@@ -49,6 +49,9 @@
     "stdexcept": "cpp",
     "streambuf": "cpp",
     "cinttypes": "cpp",
-    "typeinfo": "cpp"
+    "typeinfo": "cpp",
+    "common.h": "c",
+    "alignment.h": "c",
+    "cmac.h": "c"
   }
 }
