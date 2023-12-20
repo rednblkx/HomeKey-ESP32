@@ -165,6 +165,7 @@ void DigitalKeySecureContext::encrypt(unsigned char* plaintext, size_t data_size
     // Generate ICV
     unsigned char* icv = new unsigned char[16];
     unsigned char *iv = new unsigned char[16];
+    std::fill(iv, iv + 16, 0);
     unsigned char counter_byte[] = {static_cast<unsigned char>(counter % 256)};
     size_t input_data_size = 15 + 1;
     unsigned char* input_data = concatenate_arrays(pcb, counter_byte, 15, 1);
@@ -185,10 +186,12 @@ void DigitalKeySecureContext::decrypt(const unsigned char* ciphertext, size_t ci
 
     // Generate ICV
     unsigned char* icv = new unsigned char[16];
+    unsigned char *iv = new unsigned char[16];
+    std::fill(iv, iv + 16, 0);
     unsigned char counter_byte[] = {static_cast<unsigned char>(counter % 256)};
     size_t input_data_size = 15 + 1;
     unsigned char* input_data = concatenate_arrays(pcb, counter_byte, 15, 1);
-    encrypt_aes_cbc(key, new unsigned char[16], input_data, input_data_size, icv);
+    encrypt_aes_cbc(key, iv, input_data, input_data_size, icv);
 
     uint8_t dec[cipherTextLen];
 

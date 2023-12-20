@@ -1,30 +1,3 @@
-/*********************************************************************************
- *  MIT License
- *
- *  Copyright (c) 2022 Gregg E. Berman
- *
- *  https://github.com/HomeSpan/HomeSpan
- *
- *  Permission is hereby granted, free of charge, to any person obtaining a copy
- *  of this software and associated documentation files (the "Software"), to deal
- *  in the Software without restriction, including without limitation the rights
- *  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- *  copies of the Software, and to permit persons to whom the Software is
- *  furnished to do so, subject to the following conditions:
- *
- *  The above copyright notice and this permission notice shall be included in all
- *  copies or substantial portions of the Software.
- *
- *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- *  SOFTWARE.
- *
- ********************************************************************************/
-
 #include "HomeSpan.h"
 #include "TLV.h"
 #include <mbedtls/sha256.h>
@@ -35,11 +8,13 @@
 #include <SPI.h>
 #include <PN532_SPI.h>
 #include "PN532.h"
+// #include <Adafruit_PN532.h>
 #include <sys/random.h>
 #include <mbedtls/ecdh.h>
 #include "x963kdf.h"
 #include <mbedtls/hkdf.h>
 #include "DigitalKeySecureContext.h"
+#include "ndef.h"
 
 // // If using the breakout with SPI, define the pins for SPI communication.
 #define PN532_SCK (D5)
@@ -54,7 +29,7 @@ PN532 nfc(pn532spi);
 
 // Adafruit_PN532 nfc(PN532_SS);
 
-struct attestation
+struct attestation_t
 {
   uint32_t time;
   uint8_t payload;
@@ -63,33 +38,33 @@ struct attestation
 struct issuerEnrollments_t
 {
   uint32_t hap_at;
-  char payload[56];
-  boolean attestation;
+  uint8_t payload[56];
+  attestation_t attestation;
 };
 
 struct issuerEndpoints_t
 {
-  char endpointId[6];
+  uint8_t endpointId[6];
   uint32_t last_used_at;
   uint8_t counter;
   uint8_t key_type;
-  char publicKey[65];
-  char persistent_key[32];
-  issuerEnrollments_t enrollments[2];
+  uint8_t publicKey[65];
+  uint8_t persistent_key[32];
+  issuerEnrollments_t enrollments[1];
 };
 
 struct homeKeyIssuers_t
 {
-  char issuerId[8];
-  char publicKey[32];
-  issuerEndpoints_t endpoints[2];
+  uint8_t issuerId[8];
+  uint8_t publicKey[64];
+  issuerEndpoints_t endpoints[1];
 };
 
 struct readerData_t
 {
-  char reader_private_key[32];
-  char reader_identifier[8];
-  char identifier[8];
+  uint8_t reader_private_key[32];
+  uint8_t reader_identifier[8];
+  uint8_t identifier[8];
   homeKeyIssuers_t issuers[4];
 } readerData;
 
@@ -270,14 +245,14 @@ int provision_device_cred(uint8_t *buf, size_t len)
   {
     if(!memcmp(readerData.issuers[i].issuerId, issuerIdentifier, 8)){
       existent = true;
-      index_ex = 0;
+      index_ex = i;
     }
   }
   if(existent) {
     memcpy(readerData.issuers[index_ex].publicKey, publicKey, tlv8.len(kDevice_Req_Public_Key));
   } else {
-    memcpy(readerData.issuers[issuersCount > 0 ? issuersCount : 0].issuerId, issuerIdentifier, tlv8.len(kDevice_Req_Issuer_Key_Identifier));
-    memcpy(readerData.issuers[issuersCount > 0 ? issuersCount : 0].publicKey, publicKey, tlv8.len(kDevice_Req_Public_Key));
+    memcpy(readerData.issuers[issuersCount].issuerId, issuerIdentifier, tlv8.len(kDevice_Req_Issuer_Key_Identifier));
+    memcpy(readerData.issuers[issuersCount].publicKey, publicKey, tlv8.len(kDevice_Req_Public_Key));
   }
   issuersCount++;
   esp_err_t set_issuers = nvs_set_u8(savedData, "ISSUERS", issuersCount);
@@ -426,10 +401,59 @@ std::tuple<uint8_t*, uint8_t*, uint8_t*> key_material_generator(uint8_t *rEphPri
 
 }
 
+void attestation_exchange(DigitalKeySecureContext context){
+  uint8_t attestation_exchange_common_secret[32];
+  esp_fill_random(attestation_exchange_common_secret, 32);
+  auto attTlv = simple_tlv(0xC0, attestation_exchange_common_secret, 32, NULL, NULL);
+  auto opAttTlv = simple_tlv(0x8E, std::get<0>(attTlv), std::get<1>(attTlv), NULL, NULL);
+  uint8_t attComm[std::get<1>(opAttTlv) + 1] = {0x0};
+  memcpy(attComm + 1, std::get<0>(opAttTlv), std::get<1>(opAttTlv));
+  nfc.PrintHex(attComm, sizeof(attComm));
+  auto encrypted = context.encrypt_command(attComm, sizeof(attComm));
+
+  nfc.PrintHex(std::get<0>(encrypted), std::get<1>(encrypted));
+  nfc.PrintHex(std::get<2>(encrypted), 8);
+  uint8_t exchApdu[std::get<1>(encrypted) + 5] = {0x84, 0xc9, 0x0, 0x0, (uint8_t)std::get<1>(encrypted)};
+  memcpy(exchApdu + 5, std::get<0>(encrypted), std::get<1>(encrypted));
+  uint8_t exchRes[16];
+  uint8_t exchResLen = 16;
+  nfc.inDataExchange(exchApdu, sizeof(exchApdu), exchRes, &exchResLen);
+  nfc.PrintHex(exchRes, exchResLen);
+  if(exchResLen > 2 && exchRes[exchResLen - 2] == 0x90){
+    uint8_t controlFlow[4] = {0x80, 0x3c, 0x40, 0xa0};
+    uint8_t controlRes[8];
+    uint8_t controlResLen = 8;
+    nfc.inDataExchange(controlFlow, sizeof(controlFlow),  controlRes, &controlResLen);
+    nfc.PrintHex(controlRes, controlResLen);
+
+    // cla=0x00; ins=0xa4; p1=0x04; p2=0x00; lc=0x07(7); data=a0000008580102; le=0x00
+    uint8_t data[] = {0x00, 0xA4, 0x04, 0x00, 0x07, 0xA0, 0x00, 0x00, 0x08, 0x58, 0x01, 0x02, 0x0};
+    uint8_t response[4];
+    uint8_t responseLength = 4;
+    nfc.inDataExchange(data, sizeof(data), response, &responseLength);
+    unsigned char payload[] = {0x15, 0x91, 0x02, 0x02, 0x63, 0x72, 0x01, 0x02, 0x51, 0x02, 0x11, 0x61, 0x63, 0x01, 0x03, 0x6e, 0x66, 0x63, 0x01, 0x0a, 0x6d, 0x64, 0x6f, 0x63, 0x72, 0x65, 0x61, 0x64, 0x65, 0x72};
+    unsigned char payload1[] = {0x01};
+    unsigned char payload2[] = {0xa2, 0x00, 0x63, 0x31, 0x2e, 0x30, 0x20, 0x81, 0x29};
+      NDEFRecord list[3] = {
+      NDEFRecord("", 0x01, "Hr", payload, sizeof(payload)),
+      NDEFRecord("nfc", 0x04, "iso.org:18013:nfc", payload1, 1),
+      NDEFRecord("mdocreader", 0x04, "iso.org:18013:readerengagement", payload2, sizeof(payload2))
+    };
+    auto ndefMessage = NDEFMessage(list, sizeof(list) / sizeof(NDEFRecord)).pack();
+    auto envelope1Tlv = simple_tlv(0x53, std::get<0>(ndefMessage), std::get<1>(ndefMessage), NULL, NULL);
+    uint8_t env1Apdu[std::get<1>(envelope1Tlv) + 6] = {0x00, 0xc3, 0x00, 0x01, static_cast<uint8_t>(std::get<1>(envelope1Tlv))};
+    memcpy(env1Apdu + 5, std::get<0>(envelope1Tlv), std::get<1>(envelope1Tlv));
+    uint8_t env1Res[128];
+    uint8_t env1ResLen = 128;
+    nfc.inDataExchange(env1Apdu, sizeof(env1Apdu), env1Res, &env1ResLen);
+    nfc.PrintHex(env1Res, env1ResLen);
+  }
+}
+
 void std_auth(uint8_t *readerIdentifier, uint8_t *transId, uint8_t *readerEphPrivKey, size_t readerEphLen, uint8_t *readerEphPubKey, size_t readerEphPubLen, uint8_t *endEphPublicKey, size_t endEphLen){
 try
 {
-    uint8_t readerEph_X[readerEphPubLen];
+  uint8_t readerEph_X[readerEphPubLen];
   size_t readerEph_XLen = 0;
   uint8_t endpointEph_X[endEphLen];
   size_t endpointEph_XLen = 0;
@@ -495,7 +519,7 @@ try
   memcpy(apdu + 5, sigTlv, sigTlvLen);
   uint8_t response[91];
   uint8_t responseLength = 91;
-  nfc.inDataExchange(apdu, sizeof(apdu), response, &responseLength, true);
+  nfc.inDataExchange(apdu, sizeof(apdu), response, &responseLength);
   // nfc.inCommunicateThru(apdu, sizeof(apdu), response, &responseLength, 1000, true);
   nfc.PrintHex(response, responseLength);
   if(responseLength > 2 && response[responseLength - 2] == 0x90){
@@ -514,30 +538,7 @@ try
         return;
     }
     if(std::get<0>(response_result)[0] == 0x4e){
-      uint8_t attestation_exchange_common_secret[32];
-      esp_fill_random(attestation_exchange_common_secret, 32);
-      auto attTlv = simple_tlv(0xC0, attestation_exchange_common_secret, 32, NULL, NULL);
-      auto opAttTlv = simple_tlv(0x8E, std::get<0>(attTlv), std::get<1>(attTlv), NULL, NULL);
-      uint8_t attComm[std::get<1>(opAttTlv) + 1] = {0x0};
-      memcpy(attComm + 1, std::get<0>(opAttTlv), std::get<1>(opAttTlv));
-      nfc.PrintHex(attComm, sizeof(attComm));
-      auto encrypted = context.encrypt_command(attComm, sizeof(attComm));
-
-      nfc.PrintHex(std::get<0>(encrypted), std::get<1>(encrypted));
-      nfc.PrintHex(std::get<2>(encrypted), 8);
-      uint8_t exchApdu[std::get<1>(encrypted) + 5] = {0x84, 0xc9, 0x0, 0x0, (uint8_t)std::get<1>(encrypted)};
-      memcpy(exchApdu + 5, std::get<0>(encrypted), std::get<1>(encrypted));
-      uint8_t exchRes[16];
-      uint8_t exchResLen = 16;
-      nfc.inDataExchange(exchApdu, sizeof(exchApdu), exchRes, &exchResLen, true);
-      nfc.PrintHex(exchRes, exchResLen);
-      if(exchResLen > 2 && exchRes[exchResLen - 2] == 0x90){
-        uint8_t controlFlow[4] = {0x80, 0x3c, 0x01, 0x0};
-        uint8_t controlRes[8];
-        uint8_t controlResLen = 8;
-        nfc.inDataExchange(controlFlow, sizeof(controlFlow),  controlRes, &controlResLen, true);
-        nfc.PrintHex(controlRes, controlResLen);
-      }
+      attestation_exchange(context);
     }
   }
 
@@ -585,7 +586,7 @@ void fast_auth(uint8_t *readerPublicKey, size_t pubLen, uint8_t *readerEphemeral
   bool exchange;
   uint8_t response[90];
   uint8_t responseLength = 90;
-  exchange = nfc.inDataExchange(apdu, sizeof(apdu), response, &responseLength, true);
+  exchange = nfc.inDataExchange(apdu, sizeof(apdu), response, &responseLength);
   Serial.print("***RESPONSE: ");
   nfc.PrintHex(response, responseLength);
 
@@ -722,7 +723,7 @@ struct NFCAccess : Service::NFCAccess
       {
         LOG1("*** REQ TO GET READER KEY\n");
 
-        if (strlen(readerData.reader_private_key) > 0)
+        if (strlen((const char *)readerData.reader_private_key) > 0)
         {
           size_t out_len = 0;
           TLV<Reader_Key_Response, 10> tlv8;
@@ -750,7 +751,7 @@ struct NFCAccess : Service::NFCAccess
           resB64[out_len] = '\0';
           LOG1("\nb64_ret1: %d\n", ret1);
           LOG1("b64_len: %d\n", out_len);
-          // LOG1("b64_val: %s", resB64);
+          LOG1("b64_val: %s", resB64);
           LOG1("\n*** RES LENGTH: %d\n", out_len);
           memcpy(callback, (const char *)resB64, out_len);
           memcpy(callbackLen, &out_len, sizeof(out_len));
@@ -788,7 +789,7 @@ struct NFCAccess : Service::NFCAccess
           int ret = mbedtls_base64_encode(NULL, 0, &out_len, tlv, lenTlv);
           unsigned char resB64[out_len];
           int ret1 = mbedtls_base64_encode(resB64, out_len, &out_len, tlv, lenTlv);
-          // resB64[out_len] = (unsigned char)'\0';
+          resB64[out_len] = '\0';
           LOG1("\nb64_ret1: %d\n", ret1);
           LOG1("b64_len: %d\n", out_len);
           LOG1("b64_val: %s", resB64);
@@ -827,7 +828,7 @@ struct NFCAccess : Service::NFCAccess
         int ret = mbedtls_base64_encode(NULL, 0, &out_len, tlv, lenTlv);
         unsigned char resB64[out_len];
         int ret1 = mbedtls_base64_encode(resB64, out_len, &out_len, tlv, lenTlv);
-        // resB64[out_len] = (unsigned char)'\0';
+        resB64[out_len] = '\0';
         LOG1("\nb64_ret1: %d\n", ret1);
         LOG1("b64_len: %d\n", out_len);
         LOG1("b64_val: %s", resB64);
@@ -838,8 +839,8 @@ struct NFCAccess : Service::NFCAccess
     else if (tlv8.val(kTLVType1_Operation) == 3)
     {
       LOG1("*** REQ TO REMOVE READER KEY\n");
-      strcpy(readerData.reader_identifier, "");
-      strcpy(readerData.reader_private_key, "");
+      memcpy(readerData.reader_identifier, new uint8_t[8], 8);
+      memcpy(readerData.reader_private_key, new uint8_t[32], 32);
       esp_err_t set_nvs = nvs_set_blob(savedData, "READERDATA", &readerData, sizeof(readerData));
       esp_err_t commit_nvs = nvs_commit(savedData);
       LOG1("*** NVS W STATUS: \n");
@@ -862,6 +863,29 @@ struct NFCAccess : Service::NFCAccess
 }; // end NFCAccess
 
 //////////////////////////////////////
+
+void deleteReaderData(const char* buf){
+  uint8_t empty[64];
+  std::fill(empty, empty + 64, 0);
+  for (uint8_t i = 0; i < issuersCount; ++i)
+  {
+    for (int j = 0; j < sizeof(readerData.issuers[i].issuerId); j++)
+      memcpy(readerData.issuers[i].issuerId, empty, 8);
+      memcpy(readerData.issuers[i].publicKey, empty, 64);
+  }
+  issuersCount = 0;
+  memcpy(readerData.identifier, empty, 8);
+  memcpy(readerData.reader_identifier, empty, 8);
+  memcpy(readerData.reader_private_key, empty, 32);
+  esp_err_t set_issuers = nvs_set_u8(savedData, "ISSUERS", issuersCount);
+  esp_err_t set_nvs = nvs_set_blob(savedData, "READERDATA", &readerData, sizeof(readerData));
+  esp_err_t commit_nvs = nvs_commit(savedData);
+  LOG1("*** NVS W STATUS: \n");
+  LOG1("ISSUERS: %s\n", esp_err_to_name(set_issuers));
+  LOG1("READER DATA: %s\n", esp_err_to_name(set_nvs));
+  LOG1("COMMIT: %s\n", esp_err_to_name(commit_nvs));
+  LOG1("*** NVS W STATUS: \n");
+}
 
 void setup()
 {
@@ -904,6 +928,8 @@ void setup()
   Serial.printf("\n");
 
   homeSpan.begin(Category::Locks, "Test NFC Lock");
+
+  new SpanUserCommand('D',"Delete NFC Reader Data",deleteReaderData);
 
   nfc.begin();
 
@@ -982,7 +1008,7 @@ void loop()
     uint8_t data[] = {0x00, 0xA4, 0x04, 0x00, 0x07, 0xA0, 0x00, 0x00, 0x08, 0x58, 0x01, 0x01, 0x0};
     uint8_t response[32];
     uint8_t responseLength = 32;
-    exchange = nfc.inDataExchange(data, sizeof(data), response, &responseLength, true);
+    exchange = nfc.inDataExchange(data, sizeof(data), response, &responseLength);
     if (exchange)
     {
       Serial.print("responseLength: ");
@@ -1059,9 +1085,7 @@ void loop()
     uint8_t response[64];
     uint8_t length = 64;
     nfc.setPassiveActivationRetries(0);
-    uint16_t bitFraming = 0x633d;
-    uint8_t val = 0;
-    nfc.writeRegister(&bitFraming, &val, 1);
-    nfc.inCommunicateThru(data, sizeof(data), response, &length, 100, false);
+    nfc.writeRegister(0x633d, 0);
+    nfc.inCommunicateThru(data, sizeof(data), response, &length, 1000);
   }
 }
