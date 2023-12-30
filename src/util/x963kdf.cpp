@@ -1,4 +1,4 @@
-#include "x963kdf.h"
+#include "util/x963kdf.h"
 
 X963KDF::X963KDF(mbedtls_md_type_t algorithm, size_t length, const unsigned char* sharedinfo, size_t sharedinfo_len)
     : algorithm(algorithm), length(length), sharedinfo(sharedinfo), sharedinfo_len(sharedinfo_len), used(false) {
