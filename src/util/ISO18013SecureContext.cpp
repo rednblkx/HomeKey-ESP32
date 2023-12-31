@@ -141,22 +141,7 @@ std::vector<uint8_t> ISO18013SecureContext::decryptMessageFromEndpoint(const std
     cborCiphertext.insert(cborCiphertext.begin(), bytestring, bytestring + sizeof(bytestring));
     uint8_t plaintext[cborCiphertext.size() - 16];
 
-    std::cout << std::endl;
-    for (auto& byte : cborCiphertext)
-    {
-        std::cout << std::hex << std::setw(2) << std::setfill('0') << (int)byte;
-    }
-    std::cout << std::endl;
-
     std::vector<uint8_t> iv = getEndpointIV();
-
-    std::cout << std::endl;
-    printf("\nIV: ");
-    for(auto& byte:iv){
-        printf("%02x ", byte);
-    }
-    printf("\n");
-    std::cout << std::endl;
 
     mbedtls_gcm_context ctx;
     mbedtls_gcm_init(&ctx);
@@ -169,7 +154,7 @@ std::vector<uint8_t> ISO18013SecureContext::decryptMessageFromEndpoint(const std
                                        cborCiphertext.data(),
                                        plaintext);
 
-    std::cout << ret << std::endl;
+    std::cout << "\ndecrypt status: " << ret << std::endl;
 
     mbedtls_gcm_free(&ctx);
 
