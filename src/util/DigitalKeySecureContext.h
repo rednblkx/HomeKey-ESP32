@@ -1,4 +1,7 @@
-// DigitalKeySecureContext.h
+/*
+  Code highly inspired by https://github.com/kormax/apple-home-key-reader/blob/main/util/digital_key.py
+ */
+
 #ifndef DIGITAL_KEY_SECURE_CONTEXT_H
 #define DIGITAL_KEY_SECURE_CONTEXT_H
 
@@ -8,13 +11,14 @@
 #include <mbedtls/platform_util.h>
 #include <string.h>
 #include <algorithm>
+#include <vector>
 
 class DigitalKeySecureContext {
 public:
     DigitalKeySecureContext(const unsigned char* kenc, const unsigned char* kmac, const unsigned char* krmac);
 
     std::tuple<unsigned char*, size_t, unsigned char*> encrypt_command(unsigned char* data, size_t dataSize);
-    std::tuple<unsigned char*, size_t> decrypt_response(const unsigned char* data, size_t dataSize);
+    std::tuple<std::vector<uint8_t>, size_t> decrypt_response(const unsigned char* data, size_t dataSize);
 
 private:
     int counter;
@@ -35,4 +39,4 @@ private:
     unsigned char* concatenate_arrays(const unsigned char* a, const unsigned char* b, size_t size_a, size_t size_b);
 };
 
-#endif // DIGITAL_KEY_SECURE_CONTEXT_H
+#endif

@@ -395,9 +395,9 @@ std::tuple<uint8_t *, int> provision_device_cred(uint8_t *buf, size_t len)
   if (foundIssuer != 0)
   {
     homeKeyReader::issuerEndpoints::issuerEndpoints_t *foundEndpoint = 0;
-    std::vector<uint8_t> endpointId = getHashIdentifier(tlv8.buf(kDevice_Req_Public_Key), tlv8.len(kDevice_Req_Public_Key), false);
-    uint8_t publicKey[1 + tlv8.len(kDevice_Req_Public_Key)] = {0x04};
-    memcpy(publicKey, tlv8.buf(kDevice_Req_Public_Key), tlv8.len(kDevice_Req_Public_Key));
+    uint8_t endEphPubKey[tlv8.len(kDevice_Req_Public_Key) + 1] = {0x04};
+    memcpy(endEphPubKey + 1, tlv8.buf(kDevice_Req_Public_Key), tlv8.len(kDevice_Req_Public_Key));
+    std::vector<uint8_t> endpointId = getHashIdentifier(endEphPubKey, sizeof(endEphPubKey), false);
     for (auto &endpoint : foundIssuer->endpoints)
     {
       if (!memcmp(endpoint.endpointId, endpointId.data(), 6))
@@ -427,7 +427,7 @@ std::tuple<uint8_t *, int> provision_device_cred(uint8_t *buf, size_t len)
       uint8_t persistentKey[32];
       esp_fill_random(persistentKey, 32);
       memcpy(endpoint.endpointId, endpointId.data(), 6);
-      memcpy(endpoint.publicKey, publicKey, sizeof(publicKey));
+      memcpy(endpoint.publicKey, endEphPubKey, sizeof(endEphPubKey));
       memcpy(endpoint.persistent_key, persistentKey, sizeof(persistentKey));
       foundIssuer->endpoints.push_back(endpoint);
       return std::make_tuple(foundIssuer->issuerId, SUCCESS);
@@ -489,25 +489,36 @@ void Auth0_keying_material(std::vector<uint8_t> rPub_X, std::vector<uint8_t> rEp
   uint8_t flags[2] = {0x01, 0x01};
   uint8_t prot_ver[4] = {0x5c, 0x02, 0x02, 0x0};
   uint8_t supported_vers[6] = {0x5c, 0x04, 0x02, 0x0, 0x01, 0x0};
-  std::list<uint8_t> dataMaterial;
+  // std::list<uint8_t> dataMaterial;
   uint8_t identifier[sizeof(homeKeyReader::readerData.reader_identifier) + sizeof(homeKeyReader::readerData.identifier)];
+  uint8_t dataMaterial[strlen(context) + sizeof(identifier) + ePub_X.size() + 1 + sizeof(supported_vers) + sizeof(prot_ver) + rEph_X.size() + 16 + 2 + eEph_X.size()];
   memcpy(identifier, homeKeyReader::readerData.reader_identifier, sizeof(homeKeyReader::readerData.reader_identifier));
   memcpy(identifier + sizeof(homeKeyReader::readerData.reader_identifier), homeKeyReader::readerData.identifier, sizeof(homeKeyReader::readerData.identifier));
   int olen = 0;
-  dataMaterial.insert(dataMaterial.end(), rPub_X.data(), rPub_X.data() + rPub_X.size());
-  dataMaterial.insert(dataMaterial.end(), context, context + strlen(context));
-  dataMaterial.insert(dataMaterial.end(), identifier, identifier + sizeof(identifier));
-  dataMaterial.insert(dataMaterial.end(), ePub_X.data(), ePub_X.data() + ePub_X.size());
-  dataMaterial.push_back(interface);
-  dataMaterial.insert(dataMaterial.end(), supported_vers, supported_vers + sizeof(supported_vers));
-  dataMaterial.insert(dataMaterial.end(), prot_ver, prot_ver + sizeof(prot_ver));
-  dataMaterial.insert(dataMaterial.end(), rEph_X.data(), rEph_X.data() + rEph_X.size());
-  dataMaterial.insert(dataMaterial.end(), transId, transId + 16);
-  dataMaterial.insert(dataMaterial.end(), flags, flags + 2);
-  dataMaterial.insert(dataMaterial.end(), eEph_X.data(), eEph_X.data() + eEph_X.size());
+  pack((uint8_t *)context, strlen(context), dataMaterial, &olen);
+  pack(identifier, sizeof(identifier), dataMaterial, &olen);
+  pack(ePub_X.data(), ePub_X.size(), dataMaterial, &olen);
+  pack(&interface, 1, dataMaterial, &olen);
+  pack(supported_vers, sizeof(supported_vers), dataMaterial, &olen);
+  pack(prot_ver, sizeof(prot_ver), dataMaterial, &olen);
+  pack(rEph_X.data(), rEph_X.size(), dataMaterial, &olen);
+  pack(transId, 16, dataMaterial, &olen);
+  pack(flags, 2, dataMaterial, &olen);
+  pack(eEph_X.data(), eEph_X.size(), dataMaterial, &olen);
+  // dataMaterial.insert(dataMaterial.end(), context, context + strlen(context));
+  // dataMaterial.insert(dataMaterial.end(), identifier, identifier + sizeof(identifier));
+  // dataMaterial.insert(dataMaterial.end(), ePub_X.data(), ePub_X.data() + ePub_X.size());
+  // dataMaterial.push_back(interface);
+  // dataMaterial.insert(dataMaterial.end(), supported_vers, supported_vers + sizeof(supported_vers));
+  // dataMaterial.insert(dataMaterial.end(), prot_ver, prot_ver + sizeof(prot_ver));
+  // dataMaterial.insert(dataMaterial.end(), rEph_X.data(), rEph_X.data() + rEph_X.size());
+  // dataMaterial.insert(dataMaterial.end(), transId, transId + 16);
+  // dataMaterial.insert(dataMaterial.end(), flags, flags + 2);
+  // dataMaterial.insert(dataMaterial.end(), eEph_X.data(), eEph_X.data() + eEph_X.size());
   Serial.print("\nDATA MATERIAL: ");
-  nfc.PrintHex(&dataMaterial.front(), dataMaterial.size());
-  mbedtls_hkdf(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), NULL, 0, derivedKey, 32, &dataMaterial.front(), dataMaterial.size(), out, outLen);
+  // nfc.PrintHex(&dataMaterial.front(), dataMaterial.size());
+  nfc.PrintHex(dataMaterial, olen);
+  mbedtls_hkdf(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), NULL, 0, derivedKey, 32, dataMaterial, olen, out, outLen);
 }
 
 void Auth1_keying_material(uint8_t *rEph_X, size_t rEph_XLen, uint8_t *eEph_X, size_t eEph_XLen, uint8_t *transId, uint8_t *derivedKey, const char *context, uint8_t *out, size_t outLen)
@@ -516,27 +527,29 @@ void Auth1_keying_material(uint8_t *rEph_X, size_t rEph_XLen, uint8_t *eEph_X, s
   uint8_t flags[2] = {0x01, 0x01};
   uint8_t prot_ver[4] = {0x5c, 0x02, 0x02, 0x0};
   uint8_t supported_vers[6] = {0x5c, 0x04, 0x02, 0x0, 0x01, 0x0};
-  std::list<uint8_t> dataMaterial;
+  // std::list<uint8_t> dataMaterial;
+  uint8_t dataMaterial[rEph_XLen + eEph_XLen + 16 + 1 + 2 + strlen(context) + sizeof(prot_ver) + sizeof(supported_vers)];
   int olen = 0;
-  // pack(rEph_X, rEph_XLen, dataMaterial, &olen);
-  dataMaterial.insert(dataMaterial.end(), rEph_X, rEph_X + rEph_XLen);
-  // pack(eEph_X, eEph_XLen, dataMaterial, &olen);
-  dataMaterial.insert(dataMaterial.end(), eEph_X, eEph_X + eEph_XLen);
-  // pack(transId, 16, dataMaterial, &olen);
-  dataMaterial.insert(dataMaterial.end(), transId, transId + 16);
-  // pack(&interface, 1, dataMaterial, &olen);
-  dataMaterial.push_back(interface);
-  // pack(flags, 2, dataMaterial, &olen);
-  dataMaterial.insert(dataMaterial.end(), flags, flags + 2);
-  // pack((uint8_t *)context, strlen(context), dataMaterial, &olen);
-  dataMaterial.insert(dataMaterial.end(), context, context + strlen(context));
-  // pack(prot_ver, sizeof(prot_ver), dataMaterial, &olen);
-  dataMaterial.insert(dataMaterial.end(), prot_ver, prot_ver + sizeof(prot_ver));
-  // pack(supported_vers, sizeof(supported_vers), dataMaterial, &olen);
-  dataMaterial.insert(dataMaterial.end(), supported_vers, supported_vers + sizeof(supported_vers));
+  pack(rEph_X, rEph_XLen, dataMaterial, &olen);
+  // dataMaterial.insert(dataMaterial.end(), rEph_X, rEph_X + rEph_XLen);
+  pack(eEph_X, eEph_XLen, dataMaterial, &olen);
+  // dataMaterial.insert(dataMaterial.end(), eEph_X, eEph_X + eEph_XLen);
+  pack(transId, 16, dataMaterial, &olen);
+  // dataMaterial.insert(dataMaterial.end(), transId, transId + 16);
+  pack(&interface, 1, dataMaterial, &olen);
+  // dataMaterial.push_back(interface);
+  pack(flags, 2, dataMaterial, &olen);
+  // dataMaterial.insert(dataMaterial.end(), flags, flags + 2);
+  pack((uint8_t *)context, strlen(context), dataMaterial, &olen);
+  // dataMaterial.insert(dataMaterial.end(), context, context + strlen(context));
+  pack(prot_ver, sizeof(prot_ver), dataMaterial, &olen);
+  // dataMaterial.insert(dataMaterial.end(), prot_ver, prot_ver + sizeof(prot_ver));
+  pack(supported_vers, sizeof(supported_vers), dataMaterial, &olen);
+  // dataMaterial.insert(dataMaterial.end(), supported_vers, supported_vers + sizeof(supported_vers));
   Serial.print("\nDATA MATERIAL: ");
-  nfc.PrintHex(&dataMaterial.front(), dataMaterial.size());
-  mbedtls_hkdf(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), NULL, 0, derivedKey, 32, &dataMaterial.front(), dataMaterial.size(), out, outLen);
+  // nfc.PrintHex(&dataMaterial.front(), dataMaterial.size());
+  nfc.PrintHex(dataMaterial, olen);
+  mbedtls_hkdf(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), NULL, 0, derivedKey, 32, dataMaterial, olen, out, outLen);
 }
 
 void get_shared_key(uint8_t *reader_priv_key, size_t privLen, uint8_t *endpoint_pub_key, size_t pubLen, uint8_t *out, size_t buflen)
@@ -582,50 +595,43 @@ void get_shared_key(uint8_t *reader_priv_key, size_t privLen, uint8_t *endpoint_
 
 std::tuple<uint8_t *, uint8_t *, uint8_t *, uint8_t *> key_material_generator(uint8_t *rEphPrivKey, size_t rEphLen, uint8_t *rEph_X, size_t rEph_XLen, uint8_t *eEphPubKey, size_t eEphLen, uint8_t *eEph_X, size_t eEph_XLen, uint8_t *transId /*0x5E interface, 5c020200 sel ver, 5c0402000100 supported vers*/)
 {
-  try
-  {
-    mbedtls_md_type_t algorithm = MBEDTLS_MD_SHA256;
+  mbedtls_md_type_t algorithm = MBEDTLS_MD_SHA256;
 
-    uint8_t sharedKey[32];
+  uint8_t sharedKey[32];
 
-    get_shared_key(rEphPrivKey, rEphLen, eEphPubKey, eEphLen, sharedKey, sizeof(sharedKey));
-    Serial.print("\nSHARED KEY: ");
-    nfc.PrintHex(sharedKey, 32);
+  get_shared_key(rEphPrivKey, rEphLen, eEphPubKey, eEphLen, sharedKey, sizeof(sharedKey));
+  Serial.print("\nSHARED KEY: ");
+  nfc.PrintHex(sharedKey, 32);
 
-    X963KDF kdf(algorithm, 32, transId, 16);
+  X963KDF kdf(algorithm, 32, transId, 16);
 
-    // Derive the key using X963KDF
-    uint8_t derivedKey[32];
-    kdf.derive(sharedKey, sizeof(sharedKey), derivedKey);
-    Serial.print("DERIVED KEY: ");
-    nfc.PrintHex(derivedKey, 32);
-    uint8_t PersistentKey[32];
-    uint8_t VolatileKey[48];
-    Auth1_keying_material(rEph_X, rEph_XLen, eEph_X, eEph_XLen, transId, derivedKey, "Persistent", PersistentKey, 32);
-    Auth1_keying_material(rEph_X, rEph_XLen, eEph_X, eEph_XLen, transId, derivedKey, "Volatile", VolatileKey, 48);
-    Serial.print("PERSISTENT KEY: ");
-    nfc.PrintHex(PersistentKey, 32);
-    Serial.print("VOLATILE KEY: ");
-    nfc.PrintHex(VolatileKey, 48);
-    uint8_t kenc[16];
-    uint8_t kmac[16];
-    uint8_t krmac[16];
+  // Derive the key using X963KDF
+  uint8_t derivedKey[32];
+  kdf.derive(sharedKey, sizeof(sharedKey), derivedKey);
+  Serial.print("DERIVED KEY: ");
+  nfc.PrintHex(derivedKey, 32);
+  uint8_t PersistentKey[32];
+  uint8_t VolatileKey[48];
+  Auth1_keying_material(rEph_X, rEph_XLen, eEph_X, eEph_XLen, transId, derivedKey, "Persistent", PersistentKey, 32);
+  Auth1_keying_material(rEph_X, rEph_XLen, eEph_X, eEph_XLen, transId, derivedKey, "Volatile", VolatileKey, 48);
+  Serial.print("PERSISTENT KEY: ");
+  nfc.PrintHex(PersistentKey, 32);
+  Serial.print("VOLATILE KEY: ");
+  nfc.PrintHex(VolatileKey, 48);
+  uint8_t kenc[16];
+  uint8_t kmac[16];
+  uint8_t krmac[16];
 
-    memcpy(kenc, VolatileKey, 16);
-    memcpy(kmac, VolatileKey + 16, 16);
-    memcpy(krmac, VolatileKey + 32, 16);
-    Serial.print("KENC: ");
-    nfc.PrintHex(kenc, 16);
-    Serial.print("KMAC: ");
-    nfc.PrintHex(kmac, 16);
-    Serial.print("KRMAC: ");
-    nfc.PrintHex(krmac, 16);
-    return std::make_tuple(kenc, kmac, krmac, PersistentKey);
-  }
-  catch (const std::exception &e)
-  {
-    std::cerr << e.what() << '\n';
-  }
+  memcpy(kenc, VolatileKey, 16);
+  memcpy(kmac, VolatileKey + 16, 16);
+  memcpy(krmac, VolatileKey + 32, 16);
+  Serial.print("KENC: ");
+  nfc.PrintHex(kenc, 16);
+  Serial.print("KMAC: ");
+  nfc.PrintHex(kmac, 16);
+  Serial.print("KRMAC: ");
+  nfc.PrintHex(krmac, 16);
+  return std::make_tuple(kenc, kmac, krmac, PersistentKey);
 }
 
 std::vector<unsigned char> attestation_salt(std::vector<unsigned char> env1Data, std::vector<unsigned char> readerCmd)
@@ -922,7 +928,7 @@ std::tuple<homeKeyReader::issuerEndpoints::issuerEndpoints_t*, uint8_t*> std_aut
   get_public_points(endEphPublicKey, endEphLen, endpointEph_X, &endpointEph_XLen, NULL, NULL);
   printBuffer(readerEph_X, readerEph_XLen);
   printBuffer(endpointEph_X, endpointEph_XLen);
-  uint8_t *stdTlv = new unsigned char[110];
+  uint8_t stdTlv[128];
   size_t len = 0;
   simple_tlv(0x4D, readerIdentifier, sizeof(homeKeyReader::readerData.reader_identifier) + sizeof(homeKeyReader::readerData.identifier), stdTlv, &len);
   simple_tlv(0x86, endpointEph_X, endpointEph_XLen, stdTlv + len, &len);
@@ -934,10 +940,9 @@ std::tuple<homeKeyReader::issuerEndpoints::issuerEndpoints_t*, uint8_t*> std_aut
   auto sigTlv = signSharedInfo(stdTlv, len);
   uint8_t apdu[sigTlv.size() + 5] = {0x80, 0x81, 0x0, 0x0, (uint8_t)sigTlv.size()};
   memcpy(apdu + 5, sigTlv.data(), sigTlv.size());
-  uint8_t *response = new unsigned char[91];
-  uint8_t responseLength = 91;
+  uint8_t response[128];
+  uint8_t responseLength = 128;
   nfc.inDataExchange(apdu, sizeof(apdu), response, &responseLength);
-  // nfc.inCommunicateThru(apdu, sizeof(apdu), response, &responseLength, 1000, true);
   nfc.PrintHex(response, responseLength);
   homeKeyReader::issuerEndpoints::issuerEndpoints_t *foundEndpoint = nullptr;
   if (responseLength > 2 && response[responseLength - 2] == 0x90)
@@ -951,113 +956,113 @@ std::tuple<homeKeyReader::issuerEndpoints::issuerEndpoints_t*, uint8_t*> std_aut
       printf("%02X ", std::get<0>(response_result)[i]);
     }
     printf("\ndecrypted length: %d\n", std::get<1>(response_result));
-    std::vector<BERTLV> decryptedTlv = BERTLV::unpack_array(std::vector<unsigned char>{std::get<0>(response_result), std::get<0>(response_result)+std::get<1>(response_result)});
-    BERTLV *signature = nullptr;
-    BERTLV *device_identifier = nullptr;
-    for (auto &data : decryptedTlv)
-    {
-      if(data.tag.data.data()[0] == 0x4E){
-        device_identifier = &data;
-      }
-      if(data.tag.data.data()[0] == 0x9E){
-        signature = &data;
-      }
-    }
-    for (auto &issuer : homeKeyReader::readerData.issuers)
-    {
-      for (auto &endpoint : issuer.endpoints)
+    if(std::get<1>(response_result) > 0){
+      std::vector<BERTLV> decryptedTlv = BERTLV::unpack_array(std::vector<unsigned char>{std::get<0>(response_result).data(), std::get<0>(response_result).data()+std::get<1>(response_result)});
+      BERTLV *signature = nullptr;
+      BERTLV *device_identifier = nullptr;
+      for (auto &data : decryptedTlv)
       {
-        if(!memcmp(endpoint.endpointId, device_identifier->value.data(), 6)){
-          printf("\n AUTH1: Found matching endpoint\n");
-          foundEndpoint = &endpoint;
+        if(data.tag.data.data()[0] == 0x4E){
+          device_identifier = &data;
+        }
+        if(data.tag.data.data()[0] == 0x9E){
+          signature = &data;
         }
       }
-    }
-    if(foundEndpoint != nullptr){
-      uint8_t verification_hash_input_material[sizeof(homeKeyReader::readerData.reader_identifier) + sizeof(homeKeyReader::readerData.identifier) + endpointEph_XLen + readerEph_XLen + 20];
-      size_t olen = 0;
-
-      simple_tlv(0x4D, readerIdentifier, sizeof(homeKeyReader::readerData.reader_identifier) + sizeof(homeKeyReader::readerData.identifier), verification_hash_input_material, &olen);
-      simple_tlv(0x86, endpointEph_X, endpointEph_XLen, verification_hash_input_material + olen, &olen);
-      simple_tlv(0x87, readerEph_X, readerEph_XLen, verification_hash_input_material + olen, &olen);
-      simple_tlv(0x4C, transId, 16, verification_hash_input_material + olen, &olen);
-      simple_tlv(0x93, deviceCtx, 4, verification_hash_input_material + olen, &olen);
-
-      mbedtls_ecp_keypair keypair;
-      mbedtls_ecp_keypair_init(&keypair);
-      mbedtls_ecp_group grp;
-      mbedtls_ecp_group_init(&grp);
-      mbedtls_ecp_point pubKey;
-      mbedtls_ecp_point_init(&pubKey);
-
-      const mbedtls_md_info_t *mdInfo = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
-
-      uint8_t hash[32];
-
-      mbedtls_md(mdInfo, verification_hash_input_material, len, hash);
-
-      printf("\n** VERIFICATION SHA256 Hashed TLV:\n");
-      nfc.PrintHex(hash, 32);
-
-      mbedtls_mpi r;
-      mbedtls_mpi s;
-
-      mbedtls_mpi_init( &r );
-      mbedtls_mpi_init( &s );
-
-      mbedtls_ecp_point_read_binary(&grp, &pubKey, foundEndpoint->publicKey, sizeof(foundEndpoint->publicKey));
-      mbedtls_mpi_read_binary(&r, signature->value.data(), sizeof(signature) / 2);
-      mbedtls_mpi_read_binary(&s, signature->value.data() + sizeof(signature) / 2, sizeof(signature) / 2);
-
-      int result = mbedtls_ecdsa_verify(&grp, hash, 32, &pubKey, &r, &s);
-
-      mbedtls_ecp_keypair_free(&keypair);
-      mbedtls_ecp_group_free(&grp);
-      mbedtls_ecp_point_free(&pubKey);
-      mbedtls_mpi_free(&r);
-      mbedtls_mpi_free(&s);
-
-      printf("\nsig verify result: %d\n", result);
-      printf("%s\n", mbedtls_high_level_strerr(result));
-
-      if(result == 0){
-        memcpy(foundEndpoint->persistent_key, std::get<3>(keys), 32);
-        json data = homeKeyReader::readerData;
-        auto bson = json::to_bson(data);
-        esp_err_t set_nvs = nvs_set_blob(savedData, "READERDATA", bson.data(), bson.size());
-        esp_err_t commit_nvs = nvs_commit(savedData);
-        LOG1("*** NVS W STATUS: \n");
-        LOG1("SET: %s\n", esp_err_to_name(set_nvs));
-        LOG1("COMMIT: %s\n", esp_err_to_name(commit_nvs));
-        LOG1("*** NVS W STATUS: \n");
-        return std::make_tuple(foundEndpoint, std::get<3>(keys));
-      }
-    }
-
-    if (std::get<0>(response_result)[0] == 0)
-    {
-      std::cout << std::endl;
-      printf("\nSOMETHING WENT WRONG\n");
-      std::make_tuple(foundEndpoint, NULL);
-    }
-    if (device_identifier != nullptr)
-    {
-      auto att1_res = attestation_exchange(context);
-      size_t att1Len = std::get<0>(att1_res).size();
-      if (att1Len > 2 && std ::get<0>(att1_res).data()[att1Len - 2] == 0x90)
+      for (auto &issuer : homeKeyReader::readerData.issuers)
       {
-        auto env1 = envelope1Cmd();
-        size_t env1Len = std::get<0>(env1).size();
-        if (env1Len > 2 && std::get<0>(env1).data()[env1Len - 2] == 0x90)
+        for (auto &endpoint : issuer.endpoints)
         {
-          envelope2Cmd(std::get<0>(env1), std::get<1>(env1), std::get<1>(att1_res));
+          if(!memcmp(endpoint.endpointId, device_identifier->value.data(), 6)){
+            printf("\n AUTH1: Found matching endpoint\n");
+            foundEndpoint = &endpoint;
+          }
+        }
+      }
+      if(foundEndpoint != nullptr){
+        uint8_t verification_hash_input_material[sizeof(homeKeyReader::readerData.reader_identifier) + sizeof(homeKeyReader::readerData.identifier) + endpointEph_XLen + readerEph_XLen + 20];
+        size_t olen = 0;
+
+        simple_tlv(0x4D, readerIdentifier, sizeof(homeKeyReader::readerData.reader_identifier) + sizeof(homeKeyReader::readerData.identifier), verification_hash_input_material, &olen);
+        simple_tlv(0x86, endpointEph_X, endpointEph_XLen, verification_hash_input_material + olen, &olen);
+        simple_tlv(0x87, readerEph_X, readerEph_XLen, verification_hash_input_material + olen, &olen);
+        simple_tlv(0x4C, transId, 16, verification_hash_input_material + olen, &olen);
+        simple_tlv(0x93, deviceCtx, 4, verification_hash_input_material + olen, &olen);
+
+        mbedtls_ecp_keypair keypair;
+        mbedtls_ecp_keypair_init(&keypair);
+        mbedtls_ecp_group grp;
+        mbedtls_ecp_group_init(&grp);
+        mbedtls_ecp_point pubKey;
+        mbedtls_ecp_point_init(&pubKey);
+
+        const mbedtls_md_info_t *mdInfo = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+
+        uint8_t hash[32];
+
+        mbedtls_md(mdInfo, verification_hash_input_material, len, hash);
+
+        printf("\n** VERIFICATION SHA256 Hashed TLV:\n");
+        nfc.PrintHex(hash, 32);
+
+        mbedtls_mpi r;
+        mbedtls_mpi s;
+
+        mbedtls_mpi_init( &r );
+        mbedtls_mpi_init( &s );
+
+        mbedtls_ecp_point_read_binary(&grp, &pubKey, foundEndpoint->publicKey, sizeof(foundEndpoint->publicKey));
+        mbedtls_mpi_read_binary(&r, signature->value.data(), sizeof(signature) / 2);
+        mbedtls_mpi_read_binary(&s, signature->value.data() + sizeof(signature) / 2, sizeof(signature) / 2);
+
+        int result = mbedtls_ecdsa_verify(&grp, hash, 32, &pubKey, &r, &s);
+
+        mbedtls_ecp_keypair_free(&keypair);
+        mbedtls_ecp_group_free(&grp);
+        mbedtls_ecp_point_free(&pubKey);
+        mbedtls_mpi_free(&r);
+        mbedtls_mpi_free(&s);
+
+        printf("\nsig verify result: %d\n", result);
+        printf("%s\n", mbedtls_high_level_strerr(result));
+
+        if(result == 0){
+          memcpy(foundEndpoint->persistent_key, std::get<3>(keys), 32);
+          json data = homeKeyReader::readerData;
+          auto bson = json::to_bson(data);
+          esp_err_t set_nvs = nvs_set_blob(savedData, "READERDATA", bson.data(), bson.size());
+          esp_err_t commit_nvs = nvs_commit(savedData);
+          LOG1("*** NVS W STATUS: \n");
+          LOG1("SET: %s\n", esp_err_to_name(set_nvs));
+          LOG1("COMMIT: %s\n", esp_err_to_name(commit_nvs));
+          LOG1("*** NVS W STATUS: \n");
+          return std::make_tuple(foundEndpoint, std::get<3>(keys));
+        }
+      }
+
+      if (std::get<0>(response_result)[0] == 0)
+      {
+        std::cout << std::endl;
+        printf("\nSOMETHING WENT WRONG\n");
+        std::make_tuple(foundEndpoint, NULL);
+      }
+      if (device_identifier != nullptr)
+      {
+        auto att1_res = attestation_exchange(context);
+        size_t att1Len = std::get<0>(att1_res).size();
+        if (att1Len > 2 && std ::get<0>(att1_res).data()[att1Len - 2] == 0x90)
+        {
+          auto env1 = envelope1Cmd();
+          size_t env1Len = std::get<0>(env1).size();
+          if (env1Len > 2 && std::get<0>(env1).data()[env1Len - 2] == 0x90)
+          {
+            envelope2Cmd(std::get<0>(env1), std::get<1>(env1), std::get<1>(att1_res));
+          }
         }
       }
     }
   }
-  delete[] stdTlv;
-  delete[] response;
-  std::make_tuple(foundEndpoint, NULL);
+  return std::make_tuple(foundEndpoint, nullptr);
 }
 
 homeKeyReader::issuerEndpoints::issuerEndpoints_t *find_endpoint_by_cryptogram(uint8_t *readerPublicKey, size_t rPubLen, uint8_t *readerEphemeralPublicKey, size_t rEphPubLen, uint8_t *endpointEphemeralPublicKey, size_t ePubLen, uint8_t *transId, uint8_t *cryptogram)

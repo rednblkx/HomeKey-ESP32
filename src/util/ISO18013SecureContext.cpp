@@ -1,7 +1,8 @@
-#include <util/ISO18013SecureContext.h>
-#include <iomanip>
+/*
+  Code highly inspired by https://github.com/kormax/apple-home-key-reader/blob/main/util/iso18013.py
+ */
 
-// Assuming similar definitions for util::iso7816::ISO7816Tag
+#include <util/ISO18013SecureContext.h>
 
 const std::vector<uint8_t> READER_CONTEXT = {'S', 'K', 'R', 'e', 'a', 'd', 'e', 'r'};
 const std::vector<uint8_t> ENDPOINT_CONTEXT = {'S', 'K', 'D', 'e', 'v', 'i', 'c', 'e'};

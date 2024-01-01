@@ -1,3 +1,7 @@
+/*
+  Code highly inspired by https://github.com/kormax/apple-home-key-reader/blob/main/util/tlv.py
+ */
+
 #ifndef BERTLV_H
 #define BERTLV_H
 
@@ -15,10 +19,6 @@ enum BERTLVTagClass {
 class BERTLVTag {
 public:
     std::vector<uint8_t> data;
-
-    BERTLVTagClass getClass() const;
-
-    bool isConstructed() const;
 
     BERTLVTag(int data);
 

@@ -1,3 +1,7 @@
+/*
+    Code was higly inspired by https://github.com/pyca/cryptography/blob/main/src/cryptography/hazmat/primitives/kdf/x963kdf.py
+ */
+
 #include "util/x963kdf.h"
 
 X963KDF::X963KDF(mbedtls_md_type_t algorithm, size_t length, const unsigned char* sharedinfo, size_t sharedinfo_len)

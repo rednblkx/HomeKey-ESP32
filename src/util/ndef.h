@@ -1,3 +1,7 @@
+/*
+  Code highly inspired by https://github.com/kormax/apple-home-key-reader/blob/main/util/ndef.py
+ */
+
 #ifndef NDEF_H
 #define NDEF_H
 

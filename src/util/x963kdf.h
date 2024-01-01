@@ -1,3 +1,6 @@
+/*
+    Code was higly inspired by https://github.com/pyca/cryptography/blob/main/src/cryptography/hazmat/primitives/kdf/x963kdf.py
+ */
 #ifndef X963KDF_H
 #define X963KDF_H
 

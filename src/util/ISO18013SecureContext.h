@@ -1,3 +1,7 @@
+/*
+  Code highly inspired by https://github.com/kormax/apple-home-key-reader/blob/main/util/iso18013.py
+ */
+
 #ifndef ISO18013_SECURE_CONTEXT_H
 #define ISO18013_SECURE_CONTEXT_H
 
@@ -11,7 +15,7 @@
 #include <mbedtls/gcm.h>
 #include <mbedtls/entropy.h>
 #include <mbedtls/ctr_drbg.h>
-
+#include <iomanip>
 #include <YACL.h>
 
 #include <nlohmann/json.hpp>

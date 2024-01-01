@@ -1,4 +1,7 @@
-// DigitalKeySecureContext.cpp
+/*
+  Code highly inspired by https://github.com/kormax/apple-home-key-reader/blob/main/util/digital_key.py
+ */
+
 #include "util/DigitalKeySecureContext.h"
 #include <iostream>
 #include <Arduino.h>
@@ -112,7 +115,7 @@ std::tuple<unsigned char*, size_t, unsigned char*> DigitalKeySecureContext::encr
     return std::make_tuple(result, olen + 8, calculated_rmac);
 }
 
-std::tuple<unsigned char*, size_t> DigitalKeySecureContext::decrypt_response(const unsigned char* data, size_t dataSize) {
+std::tuple<std::vector<uint8_t>, size_t> DigitalKeySecureContext::decrypt_response(const unsigned char* data, size_t dataSize) {
     unsigned char* ciphertext = new unsigned char[dataSize - 8];
     memcpy(ciphertext, data, dataSize - 8);
 
@@ -138,14 +141,18 @@ std::tuple<unsigned char*, size_t> DigitalKeySecureContext::decrypt_response(con
     //     return std::make_tuple(new unsigned char[2], 0);
     // }
 
+    delete[] ciphertext;
+    delete[] rmac;
+    delete[] calculated_rmac;
+
     unsigned char *plaintext = new unsigned char[dataSize - 8];
     size_t olen = 0;
     decrypt(ciphertext, dataSize - 8, response_pcb, kenc, counter, plaintext, &olen);
+    std::vector<uint8_t> plain{plaintext, plaintext + dataSize - 8};
 
     counter++;
-
-    return std::make_tuple(plaintext, olen);
-
+    delete[] plaintext;
+    return std::make_tuple(plain, olen);
 }
 
 void DigitalKeySecureContext::encrypt(unsigned char* plaintext, size_t data_size, const unsigned char* pcb, const unsigned char* key, int counter, unsigned char* ciphertext, size_t *olen) {

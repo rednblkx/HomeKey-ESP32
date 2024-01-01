@@ -1,3 +1,7 @@
+/*
+  Code highly inspired by https://github.com/kormax/apple-home-key-reader/blob/main/util/ndef.py
+ */
+
 #include <util/ndef.h>
 NDEFRecord::NDEFRecord(){
   this->id.assign(1, '\0');

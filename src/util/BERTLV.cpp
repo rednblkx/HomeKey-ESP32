@@ -1,21 +1,11 @@
 /*
-  Code inspired by the python script at https://github.com/kormax/apple-home-key-reader/blob/main/util/tlv.py
-*/
+  Code highly inspired by https://github.com/kormax/apple-home-key-reader/blob/main/util/tlv.py
+ */
 
 #include <iostream>
 #include <vector>
 #include <cstdint>
 #include <util/BERTLV.h>
-
-BERTLVTagClass BERTLVTag::getClass() const
-{
-  return static_cast<BERTLVTagClass>((data[0] & 0b11000000) >> 6);
-}
-
-bool BERTLVTag::isConstructed() const
-{
-  return static_cast<bool>(data[0] & 0b00100000);
-}
 
 BERTLVTag::BERTLVTag(int data)
 {
@@ -24,7 +14,10 @@ BERTLVTag::BERTLVTag(int data)
   this->data.assign(bytes, bytes + sizeof(data));
 }
 
-BERTLVTag::BERTLVTag(const std::vector<uint8_t> &data) : data(data) {}
+BERTLVTag::BERTLVTag(const std::vector<uint8_t> &data)
+{
+  this->data = data;
+}
 
 std::vector<uint8_t> BERTLVTag::pack() const
 {
