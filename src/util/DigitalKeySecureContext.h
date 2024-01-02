@@ -15,7 +15,8 @@
 
 class DigitalKeySecureContext {
 public:
-    DigitalKeySecureContext(const unsigned char* kenc, const unsigned char* kmac, const unsigned char* krmac);
+    DigitalKeySecureContext();
+    DigitalKeySecureContext(const unsigned char *kenc, const unsigned char *kmac, const unsigned char *krmac);
 
     std::tuple<unsigned char*, size_t, unsigned char*> encrypt_command(unsigned char* data, size_t dataSize);
     std::tuple<std::vector<uint8_t>, size_t> decrypt_response(const unsigned char* data, size_t dataSize);
@@ -31,12 +32,12 @@ private:
 
     void encrypt(unsigned char* plaintext, size_t data_size, const unsigned char* pcb, const unsigned char* key, int counter, unsigned char *ciphertext, size_t *olen);
     void decrypt(const unsigned char* ciphertext, size_t data_size, const unsigned char* pcb, const unsigned char* key, int counter, unsigned char *plaintext, size_t *olen);
-    std::tuple<unsigned char*, size_t> pad_mode_3(unsigned char* message, size_t message_size, unsigned char pad_byte, size_t block_size);
+    std::tuple<std::vector<uint8_t>, size_t> pad_mode_3(unsigned char* message, size_t message_size, unsigned char pad_byte, size_t block_size);
     void unpad_mode_3(unsigned char* message, size_t message_size, unsigned char *unpadded, size_t *outLen, unsigned char pad_flag_byte, size_t block_size);
     void encrypt_aes_cbc(const unsigned char* key, unsigned char* iv, const unsigned char* plaintext, size_t length, unsigned char* ciphertext);
     void decrypt_aes_cbc(const unsigned char* key, unsigned char* iv, const unsigned char* ciphertext, size_t length, unsigned char* plaintext);
     void aes_cmac(const unsigned char* key, const unsigned char* data, size_t data_size, unsigned char* mac);
-    unsigned char* concatenate_arrays(const unsigned char* a, const unsigned char* b, size_t size_a, size_t size_b);
+    std::vector<uint8_t> concatenate_arrays(const unsigned char* a, const unsigned char* b, size_t size_a, size_t size_b);
 };
 
 #endif

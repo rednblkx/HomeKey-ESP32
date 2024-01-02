@@ -8,14 +8,14 @@
 
 const unsigned char RESPONSE_PCB[] = {0x80};
 
-std::tuple<unsigned char*, size_t> DigitalKeySecureContext::pad_mode_3(unsigned char* message, size_t message_size, unsigned char pad_byte = 0x80, size_t block_size = 8) {
+std::tuple<std::vector<uint8_t>, size_t> DigitalKeySecureContext::pad_mode_3(unsigned char* message, size_t message_size, unsigned char pad_byte = 0x80, size_t block_size = 8) {
     size_t totalLen = message_size;
     size_t padding_length = block_size - (totalLen + 1) % block_size;
-    uint8_t *buf = new unsigned char[totalLen + padding_length];
-    memcpy(buf, message, message_size);
-    memcpy(buf + message_size, &pad_byte, 1);
+    std::vector<uint8_t> buf(totalLen + padding_length + 1);
+    memcpy(buf.data(), message, message_size);
+    memcpy(buf.data() + message_size, &pad_byte, 1);
     totalLen += padding_length + 1;
-    std::fill(buf + message_size + 1, buf + totalLen, 0);
+    std::fill(&buf.front() + message_size + 1, &buf.back(), 0);
     return std::make_tuple(buf, totalLen);
 }
 
@@ -78,6 +78,8 @@ void DigitalKeySecureContext::aes_cmac(const unsigned char* key, const unsigned 
     // std::cout << "result of cmac: " << ret << std::endl;
 }
 
+DigitalKeySecureContext::DigitalKeySecureContext(){}
+
 DigitalKeySecureContext::DigitalKeySecureContext(const unsigned char* kenc, const unsigned char* kmac, const unsigned char* krmac){
     counter = 0;
     memcpy(this->kenc, kenc, 16);   // Assuming a 128-bit key size
@@ -103,16 +105,16 @@ std::tuple<unsigned char*, size_t, unsigned char*> DigitalKeySecureContext::encr
 
     unsigned char* calculated_rmac = new unsigned char[16];
     size_t input_dataSize = 16 + olen;
-    unsigned char* input_data = concatenate_arrays(mac_chaining_value, ciphertext, 16, olen);
-    aes_cmac(kmac, input_data, input_dataSize, calculated_rmac);
+    std::vector<uint8_t> input_data = concatenate_arrays(mac_chaining_value, ciphertext, 16, olen);
+    aes_cmac(kmac, input_data.data(), input_dataSize, calculated_rmac);
     for (uint8_t i = 0; i < 16; i++) {
         printf(" %02X", calculated_rmac[i]);
     }
     printf("\n");
 
-    unsigned char* result = concatenate_arrays(ciphertext, calculated_rmac, olen, 8);
+    std::vector<uint8_t> result = concatenate_arrays(ciphertext, calculated_rmac, olen, 8);
 
-    return std::make_tuple(result, olen + 8, calculated_rmac);
+    return std::make_tuple(result.data(), olen + 8, calculated_rmac);
 }
 
 std::tuple<std::vector<uint8_t>, size_t> DigitalKeySecureContext::decrypt_response(const unsigned char* data, size_t dataSize) {
@@ -124,8 +126,8 @@ std::tuple<std::vector<uint8_t>, size_t> DigitalKeySecureContext::decrypt_respon
 
     unsigned char* calculated_rmac = new unsigned char[16];
     size_t input_dataSize = 16 + (dataSize - 8);
-    unsigned char* input_data = concatenate_arrays(mac_chaining_value, ciphertext, 16, dataSize - 8);
-    aes_cmac(krmac, input_data, input_dataSize, calculated_rmac);
+    std::vector<uint8_t> input_data = concatenate_arrays(mac_chaining_value, ciphertext, 16, dataSize - 8);
+    aes_cmac(krmac, input_data.data(), input_dataSize, calculated_rmac);
     for (uint8_t i = 0; i < 8; i++) {
         Serial.printf(" %02X", calculated_rmac[i]);
     }
@@ -137,13 +139,9 @@ std::tuple<std::vector<uint8_t>, size_t> DigitalKeySecureContext::decrypt_respon
 
     // assert(memcmp(rmac, calculated_rmac, 8) == 0);
 
-    // if(memcmp(rmac, calculated_rmac, 8) != 0){
-    //     return std::make_tuple(new unsigned char[2], 0);
-    // }
-
-    delete[] ciphertext;
-    delete[] rmac;
-    delete[] calculated_rmac;
+    if(memcmp(rmac, calculated_rmac, 8)){
+        return std::make_tuple(std::vector<uint8_t>{}, 0);
+    }
 
     unsigned char *plaintext = new unsigned char[dataSize - 8];
     size_t olen = 0;
@@ -151,6 +149,9 @@ std::tuple<std::vector<uint8_t>, size_t> DigitalKeySecureContext::decrypt_respon
     std::vector<uint8_t> plain{plaintext, plaintext + dataSize - 8};
 
     counter++;
+    delete[] ciphertext;
+    delete[] rmac;
+    delete[] calculated_rmac;
     delete[] plaintext;
     return std::make_tuple(plain, olen);
 }
@@ -175,15 +176,16 @@ void DigitalKeySecureContext::encrypt(unsigned char* plaintext, size_t data_size
     std::fill(iv, iv + 16, 0);
     unsigned char counter_byte[] = {static_cast<unsigned char>(counter % 256)};
     size_t input_data_size = 15 + 1;
-    unsigned char* input_data = concatenate_arrays(pcb, counter_byte, 15, 1);
-    encrypt_aes_cbc(key, iv, input_data, input_data_size, icv);
+    std::vector<uint8_t> input_data = concatenate_arrays(pcb, counter_byte, 15, 1);
+    encrypt_aes_cbc(key, iv, input_data.data(), input_data_size, icv);
 
     // Encrypt using AES-CBC
-    encrypt_aes_cbc(key, icv, std::get<0>(padded), std::get<1>(padded), ciphertext);
+    encrypt_aes_cbc(key, icv, std::get<0>(padded).data(), std::get<1>(padded), ciphertext);
 
     memcpy(olen, &std::get<1>(padded), 1);
 
     delete[] icv;
+    delete[] iv;
 }
 
 void DigitalKeySecureContext::decrypt(const unsigned char* ciphertext, size_t cipherTextLen, const unsigned char* pcb, const unsigned char* key, int counter, unsigned char* plaintext, size_t* olen) {
@@ -197,8 +199,8 @@ void DigitalKeySecureContext::decrypt(const unsigned char* ciphertext, size_t ci
     std::fill(iv, iv + 16, 0);
     unsigned char counter_byte[] = {static_cast<unsigned char>(counter % 256)};
     size_t input_data_size = 15 + 1;
-    unsigned char* input_data = concatenate_arrays(pcb, counter_byte, 15, 1);
-    encrypt_aes_cbc(key, iv, input_data, input_data_size, icv);
+    std::vector<uint8_t> input_data = concatenate_arrays(pcb, counter_byte, 15, 1);
+    encrypt_aes_cbc(key, iv, input_data.data(), input_data_size, icv);
 
     uint8_t dec[cipherTextLen];
 
@@ -209,12 +211,13 @@ void DigitalKeySecureContext::decrypt(const unsigned char* ciphertext, size_t ci
     unpad_mode_3(dec, cipherTextLen, plaintext, olen);
 
     delete[] icv;
+    delete[] iv;
 }
 
-unsigned char* DigitalKeySecureContext::concatenate_arrays(const unsigned char* a, const unsigned char* b, size_t size_a, size_t size_b) {
-    unsigned char* result = new unsigned char[size_a + size_b];
-    memcpy(result, a, size_a);
-    memcpy(result + size_a, b, size_b);
+std::vector<uint8_t> DigitalKeySecureContext::concatenate_arrays(const unsigned char* a, const unsigned char* b, size_t size_a, size_t size_b) {
+    std::vector<uint8_t> result(size_a + size_b);
+    memcpy(result.data(), a, size_a);
+    memcpy(result.data() + size_a, b, size_b);
 
     return result;
 }

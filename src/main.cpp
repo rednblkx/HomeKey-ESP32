@@ -318,7 +318,7 @@ int set_reader_key(uint8_t *buf, size_t len)
   std::vector<uint8_t> readeridentifier = getHashIdentifier(homeKeyReader::readerData.reader_private_key, sizeof(homeKeyReader::readerData.reader_private_key), true);
   memcpy(homeKeyReader::readerData.reader_identifier, readeridentifier.data(), 8);
   json serializedData = homeKeyReader::readerData;
-  auto bson = json::to_bson(serializedData);
+  auto bson = json::to_msgpack(serializedData);
   esp_err_t set_nvs = nvs_set_blob(savedData, "READERDATA", bson.data(), bson.size());
   esp_err_t commit_nvs = nvs_commit(savedData);
   LOG1("*** NVS W STATUS: \n");
@@ -333,6 +333,7 @@ int set_reader_key(uint8_t *buf, size_t len)
   else
     return 1;
 }
+
 std::vector<unsigned char> simple_tlv(unsigned char tag, const unsigned char *value, size_t valLength, unsigned char *out = NULL, size_t *olen = NULL)
 {
   uint8_t dataLen[2] = {(unsigned char)valLength};
@@ -369,6 +370,57 @@ void pack(uint8_t *buf, size_t buflen, uint8_t *out, int *olen)
 
 std::tuple<uint8_t *, int> provision_device_cred(uint8_t *buf, size_t len)
 {
+  for (size_t i = 0; i < 16; i++)
+  {
+    if (HAPClient::controllers[i].allocated)
+    {
+      std::vector<uint8_t> id = getHashIdentifier(HAPClient::controllers[i].LTPK, 32, true);
+      HAPClient::hexPrintRow(id.data(), 8);
+      printf("\n");
+      homeKeyReader::Issuers::homeKeyIssuers_t *foundIssuer = 0;
+      for (auto &issuer : homeKeyReader::readerData.issuers)
+      {
+        nfc.PrintHex(issuer.issuerId, 8);
+        HAPClient::hexPrintRow(HAPClient::controllers[i].LTPK, 32);
+        if (!memcmp(issuer.issuerId, id.data(), 8))
+        {
+          printf("\nALREADY HERE!!!!\n");
+          foundIssuer = &issuer;
+          break;
+        }
+      }
+      if (foundIssuer == 0)
+      {
+        printf("\nNOT PRESENT, INSERTING!!!\n");
+        nfc.PrintHex(id.data(), id.size());
+        homeKeyReader::Issuers::homeKeyIssuers_t issuer;
+        memcpy(issuer.issuerId, id.data(), 8);
+        memcpy(issuer.publicKey, HAPClient::controllers[i].LTPK, 32);
+        homeKeyReader::readerData.issuers.emplace_back(issuer);
+        json serializedData = homeKeyReader::readerData;
+        auto bson = json::to_msgpack(serializedData);
+        esp_err_t set_nvs = nvs_set_blob(savedData, "READERDATA", bson.data(), bson.size());
+        esp_err_t commit_nvs = nvs_commit(savedData);
+        LOG1("*** NVS W STATUS: \n");
+        LOG1("READER DATA: %s\n", esp_err_to_name(set_nvs));
+        LOG1("COMMIT: %s\n", esp_err_to_name(commit_nvs));
+        LOG1("*** NVS W STATUS: \n");
+      }
+    }
+  }
+  Serial.printf("\n*** HOMEKEY ISSUERS: %d\n", homeKeyReader::readerData.issuers.size());
+  for (auto &issuer : homeKeyReader::readerData.issuers)
+  {
+    Serial.printf("**Issuer\n");
+    Serial.printf("\t- Identifier: ");
+    for (auto &issuerId : issuer.issuerId)
+      Serial.printf("%02x", issuerId);
+    Serial.printf("\n\t- Public Key: ");
+    for (auto &issuerKey : issuer.publicKey)
+      Serial.printf("%02x", issuerKey);
+    Serial.println();
+  }
+  Serial.printf("\n");
   TLV<Device_Credential_Request, 5> tlv8;
   printBuffer(buf, len);
   tlv8.create(kDevice_Req_Key_Type, 1, "KEY.TYPE");
@@ -386,7 +438,7 @@ std::tuple<uint8_t *, int> provision_device_cred(uint8_t *buf, size_t len)
   {
     if (!memcmp(issuer.issuerId, tlv8.buf(kDevice_Req_Issuer_Key_Identifier), 8))
     {
-      printf("\nFound Issuer: ");
+      printf("\nFound Issuer: \n");
       for (auto &id : issuer.issuerId)
       {
         printf("%02x", id);
@@ -431,7 +483,7 @@ std::tuple<uint8_t *, int> provision_device_cred(uint8_t *buf, size_t len)
       memcpy(endpoint.endpointId, endpointId.data(), 6);
       memcpy(endpoint.publicKey, endEphPubKey, sizeof(endEphPubKey));
       memcpy(endpoint.persistent_key, persistentKey, sizeof(persistentKey));
-      foundIssuer->endpoints.push_back(endpoint);
+      foundIssuer->endpoints.emplace_back(endpoint);
       return std::make_tuple(foundIssuer->issuerId, SUCCESS);
     }
     else
@@ -439,7 +491,7 @@ std::tuple<uint8_t *, int> provision_device_cred(uint8_t *buf, size_t len)
       return std::make_tuple(homeKeyReader::readerData.reader_identifier, DUPLICATE);
     }
     json serializedData = homeKeyReader::readerData;
-    auto bson = json::to_bson(serializedData);
+    auto bson = json::to_msgpack(serializedData);
     esp_err_t set_nvs = nvs_set_blob(savedData, "READERDATA", bson.data(), bson.size());
     esp_err_t commit_nvs = nvs_commit(savedData);
     LOG1("*** NVS W STATUS: \n");
@@ -452,7 +504,7 @@ std::tuple<uint8_t *, int> provision_device_cred(uint8_t *buf, size_t len)
   {
     return std::make_tuple(homeKeyReader::readerData.reader_identifier, DOES_NOT_EXIST);
   }
-  return std::make_tuple(tlv8.buf(kDevice_Req_Issuer_Key_Identifier), 99);
+  return std::make_tuple(homeKeyReader::readerData.reader_identifier, DOES_NOT_EXIST);
 }
 
 std::tuple<std::vector<uint8_t>, std::vector<uint8_t>> get_public_points(uint8_t *pubKey, size_t pubLen, uint8_t *xBuf, size_t *xLen, uint8_t *yBuf, size_t *yLen)
@@ -626,12 +678,13 @@ std::tuple<uint8_t *, uint8_t *, uint8_t *, std::vector<uint8_t>> key_material_g
 
 std::vector<unsigned char> attestation_salt(std::vector<unsigned char> env1Data, std::vector<unsigned char> readerCmd)
 {
-  TLV<ENVELOPE_RESPONSE, 2> env1ResTlv;
-  env1ResTlv.create(kNDEF_MESSAGE, 128, "NDEF.MESSAGE");
-  env1ResTlv.create(kEnv1Status, 2, "STATUS");
-  env1ResTlv.unpack(env1Data.data(), env1Data.size());
-  env1ResTlv.print(1);
-  NDEFMessage ndefEnv1Ctx = NDEFMessage(env1ResTlv.buf(kNDEF_MESSAGE), env1ResTlv.len(kNDEF_MESSAGE));
+  // TLV<ENVELOPE_RESPONSE, 2> env1ResTlv;
+  // env1ResTlv.create(kNDEF_MESSAGE, 128, "NDEF.MESSAGE");
+  // env1ResTlv.create(kEnv1Status, 2, "STATUS");
+  // env1ResTlv.unpack(env1Data.data(), env1Data.size());
+  // env1ResTlv.print(1);
+  BERTLV env1ResTlv = BERTLV::unpack(env1Data);
+  NDEFMessage ndefEnv1Ctx = NDEFMessage(env1ResTlv.value.data(), env1ResTlv.value.size());
   auto ndefEnv1Data = ndefEnv1Ctx.unpack();
   auto ndefEnv1Pack = ndefEnv1Ctx.pack();
   for (int i = 0; i < ndefEnv1Data.size(); i++)
@@ -647,7 +700,7 @@ std::vector<unsigned char> attestation_salt(std::vector<unsigned char> env1Data,
   CBOR readerNdef = CBOR();
   readerNdef.encode(readerCmd.data(), readerCmd.size());
   CBOR deviceNdef = CBOR();
-  deviceNdef.encode(env1ResTlv.buf(kNDEF_MESSAGE), env1ResTlv.len(kNDEF_MESSAGE));
+  deviceNdef.encode(env1ResTlv.value.data(), env1ResTlv.value.size());
 
   CBOR tag1 = CBOR(24, deviceEngagement);
   json tagArray = {json::from_cbor(tag1.to_CBOR(), tag1.to_CBOR() + tag1.length(), true, true, json::cbor_tag_handler_t::store), {json::from_cbor(deviceNdef.to_CBOR(), deviceNdef.to_CBOR() + deviceNdef.length(), true, true, json::cbor_tag_handler_t::store), json::from_cbor(readerNdef.to_CBOR(), readerNdef.to_CBOR() + readerNdef.length(), true, true, json::cbor_tag_handler_t::store)}};
@@ -975,11 +1028,11 @@ void attestKeys(std::vector<uint8_t> cborDecrypted){
 
 }
 
-std::tuple<homeKeyReader::issuerEndpoints::issuerEndpoints_t*, std::vector<uint8_t>> std_auth(uint8_t *readerIdentifier, uint8_t *transId, uint8_t *readerEphPrivKey, size_t readerEphLen, uint8_t *readerEphPubKey, size_t readerEphPubLen, uint8_t *endEphPublicKey, size_t endEphLen)
+std::tuple<homeKeyReader::issuerEndpoints::issuerEndpoints_t*, DigitalKeySecureContext, std::vector<uint8_t>, int> std_auth(uint8_t *readerIdentifier, uint8_t *transId, uint8_t *readerEphPrivKey, size_t readerEphLen, uint8_t *readerEphPubKey, size_t readerEphPubLen, uint8_t *endEphPublicKey, size_t endEphLen)
 {
-  uint8_t readerEph_X[readerEphPubLen];
+  std::vector<uint8_t> readerEph_X(readerEphPubLen);
   size_t readerEph_XLen = 0;
-  uint8_t endpointEph_X[endEphLen];
+  std::vector<uint8_t> endpointEph_X(endEphLen);
   size_t endpointEph_XLen = 0;
   int readerContext = 1096652137;
   int deviceContext = 1317567308;
@@ -996,32 +1049,32 @@ std::tuple<homeKeyReader::issuerEndpoints::issuerEndpoints_t*, std::vector<uint8
   deviceCtx[2] = static_cast<uint8_t>((deviceContext >> 8) & 0xFF);
   deviceCtx[3] = static_cast<uint8_t>(deviceContext & 0xFF);
 
-  get_public_points(readerEphPubKey, readerEphPubLen, readerEph_X, &readerEph_XLen, NULL, NULL);
-  get_public_points(endEphPublicKey, endEphLen, endpointEph_X, &endpointEph_XLen, NULL, NULL);
-  printBuffer(readerEph_X, readerEph_XLen);
-  printBuffer(endpointEph_X, endpointEph_XLen);
-  uint8_t stdTlv[128];
+  get_public_points(readerEphPubKey, readerEphPubLen, readerEph_X.data(), &readerEph_XLen, NULL, NULL);
+  get_public_points(endEphPublicKey, endEphLen, endpointEph_X.data(), &endpointEph_XLen, NULL, NULL);
+  printBuffer(readerEph_X.data(), readerEph_XLen);
+  printBuffer(endpointEph_X.data(), endpointEph_XLen);
+  std::vector<uint8_t> stdTlv(sizeof(homeKeyReader::readerData.reader_identifier) + sizeof(homeKeyReader::readerData.identifier) + endpointEph_XLen + readerEph_XLen + 30);
   size_t len = 0;
-  simple_tlv(0x4D, readerIdentifier, sizeof(homeKeyReader::readerData.reader_identifier) + sizeof(homeKeyReader::readerData.identifier), stdTlv, &len);
-  simple_tlv(0x86, endpointEph_X, endpointEph_XLen, stdTlv + len, &len);
-  simple_tlv(0x87, readerEph_X, readerEph_XLen, stdTlv + len, &len);
-  simple_tlv(0x4C, transId, 16, stdTlv + len, &len);
-  simple_tlv(0x93, readerCtx, 4, stdTlv + len, &len);
+  simple_tlv(0x4D, readerIdentifier, sizeof(homeKeyReader::readerData.reader_identifier) + sizeof(homeKeyReader::readerData.identifier), stdTlv.data(), &len);
+  simple_tlv(0x86, endpointEph_X.data(), endpointEph_XLen, stdTlv.data() + len, &len);
+  simple_tlv(0x87, readerEph_X.data(), readerEph_XLen, stdTlv.data() + len, &len);
+  simple_tlv(0x4C, transId, 16, stdTlv.data() + len, &len);
+  simple_tlv(0x93, readerCtx, 4, stdTlv.data() + len, &len);
   Serial.println("*** Packed TLV: ");
-  nfc.PrintHex(stdTlv, len);
-  auto sigTlv = signSharedInfo(stdTlv, len);
-  uint8_t apdu[sigTlv.size() + 5] = {0x80, 0x81, 0x0, 0x0, (uint8_t)sigTlv.size()};
-  memcpy(apdu + 5, sigTlv.data(), sigTlv.size());
-  uint8_t response[128];
+  nfc.PrintHex(stdTlv.data(), len);
+  auto sigTlv = signSharedInfo(stdTlv.data(), len);
+  std::vector<uint8_t> apdu{0x80, 0x81, 0x0, 0x0, (uint8_t)sigTlv.size()};
+  apdu.insert(apdu.begin()+5,sigTlv.begin(), sigTlv.end());
+  std::vector<uint8_t> response(128);
   uint8_t responseLength = 128;
-  nfc.inDataExchange(apdu, sizeof(apdu), response, &responseLength);
-  nfc.PrintHex(response, responseLength);
+  nfc.inDataExchange(apdu.data(), apdu.size(), response.data(), &responseLength);
+  nfc.PrintHex(response.data(), responseLength);
   homeKeyReader::issuerEndpoints::issuerEndpoints_t *foundEndpoint = nullptr;
   if (responseLength > 2 && response[responseLength - 2] == 0x90)
   {
-    auto keys = key_material_generator(readerEphPrivKey, readerEphLen, readerEph_X, readerEph_XLen, endEphPublicKey, endEphLen, endpointEph_X, readerEph_XLen, transId);
+    auto keys = key_material_generator(readerEphPrivKey, readerEphLen, readerEph_X.data(), readerEph_XLen, endEphPublicKey, endEphLen, endpointEph_X.data(), readerEph_XLen, transId);
     DigitalKeySecureContext context(std::get<0>(keys), std::get<1>(keys), std::get<2>(keys));
-    auto response_result = context.decrypt_response(response, responseLength - 2);
+    auto response_result = context.decrypt_response(response.data(), responseLength - 2);
     printf("\ndecrypted data: ");
     for (size_t i = 0; i < std::get<1>(response_result); i++)
     {
@@ -1041,6 +1094,13 @@ std::tuple<homeKeyReader::issuerEndpoints::issuerEndpoints_t*, std::vector<uint8
           signature = &data;
         }
       }
+      if(device_identifier == nullptr){
+        uint8_t apdu[4] = {0x80, 0x3c, 0x00, 0x0};
+        uint8_t response[4];
+        uint8_t responseLength = 4;
+        nfc.inDataExchange(apdu, sizeof(apdu), response, &responseLength);
+        return std::make_tuple(nullptr, context, std::vector<uint8_t>{}, 99);
+      }
       for (auto &issuer : homeKeyReader::readerData.issuers)
       {
         for (auto &endpoint : issuer.endpoints)
@@ -1052,16 +1112,16 @@ std::tuple<homeKeyReader::issuerEndpoints::issuerEndpoints_t*, std::vector<uint8
         }
       }
       if(foundEndpoint != nullptr){
-        uint8_t verification_hash_input_material[sizeof(homeKeyReader::readerData.reader_identifier) + sizeof(homeKeyReader::readerData.identifier) + endpointEph_XLen + readerEph_XLen + 20];
+        std::vector<uint8_t> verification_hash_input_material(sizeof(homeKeyReader::readerData.reader_identifier) + sizeof(homeKeyReader::readerData.identifier) + endpointEph_XLen + readerEph_XLen + 30);
         size_t olen = 0;
 
-        simple_tlv(0x4D, readerIdentifier, sizeof(homeKeyReader::readerData.reader_identifier) + sizeof(homeKeyReader::readerData.identifier), verification_hash_input_material, &olen);
-        simple_tlv(0x86, endpointEph_X, endpointEph_XLen, verification_hash_input_material + olen, &olen);
-        simple_tlv(0x87, readerEph_X, readerEph_XLen, verification_hash_input_material + olen, &olen);
-        simple_tlv(0x4C, transId, 16, verification_hash_input_material + olen, &olen);
-        simple_tlv(0x93, deviceCtx, 4, verification_hash_input_material + olen, &olen);
+        simple_tlv(0x4D, readerIdentifier, sizeof(homeKeyReader::readerData.reader_identifier) + sizeof(homeKeyReader::readerData.identifier), verification_hash_input_material.data(), &olen);
+        simple_tlv(0x86, endpointEph_X.data(), endpointEph_XLen, verification_hash_input_material.data() + olen, &olen);
+        simple_tlv(0x87, readerEph_X.data(), readerEph_XLen, verification_hash_input_material.data() + olen, &olen);
+        simple_tlv(0x4C, transId, 16, verification_hash_input_material.data() + olen, &olen);
+        simple_tlv(0x93, deviceCtx, 4, verification_hash_input_material.data() + olen, &olen);
         Serial.println("*** Packed TLV: ");
-        nfc.PrintHex(verification_hash_input_material, olen);
+        nfc.PrintHex(verification_hash_input_material.data(), olen);
         mbedtls_ecp_keypair keypair;
         mbedtls_ecp_keypair_init(&keypair);
         mbedtls_ecp_group grp;
@@ -1078,7 +1138,7 @@ std::tuple<homeKeyReader::issuerEndpoints::issuerEndpoints_t*, std::vector<uint8
 
         uint8_t hash[32];
 
-        mbedtls_md(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), verification_hash_input_material, olen, hash);
+        mbedtls_md(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), verification_hash_input_material.data(), olen, hash);
 
         printf("\n** VERIFICATION SHA256 Hashed TLV:\n");
         nfc.PrintHex(hash, 32);
@@ -1115,7 +1175,7 @@ std::tuple<homeKeyReader::issuerEndpoints::issuerEndpoints_t*, std::vector<uint8
         if(result == 0){
           memcpy(foundEndpoint->persistent_key, std::get<3>(keys).data(), 32);
           json data = homeKeyReader::readerData;
-          auto bson = json::to_bson(data);
+          auto bson = json::to_msgpack(data);
           esp_err_t set_nvs = nvs_set_blob(savedData, "READERDATA", bson.data(), bson.size());
           esp_err_t commit_nvs = nvs_commit(savedData);
           LOG1("*** NVS W STATUS: \n");
@@ -1123,53 +1183,30 @@ std::tuple<homeKeyReader::issuerEndpoints::issuerEndpoints_t*, std::vector<uint8
           LOG1("COMMIT: %s\n", esp_err_to_name(commit_nvs));
           LOG1("*** NVS W STATUS: \n");
           uint8_t apdu[4] = {0x80, 0x3c, 0x01, 0x0};
-          uint8_t response[4];
-          uint8_t responseLength = 4;
-          nfc.inDataExchange(apdu, sizeof(apdu), response, &responseLength);
-          if(response[0] == 0x90){
+          uint8_t cmdFlow[4];
+          uint8_t cmdFlowLength = 4;
+          nfc.inDataExchange(apdu, sizeof(apdu), cmdFlow, &cmdFlowLength);
+          if(cmdFlow[0] == 0x90){
             printf("\nAUTHENTICATED VIA STD FLOW\n");
           }
-          return std::make_tuple(foundEndpoint, std::get<3>(keys));
-        }
-      }
-
-      if (std::get<0>(response_result)[0] == 0)
-      {
-        std::cout << std::endl;
-        printf("\nSOMETHING WENT WRONG\n");
-        std::make_tuple(foundEndpoint, NULL);
-      }
-      if (device_identifier != nullptr)
-      {
-        auto att1_res = attestation_exchange(context);
-        size_t att1Len = std::get<0>(att1_res).size();
-        if (att1Len > 2 && std ::get<0>(att1_res).data()[att1Len - 2] == 0x90)
+          return std::make_tuple(foundEndpoint, context, std::get<3>(keys), kFlowSTANDARD);
+        } else 
+        if (device_identifier != nullptr)
         {
-          auto env1 = envelope1Cmd();
-          size_t env1Len = std::get<0>(env1).size();
-          if (env1Len > 2 && std::get<0>(env1).data()[env1Len - 2] == 0x90)
-          {
-            auto env2Decrypted = envelope2Cmd(std::get<0>(env1), std::get<1>(env1), std::get<1>(att1_res));
-            if(env2Decrypted.size() > 0){
-              Serial.print("\nAuth Attestation, storing persistent key");
-              nfc.PrintHex(std::get<3>(keys).data(), 32);
-              memcpy(foundEndpoint->persistent_key, std::get<3>(keys).data(), 32);
-              json data = homeKeyReader::readerData;
-              auto bson = json::to_bson(data);
-              esp_err_t set_nvs = nvs_set_blob(savedData, "READERDATA", bson.data(), bson.size());
-              esp_err_t commit_nvs = nvs_commit(savedData);
-              LOG1("*** NVS W STATUS: \n");
-              LOG1("SET: %s\n", esp_err_to_name(set_nvs));
-              LOG1("COMMIT: %s\n", esp_err_to_name(commit_nvs));
-              LOG1("*** NVS W STATUS: \n");
-              return std::make_tuple(foundEndpoint, std::get<3>(keys));
-            }
-          }
+          return std::make_tuple(foundEndpoint, context, std::get<3>(keys), kFlowATTESTATION);
         }
       }
+    } else {
+      std::cout << std::endl;
+      printf("\nSOMETHING WENT WRONG\n");
+      uint8_t apdu[4] = {0x80, 0x3c, 0x00, 0x0};
+      uint8_t response[4];
+      uint8_t responseLength = 4;
+      nfc.inDataExchange(apdu, sizeof(apdu), response, &responseLength);
+      std::make_tuple(nullptr, context, std::vector<uint8_t>{}, 99);
     }
   }
-  return std::make_tuple(foundEndpoint, std::vector<uint8_t>{});
+  return std::make_tuple(foundEndpoint, DigitalKeySecureContext(), std::vector<uint8_t>{}, 99);
 }
 
 homeKeyReader::issuerEndpoints::issuerEndpoints_t *find_endpoint_by_cryptogram(uint8_t *readerPublicKey, size_t rPubLen, uint8_t *readerEphemeralPublicKey, size_t rEphPubLen, uint8_t *endpointEphemeralPublicKey, size_t ePubLen, uint8_t *transId, uint8_t *cryptogram)
@@ -1202,7 +1239,7 @@ homeKeyReader::issuerEndpoints::issuerEndpoints_t *find_endpoint_by_cryptogram(u
   return foundEndpoint;
 }
 
-void fast_auth(uint8_t *readerPublicKey, size_t pubLen, uint8_t *readerEphemeralPublicKey, size_t ephLen, uint8_t *readerEphemeralPrivKey, size_t ephPrivLen)
+std::tuple<homeKeyReader::issuerEndpoints::issuerEndpoints_t*, int> fast_auth(uint8_t *readerPublicKey, size_t pubLen, uint8_t *readerEphemeralPublicKey, size_t ephLen, uint8_t *readerEphemeralPrivKey, size_t ephPrivLen)
 {
   uint8_t prot_v_data[] = {0x02, 0x0};
   uint8_t transactionIdentifier[16];
@@ -1215,15 +1252,6 @@ void fast_auth(uint8_t *readerPublicKey, size_t pubLen, uint8_t *readerEphemeral
   }
 
   Serial.println();
-
-  uint8_t *fastTlv = new unsigned char[110];
-  size_t len = 0;
-  simple_tlv(0x5C, prot_v_data, sizeof(prot_v_data), fastTlv, &len);
-
-  simple_tlv(0x87, readerEphemeralPublicKey, ephLen, fastTlv + len, &len);
-
-  simple_tlv(0x4C, transactionIdentifier, sizeof(transactionIdentifier), fastTlv + len, &len);
-
   uint8_t identifier[sizeof(homeKeyReader::readerData.reader_identifier) + sizeof(homeKeyReader::readerData.identifier)];
   memcpy(identifier, homeKeyReader::readerData.reader_identifier, sizeof(homeKeyReader::readerData.reader_identifier));
   memcpy(identifier + sizeof(homeKeyReader::readerData.reader_identifier), homeKeyReader::readerData.identifier, sizeof(homeKeyReader::readerData.identifier));
@@ -1233,19 +1261,28 @@ void fast_auth(uint8_t *readerPublicKey, size_t pubLen, uint8_t *readerEphemeral
     Serial.printf("%02x ", identifier[i]);
   }
   Serial.println();
-  simple_tlv(0x4D, identifier, sizeof(identifier), fastTlv + len, &len);
+
+  std::vector<uint8_t> fastTlv(sizeof(prot_v_data) + ephLen + sizeof(transactionIdentifier) + sizeof(identifier) + 8);
+  size_t len = 0;
+  simple_tlv(0x5C, prot_v_data, sizeof(prot_v_data), fastTlv.data(), &len);
+
+  simple_tlv(0x87, readerEphemeralPublicKey, ephLen, fastTlv.data() + len, &len);
+
+  simple_tlv(0x4C, transactionIdentifier, sizeof(transactionIdentifier), fastTlv.data() + len, &len);
+
+  simple_tlv(0x4D, identifier, sizeof(identifier), fastTlv.data() + len, &len);
   Serial.println("*** TLV LENGTH: ");
   Serial.println(len);
-  uint8_t *apdu = new unsigned char[113]{0x80, 0x80, 0x01, 0x01, (uint8_t)len};
-  memcpy(apdu + 5, fastTlv, len);
+  std::vector<uint8_t> apdu{0x80, 0x80, 0x01, 0x01, (uint8_t)len};
+  apdu.insert(apdu.begin()+5,fastTlv.begin(), fastTlv.end());
   bool exchange;
-  uint8_t *response = new unsigned char[90];
-  uint8_t responseLength = 90;
-  exchange = nfc.inDataExchange(apdu, 113, response, &responseLength);
+  std::vector<uint8_t> response(128);
+  uint8_t responseLength = 128;
+  exchange = nfc.inDataExchange(apdu.data(), apdu.size(), response.data(), &responseLength);
   Serial.print("***RESPONSE: ");
-  nfc.PrintHex(response, responseLength);
-
-  if (response[responseLength - 2] == 0x90)
+  nfc.PrintHex(response.data(), responseLength);
+  homeKeyReader::issuerEndpoints::issuerEndpoints_t *endpoint = nullptr;
+  if (response[responseLength - 2] == 0x90 && response[0] == 0x86)
   {
     TLV<AUTH0_RESPONSE, 10> Auth0Res;
 
@@ -1253,28 +1290,56 @@ void fast_auth(uint8_t *readerPublicKey, size_t pubLen, uint8_t *readerEphemeral
     Auth0Res.create(kAuth0_Cryptogram, 16, "AUTH0.CRYPT");
     Auth0Res.create(kAuth0Status, 1, "STATUS");
 
-    Auth0Res.unpack(response, responseLength);
+    Auth0Res.unpack(response.data(), responseLength);
     Auth0Res.print(0);
 
-    homeKeyReader::issuerEndpoints::issuerEndpoints_t *endpoint = find_endpoint_by_cryptogram(readerPublicKey, pubLen, readerEphemeralPublicKey, ephLen, Auth0Res.buf(kEndpoint_Public_Key), Auth0Res.len(kEndpoint_Public_Key), transactionIdentifier, Auth0Res.buf(kAuth0_Cryptogram));
+    endpoint = find_endpoint_by_cryptogram(readerPublicKey, pubLen, readerEphemeralPublicKey, ephLen, Auth0Res.buf(kEndpoint_Public_Key), Auth0Res.len(kEndpoint_Public_Key), transactionIdentifier, Auth0Res.buf(kAuth0_Cryptogram));
     if (endpoint != nullptr)
     {
-      uint8_t apdu[4] = {0x80, 0x3c, 0x01, 0x0};
-      uint8_t response[4];
+      uint8_t apdu1[4] = {0x80, 0x3c, 0x01, 0x0};
+      uint8_t response1[4];
       uint8_t responseLength = 4;
-      exchange = nfc.inDataExchange(apdu, sizeof(apdu), response, &responseLength);
-      if(response[0] == 0x90){
+      exchange = nfc.inDataExchange(apdu1, sizeof(apdu1), response1, &responseLength);
+      if(response1[0] == 0x90){
         printf("\nAUTHENTICATED VIA FAST FLOW\n");
+        return std::make_tuple(endpoint, kFlowFAST);
       }
     }
     else
     {
-      std_auth(identifier, transactionIdentifier, readerEphemeralPrivKey, ephPrivLen, readerEphemeralPublicKey, ephLen, Auth0Res.buf(kEndpoint_Public_Key), Auth0Res.len(kEndpoint_Public_Key));
+      auto std = std_auth(identifier, transactionIdentifier, readerEphemeralPrivKey, ephPrivLen, readerEphemeralPublicKey, ephLen, Auth0Res.buf(kEndpoint_Public_Key), Auth0Res.len(kEndpoint_Public_Key));
+      if(std::get<3>(std) == kFlowATTESTATION){
+        auto att1_res = attestation_exchange(std::get<1>(std));
+        size_t att1Len = std::get<0>(att1_res).size();
+        if (att1Len > 2 && std ::get<0>(att1_res).data()[att1Len - 2] == 0x90)
+        {
+          auto env1 = envelope1Cmd();
+          size_t env1Len = std::get<0>(env1).size();
+          if (env1Len > 2 && std::get<0>(env1).data()[env1Len - 2] == 0x90)
+          {
+            auto env2Decrypted = envelope2Cmd(std::get<0>(env1), std::get<1>(env1), std::get<1>(att1_res));
+            if(env2Decrypted.size() > 0){
+              Serial.print("\nAuth Attestation, storing persistent key");
+              nfc.PrintHex(std::get<2>(std).data(), 32);
+              memcpy(std::get<0>(std)->persistent_key, std::get<2>(std).data(), 32);
+              json data = homeKeyReader::readerData;
+              auto bson = json::to_msgpack(data);
+              esp_err_t set_nvs = nvs_set_blob(savedData, "READERDATA", bson.data(), bson.size());
+              esp_err_t commit_nvs = nvs_commit(savedData);
+              LOG1("*** NVS W STATUS: \n");
+              LOG1("SET: %s\n", esp_err_to_name(set_nvs));
+              LOG1("COMMIT: %s\n", esp_err_to_name(commit_nvs));
+              LOG1("*** NVS W STATUS: \n");
+              return std::make_tuple(std::get<0>(std), kFlowATTESTATION);
+            }
+          }
+        }
+      } else if(std::get<3>(std) == kFlowSTANDARD){
+        return std::make_tuple(std::get<0>(std), kFlowSTANDARD); 
+      }
     }
   }
-  delete[] apdu;
-  delete[] fastTlv;
-  delete[] response;
+  return std::make_tuple(endpoint, 99);
 }
 
 struct LockManagement : Service::LockManagement
@@ -1295,6 +1360,29 @@ struct LockManagement : Service::LockManagement
   } // end constructor
 
 }; // end LockManagement
+
+// Function to calculate CRC16
+void crc16a(unsigned char *data, unsigned int size, unsigned char *result)
+{
+  unsigned short w_crc = 0x6363;
+
+  for (unsigned int i = 0; i < size; ++i)
+  {
+    unsigned char byte = data[i];
+    byte = (byte ^ (w_crc & 0x00FF));
+    byte = ((byte ^ (byte << 4)) & 0xFF);
+    w_crc = ((w_crc >> 8) ^ (byte << 8) ^ (byte << 3) ^ (byte >> 4)) & 0xFFFF;
+  }
+
+  result[0] = static_cast<unsigned char>(w_crc & 0xFF);
+  result[1] = static_cast<unsigned char>((w_crc >> 8) & 0xFF);
+}
+
+// Function to append CRC16 to data
+void with_crc16(unsigned char *data, unsigned int size, unsigned char *result)
+{
+  crc16a(data, size, result);
+}
 
 struct LockMechanism : Service::LockMechanism
 {
@@ -1327,7 +1415,100 @@ struct LockMechanism : Service::LockMechanism
 
   void loop()
   {
+    if (nfc.inListPassiveTarget())
+  {
+    bool exchange;
+    Serial.println("Found something");
+    uint8_t data[13] = {0x00, 0xA4, 0x04, 0x00, 0x07, 0xA0, 0x00, 0x00, 0x08, 0x58, 0x01, 0x01, 0x0};
+    uint8_t selectCmdRes[32];
+    uint8_t selectCmdResLength = 32;
+    exchange = nfc.inDataExchange(data, sizeof(data), selectCmdRes, &selectCmdResLength);
+    if (exchange)
+    {
+      Serial.print("selectCmdResLength: ");
+      Serial.println(selectCmdResLength);
+      if (selectCmdRes[selectCmdResLength - 2] == 0x90 && selectCmdRes[selectCmdResLength - 1] == 0x00)
+      {
+        Serial.println("\nHomeKey Selected!");
+        nfc.PrintHex(selectCmdRes, selectCmdResLength);
+        nfc.PrintHex((const uint8_t *)homeKeyReader::readerData.reader_private_key, sizeof(homeKeyReader::readerData.reader_private_key));
+        mbedtls_ecp_keypair keypair;
+        mbedtls_ecp_keypair_init(&keypair);
+        mbedtls_entropy_context entropy;
+        mbedtls_ctr_drbg_context ctr_drbg;
+        mbedtls_entropy_init(&entropy);
+        mbedtls_ctr_drbg_init(&ctr_drbg);
+        mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, NULL, 0);
 
+        int ecp_key = mbedtls_ecp_read_key(MBEDTLS_ECP_DP_SECP256R1, &keypair, (const uint8_t *)homeKeyReader::readerData.reader_private_key, sizeof(homeKeyReader::readerData.reader_private_key));
+        int ret = mbedtls_ecp_mul(&keypair.grp, &keypair.Q, &keypair.d, &keypair.grp.G, mbedtls_ctr_drbg_random, &ctr_drbg);
+
+        size_t olenPub = 0;
+        unsigned char *buf = new unsigned char[128];
+        mbedtls_ecp_point_write_binary(&keypair.grp, &keypair.Q, MBEDTLS_ECP_PF_UNCOMPRESSED, &olenPub, buf, 128);
+
+        // Set buffer size for coordinates
+        size_t buffer_size_x = mbedtls_mpi_size(&keypair.Q.X);
+        size_t buffer_size_y = mbedtls_mpi_size(&keypair.Q.Y);
+        uint8_t x_buffer[buffer_size_x];
+        uint8_t y_buffer[buffer_size_y];
+
+        // Write X and Y coordinates into the buffer
+        mbedtls_mpi_write_binary(&keypair.Q.X, x_buffer, mbedtls_mpi_size(&keypair.Q.X));
+        mbedtls_mpi_write_binary(&keypair.Q.Y, y_buffer, mbedtls_mpi_size(&keypair.Q.Y));
+
+        // Cleanup
+        mbedtls_ecp_keypair_free(&keypair);
+        mbedtls_ctr_drbg_free(&ctr_drbg);
+        mbedtls_entropy_free(&entropy);
+
+        mbedtls_ecp_keypair ephemeral;
+        mbedtls_ecp_keypair_init(&ephemeral);
+        mbedtls_entropy_context eph_entropy;
+        mbedtls_ctr_drbg_context eph_ctr_drbg;
+        mbedtls_entropy_init(&eph_entropy);
+        mbedtls_ctr_drbg_init(&eph_ctr_drbg);
+        mbedtls_ctr_drbg_seed(&eph_ctr_drbg, mbedtls_entropy_func, &eph_entropy, NULL, 0);
+        mbedtls_ecp_gen_key(MBEDTLS_ECP_DP_SECP256R1, &ephemeral, mbedtls_ctr_drbg_random, &eph_ctr_drbg);
+        unsigned char bufPriv[mbedtls_mpi_size(&ephemeral.d)];
+        mbedtls_mpi_write_binary(&ephemeral.d, bufPriv, sizeof(bufPriv));
+        Serial.println("**Ephemeral Priv Key: ");
+        for (int i = 0; i < sizeof(bufPriv); i++)
+        {
+          printf("%02x ", bufPriv[i]);
+        }
+        printf("\n");
+        unsigned char *bufPub = new unsigned char[128];
+        size_t olen = 0;
+        mbedtls_ecp_point_write_binary(&ephemeral.grp, &ephemeral.Q, MBEDTLS_ECP_PF_UNCOMPRESSED, &olen, bufPub, 128);
+        Serial.println("**Ephemeral Pub Key: ");
+        for (int i = 0; i < olen; i++)
+        {
+          printf("%02x ", bufPub[i]);
+        }
+        printf("\n");
+        auto auth = fast_auth(buf, olenPub, bufPub, olen, bufPriv, sizeof(bufPriv));
+        delete[] buf;
+        delete[] bufPub;
+        if(std::get<0>(auth) != nullptr && std::get<1>(auth) != 99){
+          Serial.println("Device has been authenticated, toggling lock state");
+          lockTargetState->setVal(!lockCurrentState->getVal());
+          lockCurrentState->setVal(lockTargetState->getVal());
+        }
+      }
+    }
+  }
+  else
+  {
+    uint8_t data[18] = {0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0};
+    memcpy(data + 8, homeKeyReader::readerData.reader_identifier, sizeof(homeKeyReader::readerData.reader_identifier));
+    with_crc16(data, 16, data + 16);
+    uint8_t response[64];
+    uint8_t length = 64;
+    nfc.setPassiveActivationRetries(0);
+    nfc.writeRegister(0x633d, 0);
+    nfc.inCommunicateThru(data, sizeof(data), response, &length, 1000);
+  }
   } // end loop
 
 }; // end LockMechanism
@@ -1514,7 +1695,7 @@ struct NFCAccess : Service::NFCAccess
       std::fill(homeKeyReader::readerData.reader_identifier, homeKeyReader::readerData.reader_identifier + 8, 0);
       std::fill(homeKeyReader::readerData.reader_private_key, homeKeyReader::readerData.reader_private_key + 32, 0);
       json serializedData = homeKeyReader::readerData;
-      auto bson = json::to_bson(serializedData);
+      auto bson = json::to_msgpack(serializedData);
       esp_err_t set_nvs = nvs_set_blob(savedData, "READERDATA", bson.data(), bson.size());
       esp_err_t commit_nvs = nvs_commit(savedData);
       LOG1("*** NVS W STATUS: \n");
@@ -1547,7 +1728,7 @@ void deleteReaderData(const char *buf)
   memcpy(homeKeyReader::readerData.reader_identifier, empty, 8);
   memcpy(homeKeyReader::readerData.reader_private_key, empty, 32);
   json serializedData = homeKeyReader::readerData;
-  auto bson = json::to_bson(serializedData);
+  auto bson = json::to_msgpack(serializedData);
   esp_err_t set_nvs = nvs_set_blob(savedData, "READERDATA", bson.data(), bson.size());
   esp_err_t commit_nvs = nvs_commit(savedData);
   LOG1("*** NVS W STATUS: \n");
@@ -1561,56 +1742,6 @@ void pairCallback(bool isPaired)
   if (isPaired)
   {
     printf("\nCONTROLLLLLLLER PAIRRRED!!!!!!\n");
-    for (size_t i = 0; i < 16; i++)
-    {
-      if (HAPClient::controllers[i].allocated)
-      {
-        std::vector<uint8_t> id = getHashIdentifier(HAPClient::controllers[i].LTPK, 32, true);
-        HAPClient::hexPrintRow(id.data(), 8);
-        printf("\n");
-        homeKeyReader::Issuers::homeKeyIssuers_t *foundIssuer = 0;
-        for (auto &issuer : homeKeyReader::readerData.issuers)
-        {
-          nfc.PrintHex(issuer.issuerId, 8);
-          HAPClient::hexPrintRow(HAPClient::controllers[i].LTPK, 32);
-          if (!memcmp(issuer.issuerId, id.data(), 8))
-          {
-            printf("\nFOUUUUND IT!!!!\n");
-            foundIssuer = &issuer;
-            break;
-          }
-        }
-        if (foundIssuer == 0)
-        {
-          printf("\nNOT PRESENT, INSERTING!!!\n");
-          homeKeyReader::Issuers::homeKeyIssuers_t issuer;
-          memcpy(issuer.issuerId, id.data(), 8);
-          memcpy(issuer.publicKey, HAPClient::controllers[i].LTPK, 32);
-          homeKeyReader::readerData.issuers.emplace_back(issuer);
-        }
-      }
-    }
-    json serializedData = homeKeyReader::readerData;
-    auto bson = json::to_bson(serializedData);
-    esp_err_t set_nvs = nvs_set_blob(savedData, "READERDATA", bson.data(), bson.size());
-    esp_err_t commit_nvs = nvs_commit(savedData);
-    LOG1("*** NVS W STATUS: \n");
-    LOG1("READER DATA: %s\n", esp_err_to_name(set_nvs));
-    LOG1("COMMIT: %s\n", esp_err_to_name(commit_nvs));
-    LOG1("*** NVS W STATUS: \n");
-    Serial.printf("\n*** HOMEKEY ISSUERS: %d\n", homeKeyReader::readerData.issuers.size());
-    for (auto &issuer : homeKeyReader::readerData.issuers)
-    {
-      Serial.printf("**Issuer\n");
-      Serial.printf("\t- Identifier: ");
-      for (auto &issuerId : issuer.issuerId)
-        Serial.printf("%02x", issuerId);
-      Serial.printf("\n\t- Public Key: ");
-      for (auto &issuerKey : issuer.publicKey)
-        Serial.printf("%02x", issuerKey);
-      Serial.println();
-    }
-    Serial.printf("\n");
   }
   else if (HAPClient::nAdminControllers() == 0)
   {
@@ -1626,7 +1757,14 @@ void setup()
   if (!nvs_get_blob(savedData, "READERDATA", NULL, &len)){
     uint8_t bson[len];
     nvs_get_blob(savedData, "READERDATA", bson, &len); // retrieve data
-    json data = json::from_bson(bson, len);
+    printf("\n");
+    for (int i = 0; i < len;i++)
+    {
+      printf("%02x", bson[i]);
+    }
+    printf("\n");
+
+    json data = json::from_msgpack(bson, len);
     std::cout << data.dump(-1) << std::endl;
     homeKeyReader::readerData_t p = data.template get<homeKeyReader::readerData_t>();
     homeKeyReader::readerData = p;
@@ -1703,119 +1841,7 @@ void setup()
 
 //////////////////////////////////////
 
-// Function to calculate CRC16
-void crc16a(unsigned char *data, unsigned int size, unsigned char *result)
-{
-  unsigned short w_crc = 0x6363;
-
-  for (unsigned int i = 0; i < size; ++i)
-  {
-    unsigned char byte = data[i];
-    byte = (byte ^ (w_crc & 0x00FF));
-    byte = ((byte ^ (byte << 4)) & 0xFF);
-    w_crc = ((w_crc >> 8) ^ (byte << 8) ^ (byte << 3) ^ (byte >> 4)) & 0xFFFF;
-  }
-
-  result[0] = static_cast<unsigned char>(w_crc & 0xFF);
-  result[1] = static_cast<unsigned char>((w_crc >> 8) & 0xFF);
-}
-
-// Function to append CRC16 to data
-void with_crc16(unsigned char *data, unsigned int size, unsigned char *result)
-{
-  crc16a(data, size, result);
-}
-
 void loop()
 {
   homeSpan.poll();
-  if (nfc.inListPassiveTarget())
-  {
-    bool exchange;
-    Serial.println("Found something");
-    uint8_t data[] = {0x00, 0xA4, 0x04, 0x00, 0x07, 0xA0, 0x00, 0x00, 0x08, 0x58, 0x01, 0x01, 0x0};
-    uint8_t response[32];
-    uint8_t responseLength = 32;
-    exchange = nfc.inDataExchange(data, sizeof(data), response, &responseLength);
-    if (exchange)
-    {
-      Serial.print("responseLength: ");
-      Serial.println(responseLength);
-      if (response[responseLength - 2] == 0x90 && response[responseLength - 1] == 0x00)
-      {
-        Serial.println("\nSuccess!");
-        nfc.PrintHex(response, responseLength);
-        nfc.PrintHex((const uint8_t *)homeKeyReader::readerData.reader_private_key, sizeof(homeKeyReader::readerData.reader_private_key));
-        mbedtls_ecp_keypair keypair;
-        mbedtls_ecp_keypair_init(&keypair);
-        mbedtls_entropy_context entropy;
-        mbedtls_ctr_drbg_context ctr_drbg;
-        mbedtls_entropy_init(&entropy);
-        mbedtls_ctr_drbg_init(&ctr_drbg);
-        mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, NULL, 0);
-
-        int ecp_key = mbedtls_ecp_read_key(MBEDTLS_ECP_DP_SECP256R1, &keypair, (const uint8_t *)homeKeyReader::readerData.reader_private_key, sizeof(homeKeyReader::readerData.reader_private_key));
-        int ret = mbedtls_ecp_mul(&keypair.grp, &keypair.Q, &keypair.d, &keypair.grp.G, mbedtls_ctr_drbg_random, &ctr_drbg);
-
-        size_t olenPub = 0;
-        unsigned char *buf = new unsigned char[MBEDTLS_ECP_MAX_BYTES];
-        mbedtls_ecp_point_write_binary(&keypair.grp, &keypair.Q, MBEDTLS_ECP_PF_UNCOMPRESSED, &olenPub, buf, MBEDTLS_ECP_MAX_BYTES);
-
-        // Set buffer size for coordinates
-        size_t buffer_size_x = mbedtls_mpi_size(&keypair.Q.X);
-        size_t buffer_size_y = mbedtls_mpi_size(&keypair.Q.Y);
-        uint8_t x_buffer[buffer_size_x];
-        uint8_t y_buffer[buffer_size_y];
-
-        // Write X and Y coordinates into the buffer
-        mbedtls_mpi_write_binary(&keypair.Q.X, x_buffer, mbedtls_mpi_size(&keypair.Q.X));
-        mbedtls_mpi_write_binary(&keypair.Q.Y, y_buffer, mbedtls_mpi_size(&keypair.Q.Y));
-
-        // Cleanup
-        mbedtls_ecp_keypair_free(&keypair);
-        mbedtls_ctr_drbg_free(&ctr_drbg);
-        mbedtls_entropy_free(&entropy);
-
-        mbedtls_ecp_keypair ephemeral;
-        mbedtls_ecp_keypair_init(&ephemeral);
-        mbedtls_entropy_context eph_entropy;
-        mbedtls_ctr_drbg_context eph_ctr_drbg;
-        mbedtls_entropy_init(&eph_entropy);
-        mbedtls_ctr_drbg_init(&eph_ctr_drbg);
-        mbedtls_ctr_drbg_seed(&eph_ctr_drbg, mbedtls_entropy_func, &eph_entropy, NULL, 0);
-        mbedtls_ecp_gen_key(MBEDTLS_ECP_DP_SECP256R1, &ephemeral, mbedtls_ctr_drbg_random, &eph_ctr_drbg);
-        unsigned char bufPriv[mbedtls_mpi_size(&ephemeral.d)];
-        mbedtls_mpi_write_binary(&ephemeral.d, bufPriv, sizeof(bufPriv));
-        Serial.println("**Ephemeral Priv Key: ");
-        for (int i = 0; i < sizeof(bufPriv); i++)
-        {
-          printf("%02x ", bufPriv[i]);
-        }
-        printf("\n");
-        unsigned char *bufPub = new unsigned char[MBEDTLS_ECP_MAX_BYTES];
-        size_t olen = 0;
-        mbedtls_ecp_point_write_binary(&ephemeral.grp, &ephemeral.Q, MBEDTLS_ECP_PF_UNCOMPRESSED, &olen, bufPub, MBEDTLS_ECP_MAX_BYTES);
-        Serial.println("**Ephemeral Pub Key: ");
-        for (int i = 0; i < olen; i++)
-        {
-          printf("%02x ", bufPub[i]);
-        }
-        printf("\n");
-        fast_auth(buf, olenPub, bufPub, olen, bufPriv, sizeof(bufPriv));
-        delete[] buf;
-        delete[] bufPub;
-      }
-    }
-  }
-  else
-  {
-    uint8_t data[18] = {0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0};
-    memcpy(data + 8, homeKeyReader::readerData.reader_identifier, sizeof(homeKeyReader::readerData.reader_identifier));
-    with_crc16(data, 16, data + 16);
-    uint8_t response[64];
-    uint8_t length = 64;
-    nfc.setPassiveActivationRetries(0);
-    nfc.writeRegister(0x633d, 0);
-    nfc.inCommunicateThru(data, sizeof(data), response, &length, 1000);
-  }
 }
