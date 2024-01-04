@@ -5,3 +5,5 @@ lib
 .vscode/launch.json
 .vscode/ipch
 *.log
+.cache
+compile_commands.json

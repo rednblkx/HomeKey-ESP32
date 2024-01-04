@@ -1235,6 +1235,9 @@ homeKeyReader::issuerEndpoints::issuerEndpoints_t *find_endpoint_by_cryptogram(u
         break;
       }
     }
+    if(foundEndpoint != nullptr){
+      break;
+    }
   }
   return foundEndpoint;
 }
@@ -1722,28 +1725,21 @@ struct NFCAccess : Service::NFCAccess
 void deleteReaderData(const char *buf)
 {
   uint8_t empty[64];
-  std::fill(empty, empty + 64, 0);
   homeKeyReader::readerData.issuers.clear();
-  memcpy(homeKeyReader::readerData.identifier, empty, 8);
-  memcpy(homeKeyReader::readerData.reader_identifier, empty, 8);
-  memcpy(homeKeyReader::readerData.reader_private_key, empty, 32);
-  json serializedData = homeKeyReader::readerData;
-  auto bson = json::to_msgpack(serializedData);
-  esp_err_t set_nvs = nvs_set_blob(savedData, "READERDATA", bson.data(), bson.size());
+  std::fill(homeKeyReader::readerData.identifier, homeKeyReader::readerData.identifier + 8, 0);
+  std::fill(homeKeyReader::readerData.reader_identifier, homeKeyReader::readerData.reader_identifier + 8, 0);
+  std::fill(homeKeyReader::readerData.reader_private_key, homeKeyReader::readerData.reader_private_key + 32, 0);
+  esp_err_t erase_nvs = nvs_erase_key(savedData, "READERDATA");
   esp_err_t commit_nvs = nvs_commit(savedData);
   LOG1("*** NVS W STATUS: \n");
-  LOG1("READER DATA: %s\n", esp_err_to_name(set_nvs));
+  LOG1("ERASE: %s\n", esp_err_to_name(erase_nvs));
   LOG1("COMMIT: %s\n", esp_err_to_name(commit_nvs));
   LOG1("*** NVS W STATUS: \n");
 }
 
 void pairCallback(bool isPaired)
 {
-  if (isPaired)
-  {
-    printf("\nCONTROLLLLLLLER PAIRRRED!!!!!!\n");
-  }
-  else if (HAPClient::nAdminControllers() == 0)
+  if (!isPaired && HAPClient::nAdminControllers() == 0)
   {
     deleteReaderData(NULL);
   }
@@ -1764,7 +1760,7 @@ void setup()
     }
     printf("\n");
 
-    json data = json::from_msgpack(bson, len);
+    json data = json::from_msgpack(bson, bson + len);
     std::cout << data.dump(-1) << std::endl;
     homeKeyReader::readerData_t p = data.template get<homeKeyReader::readerData_t>();
     homeKeyReader::readerData = p;
