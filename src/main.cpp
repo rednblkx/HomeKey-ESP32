@@ -1397,7 +1397,7 @@ struct LockMechanism : Service::LockMechanism
     Serial.print("Configuring LockMechanism"); // initialization message
     Serial.print("\n");
     new Characteristic::Name("NFC Lock");
-    lockCurrentState = new Characteristic::LockCurrentState();
+    lockCurrentState = new Characteristic::LockCurrentState(0, true);
     lockTargetState = new Characteristic::LockTargetState();
 
   } // end constructor
