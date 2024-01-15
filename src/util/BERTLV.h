@@ -1,13 +1,11 @@
-/*
-  Code highly inspired by https://github.com/kormax/apple-home-key-reader/blob/main/util/tlv.py
- */
-
+#pragma once
 #ifndef BERTLV_H
 #define BERTLV_H
 
 #include <iostream>
 #include <vector>
 #include <cstdint>
+#include <util/utils.h>
 
 enum BERTLVTagClass {
     UNIVERSAL = 0b00,
@@ -19,6 +17,12 @@ enum BERTLVTagClass {
 class BERTLVTag {
 public:
     std::vector<uint8_t> data;
+
+    BERTLVTagClass getClass() const;
+
+    bool isConstructed() const;
+
+    BERTLVTag();
 
     BERTLVTag(int data);
 
@@ -33,6 +37,8 @@ class BERTLVLength {
 public:
     std::vector<uint8_t> data;
 
+    BERTLVLength();
+
     BERTLVLength(const std::vector<uint8_t>& data);
 
     int getInt() const;
@@ -46,6 +52,8 @@ public:
     static BERTLVLength unpack(const std::vector<uint8_t>& data);
 
 private:
+    std::vector<uint8_t> toBytes(int value) const;
+
     int fromBytes(const std::vector<uint8_t>& bytes) const;
 };
 
@@ -55,14 +63,18 @@ public:
     BERTLVLength length;
     std::vector<uint8_t> value;
 
+    BERTLV();
+
     BERTLV(int tag, const std::vector<uint8_t> length, const std::vector<uint8_t>& value);
 
     BERTLV(const BERTLVTag& tag, const BERTLVLength& length, const std::vector<uint8_t>& value);
 
     std::vector<uint8_t> pack() const;
+    static BERTLV findTag(int tag, std::vector<BERTLV> data);
 
     static BERTLV unpack(const std::vector<uint8_t>& data);
     static std::vector<BERTLV> unpack_array(const std::vector<uint8_t> &data);
+    static std::vector<BERTLV> unpack_array(const uint8_t *data, const size_t len);
 };
 
 #endif // BERTLV_H

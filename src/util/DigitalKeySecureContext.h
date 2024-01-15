@@ -16,7 +16,7 @@
 class DigitalKeySecureContext {
 public:
     DigitalKeySecureContext();
-    DigitalKeySecureContext(const unsigned char *kenc, const unsigned char *kmac, const unsigned char *krmac);
+    DigitalKeySecureContext(const unsigned char *volatileKey);
 
     std::tuple<unsigned char*, size_t, unsigned char*> encrypt_command(unsigned char* data, size_t dataSize);
     std::tuple<std::vector<uint8_t>, size_t> decrypt_response(const unsigned char* data, size_t dataSize);

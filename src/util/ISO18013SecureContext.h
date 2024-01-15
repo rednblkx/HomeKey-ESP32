@@ -1,7 +1,7 @@
 /*
   Code highly inspired by https://github.com/kormax/apple-home-key-reader/blob/main/util/iso18013.py
  */
-
+#pragma once
 #ifndef ISO18013_SECURE_CONTEXT_H
 #define ISO18013_SECURE_CONTEXT_H
 

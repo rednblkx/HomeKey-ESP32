@@ -27,7 +27,7 @@ void DigitalKeySecureContext::unpad_mode_3(unsigned char* message, size_t messag
     {
         if (!padding)
         {
-            printf("%x ", message[i]);
+            // printf("%x ", message[i]);
             unpadded[result_size++] = message[i];
         }
         else if (message[i] == 0x00)
@@ -36,11 +36,11 @@ void DigitalKeySecureContext::unpad_mode_3(unsigned char* message, size_t messag
         }
         else if (message[i] == pad_flag_byte)
         {
-            printf("found the padding!");
+            // printf("found the padding!");
             padding = false;
         }
     }
-    printf("\n");
+    // printf("\n");
 
     if (result_size == 0) {
         return;
@@ -66,10 +66,10 @@ void DigitalKeySecureContext::decrypt_aes_cbc(const unsigned char* key, unsigned
     mbedtls_aes_setkey_dec(&aes_ctx, key, 128);
     mbedtls_aes_crypt_cbc(&aes_ctx, MBEDTLS_AES_DECRYPT, length, iv, ciphertext, plaintext);
     mbedtls_aes_free(&aes_ctx);
-    for (uint8_t i = 0; i < length; i++) {
-        Serial.printf(" %02X", plaintext[i]);
-    }
-    Serial.printf("\n");
+    // for (uint8_t i = 0; i < length; i++) {
+    //     Serial.printf(" %02X", plaintext[i]);
+    // }
+    // Serial.printf("\n");
 }
 
 void DigitalKeySecureContext::aes_cmac(const unsigned char* key, const unsigned char* data, size_t data_size, unsigned char* mac) {
@@ -80,11 +80,11 @@ void DigitalKeySecureContext::aes_cmac(const unsigned char* key, const unsigned 
 
 DigitalKeySecureContext::DigitalKeySecureContext(){}
 
-DigitalKeySecureContext::DigitalKeySecureContext(const unsigned char* kenc, const unsigned char* kmac, const unsigned char* krmac){
+DigitalKeySecureContext::DigitalKeySecureContext(const unsigned char* volatileKey){
     counter = 0;
-    memcpy(this->kenc, kenc, 16);   // Assuming a 128-bit key size
-    memcpy(this->kmac, kmac, 16);   // Assuming a 128-bit key size
-    memcpy(this->krmac, krmac, 16); // Assuming a 128-bit key size
+    memcpy(this->kenc, volatileKey, 16);   // Assuming a 128-bit key size
+    memcpy(this->kmac, volatileKey + 16, 16);   // Assuming a 128-bit key size
+    memcpy(this->krmac, volatileKey + 32, 16); // Assuming a 128-bit key size
     memcpy(response_pcb, RESPONSE_PCB, 1);
     std::fill(mac_chaining_value, mac_chaining_value + 16, 0);
     std::fill(response_pcb + 1, response_pcb + 15, 0);
@@ -93,24 +93,24 @@ DigitalKeySecureContext::DigitalKeySecureContext(const unsigned char* kenc, cons
 
 std::tuple<unsigned char*, size_t, unsigned char*> DigitalKeySecureContext::encrypt_command(unsigned char* data, size_t dataSize) {
     unsigned char* ciphertext = new unsigned char[dataSize + 16];
-    printf("\n%d\n", dataSize);
+    // printf("\n%d\n", dataSize);
     size_t olen = 0;
     encrypt(data, dataSize, command_pcb, kenc, counter, ciphertext, &olen);
 
-    printf("\n");
-    for (uint8_t i = 0; i < olen; i++) {
-        printf(" %02X", ciphertext[i]);
-    }
-    printf("\n");
+    // printf("\n");
+    // for (uint8_t i = 0; i < olen; i++) {
+    //     printf(" %02X", ciphertext[i]);
+    // }
+    // printf("\n");
 
     unsigned char* calculated_rmac = new unsigned char[16];
     size_t input_dataSize = 16 + olen;
     std::vector<uint8_t> input_data = concatenate_arrays(mac_chaining_value, ciphertext, 16, olen);
     aes_cmac(kmac, input_data.data(), input_dataSize, calculated_rmac);
-    for (uint8_t i = 0; i < 16; i++) {
-        printf(" %02X", calculated_rmac[i]);
-    }
-    printf("\n");
+    // for (uint8_t i = 0; i < 16; i++) {
+    //     printf(" %02X", calculated_rmac[i]);
+    // }
+    // printf("\n");
 
     std::vector<uint8_t> result = concatenate_arrays(ciphertext, calculated_rmac, olen, 8);
 
@@ -128,14 +128,14 @@ std::tuple<std::vector<uint8_t>, size_t> DigitalKeySecureContext::decrypt_respon
     size_t input_dataSize = 16 + (dataSize - 8);
     std::vector<uint8_t> input_data = concatenate_arrays(mac_chaining_value, ciphertext, 16, dataSize - 8);
     aes_cmac(krmac, input_data.data(), input_dataSize, calculated_rmac);
-    for (uint8_t i = 0; i < 8; i++) {
-        Serial.printf(" %02X", calculated_rmac[i]);
-    }
-    Serial.printf("\n");
-    for (uint8_t i = 0; i < 8; i++) {
-        Serial.printf(" %02X", rmac[i]);
-    }
-    Serial.printf("\n");
+    // for (uint8_t i = 0; i < 8; i++) {
+    //     Serial.printf(" %02X", calculated_rmac[i]);
+    // }
+    // Serial.printf("\n");
+    // for (uint8_t i = 0; i < 8; i++) {
+    //     Serial.printf(" %02X", rmac[i]);
+    // }
+    // Serial.printf("\n");
 
     // assert(memcmp(rmac, calculated_rmac, 8) == 0);
 
@@ -164,11 +164,11 @@ void DigitalKeySecureContext::encrypt(unsigned char* plaintext, size_t data_size
     // Pad plaintext
     auto padded = pad_mode_3(plaintext, data_size, 0x80, 16);
 
-    printf("\n");
-    for (uint8_t i = 0; i < std::get<1>(padded); i++) {
-        printf(" %02X", std::get<0>(padded)[i]);
-    }
-    printf("\n");
+    // printf("\n");
+    // for (uint8_t i = 0; i < std::get<1>(padded); i++) {
+    //     printf(" %02X", std::get<0>(padded)[i]);
+    // }
+    // printf("\n");
 
     // Generate ICV
     unsigned char* icv = new unsigned char[16];
