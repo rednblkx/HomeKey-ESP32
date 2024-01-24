@@ -728,11 +728,7 @@ void print_issuers(const char *buf){
 }
 
 void wifiCallback(){
-    mqtt.subscribe("picomqtt/#", [](const char * topic, const char * payload) {
-        // payload might be binary, but PicoMQTT guarantees that it's zero-terminated
-        Serial.printf("Received message in topic '%s': %s\n", topic, payload);
-    });
-    mqtt.begin();
+  mqtt.begin();
 }
 
 void setup()
