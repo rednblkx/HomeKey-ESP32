@@ -72,7 +72,7 @@ std::vector<unsigned char> NDEFMessage::pack()
 
 std::vector<NDEFRecord> NDEFMessage::unpack(){
   std::vector<NDEFRecord> records;
-  printf("packed_len: %d\n", this->packedData.size());
+  // printf("packed_len: %d\n", this->packedData.size());
   unsigned char header[1];
   unsigned char type_length[1];
   unsigned char payload_length[1];
@@ -120,22 +120,22 @@ std::vector<NDEFRecord> NDEFMessage::unpack(){
     std::vector<unsigned char> type_vec;
     type_vec.insert(type_vec.begin(), this->packedData.data() + i, this->packedData.data() + i + type_length[0]);
     type_vec.push_back('\0');
-    printf("\ntype_length: %d \n", type_length[0]);
-    printf("\ntype_vec_length: %d \n", type_vec.size());
+    // printf("\ntype_length: %d \n", type_length[0]);
+    // printf("\ntype_vec_length: %d \n", type_vec.size());
     i += type_length[0];
 
     std::vector<unsigned char> id_vec;
     id_vec.resize(id_length[0] + 1);
     id_vec.insert(id_vec.begin(), this->packedData.data() + i, this->packedData.data() + i + id_length[0]);
     id_vec.push_back('\0');
-    printf("\nid_length: %d \n", id_length[0]);
-    printf("\nid_vec_length: %d \n", id_vec.size());
+    // printf("\nid_length: %d \n", id_length[0]);
+    // printf("\nid_vec_length: %d \n", id_vec.size());
     i += id_length[0];
 
     std::vector<unsigned char> payload_vec;
     payload_vec.insert(payload_vec.begin(), this->packedData.data() + i, this->packedData.data() + i + payload_length[0]);
     payload_vec.push_back('\0');
-    printf("\npayload_length: %d \n", payload_length[0]);
+    // printf("\npayload_length: %d \n", payload_length[0]);
     i += payload_length[0];
     
     records.emplace_back(id_vec, tnf, type_vec, payload_vec);

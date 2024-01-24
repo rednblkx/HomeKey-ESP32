@@ -155,7 +155,7 @@ std::vector<uint8_t> ISO18013SecureContext::decryptMessageFromEndpoint(const std
                                        cborCiphertext.data(),
                                        plaintext);
 
-    std::cout << "\ndecrypt status: " << ret << std::endl;
+    // std::cout << "\ndecrypt status: " << ret << std::endl;
 
     mbedtls_gcm_free(&ctx);
 

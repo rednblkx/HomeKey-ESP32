@@ -22,7 +22,7 @@ std::tuple<std::vector<uint8_t>, size_t> DigitalKeySecureContext::pad_mode_3(uns
 void DigitalKeySecureContext::unpad_mode_3(unsigned char* message, size_t message_size, unsigned char *unpadded, size_t *outLen, unsigned char pad_flag_byte = 0x80, size_t block_size = 16) {
     size_t result_size = 0;
     bool padding = true;
-    printf("\n");
+    // printf("\n");
     for (int i = message_size - 1; i >= 0; --i)
     {
         if (!padding)

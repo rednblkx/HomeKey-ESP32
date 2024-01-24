@@ -8,9 +8,8 @@ void utils::pack(uint8_t *buf, size_t buflen, uint8_t *out, int *olen)
 }
 
 std::string utils::bufToHexString(const uint8_t *buf, size_t len){
-  esp32m::SimpleLoggable *loggable = new esp32m::SimpleLoggable("Utils::bufToHexString");
   std::string result;
-  if(loggable->logger().level() != esp32m::LogLevel::None){
+  if(esp32m::Logging::level() >= esp32m::LogLevel::Debug){
     result.reserve(2 * len);
     for (size_t i = 0; i < len; ++i) {
       result.push_back("0123456789ABCDEF"[buf[i] >> 4]);
@@ -21,10 +20,9 @@ std::string utils::bufToHexString(const uint8_t *buf, size_t len){
   return result;
 }
 std::string utils::bufToHexString(const uint16_t *buf, size_t len) {
-  esp32m::SimpleLoggable *loggable = new esp32m::SimpleLoggable("Utils::bufToHexString");
   std::string result;
-
-  if (loggable->logger().level() != esp32m::LogLevel::None) {
+  if (esp32m::Logging::level() >= esp32m::LogLevel::Debug)
+  {
     result.reserve(4 * len); // Reserve space for 4 characters per uint16_t
     for (size_t i = 0; i < len; ++i) {
       result.push_back("0123456789ABCDEF"[(buf[i] >> 12) & 0xF]);
@@ -35,7 +33,6 @@ std::string utils::bufToHexString(const uint16_t *buf, size_t len) {
     // loggable->logger().logf(esp32m::LogLevel::Verbose, "%s", result.c_str());
   }
 
-  delete loggable; // Don't forget to delete the allocated object
   return result;
 }
 
@@ -67,9 +64,9 @@ std::vector<uint8_t> utils::decodeB64(const char *src)
 
   loggable->logger().logf(esp32m::LogLevel::Verbose, "B64 DECODED DATA: %s", bufToHexString(dst, out_len1).c_str());;
   if (ret == MBEDTLS_ERR_BASE64_BUFFER_TOO_SMALL)
-    loggable->logger().logf(esp32m::LogLevel::Warning,"*** WARNING:  Destination buffer is too small (%d out of %d bytes needed)\n\n", sizeof(dst), out_len1);
+    loggable->logger().logf(esp32m::LogLevel::Warning,"*** WARNING:  Destination buffer is too small (%d out of %d bytes needed)", sizeof(dst), out_len1);
   else if (ret == MBEDTLS_ERR_BASE64_INVALID_CHARACTER)
-    loggable->logger().logf(esp32m::LogLevel::Warning,"*** WARNING:  Data is not in base-64 format\n\n");
+    loggable->logger().logf(esp32m::LogLevel::Warning,"*** WARNING:  Data is not in base-64 format");
   if(ret != 0){
     return std::vector<uint8_t>();
   }

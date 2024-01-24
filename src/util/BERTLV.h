@@ -14,25 +14,6 @@ enum BERTLVTagClass {
     PRIVATE = 0b11
 };
 
-class BERTLVTag {
-public:
-    std::vector<uint8_t> data;
-
-    BERTLVTagClass getClass() const;
-
-    bool isConstructed() const;
-
-    BERTLVTag();
-
-    BERTLVTag(int data);
-
-    BERTLVTag(const std::vector<uint8_t>& data);
-
-    std::vector<uint8_t> pack() const;
-
-    static BERTLVTag unpack(const std::vector<uint8_t>& data);
-};
-
 class BERTLVLength {
 public:
     std::vector<uint8_t> data;
@@ -59,7 +40,7 @@ private:
 
 class BERTLV {
 public:
-    BERTLVTag tag;
+    std::vector<uint8_t> tag;
     BERTLVLength length;
     std::vector<uint8_t> value;
 
@@ -67,7 +48,7 @@ public:
 
     BERTLV(int tag, const std::vector<uint8_t> length, const std::vector<uint8_t>& value);
 
-    BERTLV(const BERTLVTag& tag, const BERTLVLength& length, const std::vector<uint8_t>& value);
+    BERTLV(const std::vector<uint8_t>& tag, const BERTLVLength& length, const std::vector<uint8_t>& value);
 
     std::vector<uint8_t> pack() const;
     static BERTLV findTag(int tag, std::vector<BERTLV> data);

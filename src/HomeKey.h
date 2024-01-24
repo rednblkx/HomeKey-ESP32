@@ -102,9 +102,9 @@ typedef enum
     }
   }
 
-  namespace issuerEndpoints
+  namespace issuerEndpoint
   {
-    struct issuerEndpoints_t
+    struct issuerEndpoint_t
     {
       uint8_t endpointId[6];
       uint32_t last_used_at;
@@ -115,12 +115,12 @@ typedef enum
       uint8_t persistent_key[32];
       endpointEnrollments::enrollments_t enrollments;
     };
-    inline void to_json(json &j, const issuerEndpoints_t &p)
+    inline void to_json(json &j, const issuerEndpoint_t &p)
     {
       j = json{{"endpointId", p.endpointId}, {"last_used_at", p.last_used_at}, {"counter", p.counter}, {"key_type", p.key_type}, {"publicKey", p.publicKey}, {"endpoint_key_x", p.endpoint_key_x}, {"persistent_key", p.persistent_key}, {"enrollments", p.enrollments}};
     }
 
-    inline void from_json(const json &j, issuerEndpoints_t &p)
+    inline void from_json(const json &j, issuerEndpoint_t &p)
     {
       j.at("endpointId").get_to(p.endpointId);
       j.at("last_used_at").get_to(p.last_used_at);
@@ -139,7 +139,7 @@ typedef enum
       uint8_t issuerId[8];
       uint8_t publicKey[32];
       uint8_t issuer_key_x[32];
-      std::list<issuerEndpoints::issuerEndpoints_t> endpoints;
+      std::list<issuerEndpoint::issuerEndpoint_t> endpoints;
     };
     inline void to_json(json &j, const homeKeyIssuers_t &p)
     {

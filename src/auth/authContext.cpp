@@ -1,5 +1,4 @@
 #include <auth/authContext.h>
-#include "authContext.h"
 
 /**
  * The function `get_public_points` takes a public key as input, reads the X and Y coordinates of the
@@ -24,8 +23,8 @@ std::vector<uint8_t> AuthenticationContext::get_x(std::vector<uint8_t> pubKey)
   std::vector<uint8_t> X;
   X.resize(buffer_size_x);
   X.reserve(buffer_size_x);
-  mbedtls_mpi_write_binary(&point.X, X.data(), mbedtls_mpi_size(&point.X));
-  logV("PublicKey: %s, X Coordinate: %s", utils::bufToHexString(pubKey.data(), pubKey.size()).c_str(), utils::bufToHexString(X.data(), sizeof(X)).c_str());
+  mbedtls_mpi_write_binary(&point.X, X.data(), buffer_size_x);
+  logV("PublicKey: %s, X Coordinate: %s", utils::bufToHexString(pubKey.data(), pubKey.size()).c_str(), utils::bufToHexString(X.data(), X.size()).c_str());
   mbedtls_ecp_group_free(&grp);
   mbedtls_ecp_point_free(&point);
   return X;
@@ -47,14 +46,21 @@ std::tuple<std::vector<uint8_t>, std::vector<uint8_t>> AuthenticationContext::ge
   mbedtls_ecp_keypair ephemeral;
   mbedtls_ecp_keypair_init(&ephemeral);
   mbedtls_ecp_gen_key(MBEDTLS_ECP_DP_SECP256R1, &ephemeral, esp_rng, NULL);
-  unsigned char bufPriv[mbedtls_mpi_size(&ephemeral.d)];
-  mbedtls_mpi_write_binary(&ephemeral.d, bufPriv, sizeof(bufPriv));
-  unsigned char bufPub[MBEDTLS_ECP_MAX_BYTES];
+  std::vector<uint8_t> bufPriv;
+  bufPriv.resize(mbedtls_mpi_size(&ephemeral.d));
+  bufPriv.reserve(mbedtls_mpi_size(&ephemeral.d));
+  mbedtls_mpi_write_binary(&ephemeral.d, bufPriv.data(), bufPriv.capacity());
+  std::vector<uint8_t> bufPub;
+  bufPub.resize(MBEDTLS_ECP_MAX_BYTES);
+  bufPub.reserve(MBEDTLS_ECP_MAX_BYTES);
   size_t olen = 0;
-  mbedtls_ecp_point_write_binary(&ephemeral.grp, &ephemeral.Q, MBEDTLS_ECP_PF_UNCOMPRESSED, &olen, bufPub, sizeof(bufPub));
+  mbedtls_ecp_point_write_binary(&ephemeral.grp, &ephemeral.Q, MBEDTLS_ECP_PF_UNCOMPRESSED, &olen, bufPub.data(), bufPub.capacity());
+  bufPub.resize(olen);
   mbedtls_ecp_keypair_free(&ephemeral);
-  logD("Ephemeral Key generated");
-  return std::make_tuple(std::vector<uint8_t>(bufPriv, bufPriv + sizeof(bufPriv)), std::vector<uint8_t>(bufPub, bufPub + olen));
+  logI("Ephemeral Key generated");
+  logD("private: %s", utils::bufToHexString(bufPriv.data(), bufPriv.size()).c_str());
+  logD("public: %s", utils::bufToHexString(bufPub.data(), bufPub.size()).c_str());
+  return std::make_tuple(bufPriv, bufPub);
 }
 /**
  * The function signSharedInfo signs the given data using the private key and returns the signature in
@@ -246,11 +252,11 @@ void AuthenticationContext::Auth1_keying_material(uint8_t *keyingMaterial, const
  * 
  * @param cryptogram The parameter "cryptogram" is a vector of uint8_t, which represents a cryptogram.
  * 
- * @return a pointer to an object of type `issuerEndpoints::issuerEndpoints_t`.
+ * @return a pointer to an object of type `issuerEndpoint::issuerEndpoint_t`.
  */
-issuerEndpoints::issuerEndpoints_t * AuthenticationContext::find_endpoint_by_cryptogram(std::vector<uint8_t> cryptogram)
+issuerEndpoint::issuerEndpoint_t * AuthenticationContext::find_endpoint_by_cryptogram(std::vector<uint8_t> cryptogram)
 {
-  issuerEndpoints::issuerEndpoints_t *foundEndpoint = nullptr;
+  issuerEndpoint::issuerEndpoint_t *foundEndpoint = nullptr;
   for (auto &&issuer : readerData->issuers)
   {
     logV("Issuer: %s, Endpoints: %d", utils::bufToHexString(issuer.issuerId, sizeof(issuer.issuerId)).c_str(), issuer.endpoints.size());
@@ -263,7 +269,7 @@ issuerEndpoints::issuerEndpoints_t * AuthenticationContext::find_endpoint_by_cry
       logD("HKDF Derived Key: %s", utils::bufToHexString(hkdf, sizeof(hkdf)).c_str());
       if (!memcmp(hkdf, cryptogram.data(), 16))
       {
-        logI("Endpoint %s matches cryptogram", utils::bufToHexString(endpoint.endpointId, sizeof(endpoint.endpointId)).c_str());
+        logD("Endpoint %s matches cryptogram", utils::bufToHexString(endpoint.endpointId, sizeof(endpoint.endpointId)).c_str());
         foundEndpoint = &endpoint;
         break;
       }
@@ -313,11 +319,11 @@ void AuthenticationContext::Auth1_keys_generator(uint8_t *persistentKey, uint8_t
  * `fallbackToStd` is `true`, the function will return a tuple with `endpoint` set to `nullptr` and the
  * second value set to `
  * 
- * @return a std::tuple containing a pointer to an issuerEndpoints_t object and an integer value.
+ * @return a std::tuple containing a pointer to an issuerEndpoint_t object and an integer value.
  */
-std::tuple<issuerEndpoints::issuerEndpoints_t *, homeKeyReader::KeyFlow> AuthenticationContext::fast_auth(bool fallbackToStd)
+std::tuple<issuerEndpoint::issuerEndpoint_t *, homeKeyReader::KeyFlow> AuthenticationContext::fast_auth(bool fallbackToStd)
 {
-  uint8_t prot_v_data[] = {0x02, 0x0};
+  uint8_t prot_v_data[2] = {0x02, 0x0};
 
   std::vector<uint8_t> fastTlv(sizeof(prot_v_data) + readerEphPubKey.size() + transactionIdentifier.size() + readerIdentifier.size() + 8);
   size_t len = 0;
@@ -336,7 +342,7 @@ std::tuple<issuerEndpoints::issuerEndpoints_t *, homeKeyReader::KeyFlow> Authent
   logD("Auth0 APDU Length: %d, DATA: %s", apdu.size(), utils::bufToHexString(apdu.data(), apdu.size()).c_str());
   exchange = nfc->inDataExchange(apdu.data(), apdu.size(), response, &responseLength);
   logD("Auth0 Response Length: %d, DATA: %s", responseLength, utils::bufToHexString(response, responseLength).c_str());
-  issuerEndpoints::issuerEndpoints_t *endpoint = nullptr;
+  issuerEndpoint::issuerEndpoint_t *endpoint = nullptr;
   if (response[responseLength - 2] == 0x90 && response[0] == 0x86)
   {
     auto Auth0Res = BERTLV::unpack_array(response, responseLength);
@@ -376,12 +382,12 @@ std::tuple<issuerEndpoints::issuerEndpoints_t *, homeKeyReader::KeyFlow> Authent
  * operations and NFC communication.
  * 
  * @return a tuple containing four elements:
- * 1. A pointer to an object of type `issuerEndpoints::issuerEndpoints_t*`
+ * 1. A pointer to an object of type `issuerEndpoint::issuerEndpoint_t*`
  * 2. An object of type `DigitalKeySecureContext`
  * 3. A vector of type `std::vector<uint8_t>`
  * 4. An object of type `homeKeyReader::KeyFlow`
  */
-std::tuple<issuerEndpoints::issuerEndpoints_t*, DigitalKeySecureContext, std::vector<uint8_t>, homeKeyReader::KeyFlow> AuthenticationContext::std_auth()
+std::tuple<issuerEndpoint::issuerEndpoint_t*, DigitalKeySecureContext, std::vector<uint8_t>, homeKeyReader::KeyFlow> AuthenticationContext::std_auth()
 {
   int readerContext = 1096652137;
   int deviceContext = 1317567308;
@@ -400,10 +406,10 @@ std::tuple<issuerEndpoints::issuerEndpoints_t*, DigitalKeySecureContext, std::ve
   apdu.insert(apdu.begin()+5,sigTlv.begin(), sigTlv.end());
   uint8_t response[128];
   uint8_t responseLength = 128;
-  logI("Auth1 APDU Length: %d, DATA: %s", apdu.size(), utils::bufToHexString(apdu.data(), apdu.size()).c_str());
+  logD("Auth1 APDU Length: %d, DATA: %s", apdu.size(), utils::bufToHexString(apdu.data(), apdu.size()).c_str());
   nfc->inDataExchange(apdu.data(), apdu.size(), response, &responseLength);
-  logI("Auth1 Response Length: %d, DATA: %s", responseLength, utils::bufToHexString(response, responseLength).c_str());
-  issuerEndpoints::issuerEndpoints_t *foundEndpoint = nullptr;
+  logD("Auth1 Response Length: %d, DATA: %s", responseLength, utils::bufToHexString(response, responseLength).c_str());
+  issuerEndpoint::issuerEndpoint_t *foundEndpoint = nullptr;
   if (responseLength > 2 && response[responseLength - 2] == 0x90)
   {
     uint8_t persistentKey[32];
@@ -419,10 +425,10 @@ std::tuple<issuerEndpoints::issuerEndpoints_t*, DigitalKeySecureContext, std::ve
       BERTLV *device_identifier = nullptr;
       for (auto &data : decryptedTlv)
       {
-        if(data.tag.data.data()[0] == 0x4E){
+        if(data.tag.data()[0] == 0x4E){
           device_identifier = &data;
         }
-        if(data.tag.data.data()[0] == 0x9E){
+        if(data.tag.data()[0] == 0x9E){
           signature = &data;
         }
       }
