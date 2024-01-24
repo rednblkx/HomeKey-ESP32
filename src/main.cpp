@@ -109,7 +109,7 @@ struct LockMechanism : Service::LockMechanism, public SimpleLoggable
       logD("UID: %s", utils::bufToHexString(uid, uidLen).c_str());
       unsigned long startTime = millis();
       bool exchange;
-      logI("*** PASSIVE TARGET DETECTED ***");
+      this->logger().logf(LogLevel::None, "*** PASSIVE TARGET DETECTED ***");
       uint8_t data[13] = {0x00, 0xA4, 0x04, 0x00, 0x07, 0xA0, 0x00, 0x00, 0x08, 0x58, 0x01, 0x01, 0x0};
       uint8_t selectCmdRes[32];
       uint8_t selectCmdResLength = 32;
@@ -163,7 +163,6 @@ struct LockMechanism : Service::LockMechanism, public SimpleLoggable
       with_crc16(data, 16, data + 16);
       uint8_t response[64];
       uint8_t length = 64;
-      nfc.setPassiveActivationRetries(0);
       nfc.writeRegister(0x633d, 0);
       nfc.inCommunicateThru(data, sizeof(data), response, &length, 1000);
     }
@@ -529,11 +528,6 @@ struct NFCAccess : Service::NFCAccess, public SimpleLoggable
     return (true);
   }
 
-  void loop()
-  {
-
-  } // end loop
-
 }; // end NFCAccess
 
 //////////////////////////////////////
@@ -667,7 +661,7 @@ void setup()
     nfcLog->logger().logf(LogLevel::Info, "Found chip PN5%x", (versiondata >> 24) & 0xFF);
     nfcLog->logger().logf(LogLevel::Info, "Firmware ver. %d.%d", (versiondata >> 16) & 0xFF, (versiondata >> 8) & 0xFF);
     nfc.SAMConfig();
-    nfc.setPassiveActivationRetries(0xFF);
+    nfc.setPassiveActivationRetries(0);
     nfcLog->logger().logf(LogLevel::Info, "Waiting for an ISO14443A card");
   }
 
