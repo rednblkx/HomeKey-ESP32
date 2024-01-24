@@ -7,3 +7,4 @@ lib
 *.log
 .cache
 compile_commands.json
+src/mqtt.h

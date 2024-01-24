@@ -176,14 +176,14 @@ AuthenticationContext::AuthenticationContext(PN532 *nfc, homeKeyReader::readerDa
 /**
  * The function `Auth0_keying_material` generates keying material using the HKDF algorithm based on
  * various input parameters.
- * 
+ *
  * @param context The `context` parameter is a pointer to a character array that represents the context
  * for the keying material generation. It is used as input to the HKDF (HMAC-based Key Derivation
  * Function) algorithm.
  * @param ePub_X ePub_X is a pointer to a uint8_t array that represents the public key of the entity
  * being authenticated. It has a length of 32 bytes.
- * @param keyingMaterial The `keyingMaterial` parameter is a pointer to a buffer where the generated
- * keying material will be stored. It should have a size of at least 32 bytes.
+ * @param keyingMaterial The `keyingMaterial` parameter is a pointer to a buffer where the input keying material to be used with HKDF is stored.
+ * It should have a size of at least 32 bytes.
  * @param out The `out` parameter is a pointer to the buffer where the output keying material will be
  * stored. The size of the buffer is specified by the `outLen` parameter.
  * @param outLen The parameter `outLen` represents the length of the output buffer `out`. It specifies
@@ -231,7 +231,6 @@ void AuthenticationContext::Auth1_keying_material(uint8_t *keyingMaterial, const
   uint8_t flags[2] = {0x01, 0x01};
   uint8_t prot_ver[4] = {0x5c, 0x02, 0x02, 0x0};
   uint8_t supported_vers[6] = {0x5c, 0x04, 0x02, 0x0, 0x01, 0x0};
-  // std::list<uint8_t> dataMaterial;
   uint8_t dataMaterial[readerEphX.size() + endpointEphX.size() + transactionIdentifier.size() + 1 + sizeof(flags) + strlen(context) + sizeof(prot_ver) + sizeof(supported_vers)];
   int olen = 0;
   utils::pack(readerEphX.data(), readerEphX.size(), dataMaterial, &olen);

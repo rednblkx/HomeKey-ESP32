@@ -17,9 +17,31 @@
 #include <logging.hpp>
 #include <util/uart-appender.h>
 #include <sstream>
+#include <PicoMQTT.h>
+
+#if __has_include("mqtt.h")
+  #include <mqtt.h>
+#else
+  #define MQTT_HOST "0.0.0.0"
+  #define MQTT_PORT 1883
+  #define MQTT_CLIENTID "homekey_mqtt"
+  #define MQTT_USERNAME "username"
+  #define MQTT_PASSWORD "password"
+  #define MQTT_TOPIC "topic/topic"
+#endif
 
 using namespace esp32m;
 using namespace nlohmann;
+
+int currentState = 0;
+
+PicoMQTT::Client mqtt(
+    MQTT_HOST,    // broker address (or IP)
+    MQTT_PORT,                   // broker port (defaults to 1883)
+    MQTT_CLIENTID,           // Client ID
+    MQTT_USERNAME,             // MQTT username
+    MQTT_PASSWORD              // MQTT password
+);
 
 #define PN532_SS (D8)
 PN532_SPI pn532spi(SPI, PN532_SS);
@@ -141,6 +163,20 @@ struct LockMechanism : Service::LockMechanism, public SimpleLoggable
             Serial.println("Device has been authenticated, toggling lock state");
             lockTargetState->setVal(!lockCurrentState->getVal());
             lockCurrentState->setVal(lockTargetState->getVal());
+            json payload;
+            Issuers::homeKeyIssuers_t *foundIssuer;
+            for (auto &&issuer : readerData.issuers)
+            {
+              for (auto &&endpoint : issuer.endpoints)
+              {
+                if (&endpoint == std::get<0>(auth)){
+                  foundIssuer = &issuer;
+                }
+              }
+            }
+            payload["issuerId"] = utils::bufToHexString(foundIssuer->issuerId, 8);
+            payload["endpointId"] = utils::bufToHexString(std::get<0>(auth)->endpointId, 6);
+            mqtt.publish(MQTT_TOPIC, payload.dump().c_str());
           }
           else
           {
@@ -153,6 +189,20 @@ struct LockMechanism : Service::LockMechanism, public SimpleLoggable
               Serial.println("Device has been authenticated, toggling lock state");
               lockTargetState->setVal(!lockCurrentState->getVal());
               lockCurrentState->setVal(lockTargetState->getVal());
+              json payload;
+              Issuers::homeKeyIssuers_t *foundIssuer;
+              for (auto &&issuer : readerData.issuers)
+              {
+                for (auto &&endpoint : issuer.endpoints)
+                {
+                  if (&endpoint == foundEndpoint){
+                    foundIssuer = &issuer;
+                  }
+                }
+              }
+              payload["issuerId"] = foundIssuer->issuerId;
+              payload["endpointId"] = foundEndpoint->endpointId;
+              mqtt.publish(MQTT_TOPIC, payload.dump().c_str());
               std::vector<uint8_t> persistentKey = std::get<2>(auth1);
               memcpy(foundEndpoint->persistent_key, persistentKey.data(), 32);
               json data = readerData;
@@ -677,6 +727,14 @@ void print_issuers(const char *buf){
   delete issuers;
 }
 
+void wifiCallback(){
+    mqtt.subscribe("picomqtt/#", [](const char * topic, const char * payload) {
+        // payload might be binary, but PicoMQTT guarantees that it's zero-terminated
+        Serial.printf("Received message in topic '%s': %s\n", topic, payload);
+    });
+    mqtt.begin();
+}
+
 void setup()
 {
   Logging::addAppender(&UARTAppender::instance());
@@ -697,6 +755,7 @@ void setup()
   }
   // homeSpan.setStatusPin(2);
   // homeSpan.setStatusAutoOff(5);
+  homeSpan.reserveSocketConnections(2);
   homeSpan.setLogLevel(0);
 
   setupLog->logger().logf(LogLevel::Debug, "READER GROUP ID (%d): %s", strlen((const char *)readerData.reader_identifier), utils::bufToHexString(readerData.reader_identifier, sizeof(readerData.reader_identifier)).c_str());
@@ -748,6 +807,7 @@ void setup()
   new Service::HAPProtocolInformation();
   new Characteristic::Version();
   homeSpan.setPairCallback(pairCallback);
+  homeSpan.setWifiCallback(wifiCallback);
   delete setupLog;
   delete nfcLog;
 }
@@ -757,4 +817,5 @@ void setup()
 void loop()
 {
   homeSpan.poll();
+  mqtt.loop();
 }

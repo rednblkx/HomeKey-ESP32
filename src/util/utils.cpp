@@ -9,20 +9,20 @@ void utils::pack(uint8_t *buf, size_t buflen, uint8_t *out, int *olen)
 
 std::string utils::bufToHexString(const uint8_t *buf, size_t len){
   std::string result;
-  if(esp32m::Logging::level() >= esp32m::LogLevel::Debug){
+  // if(esp32m::Logging::level() >= esp32m::LogLevel::Debug){
     result.reserve(2 * len);
     for (size_t i = 0; i < len; ++i) {
       result.push_back("0123456789ABCDEF"[buf[i] >> 4]);
       result.push_back("0123456789ABCDEF"[buf[i] & 0xF]);
     }
     // loggable->logger().logf(esp32m::LogLevel::Verbose, "%s", result.c_str());
-  }
+  // }
   return result;
 }
 std::string utils::bufToHexString(const uint16_t *buf, size_t len) {
   std::string result;
-  if (esp32m::Logging::level() >= esp32m::LogLevel::Debug)
-  {
+  // if (esp32m::Logging::level() >= esp32m::LogLevel::Debug)
+  // {
     result.reserve(4 * len); // Reserve space for 4 characters per uint16_t
     for (size_t i = 0; i < len; ++i) {
       result.push_back("0123456789ABCDEF"[(buf[i] >> 12) & 0xF]);
@@ -31,7 +31,7 @@ std::string utils::bufToHexString(const uint16_t *buf, size_t len) {
       result.push_back("0123456789ABCDEF"[buf[i] & 0xF]);
     }
     // loggable->logger().logf(esp32m::LogLevel::Verbose, "%s", result.c_str());
-  }
+  // }
 
   return result;
 }
