@@ -132,61 +132,36 @@ struct LockMechanism : Service::LockMechanism, public SimpleLoggable
   {
     uint8_t uid[16];
     uint8_t uidLen = 0;
-    uint16_t atqa[2];
+    uint16_t atqa[1];
     uint8_t sak[1];
     bool passiveTarget = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, atqa, sak, 1000, true);
     if (passiveTarget)
     {
-      logD("ATQA: %s", utils::bufToHexString(atqa, 2).c_str());
+      logD("ATQA: %s", utils::bufToHexString(atqa, 1).c_str());
       logD("SAK: %s", utils::bufToHexString(sak, 1).c_str());
       logD("UID: %s", utils::bufToHexString(uid, uidLen).c_str());
-      unsigned long startTime = millis();
       this->logger().logf(LogLevel::None, "*** PASSIVE TARGET DETECTED ***");
-      uint8_t data[13] = {0x00, 0xA4, 0x04, 0x00, 0x07, 0xA0, 0x00, 0x00, 0x08, 0x58, 0x01, 0x01, 0x0};
-      uint8_t selectCmdRes[32];
-      uint8_t selectCmdResLength = 32;
-      logD("SELECT HomeKey Applet, APDU: %s", utils::bufToHexString(data, sizeof(data)).c_str());
-      bool exchange = nfc.inDataExchange(data, sizeof(data), selectCmdRes, &selectCmdResLength);
-      logD("SELECT HomeKey Applet, Response: %s, Length: %d", utils::bufToHexString(selectCmdRes, selectCmdResLength).c_str(), selectCmdResLength);
-      if (exchange)
-      {
-        if (selectCmdRes[selectCmdResLength - 2] == 0x90 && selectCmdRes[selectCmdResLength - 1] == 0x00)
+      if(sak[0] == 0x20 && atqa[0] == 0x04){
+        unsigned long startTime = millis();
+        uint8_t data[13] = {0x00, 0xA4, 0x04, 0x00, 0x07, 0xA0, 0x00, 0x00, 0x08, 0x58, 0x01, 0x01, 0x0};
+        uint8_t selectCmdRes[32];
+        uint8_t selectCmdResLength = 32;
+        logD("SELECT HomeKey Applet, APDU: %s", utils::bufToHexString(data, sizeof(data)).c_str());
+        bool exchange = nfc.inDataExchange(data, sizeof(data), selectCmdRes, &selectCmdResLength);
+        logD("SELECT HomeKey Applet, Response: %s, Length: %d", utils::bufToHexString(selectCmdRes, selectCmdResLength).c_str(), selectCmdResLength);
+        if (exchange)
         {
-          logI("*** SELECT HOMEKEY APPLET SUCCESSFUL ***");
-          logD("Reader Private Key: %s", utils::bufToHexString((const uint8_t *)readerData.reader_private_key, sizeof(readerData.reader_private_key)).c_str());
-          AuthenticationContext flow(&nfc, &readerData);
-          auto auth = flow.fast_auth(defaultToStd);
-          if (std::get<0>(auth) != nullptr && std::get<1>(auth) != 99)
+          if (selectCmdRes[selectCmdResLength - 2] == 0x90 && selectCmdRes[selectCmdResLength - 1] == 0x00)
           {
-            unsigned long stopTime = millis();
-            this->logger().logf(LogLevel::None, "Transaction took %lu ms", stopTime - startTime);
-            Serial.println("Device has been authenticated, toggling lock state");
-            lockTargetState->setVal(!lockCurrentState->getVal());
-            lockCurrentState->setVal(lockTargetState->getVal());
-            json payload;
-            Issuers::homeKeyIssuers_t *foundIssuer;
-            for (auto &&issuer : readerData.issuers)
-            {
-              for (auto &&endpoint : issuer.endpoints)
-              {
-                if (&endpoint == std::get<0>(auth)){
-                  foundIssuer = &issuer;
-                }
-              }
-            }
-            payload["issuerId"] = utils::bufToHexString(foundIssuer->issuerId, 8);
-            payload["endpointId"] = utils::bufToHexString(std::get<0>(auth)->endpointId, 6);
-            mqtt.publish(MQTT_TOPIC, payload.dump().c_str());
-          }
-          else
-          {
-            auto auth1 = flow.std_auth();
-            issuerEndpoint::issuerEndpoint_t *foundEndpoint = std::get<0>(auth1);
-            if (foundEndpoint != nullptr && std::get<3>(auth1) == homeKeyReader::kFlowSTANDARD)
+            logI("*** SELECT HOMEKEY APPLET SUCCESSFUL ***");
+            logD("Reader Private Key: %s", utils::bufToHexString((const uint8_t *)readerData.reader_private_key, sizeof(readerData.reader_private_key)).c_str());
+            AuthenticationContext flow(&nfc, &readerData);
+            auto auth = flow.fast_auth(defaultToStd);
+            if (std::get<0>(auth) != nullptr && std::get<1>(auth) != 99)
             {
               unsigned long stopTime = millis();
               this->logger().logf(LogLevel::None, "Transaction took %lu ms", stopTime - startTime);
-              Serial.println("Device has been authenticated, toggling lock state");
+              logI("Device has been authenticated, toggling lock state");
               lockTargetState->setVal(!lockCurrentState->getVal());
               lockCurrentState->setVal(lockTargetState->getVal());
               json payload;
@@ -195,25 +170,61 @@ struct LockMechanism : Service::LockMechanism, public SimpleLoggable
               {
                 for (auto &&endpoint : issuer.endpoints)
                 {
-                  if (&endpoint == foundEndpoint){
+                  if (&endpoint == std::get<0>(auth)){
                     foundIssuer = &issuer;
                   }
                 }
               }
-              payload["issuerId"] = foundIssuer->issuerId;
-              payload["endpointId"] = foundEndpoint->endpointId;
+              payload["issuerId"] = utils::bufToHexString(foundIssuer->issuerId, 8);
+              payload["endpointId"] = utils::bufToHexString(std::get<0>(auth)->endpointId, 6);
+              payload["homekey"] = true;
               mqtt.publish(MQTT_TOPIC, payload.dump().c_str());
-              std::vector<uint8_t> persistentKey = std::get<2>(auth1);
-              memcpy(foundEndpoint->persistent_key, persistentKey.data(), 32);
-              json data = readerData;
-              auto msgpack = json::to_msgpack(data);
-              esp_err_t set_nvs = nvs_set_blob(savedData, "READERDATA", msgpack.data(), msgpack.size());
-              esp_err_t commit_nvs = nvs_commit(savedData);
-              logD("NVS SET: %s", esp_err_to_name(set_nvs));
-              logD("NVS COMMIT: %s", esp_err_to_name(commit_nvs));
+            }
+            else
+            {
+              auto auth1 = flow.std_auth();
+              issuerEndpoint::issuerEndpoint_t *foundEndpoint = std::get<0>(auth1);
+              if (foundEndpoint != nullptr && std::get<3>(auth1) == homeKeyReader::kFlowSTANDARD)
+              {
+                unsigned long stopTime = millis();
+                this->logger().logf(LogLevel::None, "Transaction took %lu ms", stopTime - startTime);
+                logI("Device has been authenticated, toggling lock state");
+                lockTargetState->setVal(!lockCurrentState->getVal());
+                lockCurrentState->setVal(lockTargetState->getVal());
+                json payload;
+                Issuers::homeKeyIssuers_t *foundIssuer;
+                for (auto &&issuer : readerData.issuers)
+                {
+                  for (auto &&endpoint : issuer.endpoints)
+                  {
+                    if (&endpoint == foundEndpoint){
+                      foundIssuer = &issuer;
+                    }
+                  }
+                }
+                payload["issuerId"] = foundIssuer->issuerId;
+                payload["endpointId"] = foundEndpoint->endpointId;
+                payload["homekey"] = true;
+                mqtt.publish(MQTT_TOPIC, payload.dump().c_str());
+                std::vector<uint8_t> persistentKey = std::get<2>(auth1);
+                memcpy(foundEndpoint->persistent_key, persistentKey.data(), 32);
+                json data = readerData;
+                auto msgpack = json::to_msgpack(data);
+                esp_err_t set_nvs = nvs_set_blob(savedData, "READERDATA", msgpack.data(), msgpack.size());
+                esp_err_t commit_nvs = nvs_commit(savedData);
+                logD("NVS SET: %s", esp_err_to_name(set_nvs));
+                logD("NVS COMMIT: %s", esp_err_to_name(commit_nvs));
+              }
             }
           }
         }
+      } else {
+        json payload;
+        payload["atqa"] = utils::bufToHexString(atqa, 1);
+        payload["sak"] = utils::bufToHexString(sak, 1);
+        payload["uid"] = utils::bufToHexString(uid, uidLen);
+        payload["homekey"] = false;
+        mqtt.publish(MQTT_TOPIC, payload.dump().c_str());
       }
     }
     else
