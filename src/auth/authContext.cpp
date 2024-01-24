@@ -11,7 +11,7 @@
  * The first vector contains the X coordinates of the public key point, and the second vector contains
  * the Y coordinates of the public key point.
  */
-std::tuple<std::vector<uint8_t>, std::vector<uint8_t>> AuthenticationContext::get_public_points(std::vector<uint8_t> pubKey)
+std::vector<uint8_t> AuthenticationContext::get_x(std::vector<uint8_t> pubKey)
 {
   mbedtls_ecp_group grp;
   mbedtls_ecp_point point;
@@ -21,16 +21,14 @@ std::tuple<std::vector<uint8_t>, std::vector<uint8_t>> AuthenticationContext::ge
   int ret = mbedtls_ecp_point_read_binary(&grp, &point, pubKey.data(), pubKey.size());
   logV("mbedtls_ecp_point_read_binary status: %d", ret);
   size_t buffer_size_x = mbedtls_mpi_size(&point.X);
-  size_t buffer_size_y = mbedtls_mpi_size(&point.Y);
-  uint8_t X[buffer_size_x];
-  uint8_t Y[buffer_size_y];
-  // Write X and Y coordinates into the buffer
-  mbedtls_mpi_write_binary(&point.X, X, mbedtls_mpi_size(&point.X));
-  mbedtls_mpi_write_binary(&point.Y, Y, mbedtls_mpi_size(&point.Y));
-  logV("PublicKey: %s, X Coordinate: %s, Y Coordinate: %s", utils::bufToHexString(pubKey.data(), pubKey.size()).c_str(), utils::bufToHexString(X, sizeof(X)).c_str(), utils::bufToHexString(Y, sizeof(Y)).c_str());
+  std::vector<uint8_t> X;
+  X.resize(buffer_size_x);
+  X.reserve(buffer_size_x);
+  mbedtls_mpi_write_binary(&point.X, X.data(), mbedtls_mpi_size(&point.X));
+  logV("PublicKey: %s, X Coordinate: %s", utils::bufToHexString(pubKey.data(), pubKey.size()).c_str(), utils::bufToHexString(X.data(), sizeof(X)).c_str());
   mbedtls_ecp_group_free(&grp);
   mbedtls_ecp_point_free(&point);
-  return std::make_tuple(std::vector<uint8_t>{X, X + buffer_size_x}, std::vector<uint8_t>{Y, Y + buffer_size_y});
+  return X;
 }
 
 int esp_rng(void *, uint8_t *buf, size_t len){
@@ -166,7 +164,7 @@ AuthenticationContext::AuthenticationContext(PN532 *nfc, homeKeyReader::readerDa
   esp_fill_random(transactionIdentifier.data(), 16);
   readerIdentifier.insert(readerIdentifier.begin(), readerData->reader_identifier, readerData->reader_identifier + sizeof(readerData->reader_identifier));
   readerIdentifier.insert(readerIdentifier.end(), readerData->identifier, readerData->identifier + sizeof(readerData->identifier));
-  readerEphX = std::get<0>(get_public_points(readerEphPubKey));
+  readerEphX = get_x(readerEphPubKey);
 }
 
 /**
@@ -259,7 +257,7 @@ issuerEndpoints::issuerEndpoints_t * AuthenticationContext::find_endpoint_by_cry
     for (auto &&endpoint : issuer.endpoints)
     {
       logV("Endpoint: %s, Persistent Key: %s", utils::bufToHexString(endpoint.endpointId, sizeof(endpoint.endpointId)).c_str(), utils::bufToHexString(endpoint.persistent_key, sizeof(endpoint.persistent_key)).c_str());
-      std::vector<uint8_t> endpointPubX = std::get<0>(get_public_points(std::vector<uint8_t>{endpoint.publicKey, endpoint.publicKey + 65}));
+      std::vector<uint8_t> endpointPubX = get_x(std::vector<uint8_t>{endpoint.publicKey, endpoint.publicKey + 65});
       uint8_t hkdf[58];
       Auth0_keying_material("VolatileFast", endpoint.endpoint_key_x, endpoint.persistent_key, hkdf, sizeof(hkdf));
       logD("HKDF Derived Key: %s", utils::bufToHexString(hkdf, sizeof(hkdf)).c_str());
@@ -345,7 +343,7 @@ std::tuple<issuerEndpoints::issuerEndpoints_t *, homeKeyReader::KeyFlow> Authent
     auto endpointPubKey = BERTLV::findTag(kEndpoint_Public_Key, Auth0Res);
     endpointEphPubKey = endpointPubKey.value;
     auto encryptedMessage = BERTLV::findTag(kAuth0_Cryptogram, Auth0Res);
-    endpointEphX = std::get<0>(get_public_points(endpointEphPubKey));
+    endpointEphX = get_x(endpointEphPubKey);
     if(fallbackToStd){
       return std::make_tuple(endpoint, homeKeyReader::kFlowFailed);
     } else {

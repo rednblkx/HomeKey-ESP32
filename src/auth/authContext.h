@@ -30,7 +30,7 @@ protected:
   std::vector<uint8_t> readerIdentifier;
   std::tuple<std::vector<uint8_t>, std::vector<uint8_t>> generateEphemeralKey();
   std::vector<uint8_t> signSharedInfo(uint8_t *stdTlv, size_t len);
-  std::tuple<std::vector<uint8_t>, std::vector<uint8_t>> get_public_points(std::vector<uint8_t> pubKey);
+  std::vector<uint8_t> get_x(std::vector<uint8_t> pubKey);
   void Auth0_keying_material(const char *context, uint8_t ePub_X[32], uint8_t *keyingMaterial, uint8_t *out, size_t outLen);
   void Auth1_keys_generator(uint8_t *persistentKey, uint8_t *volatileKey);
   void get_shared_key(uint8_t *outBuf, size_t oLen);
