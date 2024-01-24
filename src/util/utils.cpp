@@ -20,6 +20,24 @@ std::string utils::bufToHexString(const uint8_t *buf, size_t len){
   }
   return result;
 }
+std::string utils::bufToHexString(const uint16_t *buf, size_t len) {
+  esp32m::SimpleLoggable *loggable = new esp32m::SimpleLoggable("Utils::bufToHexString");
+  std::string result;
+
+  if (loggable->logger().level() != esp32m::LogLevel::None) {
+    result.reserve(4 * len); // Reserve space for 4 characters per uint16_t
+    for (size_t i = 0; i < len; ++i) {
+      result.push_back("0123456789ABCDEF"[(buf[i] >> 12) & 0xF]);
+      result.push_back("0123456789ABCDEF"[(buf[i] >> 8) & 0xF]);
+      result.push_back("0123456789ABCDEF"[(buf[i] >> 4) & 0xF]);
+      result.push_back("0123456789ABCDEF"[buf[i] & 0xF]);
+    }
+    // loggable->logger().logf(esp32m::LogLevel::Verbose, "%s", result.c_str());
+  }
+
+  delete loggable; // Don't forget to delete the allocated object
+  return result;
+}
 
 std::vector<uint8_t> utils::encodeB64(const uint8_t *src, size_t len){
   esp32m::SimpleLoggable *loggable = new esp32m::SimpleLoggable("Utils::encodeB64");

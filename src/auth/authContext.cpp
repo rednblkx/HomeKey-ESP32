@@ -335,9 +335,9 @@ std::tuple<issuerEndpoints::issuerEndpoints_t *, homeKeyReader::KeyFlow> Authent
   bool exchange;
   uint8_t response[128];
   uint8_t responseLength = 128;
-  logI("Auth0 APDU Length: %d, DATA: %s", apdu.size(), utils::bufToHexString(apdu.data(), apdu.size()).c_str());
+  logD("Auth0 APDU Length: %d, DATA: %s", apdu.size(), utils::bufToHexString(apdu.data(), apdu.size()).c_str());
   exchange = nfc->inDataExchange(apdu.data(), apdu.size(), response, &responseLength);
-  logI("Auth0 Response Length: %d, DATA: %s", responseLength, utils::bufToHexString(response, responseLength).c_str());
+  logD("Auth0 Response Length: %d, DATA: %s", responseLength, utils::bufToHexString(response, responseLength).c_str());
   issuerEndpoints::issuerEndpoints_t *endpoint = nullptr;
   if (response[responseLength - 2] == 0x90 && response[0] == 0x86)
   {
@@ -356,9 +356,9 @@ std::tuple<issuerEndpoints::issuerEndpoints_t *, homeKeyReader::KeyFlow> Authent
         uint8_t response1[4];
         uint8_t responseLength = 4;
         logI("Endpoint Authenticated, CONTROL FLOW SUCCESS");
-        logI("APDU: %s, Length: %d", utils::bufToHexString(apdu1, sizeof(apdu1)).c_str(), sizeof(apdu1));
+        logD("APDU: %s, Length: %d", utils::bufToHexString(apdu1, sizeof(apdu1)).c_str(), sizeof(apdu1));
         exchange = nfc->inDataExchange(apdu1, sizeof(apdu1), response1, &responseLength);
-        logI("RESPONSE: %s, Length: %d", utils::bufToHexString(response1, responseLength).c_str(), responseLength);
+        logD("RESPONSE: %s, Length: %d", utils::bufToHexString(response1, responseLength).c_str(), responseLength);
         if(response1[0] == 0x90){
           logI("AUTHENTICATED VIA FAST FLOW");
           return std::make_tuple(endpoint, homeKeyReader::kFlowFAST);

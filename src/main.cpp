@@ -97,64 +97,76 @@ struct LockMechanism : Service::LockMechanism, public SimpleLoggable
 
   void loop()
   {
-    if (nfc.inListPassiveTarget())
-  {
-    unsigned long startTime = millis();
-    bool exchange;
-    logI("*** PASSIVE TARGET DETECTED ***");
-    uint8_t data[13] = {0x00, 0xA4, 0x04, 0x00, 0x07, 0xA0, 0x00, 0x00, 0x08, 0x58, 0x01, 0x01, 0x0};
-    uint8_t selectCmdRes[32];
-    uint8_t selectCmdResLength = 32;
-    logD("SELECT HomeKey Applet, APDU: %s", utils::bufToHexString(data, sizeof(data)).c_str());
-    exchange = nfc.inDataExchange(data, sizeof(data), selectCmdRes, &selectCmdResLength);
-    logI("SELECT HomeKey Applet, Response: %s, Length: %d", utils::bufToHexString(selectCmdRes, selectCmdResLength).c_str(), selectCmdResLength);
-    if (exchange)
+    uint8_t uid[16];
+    uint8_t uidLen = 0;
+    uint16_t atqa[2];
+    uint8_t sak[1];
+    bool passiveTarget = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, atqa, sak, 1000, true);
+    if (passiveTarget)
     {
-      if (selectCmdRes[selectCmdResLength - 2] == 0x90 && selectCmdRes[selectCmdResLength - 1] == 0x00)
+      logV("ATQA: %s", utils::bufToHexString(atqa, 2).c_str());
+      logV("SAK: %s", utils::bufToHexString(sak, 1).c_str());
+      logD("UID: %s", utils::bufToHexString(uid, uidLen).c_str());
+      unsigned long startTime = millis();
+      bool exchange;
+      logI("*** PASSIVE TARGET DETECTED ***");
+      uint8_t data[13] = {0x00, 0xA4, 0x04, 0x00, 0x07, 0xA0, 0x00, 0x00, 0x08, 0x58, 0x01, 0x01, 0x0};
+      uint8_t selectCmdRes[32];
+      uint8_t selectCmdResLength = 32;
+      logD("SELECT HomeKey Applet, APDU: %s", utils::bufToHexString(data, sizeof(data)).c_str());
+      exchange = nfc.inDataExchange(data, sizeof(data), selectCmdRes, &selectCmdResLength);
+      logI("SELECT HomeKey Applet, Response: %s, Length: %d", utils::bufToHexString(selectCmdRes, selectCmdResLength).c_str(), selectCmdResLength);
+      if (exchange)
       {
-        logI("*** SELECT HOMEKEY APPLET SUCCESSFUL ***");
-        logD("Reader Private Key: %s", utils::bufToHexString((const uint8_t *)readerData.reader_private_key, sizeof(readerData.reader_private_key)).c_str());
-        AuthenticationContext flow(&nfc, &readerData);
-        auto auth = flow.fast_auth(defaultToStd);
-        if(std::get<0>(auth) != nullptr && std::get<1>(auth) != 99){
-          unsigned long stopTime = millis();
-          logI("Transaction took %lu ms", stopTime - startTime);
-          Serial.println("Device has been authenticated, toggling lock state");
-          lockTargetState->setVal(!lockCurrentState->getVal());
-          lockCurrentState->setVal(lockTargetState->getVal());
-        } else {
-          auto auth1 = flow.std_auth();
-          issuerEndpoints::issuerEndpoints_t *foundEndpoint = std::get<0>(auth1);
-          if(foundEndpoint != nullptr && std::get<3>(auth1) == homeKeyReader::kFlowSTANDARD){
+        if (selectCmdRes[selectCmdResLength - 2] == 0x90 && selectCmdRes[selectCmdResLength - 1] == 0x00)
+        {
+          logI("*** SELECT HOMEKEY APPLET SUCCESSFUL ***");
+          logD("Reader Private Key: %s", utils::bufToHexString((const uint8_t *)readerData.reader_private_key, sizeof(readerData.reader_private_key)).c_str());
+          AuthenticationContext flow(&nfc, &readerData);
+          auto auth = flow.fast_auth(defaultToStd);
+          if (std::get<0>(auth) != nullptr && std::get<1>(auth) != 99)
+          {
             unsigned long stopTime = millis();
-            logI("Transaction took %lu ms", stopTime - startTime);
+            this->logger().logf(LogLevel::None, "Transaction took %lu ms", stopTime - startTime);
             Serial.println("Device has been authenticated, toggling lock state");
             lockTargetState->setVal(!lockCurrentState->getVal());
             lockCurrentState->setVal(lockTargetState->getVal());
-            std::vector<uint8_t> persistentKey = std::get<2>(auth1);
-            memcpy(foundEndpoint->persistent_key, persistentKey.data(), 32);
-            json data = readerData;
-            auto msgpack = json::to_msgpack(data);
-            esp_err_t set_nvs = nvs_set_blob(savedData, "READERDATA", msgpack.data(), msgpack.size());
-            esp_err_t commit_nvs = nvs_commit(savedData);
-            logD("NVS SET: %s\n", esp_err_to_name(set_nvs));
-            logD("NVS COMMIT: %s\n", esp_err_to_name(commit_nvs));
+          }
+          else
+          {
+            auto auth1 = flow.std_auth();
+            issuerEndpoints::issuerEndpoints_t *foundEndpoint = std::get<0>(auth1);
+            if (foundEndpoint != nullptr && std::get<3>(auth1) == homeKeyReader::kFlowSTANDARD)
+            {
+              unsigned long stopTime = millis();
+              this->logger().logf(LogLevel::None, "Transaction took %lu ms", stopTime - startTime);
+              Serial.println("Device has been authenticated, toggling lock state");
+              lockTargetState->setVal(!lockCurrentState->getVal());
+              lockCurrentState->setVal(lockTargetState->getVal());
+              std::vector<uint8_t> persistentKey = std::get<2>(auth1);
+              memcpy(foundEndpoint->persistent_key, persistentKey.data(), 32);
+              json data = readerData;
+              auto msgpack = json::to_msgpack(data);
+              esp_err_t set_nvs = nvs_set_blob(savedData, "READERDATA", msgpack.data(), msgpack.size());
+              esp_err_t commit_nvs = nvs_commit(savedData);
+              logD("NVS SET: %s\n", esp_err_to_name(set_nvs));
+              logD("NVS COMMIT: %s\n", esp_err_to_name(commit_nvs));
+            }
           }
         }
       }
     }
-  }
-  else
-  {
-    uint8_t data[18] = {0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0};
-    memcpy(data + 8, readerData.reader_identifier, sizeof(readerData.reader_identifier));
-    with_crc16(data, 16, data + 16);
-    uint8_t response[64];
-    uint8_t length = 64;
-    nfc.setPassiveActivationRetries(0);
-    nfc.writeRegister(0x633d, 0);
-    nfc.inCommunicateThru(data, sizeof(data), response, &length, 1000);
-  }
+    else
+    {
+      uint8_t data[18] = {0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0};
+      memcpy(data + 8, readerData.reader_identifier, sizeof(readerData.reader_identifier));
+      with_crc16(data, 16, data + 16);
+      uint8_t response[64];
+      uint8_t length = 64;
+      nfc.setPassiveActivationRetries(0);
+      nfc.writeRegister(0x633d, 0);
+      nfc.inCommunicateThru(data, sizeof(data), response, &length, 1000);
+    }
   } // end loop
 
 }; // end LockMechanism
@@ -371,7 +383,8 @@ struct NFCAccess : Service::NFCAccess, public SimpleLoggable
     {
       return 0;
     }
-    else return 1;
+    else
+      return 1;
   }
 
   boolean update(std::vector<char> *callback, int *callbackLen)
@@ -388,7 +401,8 @@ struct NFCAccess : Service::NFCAccess, public SimpleLoggable
     logD(dataNfcControlPoint);
     logD("NfcControlPoint Length: %d \n", strlen(dataNfcControlPoint));
     std::vector<uint8_t> decB64 = utils::decodeB64(dataNfcControlPoint);
-    if(decB64.size() == 0)  return false;
+    if (decB64.size() == 0)
+      return false;
     logD("Decoded data: %s", utils::bufToHexString(decB64.data(), decB64.size()).c_str());
     logD("Decoded data length: %d \n", decB64.size());
     std::vector<BERTLV> tlv = BERTLV::unpack_array(decB64);
@@ -547,7 +561,8 @@ void pairCallback(bool isPaired)
   }
 }
 
-void setFlow(const char *buf){
+void setFlow(const char *buf)
+{
   switch (buf[1])
   {
   case '0':
@@ -569,32 +584,32 @@ void setFlow(const char *buf){
 void setLogLevel(const char *buf)
 {
   LogLevel level = LogLevel::Info;
-  if (strncmp(buf+1, "E", 1) == 0)
+  if (strncmp(buf + 1, "E", 1) == 0)
   {
     level = LogLevel::Error;
     Serial.println("ERROR");
   }
-  else if (strncmp(buf+1, "W", 1) == 0)
+  else if (strncmp(buf + 1, "W", 1) == 0)
   {
     level = LogLevel::Warning;
     Serial.println("WARNING");
   }
-  else if (strncmp(buf+1, "I", 1) == 0)
+  else if (strncmp(buf + 1, "I", 1) == 0)
   {
     level = LogLevel::Info;
     Serial.println("INFO");
   }
-  else if (strncmp(buf+1, "D", 1) == 0)
+  else if (strncmp(buf + 1, "D", 1) == 0)
   {
     level = LogLevel::Debug;
     Serial.println("DEBUG");
   }
-  else if (strncmp(buf+1, "V", 1) == 0)
+  else if (strncmp(buf + 1, "V", 1) == 0)
   {
     level = LogLevel::Verbose;
     Serial.println("VERBOSE");
   }
-  else if (strncmp(buf+1, "N", 1) == 0)
+  else if (strncmp(buf + 1, "N", 1) == 0)
   {
     level = LogLevel::None;
     Serial.println("NONE");
@@ -611,7 +626,8 @@ void setup()
   SimpleLoggable *setupLog = new SimpleLoggable("SETUP");
   size_t len;
   nvs_open("SAVED_DATA", NVS_READWRITE, &savedData);
-  if (!nvs_get_blob(savedData, "READERDATA", NULL, &len)){
+  if (!nvs_get_blob(savedData, "READERDATA", NULL, &len))
+  {
     uint8_t msgpack[len];
     nvs_get_blob(savedData, "READERDATA", msgpack, &len);
     setupLog->logger().logf(LogLevel::Info, "READERDATA - MSGPACK(%d): %s", len, utils::bufToHexString(msgpack, len).c_str());
@@ -644,16 +660,16 @@ void setup()
   SimpleLoggable *nfcLog = new SimpleLoggable("NFC_SETUP");
   if (!versiondata)
   {
-    nfcLog->logger().logf(LogLevel::Error, "NFC_SETUP","Didn't find PN53x board");
+    nfcLog->logger().logf(LogLevel::Error, "NFC_SETUP", "Didn't find PN53x board");
   }
-  else {
+  else
+  {
     nfcLog->logger().logf(LogLevel::Info, "Found chip PN5%x", (versiondata >> 24) & 0xFF);
     nfcLog->logger().logf(LogLevel::Info, "Firmware ver. %d.%d", (versiondata >> 16) & 0xFF, (versiondata >> 8) & 0xFF);
     nfc.SAMConfig();
     nfc.setPassiveActivationRetries(0xFF);
     nfcLog->logger().logf(LogLevel::Info, "Waiting for an ISO14443A card");
   }
-
 
   new SpanAccessory();                 // Begin by creating a new Accessory using SpanAccessory(), no arguments needed
   new Service::AccessoryInformation(); // HAP requires every Accessory to implement an AccessoryInformation Service, with the required Identify Characteristic
