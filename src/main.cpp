@@ -734,7 +734,7 @@ void wifiCallback(){
 void setup()
 {
   Logging::addAppender(&UARTAppender::instance());
-  Logging::setLevel(LogLevel::Debug);
+  Logging::setLevel(LogLevel::Info);
   Serial.begin(115200);
   SimpleLoggable *setupLog = new SimpleLoggable("SETUP");
   size_t len;
