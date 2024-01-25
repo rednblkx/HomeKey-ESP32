@@ -229,7 +229,14 @@ struct LockMechanism : Service::LockMechanism
             {
               ESP_LOGW(TAG,"Authentication Failed, lock state not changed");
             }
-          }
+          } else {
+          json payload;
+          payload["atqa"] = utils::bufToHexString(atqa, 1);
+          payload["sak"] = utils::bufToHexString(sak, 1);
+          payload["uid"] = utils::bufToHexString(uid, uidLen);
+          payload["homekey"] = false;
+          mqtt.publish(MQTT_AUTH_TOPIC, payload.dump().c_str());
+        }
         }
       }
       else
