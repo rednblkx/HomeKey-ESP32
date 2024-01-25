@@ -367,11 +367,10 @@ std::tuple<issuerEndpoint::issuerEndpoint_t *, homeKeyReader::KeyFlow> Authentic
   utils::simple_tlv(0x4D, readerIdentifier->data(), readerIdentifier->size(), fastTlv.data() + len, &len);
   std::vector<uint8_t> apdu{0x80, 0x80, 0x01, 0x01, (uint8_t)len};
   apdu.insert(apdu.begin() + 5, fastTlv.begin(), fastTlv.end());
-  bool exchange;
   uint8_t response[128];
   uint8_t responseLength = 128;
   ESP_LOGD(TAG,"Auth0 APDU Length: %d, DATA: %s", apdu.size(), utils::bufToHexString(apdu.data(), apdu.size()).c_str());
-  exchange = nfc->inDataExchange(apdu.data(), apdu.size(), response, &responseLength);
+  nfc->inDataExchange(apdu.data(), apdu.size(), response, &responseLength);
   ESP_LOGD(TAG,"Auth0 Response Length: %d, DATA: %s", responseLength, utils::bufToHexString(response, responseLength).c_str());
   issuerEndpoint::issuerEndpoint_t *endpoint = nullptr;
   if (response[responseLength - 2] == 0x90 && response[0] == 0x86)
@@ -392,7 +391,7 @@ std::tuple<issuerEndpoint::issuerEndpoint_t *, homeKeyReader::KeyFlow> Authentic
         uint8_t responseLength = 4;
         ESP_LOGI(TAG,"Endpoint Authenticated, COMMAND FLOW SUCCESS");
         ESP_LOGD(TAG,"APDU: %s, Length: %d", utils::bufToHexString(apdu1, sizeof(apdu1)).c_str(), sizeof(apdu1));
-        exchange = nfc->inDataExchange(apdu1, sizeof(apdu1), response1, &responseLength);
+        nfc->inDataExchange(apdu1, sizeof(apdu1), response1, &responseLength);
         ESP_LOGD(TAG,"RESPONSE: %s, Length: %d", utils::bufToHexString(response1, responseLength).c_str(), responseLength);
         if(response1[0] == 0x90){
           ESP_LOGI(TAG,"AUTHENTICATED VIA FAST FLOW");
@@ -413,7 +412,7 @@ std::tuple<issuerEndpoint::issuerEndpoint_t *, homeKeyReader::KeyFlow> Authentic
   uint8_t cmdFlowResLen = 4;
   ESP_LOGE(TAG,"Response Status not 0x90, something went wrong!");
   ESP_LOGD(TAG,"APDU: %s, Length: %d", utils::bufToHexString(apdu1, sizeof(apdu1)).c_str(), sizeof(apdu1));
-  exchange = nfc->inDataExchange(apdu1, sizeof(apdu1), cmdFlowRes, &cmdFlowResLen);
+  nfc->inDataExchange(apdu1, sizeof(apdu1), cmdFlowRes, &cmdFlowResLen);
   delete endpointEphPubKey;
   delete endpointEphX;
   return std::make_tuple(endpoint, homeKeyReader::kFlowFailed);
@@ -431,9 +430,9 @@ std::tuple<issuerEndpoint::issuerEndpoint_t *, homeKeyReader::KeyFlow> Authentic
  */
 std::tuple<issuerEndpoint::issuerEndpoint_t*, DigitalKeySecureContext *, std::vector<uint8_t>, homeKeyReader::KeyFlow> AuthenticationContext::std_auth()
 {
-  int readerContext = 1096652137;
-  int deviceContext = 1317567308;
+  // int readerContext = 1096652137;
   uint8_t readerCtx[4]{0x41,0x5d,0x95,0x69};
+  // int deviceContext = 1317567308;
   uint8_t deviceCtx[4]{0x4e,0x88,0x7b,0x4c};
 
   std::vector<uint8_t> stdTlv(16 + endpointEphX->size() + readerEphX->size() + 30);

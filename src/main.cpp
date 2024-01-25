@@ -25,7 +25,9 @@
 #define MQTT_CLIENTID "homekey_mqtt"
 #define MQTT_USERNAME "username"
 #define MQTT_PASSWORD "password"
-#define MQTT_TOPIC "topic/topic"
+#define MQTT_AUTH_TOPIC "topic/auth"
+#define MQTT_SET_STATE_TOPIC "topic/set_state"
+#define MQTT_STATE_TOPIC "topic/state"
 #endif
 
 using namespace nlohmann;
@@ -106,7 +108,13 @@ struct LockMechanism : Service::LockMechanism
     new Characteristic::Name("NFC Lock");
     lockCurrentState = new Characteristic::LockCurrentState(0, true);
     lockTargetState = new Characteristic::LockTargetState();
-
+    mqtt.subscribe(MQTT_SET_STATE_TOPIC, [this](const char *payload)
+                   {
+        Serial.printf("\nReceived message in topic set_state: %s\n", payload);
+        int state = atoi(payload);
+        lockTargetState->setVal(state == 0 || state == 1 ? state : lockTargetState->getVal());
+        lockCurrentState->setVal(state == 0 || state == 1 ? state : lockCurrentState->getVal());
+        });
   } // end constructor
 
   boolean update(std::vector<char> *callback, int *callbackLen)
@@ -114,7 +122,8 @@ struct LockMechanism : Service::LockMechanism
     int targetState = lockTargetState->getNewVal();
     ESP_LOGI(TAG, "New LockState=%d, Current LockState=%d", targetState, lockCurrentState->getVal());
 
-    lockCurrentState->setVal(targetState);
+    // lockCurrentState->setVal(targetState);
+    mqtt.publish(MQTT_STATE_TOPIC, std::to_string(targetState).c_str());
 
     return (true);
   }
@@ -154,8 +163,9 @@ struct LockMechanism : Service::LockMechanism
               unsigned long stopTime = millis();
               ESP_LOGI(TAG, "Transaction took %lu ms", stopTime - startTime);
               ESP_LOGI(TAG, "Device has been authenticated, toggling lock state");
-              lockTargetState->setVal(!lockCurrentState->getVal());
-              lockCurrentState->setVal(lockTargetState->getVal());
+              mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockTargetState->getNewVal()).c_str());
+              // lockTargetState->setVal(lockTargetState->getNewVal());
+              // lockCurrentState->setVal(lockTargetState->getVal());
               json payload;
               Issuers::homeKeyIssuers_t *foundIssuer = nullptr;
               for (auto &&issuer : readerData.issuers)
@@ -172,7 +182,7 @@ struct LockMechanism : Service::LockMechanism
                 payload["issuerId"] = utils::bufToHexString(foundIssuer->issuerId, 8);
                 payload["endpointId"] = utils::bufToHexString(std::get<0>(auth)->endpointId, 6);
                 payload["homekey"] = true;
-                mqtt.publish(MQTT_TOPIC, payload.dump().c_str());
+                mqtt.publish(MQTT_AUTH_TOPIC, payload.dump().c_str());
               }
             }
             else if (std::get<1>(auth) != homeKeyReader::kFlowFailed)
@@ -185,8 +195,9 @@ struct LockMechanism : Service::LockMechanism
                 unsigned long stopTime = millis();
                 ESP_LOGI(TAG, "Transaction took %lu ms", stopTime - startTime);
                 ESP_LOGI(TAG, "Device has been authenticated, toggling lock state");
-                lockTargetState->setVal(!lockCurrentState->getVal());
-                lockCurrentState->setVal(lockTargetState->getVal());
+                mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockTargetState->getNewVal()).c_str());
+                // lockTargetState->setVal(!lockCurrentState->getVal());
+                // lockCurrentState->setVal(lockTargetState->getVal());
                 json payload;
                 Issuers::homeKeyIssuers_t *foundIssuer = nullptr;
                 for (auto &&issuer : readerData.issuers)
@@ -203,7 +214,7 @@ struct LockMechanism : Service::LockMechanism
                   payload["issuerId"] = foundIssuer->issuerId;
                   payload["endpointId"] = foundEndpoint->endpointId;
                   payload["homekey"] = true;
-                  mqtt.publish(MQTT_TOPIC, payload.dump().c_str());
+                  mqtt.publish(MQTT_AUTH_TOPIC, payload.dump().c_str());
                   std::vector<uint8_t> persistentKey = std::get<2>(auth1);
                   memcpy(foundEndpoint->persistent_key, persistentKey.data(), 32);
                   save_to_nvs();
@@ -228,7 +239,7 @@ struct LockMechanism : Service::LockMechanism
         payload["sak"] = utils::bufToHexString(sak, 1);
         payload["uid"] = utils::bufToHexString(uid, uidLen);
         payload["homekey"] = false;
-        mqtt.publish(MQTT_TOPIC, payload.dump().c_str());
+        mqtt.publish(MQTT_AUTH_TOPIC, payload.dump().c_str());
       }
     }
     else
@@ -451,7 +462,6 @@ struct NFCAccess : Service::NFCAccess
 
     char *dataConfState = configurationState->getNewString();
     char *dataNfcControlPoint = nfcControlPoint->getNewString();
-    ESP_LOGD(TAG, "ConfState Length: %d", strlen(dataConfState));
     ESP_LOGD(TAG, "NfcControlPoint Length: %d", strlen(dataNfcControlPoint));
     std::vector<uint8_t> decB64 = utils::decodeB64(dataNfcControlPoint);
     if (decB64.size() == 0)
@@ -588,7 +598,6 @@ struct NFCAccess : Service::NFCAccess
 
 void deleteReaderData(const char *buf)
 {
-  uint8_t empty[64];
   readerData.issuers.clear();
   std::fill(readerData.identifier, readerData.identifier + 8, 0);
   std::fill(readerData.reader_identifier, readerData.reader_identifier + 8, 0);
