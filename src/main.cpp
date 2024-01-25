@@ -168,8 +168,7 @@ struct LockMechanism : Service::LockMechanism
                   }
                 }
               }
-              if (foundIssuer != nullptr)
-              {
+              if(foundIssuer != nullptr){
                 payload["issuerId"] = utils::bufToHexString(foundIssuer->issuerId, 8);
                 payload["endpointId"] = utils::bufToHexString(std::get<0>(auth)->endpointId, 6);
                 payload["homekey"] = true;
@@ -200,8 +199,7 @@ struct LockMechanism : Service::LockMechanism
                     }
                   }
                 }
-                if (foundIssuer != nullptr)
-                {
+                if(foundIssuer != nullptr){
                   payload["issuerId"] = foundIssuer->issuerId;
                   payload["endpointId"] = foundEndpoint->endpointId;
                   payload["homekey"] = true;
@@ -747,8 +745,7 @@ void print_issuers(const char *buf)
   }
 }
 
-void wifiCallback()
-{
+void wifiCallback(){
   mqtt.host = MQTT_HOST;
   mqtt.port = MQTT_PORT;
   mqtt.client_id = MQTT_CLIENTID;

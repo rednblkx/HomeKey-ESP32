@@ -402,15 +402,8 @@ std::tuple<issuerEndpoint::issuerEndpoint_t *, homeKeyReader::KeyFlow> Authentic
         }
       }
       else
-      { 
-        // uint8_t apdu1[4] = {0x80, 0x3c, 0x00, 0x0};
-        // uint8_t cmdFlowRes[4];
-        // uint8_t cmdFlowResLen = 4;
+      {
         ESP_LOGW(TAG,"FAST Flow failed!");
-        // ESP_LOGD(TAG,"APDU: %s, Length: %d", utils::bufToHexString(apdu1, sizeof(apdu1)).c_str(), sizeof(apdu1));
-        // exchange = nfc->inDataExchange(apdu1, sizeof(apdu1), cmdFlowRes, &cmdFlowResLen);
-        // delete endpointEphPubKey;
-        // delete endpointEphX;
         return std::make_tuple(endpoint, homeKeyReader::kFlowSTANDARD);
       }
     }
