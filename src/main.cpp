@@ -211,8 +211,8 @@ struct LockMechanism : Service::LockMechanism
                   }
                 }
                 if(foundIssuer != nullptr){
-                  payload["issuerId"] = foundIssuer->issuerId;
-                  payload["endpointId"] = foundEndpoint->endpointId;
+                  payload["issuerId"] = utils::bufToHexString(foundIssuer->issuerId, 8);
+                  payload["endpointId"] = utils::bufToHexString(std::get<0>(auth)->endpointId, 6);
                   payload["homekey"] = true;
                   mqtt.publish(MQTT_AUTH_TOPIC, payload.dump().c_str());
                   std::vector<uint8_t> persistentKey = std::get<2>(auth1);
