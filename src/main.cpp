@@ -451,10 +451,7 @@ struct NFCAccess : Service::NFCAccess
 
     char *dataConfState = configurationState->getNewString();
     char *dataNfcControlPoint = nfcControlPoint->getNewString();
-    ESP_LOGD(TAG, "New Value ConfState:");
-    ESP_LOGD(TAG, "%s", dataConfState);
-    ESP_LOGD(TAG, "New Value NfcControlPoint:");
-    ESP_LOGD(TAG, "%s", dataNfcControlPoint);
+    ESP_LOGD(TAG, "ConfState Length: %d", strlen(dataConfState));
     ESP_LOGD(TAG, "NfcControlPoint Length: %d", strlen(dataNfcControlPoint));
     std::vector<uint8_t> decB64 = utils::decodeB64(dataNfcControlPoint);
     if (decB64.size() == 0)
