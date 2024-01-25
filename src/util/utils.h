@@ -1,7 +1,6 @@
 #pragma once
 #include <cstdint>
 #include <string>
-#include <logging.hpp>
 #include <mbedtls/base64.h>
 #include <algorithm>
 #include <vector>
@@ -9,6 +8,7 @@
 #include <mbedtls/sha1.h>
 #include <string.h>
 #include <mbedtls/error.h>
+#include <esp_log.h>
 class utils {
 private:
   /* data */

@@ -15,10 +15,10 @@
 #include <util/DigitalKeySecureContext.h>
 #include <util/x963kdf.h>
 
-using namespace esp32m;
-class AuthenticationContext : public SimpleLoggable
+class AuthenticationContext
 {
 protected:
+  const char *TAG = "HKAuthCtx";
   homeKeyReader::readerData_t *readerData;
   std::vector<uint8_t> *readerEphX;
   std::vector<uint8_t> *readerEphPrivKey;

@@ -19,11 +19,11 @@ std::vector<uint8_t> *AuthenticationContext::get_x(std::vector<uint8_t> *pubKey)
   mbedtls_ecp_group_init(&grp);
   mbedtls_ecp_group_load(&grp, MBEDTLS_ECP_DP_SECP256R1);
   int ret = mbedtls_ecp_point_read_binary(&grp, &point, pubKey->data(), pubKey->size());
-  logV("mbedtls_ecp_point_read_binary status: %d", ret);
+  ESP_LOGV(TAG,"mbedtls_ecp_point_read_binary status: %d", ret);
   size_t buffer_size_x = mbedtls_mpi_size(&point.X);
   std::vector<uint8_t> *X = new std::vector<uint8_t>(buffer_size_x);
   mbedtls_mpi_write_binary(&point.X, X->data(), buffer_size_x);
-  logV("PublicKey: %s, X Coordinate: %s", utils::bufToHexString(pubKey->data(), pubKey->size()).c_str(), utils::bufToHexString(X->data(), X->size()).c_str());
+  ESP_LOGV(TAG,"PublicKey: %s, X Coordinate: %s", utils::bufToHexString(pubKey->data(), pubKey->size()).c_str(), utils::bufToHexString(X->data(), X->size()).c_str());
   mbedtls_ecp_group_free(&grp);
   mbedtls_ecp_point_free(&point);
   return X;
@@ -47,11 +47,11 @@ std::vector<uint8_t> *AuthenticationContext::get_x(uint8_t *pubKey, size_t len)
   mbedtls_ecp_group_init(&grp);
   mbedtls_ecp_group_load(&grp, MBEDTLS_ECP_DP_SECP256R1);
   int ret = mbedtls_ecp_point_read_binary(&grp, &point, pubKey, len);
-  logV("mbedtls_ecp_point_read_binary status: %d", ret);
+  ESP_LOGV(TAG,"mbedtls_ecp_point_read_binary status: %d", ret);
   size_t buffer_size_x = mbedtls_mpi_size(&point.X);
   std::vector<uint8_t> *X = new std::vector<uint8_t>(buffer_size_x);
   mbedtls_mpi_write_binary(&point.X, X->data(), buffer_size_x);
-  logV("PublicKey: %s, X Coordinate: %s", utils::bufToHexString(pubKey, len).c_str(), utils::bufToHexString(X->data(), X->size()).c_str());
+  ESP_LOGV(TAG,"PublicKey: %s, X Coordinate: %s", utils::bufToHexString(pubKey, len).c_str(), utils::bufToHexString(X->data(), X->size()).c_str());
   mbedtls_ecp_group_free(&grp);
   mbedtls_ecp_point_free(&point);
   return X;
@@ -80,9 +80,9 @@ std::tuple<std::vector<uint8_t> *, std::vector<uint8_t> *> AuthenticationContext
   mbedtls_ecp_point_write_binary(&ephemeral.grp, &ephemeral.Q, MBEDTLS_ECP_PF_UNCOMPRESSED, &olen, bufPub->data(), bufPub->capacity());
   bufPub->resize(olen);
   mbedtls_ecp_keypair_free(&ephemeral);
-  logI("Ephemeral Key generated");
-  logD("private: %s", utils::bufToHexString(bufPriv->data(), bufPriv->size()).c_str());
-  logD("public: %s", utils::bufToHexString(bufPub->data(), bufPub->size()).c_str());
+  ESP_LOGI(TAG,"Ephemeral Key generated");
+  ESP_LOGD(TAG,"private: %s", utils::bufToHexString(bufPriv->data(), bufPriv->size()).c_str());
+  ESP_LOGD(TAG,"public: %s", utils::bufToHexString(bufPub->data(), bufPub->size()).c_str());
   return std::make_tuple(bufPriv, bufPub);
 }
 /**
@@ -162,7 +162,7 @@ void AuthenticationContext::get_shared_key(uint8_t *outBuf, size_t oLen)
   mbedtls_ecp_point_free(&endpoint_ephemeral_public_key);
 }
 
-AuthenticationContext::AuthenticationContext(const AuthenticationContext &ctx) : SimpleLoggable("HKAuthFlow")
+AuthenticationContext::AuthenticationContext(const AuthenticationContext &ctx)
 {
   readerData = ctx.readerData;
   readerEphX = ctx.readerEphX;
@@ -192,7 +192,7 @@ AuthenticationContext::~AuthenticationContext()
    * @param nfc A pointer to an instance of the PN532 class, which is used for NFC communication.
    * @param readerData readerData is a pointer to a structure of type readerData_t.
    */
-AuthenticationContext::AuthenticationContext(PN532 *nfc, homeKeyReader::readerData_t *readerData) : SimpleLoggable("HKAuthFlow"), readerData(readerData), nfc(nfc)
+AuthenticationContext::AuthenticationContext(PN532 *nfc, homeKeyReader::readerData_t *readerData) : readerData(readerData), nfc(nfc)
 {
   auto readerEphKey = generateEphemeralKey();
   readerEphPrivKey = std::get<0>(readerEphKey);
@@ -241,9 +241,9 @@ void AuthenticationContext::Auth0_keying_material(const char *context, uint8_t e
   utils::pack(transactionIdentifier->data(), 16, dataMaterial, &olen);
   utils::pack(flags, 2, dataMaterial, &olen);
   utils::pack(endpointEphX->data(), endpointEphX->size(), dataMaterial, &olen);
-  logD("Auth0 HKDF Material: %s", utils::bufToHexString(dataMaterial, sizeof(dataMaterial)).c_str());
+  ESP_LOGD(TAG,"Auth0 HKDF Material: %s", utils::bufToHexString(dataMaterial, sizeof(dataMaterial)).c_str());
   int ret = mbedtls_hkdf(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), NULL, 0, keyingMaterial, 32, dataMaterial, sizeof(dataMaterial), out, outLen);
-  logV("HKDF Status: %d", ret);
+  ESP_LOGV(TAG,"HKDF Status: %d", ret);
 }
 
 /**
@@ -274,7 +274,7 @@ void AuthenticationContext::Auth1_keying_material(uint8_t *keyingMaterial, const
   utils::pack((uint8_t *)context, strlen(context), dataMaterial, &olen);
   utils::pack(prot_ver, sizeof(prot_ver), dataMaterial, &olen);
   utils::pack(supported_vers, sizeof(supported_vers), dataMaterial, &olen);
-  logD("DATA Material Length: %d, Data: %s", sizeof(dataMaterial), utils::bufToHexString(dataMaterial, sizeof(dataMaterial)).c_str());
+  ESP_LOGD(TAG,"DATA Material Length: %d, Data: %s", sizeof(dataMaterial), utils::bufToHexString(dataMaterial, sizeof(dataMaterial)).c_str());
   mbedtls_hkdf(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), NULL, 0, keyingMaterial, 32, dataMaterial, olen, out, outLen);
 }
 
@@ -291,16 +291,16 @@ issuerEndpoint::issuerEndpoint_t * AuthenticationContext::find_endpoint_by_crypt
   issuerEndpoint::issuerEndpoint_t *foundEndpoint = nullptr;
   for (auto &&issuer : readerData->issuers)
   {
-    logV("Issuer: %s, Endpoints: %d", utils::bufToHexString(issuer.issuerId, sizeof(issuer.issuerId)).c_str(), issuer.endpoints.size());
+    ESP_LOGV(TAG,"Issuer: %s, Endpoints: %d", utils::bufToHexString(issuer.issuerId, sizeof(issuer.issuerId)).c_str(), issuer.endpoints.size());
     for (auto &&endpoint : issuer.endpoints)
     {
-      logV("Endpoint: %s, Persistent Key: %s", utils::bufToHexString(endpoint.endpointId, sizeof(endpoint.endpointId)).c_str(), utils::bufToHexString(endpoint.persistent_key, sizeof(endpoint.persistent_key)).c_str());
+      ESP_LOGV(TAG,"Endpoint: %s, Persistent Key: %s", utils::bufToHexString(endpoint.endpointId, sizeof(endpoint.endpointId)).c_str(), utils::bufToHexString(endpoint.persistent_key, sizeof(endpoint.persistent_key)).c_str());
       uint8_t hkdf[58];
       Auth0_keying_material("VolatileFast", endpoint.endpoint_key_x, endpoint.persistent_key, hkdf, sizeof(hkdf));
-      logD("HKDF Derived Key: %s", utils::bufToHexString(hkdf, sizeof(hkdf)).c_str());
+      ESP_LOGD(TAG,"HKDF Derived Key: %s", utils::bufToHexString(hkdf, sizeof(hkdf)).c_str());
       if (!memcmp(hkdf, cryptogram.data(), 16))
       {
-        logD("Endpoint %s matches cryptogram", utils::bufToHexString(endpoint.endpointId, sizeof(endpoint.endpointId)).c_str());
+        ESP_LOGD(TAG,"Endpoint %s matches cryptogram", utils::bufToHexString(endpoint.endpointId, sizeof(endpoint.endpointId)).c_str());
         foundEndpoint = &endpoint;
         break;
       }
@@ -326,18 +326,18 @@ void AuthenticationContext::Auth1_keys_generator(uint8_t *persistentKey, uint8_t
   uint8_t sharedKey[32];
 
   get_shared_key(sharedKey, sizeof(sharedKey));
-  logD("Shared Key: %s", utils::bufToHexString(sharedKey, 32).c_str());
+  ESP_LOGD(TAG,"Shared Key: %s", utils::bufToHexString(sharedKey, 32).c_str());
 
   X963KDF kdf(MBEDTLS_MD_SHA256, 32, transactionIdentifier->data(), 16);
 
   // Derive the key using X963KDF
   uint8_t derivedKey[32];
   kdf.derive(sharedKey, sizeof(sharedKey), derivedKey);
-  logD("X963KDF Derived Key: %s", utils::bufToHexString(derivedKey, 32).c_str());
+  ESP_LOGD(TAG,"X963KDF Derived Key: %s", utils::bufToHexString(derivedKey, 32).c_str());
   Auth1_keying_material(derivedKey, "Persistent", persistentKey, 32);
   Auth1_keying_material(derivedKey, "Volatile", volatileKey, 48);
-  logD("Persistent Key: %s", utils::bufToHexString(persistentKey, 32).c_str());
-  logD("Volatile Key: %s", utils::bufToHexString(volatileKey, 48).c_str());
+  ESP_LOGD(TAG,"Persistent Key: %s", utils::bufToHexString(persistentKey, 32).c_str());
+  ESP_LOGD(TAG,"Volatile Key: %s", utils::bufToHexString(volatileKey, 48).c_str());
 }
 
 
@@ -367,12 +367,11 @@ std::tuple<issuerEndpoint::issuerEndpoint_t *, homeKeyReader::KeyFlow> Authentic
   utils::simple_tlv(0x4D, readerIdentifier->data(), readerIdentifier->size(), fastTlv.data() + len, &len);
   std::vector<uint8_t> apdu{0x80, 0x80, 0x01, 0x01, (uint8_t)len};
   apdu.insert(apdu.begin() + 5, fastTlv.begin(), fastTlv.end());
-  bool exchange;
   uint8_t response[128];
   uint8_t responseLength = 128;
-  logD("Auth0 APDU Length: %d, DATA: %s", apdu.size(), utils::bufToHexString(apdu.data(), apdu.size()).c_str());
-  exchange = nfc->inDataExchange(apdu.data(), apdu.size(), response, &responseLength);
-  logD("Auth0 Response Length: %d, DATA: %s", responseLength, utils::bufToHexString(response, responseLength).c_str());
+  ESP_LOGD(TAG,"Auth0 APDU Length: %d, DATA: %s", apdu.size(), utils::bufToHexString(apdu.data(), apdu.size()).c_str());
+  nfc->inDataExchange(apdu.data(), apdu.size(), response, &responseLength);
+  ESP_LOGD(TAG,"Auth0 Response Length: %d, DATA: %s", responseLength, utils::bufToHexString(response, responseLength).c_str());
   issuerEndpoint::issuerEndpoint_t *endpoint = nullptr;
   if (response[responseLength - 2] == 0x90 && response[0] == 0x86)
   {
@@ -390,20 +389,20 @@ std::tuple<issuerEndpoint::issuerEndpoint_t *, homeKeyReader::KeyFlow> Authentic
         uint8_t apdu1[4] = {0x80, 0x3c, 0x01, 0x0};
         uint8_t response1[4];
         uint8_t responseLength = 4;
-        logI("Endpoint Authenticated, COMMAND FLOW SUCCESS");
-        logD("APDU: %s, Length: %d", utils::bufToHexString(apdu1, sizeof(apdu1)).c_str(), sizeof(apdu1));
-        exchange = nfc->inDataExchange(apdu1, sizeof(apdu1), response1, &responseLength);
-        logD("RESPONSE: %s, Length: %d", utils::bufToHexString(response1, responseLength).c_str(), responseLength);
+        ESP_LOGI(TAG,"Endpoint Authenticated, COMMAND FLOW SUCCESS");
+        ESP_LOGD(TAG,"APDU: %s, Length: %d", utils::bufToHexString(apdu1, sizeof(apdu1)).c_str(), sizeof(apdu1));
+        nfc->inDataExchange(apdu1, sizeof(apdu1), response1, &responseLength);
+        ESP_LOGD(TAG,"RESPONSE: %s, Length: %d", utils::bufToHexString(response1, responseLength).c_str(), responseLength);
         if(response1[0] == 0x90){
-          logI("AUTHENTICATED VIA FAST FLOW");
+          ESP_LOGI(TAG,"AUTHENTICATED VIA FAST FLOW");
           delete endpointEphPubKey;
           delete endpointEphX;
           return std::make_tuple(endpoint, homeKeyReader::kFlowFAST);
         }
       }
       else
-      { 
-        logW("FAST Flow failed!");
+      {
+        ESP_LOGW(TAG,"FAST Flow failed!");
         return std::make_tuple(endpoint, homeKeyReader::kFlowSTANDARD);
       }
     }
@@ -411,9 +410,9 @@ std::tuple<issuerEndpoint::issuerEndpoint_t *, homeKeyReader::KeyFlow> Authentic
   uint8_t apdu1[4] = {0x80, 0x3c, 0x00, 0x0};
   uint8_t cmdFlowRes[4];
   uint8_t cmdFlowResLen = 4;
-  logE("Response Status not 0x90, something went wrong!");
-  logD("APDU: %s, Length: %d", utils::bufToHexString(apdu1, sizeof(apdu1)).c_str(), sizeof(apdu1));
-  exchange = nfc->inDataExchange(apdu1, sizeof(apdu1), cmdFlowRes, &cmdFlowResLen);
+  ESP_LOGE(TAG,"Response Status not 0x90, something went wrong!");
+  ESP_LOGD(TAG,"APDU: %s, Length: %d", utils::bufToHexString(apdu1, sizeof(apdu1)).c_str(), sizeof(apdu1));
+  nfc->inDataExchange(apdu1, sizeof(apdu1), cmdFlowRes, &cmdFlowResLen);
   delete endpointEphPubKey;
   delete endpointEphX;
   return std::make_tuple(endpoint, homeKeyReader::kFlowFailed);
@@ -431,9 +430,9 @@ std::tuple<issuerEndpoint::issuerEndpoint_t *, homeKeyReader::KeyFlow> Authentic
  */
 std::tuple<issuerEndpoint::issuerEndpoint_t*, DigitalKeySecureContext *, std::vector<uint8_t>, homeKeyReader::KeyFlow> AuthenticationContext::std_auth()
 {
-  int readerContext = 1096652137;
-  int deviceContext = 1317567308;
+  // int readerContext = 1096652137;
   uint8_t readerCtx[4]{0x41,0x5d,0x95,0x69};
+  // int deviceContext = 1317567308;
   uint8_t deviceCtx[4]{0x4e,0x88,0x7b,0x4c};
 
   std::vector<uint8_t> stdTlv(16 + endpointEphX->size() + readerEphX->size() + 30);
@@ -448,9 +447,9 @@ std::tuple<issuerEndpoint::issuerEndpoint_t*, DigitalKeySecureContext *, std::ve
   apdu.insert(apdu.begin()+5,sigTlv.begin(), sigTlv.end());
   uint8_t response[128];
   uint8_t responseLength = 128;
-  logD("Auth1 APDU Length: %d, DATA: %s", apdu.size(), utils::bufToHexString(apdu.data(), apdu.size()).c_str());
+  ESP_LOGD(TAG,"Auth1 APDU Length: %d, DATA: %s", apdu.size(), utils::bufToHexString(apdu.data(), apdu.size()).c_str());
   nfc->inDataExchange(apdu.data(), apdu.size(), response, &responseLength);
-  logD("Auth1 Response Length: %d, DATA: %s", responseLength, utils::bufToHexString(response, responseLength).c_str());
+  ESP_LOGD(TAG,"Auth1 Response Length: %d, DATA: %s", responseLength, utils::bufToHexString(response, responseLength).c_str());
   issuerEndpoint::issuerEndpoint_t *foundEndpoint = nullptr;
   if (responseLength > 2 && response[responseLength - 2] == 0x90)
   {
@@ -459,7 +458,7 @@ std::tuple<issuerEndpoint::issuerEndpoint_t*, DigitalKeySecureContext *, std::ve
     Auth1_keys_generator(persistentKey, volatileKey);
     DigitalKeySecureContext *context = new DigitalKeySecureContext(volatileKey);
     auto response_result = context->decrypt_response(response, responseLength - 2);
-    logD("Decrypted Length: %d, Data: %s", std::get<0>(response_result).size(), utils::bufToHexString(std::get<0>(response_result).data(), std::get<0>(response_result).size()).c_str());
+    ESP_LOGD(TAG,"Decrypted Length: %d, Data: %s", std::get<0>(response_result).size(), utils::bufToHexString(std::get<0>(response_result).data(), std::get<0>(response_result).size()).c_str());
     if (std::get<1>(response_result) > 0)
     {
       std::vector<BERTLV> decryptedTlv = BERTLV::unpack_array(std::vector<unsigned char>{std::get<0>(response_result).data(), std::get<0>(response_result).data()+std::get<1>(response_result)});
@@ -488,7 +487,7 @@ std::tuple<issuerEndpoint::issuerEndpoint_t*, DigitalKeySecureContext *, std::ve
         for (auto &endpoint : issuer.endpoints)
         {
           if(!memcmp(endpoint.endpointId, device_identifier->value.data(), 6)){
-            logD("STD_AUTH: Found Matching Endpoint, ID: %s", utils::bufToHexString(endpoint.endpointId, sizeof(endpoint.endpointId)).c_str());
+            ESP_LOGD(TAG,"STD_AUTH: Found Matching Endpoint, ID: %s", utils::bufToHexString(endpoint.endpointId, sizeof(endpoint.endpointId)).c_str());
             foundEndpoint = &endpoint;
           }
         }
@@ -509,7 +508,7 @@ std::tuple<issuerEndpoint::issuerEndpoint_t*, DigitalKeySecureContext *, std::ve
 
         mbedtls_md(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), verification_hash_input_material.data(), olen, hash);
 
-        logD("verification_hash_input_material: %s", utils::bufToHexString(hash, 32).c_str());
+        ESP_LOGD(TAG,"verification_hash_input_material: %s", utils::bufToHexString(hash, 32).c_str());
         mbedtls_mpi r;
         mbedtls_mpi s;
 
@@ -517,7 +516,7 @@ std::tuple<issuerEndpoint::issuerEndpoint_t*, DigitalKeySecureContext *, std::ve
         mbedtls_mpi_init( &s );
         mbedtls_ecp_group_load(&keypair.grp, MBEDTLS_ECP_DP_SECP256R1);
         int pubImport = mbedtls_ecp_point_read_binary(&keypair.grp, &keypair.Q, foundEndpoint->publicKey, sizeof(foundEndpoint->publicKey));
-        logV("public key import result: %d");
+        ESP_LOGV(TAG,"public key import result: %d", pubImport);
 
         mbedtls_mpi_read_binary(&r, signature->value.data(), signature->value.size()/2);
         mbedtls_mpi_read_binary(&s, signature->value.data() + (signature->value.size() / 2), signature->value.size()/2);
@@ -529,7 +528,7 @@ std::tuple<issuerEndpoint::issuerEndpoint_t*, DigitalKeySecureContext *, std::ve
 
         mbedtls_ecp_keypair_free(&keypair);
 
-        logV("signature verification result: %d", result);
+        ESP_LOGV(TAG,"signature verification result: %d", result);
 
         if(result == 0){
           uint8_t cmdFlow[4] = {0x80, 0x3c, 0x01, 0x0};
@@ -537,7 +536,7 @@ std::tuple<issuerEndpoint::issuerEndpoint_t*, DigitalKeySecureContext *, std::ve
           uint8_t cmdFlowResLength = 4;
           nfc->inDataExchange(cmdFlow, sizeof(cmdFlow), cmdFlowRes, &cmdFlowResLength);
           if(cmdFlowRes[0] == 0x90){
-            logI("AUTHENTICATED VIA STD FLOW");
+            ESP_LOGI(TAG,"AUTHENTICATED VIA STD FLOW");
           }
           delete endpointEphPubKey;
           delete endpointEphX;
@@ -554,7 +553,7 @@ std::tuple<issuerEndpoint::issuerEndpoint_t*, DigitalKeySecureContext *, std::ve
     }
     else
     {
-      logW("STANDARD Flow failed!");
+      ESP_LOGW(TAG,"STANDARD Flow failed!");
       uint8_t cmdFlow[4] = {0x80, 0x3c, 0x00, 0x0};
       uint8_t cmdFlowRes[4];
       uint8_t cmdFlowResLength = 4;
@@ -564,7 +563,7 @@ std::tuple<issuerEndpoint::issuerEndpoint_t*, DigitalKeySecureContext *, std::ve
       return std::make_tuple(nullptr, context, std::vector<uint8_t>{}, homeKeyReader::kFlowFailed);
     }
   }
-  logE("Response Status not 0x90, something went wrong!");
+  ESP_LOGE(TAG,"Response Status not 0x90, something went wrong!");
   uint8_t cmdFlow[4] = {0x80, 0x3c, 0x00, 0x0};
   uint8_t cmdFlowRes[4];
   uint8_t cmdFlowResLength = 4;
