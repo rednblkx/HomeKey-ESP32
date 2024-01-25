@@ -12,7 +12,8 @@
 
 class X963KDF {
 public:
-    X963KDF(mbedtls_md_type_t algorithm, size_t length, const unsigned char* sharedinfo, size_t sharedinfo_len);
+    ~X963KDF();
+    X963KDF(mbedtls_md_type_t algorithm, size_t length, const unsigned char *sharedinfo, size_t sharedinfo_len);
 
     void derive(const unsigned char* key_material, size_t key_material_len, unsigned char* output);
     void verify(const unsigned char* key_material, size_t key_material_len, const unsigned char* expected_key);

@@ -18,7 +18,7 @@ public:
     DigitalKeySecureContext();
     DigitalKeySecureContext(const unsigned char *volatileKey);
 
-    std::tuple<unsigned char*, size_t, unsigned char*> encrypt_command(unsigned char* data, size_t dataSize);
+    std::tuple<std::vector<uint8_t>, size_t, std::vector<uint8_t>> encrypt_command(unsigned char* data, size_t dataSize);
     std::tuple<std::vector<uint8_t>, size_t> decrypt_response(const unsigned char* data, size_t dataSize);
 
 private:

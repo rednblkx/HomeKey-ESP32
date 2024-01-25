@@ -46,6 +46,7 @@ std::vector<uint8_t> utils::encodeB64(const uint8_t *src, size_t len){
   std::vector<uint8_t> enc_vec{dst, dst + out_len1};
   loggable->logger().logf(esp32m::LogLevel::Verbose, "B64 RESULT: %d", ret);
   loggable->logger().logf(esp32m::LogLevel::Verbose, "B64 ENCODED DATA: %s", bufToHexString(dst, out_len1).c_str());
+  delete loggable;
   return enc_vec;
 }
 
@@ -68,8 +69,10 @@ std::vector<uint8_t> utils::decodeB64(const char *src)
   else if (ret == MBEDTLS_ERR_BASE64_INVALID_CHARACTER)
     loggable->logger().logf(esp32m::LogLevel::Warning,"*** WARNING:  Data is not in base-64 format");
   if(ret != 0){
+    delete loggable;
     return std::vector<uint8_t>();
   }
+  delete loggable;
   return dec_vec;
 }
 
@@ -95,6 +98,7 @@ std::vector<uint8_t> utils::getHashIdentifier(uint8_t *key, size_t len, bool sha
     mbedtls_sha1(hashable.data(), hashable.size(), hash);
   }
   loggable->logger().logf(esp32m::LogLevel::Debug, "HashIdentifier: %s", bufToHexString(hash, 8).c_str());
+  delete loggable;
   return std::vector<uint8_t>{hash, hash + 8};
 }
 
@@ -119,13 +123,19 @@ std::vector<unsigned char> utils::simple_tlv(unsigned char tag, const unsigned c
     size_t l = len + *olen;
     memcpy(olen, &l, sizeof(len));
     loggable->logger().logf(esp32m::LogLevel::Debug, "TLV %x[%d]: %s", tag, valLength, bufToHexString(out + (lenExt ? 3 : 2), len - (lenExt ? 3 : 2)).c_str());
-  } else {
+    delete loggable;
+    return std::vector<uint8_t>{};
+  }
+  else
+  {
     std::vector<unsigned char> buf(len);
     memcpy(buf.data(), &tag, sizeof(tag));
     memcpy(buf.data() + sizeof(tag), dataLen, lenExt ? 2 : 1);
     memcpy(buf.data() + sizeof(tag) + (lenExt ? 2 : 1), value, valLength);
     loggable->logger().logf(esp32m::LogLevel::Debug, "TLV %x[%d]: %s", tag, valLength, bufToHexString(buf.data() + (lenExt ? 3 : 2), len - (lenExt ? 3 : 2)).c_str());
+    delete loggable;
     return buf;
   }
+  delete loggable;
   return std::vector<uint8_t>{};
 }
