@@ -35,15 +35,9 @@ using namespace nlohmann;
 
 int currentState = 0;
 
-PicoMQTT::Client mqtt(
-    MQTT_HOST,    // broker address (or IP)
-    MQTT_PORT,                   // broker port (defaults to 1883)
-    MQTT_CLIENTID,           // Client ID
-    MQTT_USERNAME,             // MQTT username
-    MQTT_PASSWORD              // MQTT password
-);
+PicoMQTT::Client mqtt;
 
-#define PN532_SS (D8)
+#define PN532_SS (5)
 PN532_SPI pn532spi(SPI, PN532_SS);
 PN532 nfc(pn532spi);
 
@@ -157,7 +151,7 @@ struct LockMechanism : Service::LockMechanism, public SimpleLoggable
             logD("Reader Private Key: %s", utils::bufToHexString((const uint8_t *)readerData.reader_private_key, sizeof(readerData.reader_private_key)).c_str());
             AuthenticationContext flow(&nfc, &readerData);
             auto auth = flow.fast_auth(defaultToStd);
-            if (std::get<0>(auth) != nullptr && std::get<1>(auth) != 99)
+            if (std::get<0>(auth) != nullptr && std::get<1>(auth) != homeKeyReader::kFlowFailed)
             {
               unsigned long stopTime = millis();
               this->logger().logf(LogLevel::None, "Transaction took %lu ms", stopTime - startTime);
@@ -165,7 +159,7 @@ struct LockMechanism : Service::LockMechanism, public SimpleLoggable
               lockTargetState->setVal(!lockCurrentState->getVal());
               lockCurrentState->setVal(lockTargetState->getVal());
               json payload;
-              Issuers::homeKeyIssuers_t *foundIssuer;
+              Issuers::homeKeyIssuers_t *foundIssuer = nullptr;
               for (auto &&issuer : readerData.issuers)
               {
                 for (auto &&endpoint : issuer.endpoints)
@@ -175,24 +169,27 @@ struct LockMechanism : Service::LockMechanism, public SimpleLoggable
                   }
                 }
               }
-              payload["issuerId"] = utils::bufToHexString(foundIssuer->issuerId, 8);
-              payload["endpointId"] = utils::bufToHexString(std::get<0>(auth)->endpointId, 6);
-              payload["homekey"] = true;
-              mqtt.publish(MQTT_TOPIC, payload.dump().c_str());
+              if(foundIssuer != nullptr){
+                payload["issuerId"] = utils::bufToHexString(foundIssuer->issuerId, 8);
+                payload["endpointId"] = utils::bufToHexString(std::get<0>(auth)->endpointId, 6);
+                payload["homekey"] = true;
+                mqtt.publish(MQTT_TOPIC, payload.dump().c_str());
+              }
             }
-            else
+            else if (std::get<1>(auth) != homeKeyReader::kFlowFailed)
             {
               auto auth1 = flow.std_auth();
               issuerEndpoint::issuerEndpoint_t *foundEndpoint = std::get<0>(auth1);
               if (foundEndpoint != nullptr && std::get<3>(auth1) == homeKeyReader::kFlowSTANDARD)
               {
+                delete std::get<1>(auth1);
                 unsigned long stopTime = millis();
                 this->logger().logf(LogLevel::None, "Transaction took %lu ms", stopTime - startTime);
                 logI("Device has been authenticated, toggling lock state");
                 lockTargetState->setVal(!lockCurrentState->getVal());
                 lockCurrentState->setVal(lockTargetState->getVal());
                 json payload;
-                Issuers::homeKeyIssuers_t *foundIssuer;
+                Issuers::homeKeyIssuers_t *foundIssuer = nullptr;
                 for (auto &&issuer : readerData.issuers)
                 {
                   for (auto &&endpoint : issuer.endpoints)
@@ -202,19 +199,20 @@ struct LockMechanism : Service::LockMechanism, public SimpleLoggable
                     }
                   }
                 }
-                payload["issuerId"] = foundIssuer->issuerId;
-                payload["endpointId"] = foundEndpoint->endpointId;
-                payload["homekey"] = true;
-                mqtt.publish(MQTT_TOPIC, payload.dump().c_str());
-                std::vector<uint8_t> persistentKey = std::get<2>(auth1);
-                memcpy(foundEndpoint->persistent_key, persistentKey.data(), 32);
-                json data = readerData;
-                auto msgpack = json::to_msgpack(data);
-                esp_err_t set_nvs = nvs_set_blob(savedData, "READERDATA", msgpack.data(), msgpack.size());
-                esp_err_t commit_nvs = nvs_commit(savedData);
-                logD("NVS SET: %s", esp_err_to_name(set_nvs));
-                logD("NVS COMMIT: %s", esp_err_to_name(commit_nvs));
+                if(foundIssuer != nullptr){
+                  payload["issuerId"] = foundIssuer->issuerId;
+                  payload["endpointId"] = foundEndpoint->endpointId;
+                  payload["homekey"] = true;
+                  mqtt.publish(MQTT_TOPIC, payload.dump().c_str());
+                  std::vector<uint8_t> persistentKey = std::get<2>(auth1);
+                  memcpy(foundEndpoint->persistent_key, persistentKey.data(), 32);
+                  save_to_nvs();
+                }
+              } else {
+                delete std::get<1>(auth1);
               }
+            } else {
+              logW("Authentication Failed, lock state not changed");
             }
           }
         }
@@ -276,7 +274,7 @@ struct NFCAccess : Service::NFCAccess, public SimpleLoggable
   }
   std::tuple<uint8_t *, int> provision_device_cred(uint8_t *buf, size_t len)
   {
-    for (size_t i = 0; i < sizeof(HAPClient::controllers); i++)
+    for (size_t i = 0; i < 16; i++)
     {
       if (HAPClient::controllers[i].allocated)
       {
@@ -739,6 +737,11 @@ void print_issuers(const char *buf){
 }
 
 void wifiCallback(){
+  mqtt.host = MQTT_HOST;
+  mqtt.port = MQTT_PORT;
+  mqtt.client_id = MQTT_CLIENTID;
+  mqtt.username = MQTT_USERNAME;
+  mqtt.password = MQTT_PASSWORD;
   mqtt.begin();
 }
 

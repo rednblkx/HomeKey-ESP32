@@ -84,7 +84,7 @@ BERTLVLength BERTLVLength::unpack(const std::vector<uint8_t> &data)
             result.insert(result.end(), data.begin() + index, data.begin() + index + lengthLength);
             index += lengthLength;
             if (result.size() != lengthLength + 1) {
-                throw std::runtime_error("Bad format");
+                // throw std::runtime_error("Bad format");
             }
         } else {
             // Indefinite form
@@ -141,6 +141,8 @@ std::vector<BERTLV> BERTLV::unpack_array(const std::vector<uint8_t>& data) {
     loggable->logger().logf(esp32m::LogLevel::Debug, "TLV %02x[%d]: %s", tag.data()[0], length.data.data()[0], utils::bufToHexString(value.data(), value.size()).c_str());
   }
 
+  delete loggable;
+
   return result;
 }
 
@@ -160,6 +162,8 @@ std::vector<BERTLV> BERTLV::unpack_array(const uint8_t *data, const size_t len) 
     loggable->logger().logf(esp32m::LogLevel::Debug, "TLV %02x[%d]: %s", tag.data()[0], length.data.data()[0], utils::bufToHexString(value.data(), value.size()).c_str());
   }
 
+  delete loggable;
+
   return result;
 }
 
@@ -173,6 +177,7 @@ BERTLV BERTLV::unpack(const std::vector<uint8_t> &data)
   index += length.data.size();
   std::vector<uint8_t> value(data.begin() + index, data.begin() + index + length.getValue());
   loggable->logger().logf(esp32m::LogLevel::Debug, "tag: %02x, length: %02x, value: %s", tag.data()[0], length.data.data()[0], utils::bufToHexString(value.data(), value.size()).c_str());
+  delete loggable;
   return BERTLV(tag, length, value);
 }
 

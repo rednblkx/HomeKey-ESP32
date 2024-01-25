@@ -53,10 +53,10 @@ ISO18013SecureContext::ISO18013SecureContext(const std::vector<uint8_t> &sharedS
     }
     std::cout << std::endl;
     if(ret1){
-        throw "HKDF: Could not derive READER key";
+        // throw "HKDF: Could not derive READER key";
     }
     if(ret2){
-        throw "HKDF: Could not derive ENDPOINT key";
+        // throw "HKDF: Could not derive ENDPOINT key";
     }
     this->readerKey.clear();
     this->readerKey.insert(this->readerKey.begin(), outReader, outReader + keyLength);
@@ -116,7 +116,7 @@ std::vector<uint8_t> ISO18013SecureContext::encryptMessageToEndpoint(const std::
 
     if (ret != 0)
     {
-        throw std::runtime_error("Encryption failed");
+        // throw std::runtime_error("Encryption failed");
     }
 
     CBOR cipherCbor = CBOR();
@@ -161,7 +161,7 @@ std::vector<uint8_t> ISO18013SecureContext::decryptMessageFromEndpoint(const std
 
     if (ret != 0)
     {
-        throw std::runtime_error("Decryption failed");
+        // throw std::runtime_error("Decryption failed");
     }
 
     endpointCounter++;

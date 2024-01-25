@@ -3,8 +3,6 @@
  */
 
 #include "util/DigitalKeySecureContext.h"
-#include <iostream>
-#include <Arduino.h>
 
 const unsigned char RESPONSE_PCB[] = {0x80};
 
@@ -73,8 +71,7 @@ void DigitalKeySecureContext::decrypt_aes_cbc(const unsigned char* key, unsigned
 }
 
 void DigitalKeySecureContext::aes_cmac(const unsigned char* key, const unsigned char* data, size_t data_size, unsigned char* mac) {
-    const mbedtls_cipher_info_t *cipher_info = mbedtls_cipher_info_from_values(MBEDTLS_CIPHER_ID_AES, 128, MBEDTLS_MODE_ECB);
-    int ret = mbedtls_cipher_cmac(cipher_info, key, 128, data, data_size, mac);
+    int ret = mbedtls_cipher_cmac(mbedtls_cipher_info_from_values(MBEDTLS_CIPHER_ID_AES, 128, MBEDTLS_MODE_ECB), key, 128, data, data_size, mac);
     // std::cout << "result of cmac: " << ret << std::endl;
 }
 
@@ -91,11 +88,11 @@ DigitalKeySecureContext::DigitalKeySecureContext(const unsigned char* volatileKe
     std::fill(command_pcb, command_pcb + 15, 0);
 }
 
-std::tuple<unsigned char*, size_t, unsigned char*> DigitalKeySecureContext::encrypt_command(unsigned char* data, size_t dataSize) {
-    unsigned char* ciphertext = new unsigned char[dataSize + 16];
+std::tuple<std::vector<uint8_t>, size_t, std::vector<uint8_t>> DigitalKeySecureContext::encrypt_command(unsigned char* data, size_t dataSize) {
+    std::vector<uint8_t> ciphertext(dataSize + 16);
     // printf("\n%d\n", dataSize);
     size_t olen = 0;
-    encrypt(data, dataSize, command_pcb, kenc, counter, ciphertext, &olen);
+    encrypt(data, dataSize, command_pcb, kenc, counter, ciphertext.data(), &olen);
 
     // printf("\n");
     // for (uint8_t i = 0; i < olen; i++) {
@@ -103,31 +100,31 @@ std::tuple<unsigned char*, size_t, unsigned char*> DigitalKeySecureContext::encr
     // }
     // printf("\n");
 
-    unsigned char* calculated_rmac = new unsigned char[16];
+    std::vector<uint8_t> calculated_rmac(16);
     size_t input_dataSize = 16 + olen;
-    std::vector<uint8_t> input_data = concatenate_arrays(mac_chaining_value, ciphertext, 16, olen);
-    aes_cmac(kmac, input_data.data(), input_dataSize, calculated_rmac);
+    std::vector<uint8_t> input_data = concatenate_arrays(mac_chaining_value, ciphertext.data(), 16, olen);
+    aes_cmac(kmac, input_data.data(), input_dataSize, calculated_rmac.data());
     // for (uint8_t i = 0; i < 16; i++) {
     //     printf(" %02X", calculated_rmac[i]);
     // }
     // printf("\n");
 
-    std::vector<uint8_t> result = concatenate_arrays(ciphertext, calculated_rmac, olen, 8);
+    std::vector<uint8_t> result = concatenate_arrays(ciphertext.data(), calculated_rmac.data(), olen, 8);
 
-    return std::make_tuple(result.data(), olen + 8, calculated_rmac);
+    return std::make_tuple(result, olen + 8, calculated_rmac);
 }
 
 std::tuple<std::vector<uint8_t>, size_t> DigitalKeySecureContext::decrypt_response(const unsigned char* data, size_t dataSize) {
-    unsigned char* ciphertext = new unsigned char[dataSize - 8];
-    memcpy(ciphertext, data, dataSize - 8);
+    std::vector<uint8_t> ciphertext(dataSize - 8);
+    memcpy(ciphertext.data(), data, dataSize - 8);
 
-    unsigned char* rmac = new unsigned char[8];
-    memcpy(rmac, data + dataSize - 8, 8);
+    std::vector<uint8_t> rmac(8);
+    memcpy(rmac.data(), data + dataSize - 8, 8);
 
-    unsigned char* calculated_rmac = new unsigned char[16];
+    std::vector<uint8_t> calculated_rmac(16);
     size_t input_dataSize = 16 + (dataSize - 8);
-    std::vector<uint8_t> input_data = concatenate_arrays(mac_chaining_value, ciphertext, 16, dataSize - 8);
-    aes_cmac(krmac, input_data.data(), input_dataSize, calculated_rmac);
+    std::vector<uint8_t> input_data = concatenate_arrays(mac_chaining_value, ciphertext.data(), 16, dataSize - 8);
+    aes_cmac(krmac, input_data.data(), input_dataSize, calculated_rmac.data());
     // for (uint8_t i = 0; i < 8; i++) {
     //     Serial.printf(" %02X", calculated_rmac[i]);
     // }
@@ -139,21 +136,16 @@ std::tuple<std::vector<uint8_t>, size_t> DigitalKeySecureContext::decrypt_respon
 
     // assert(memcmp(rmac, calculated_rmac, 8) == 0);
 
-    if(memcmp(rmac, calculated_rmac, 8)){
+    if(memcmp(rmac.data(), calculated_rmac.data(), 8)){
         return std::make_tuple(std::vector<uint8_t>{}, 0);
     }
 
-    unsigned char *plaintext = new unsigned char[dataSize - 8];
+    std::vector<uint8_t> plaintext(dataSize - 8);
     size_t olen = 0;
-    decrypt(ciphertext, dataSize - 8, response_pcb, kenc, counter, plaintext, &olen);
-    std::vector<uint8_t> plain{plaintext, plaintext + dataSize - 8};
+    decrypt(ciphertext.data(), dataSize - 8, response_pcb, kenc, counter, plaintext.data(), &olen);
 
     counter++;
-    delete[] ciphertext;
-    delete[] rmac;
-    delete[] calculated_rmac;
-    delete[] plaintext;
-    return std::make_tuple(plain, olen);
+    return std::make_tuple(plaintext, olen);
 }
 
 void DigitalKeySecureContext::encrypt(unsigned char* plaintext, size_t data_size, const unsigned char* pcb, const unsigned char* key, int counter, unsigned char* ciphertext, size_t *olen) {
@@ -170,22 +162,18 @@ void DigitalKeySecureContext::encrypt(unsigned char* plaintext, size_t data_size
     // }
     // printf("\n");
 
-    // Generate ICV
-    unsigned char* icv = new unsigned char[16];
-    unsigned char *iv = new unsigned char[16];
-    std::fill(iv, iv + 16, 0);
+    std::vector<uint8_t> icv(16);
+    std::vector<uint8_t> iv(16);
+    std::fill(iv.data(), iv.data() + 16, 0);
     unsigned char counter_byte[] = {static_cast<unsigned char>(counter % 256)};
     size_t input_data_size = 15 + 1;
     std::vector<uint8_t> input_data = concatenate_arrays(pcb, counter_byte, 15, 1);
-    encrypt_aes_cbc(key, iv, input_data.data(), input_data_size, icv);
+    encrypt_aes_cbc(key, iv.data(), input_data.data(), input_data_size, icv.data());
 
     // Encrypt using AES-CBC
-    encrypt_aes_cbc(key, icv, std::get<0>(padded).data(), std::get<1>(padded), ciphertext);
+    encrypt_aes_cbc(key, icv.data(), std::get<0>(padded).data(), std::get<1>(padded), ciphertext);
 
     memcpy(olen, &std::get<1>(padded), 1);
-
-    delete[] icv;
-    delete[] iv;
 }
 
 void DigitalKeySecureContext::decrypt(const unsigned char* ciphertext, size_t cipherTextLen, const unsigned char* pcb, const unsigned char* key, int counter, unsigned char* plaintext, size_t* olen) {
@@ -193,25 +181,21 @@ void DigitalKeySecureContext::decrypt(const unsigned char* ciphertext, size_t ci
         return;
     }
 
-    // Generate ICV
-    unsigned char* icv = new unsigned char[16];
-    unsigned char *iv = new unsigned char[16];
-    std::fill(iv, iv + 16, 0);
+    std::vector<uint8_t> icv(16);
+    std::vector<uint8_t> iv(16);
+    std::fill(iv.data(), iv.data() + 16, 0);
     unsigned char counter_byte[] = {static_cast<unsigned char>(counter % 256)};
     size_t input_data_size = 15 + 1;
     std::vector<uint8_t> input_data = concatenate_arrays(pcb, counter_byte, 15, 1);
-    encrypt_aes_cbc(key, iv, input_data.data(), input_data_size, icv);
+    encrypt_aes_cbc(key, iv.data(), input_data.data(), input_data_size, icv.data());
 
     uint8_t dec[cipherTextLen];
 
     // Decrypt using AES-CBC
-    decrypt_aes_cbc(key, icv, ciphertext, cipherTextLen, dec);
+    decrypt_aes_cbc(key, icv.data(), ciphertext, cipherTextLen, dec);
 
     // Unpad plaintext
     unpad_mode_3(dec, cipherTextLen, plaintext, olen);
-
-    delete[] icv;
-    delete[] iv;
 }
 
 std::vector<uint8_t> DigitalKeySecureContext::concatenate_arrays(const unsigned char* a, const unsigned char* b, size_t size_a, size_t size_b) {
