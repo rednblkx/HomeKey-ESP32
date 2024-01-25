@@ -2,7 +2,6 @@
 #include <vector>
 #include <cstdint>
 #include <util/BERTLV.h>
-#include "logging.hpp"
 
 BERTLVLength::BERTLVLength(){}
 
@@ -127,7 +126,6 @@ std::vector<uint8_t> BERTLV::pack() const
 
 std::vector<BERTLV> BERTLV::unpack_array(const std::vector<uint8_t>& data) {
   std::vector<BERTLV> result;
-  esp32m::SimpleLoggable *loggable = new esp32m::SimpleLoggable("BERTLV::unpack_array");
   size_t index = 0;
 
   while (index < data.size()) {
@@ -138,17 +136,14 @@ std::vector<BERTLV> BERTLV::unpack_array(const std::vector<uint8_t>& data) {
     std::vector<uint8_t> value(data.begin() + index, data.begin() + index + length.getValue());
     result.emplace_back(tag, length, value);
     index += value.size();
-    loggable->logger().logf(esp32m::LogLevel::Debug, "TLV %02x[%d]: %s", tag.data()[0], length.data.data()[0], utils::bufToHexString(value.data(), value.size()).c_str());
+    ESP_LOGD("BERTLV::unpack_array", "TLV %02x[%d]: %s", tag.data()[0], length.data.data()[0], utils::bufToHexString(value.data(), value.size()).c_str());
   }
-
-  delete loggable;
 
   return result;
 }
 
 std::vector<BERTLV> BERTLV::unpack_array(const uint8_t *data, const size_t len) {
   std::vector<BERTLV> result;
-  esp32m::SimpleLoggable *loggable = new esp32m::SimpleLoggable("BERTLV::unpack_array");
   size_t index = 0;
 
   while (index < len) {
@@ -159,25 +154,21 @@ std::vector<BERTLV> BERTLV::unpack_array(const uint8_t *data, const size_t len) 
     std::vector<uint8_t> value(data + index, data + index + length.getValue());
     result.emplace_back(tag, length, value);
     index += value.size();
-    loggable->logger().logf(esp32m::LogLevel::Debug, "TLV %02x[%d]: %s", tag.data()[0], length.data.data()[0], utils::bufToHexString(value.data(), value.size()).c_str());
+    ESP_LOGD("BERTLV::unpack_array", "TLV %02x[%d]: %s", tag.data()[0], length.data.data()[0], utils::bufToHexString(value.data(), value.size()).c_str());
   }
-
-  delete loggable;
 
   return result;
 }
 
 BERTLV BERTLV::unpack(const std::vector<uint8_t> &data)
 {
-  esp32m::SimpleLoggable *loggable = new esp32m::SimpleLoggable("BERTLV::unpack");
   size_t index = 0;
   std::vector<uint8_t> tag(data.begin() + index, data.begin() + index + 1);
   index += tag.size();
   BERTLVLength length = BERTLVLength::unpack(std::vector<uint8_t>(data.begin() + index, data.begin() + index + 8));
   index += length.data.size();
   std::vector<uint8_t> value(data.begin() + index, data.begin() + index + length.getValue());
-  loggable->logger().logf(esp32m::LogLevel::Debug, "tag: %02x, length: %02x, value: %s", tag.data()[0], length.data.data()[0], utils::bufToHexString(value.data(), value.size()).c_str());
-  delete loggable;
+  ESP_LOGD("BERTLV::unpack", "tag: %02x, length: %02x, value: %s", tag.data()[0], length.data.data()[0], utils::bufToHexString(value.data(), value.size()).c_str());
   return BERTLV(tag, length, value);
 }
 
