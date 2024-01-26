@@ -1,4 +1,5 @@
-## HomeKey-ESP32
+# HomeKey-ESP32
+[![CI](https://github.com/rednblkx/HomeKey-ESP32/actions/workflows/main.yml/badge.svg?branch=main)](https://github.com/rednblkx/HomeKey-ESP32/actions/workflows/main.yml)
 ### ESP32 HomeKit Lock with support for the HomeKey
 
 Credit to [@kormax](https://github.com/kormax) for reverse-engineering the Homekey [NFC Protocol](https://github.com/kormax/apple-home-key) and publishing a [POC](https://github.com/kormax/apple-home-key-reader) and credit to [@kupa22](https://github.com/kupa22) for the [research](https://github.com/kupa22/apple-homekey) on the HAP side of things, this project was possible thanks to their work.
