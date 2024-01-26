@@ -27,6 +27,8 @@
 #define MQTT_PASSWORD "password"
 #define MQTT_AUTH_TOPIC "topic/auth"
 #define MQTT_SET_STATE_TOPIC "topic/set_state"
+#define MQTT_SET_TARGET_STATE_TOPIC "topic/set_target_state"
+#define MQTT_SET_CURRENT_STATE_TOPIC "topic/set_current_state"
 #define MQTT_STATE_TOPIC "topic/state"
 #endif
 
