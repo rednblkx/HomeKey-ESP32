@@ -51,9 +51,9 @@ On the `MQTT_AUTH_TOPIC` topic, the data format is as follows, depending whether
 - HomeKey
 ```json
 {
-  "endpointId": "000000000000",
+  "endpointId": "000000000000", // This is unique per device
   "homekey": true,
-  "issuerId": "0000000000000000"
+  "issuerId": "0000000000000000" // This is unique per Apple ID
 }
 ```
 - ISO14443A card
