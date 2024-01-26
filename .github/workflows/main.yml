@@ -7,6 +7,10 @@ name: CI
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'platformio.ini'
+      - 'sdkconfig.wemos_d1_mini32'
   pull_request:
     branches: [ main, dev ]
 
