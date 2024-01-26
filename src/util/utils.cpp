@@ -10,7 +10,7 @@ void utils::pack(uint8_t *buf, size_t buflen, uint8_t *out, int *olen)
 std::string utils::bufToHexString(const uint8_t *buf, size_t len){
   std::string result;
   if(buf == NULL || buf == nullptr){
-    return;
+    return result;
   }
   // if(esp32m::Logging::level() >= esp32m::LogLevel::Debug){
     result.reserve(2 * len);
