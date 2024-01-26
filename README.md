@@ -49,11 +49,11 @@ In order to connect to your MQTT Broker, first create a file called `mqtt.h` in 
 On the `MQTT_AUTH_TOPIC` topic, the data format is as follows, depending whether a homekey was authenticated or just an NFC Target was sensed.
 
 - HomeKey
-```json
+```yaml
 {
-  "endpointId": "000000000000", // This is unique per device
+  "endpointId": "000000000000", # This is unique per device
   "homekey": true,
-  "issuerId": "0000000000000000" // This is unique per Apple ID
+  "issuerId": "0000000000000000" # This is unique per Apple ID
 }
 ```
 - ISO14443A card
