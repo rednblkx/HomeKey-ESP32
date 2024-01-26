@@ -37,12 +37,18 @@ In order to connect to your MQTT Broker, first create a file called `mqtt.h` in 
 #define MQTT_PASSWORD "password"
 #define MQTT_AUTH_TOPIC "topic/auth"
 #define MQTT_SET_STATE_TOPIC "topic/set_state"
+#define MQTT_SET_TARGET_STATE_TOPIC "topic/set_target_state"
+#define MQTT_SET_CURRENT_STATE_TOPIC "topic/set_current_state"
 #define MQTT_STATE_TOPIC "topic/state"
 ```
 
  `MQTT_AUTH_TOPIC` is where authentication details will be published on success
  
- `MQTT_SET_STATE_TOPIC` is the control topic from which the state of the lock can be changed
+ `MQTT_SET_STATE_TOPIC` is the control topic that sets the current and target state of the lock
+
+ `MQTT_SET_TARGET_STATE_TOPIC` controls the target state of the lock
+
+ `MQTT_SET_CURRENT_STATE_TOPIC` controls the current state of the lock
  
  `MQTT_STATE_TOPIC` is where changes to the lock state will be published.
  

@@ -1,5 +1,4 @@
 #include <auth/authContext.h>
-#include "authContext.h"
 
 /**
  * The function `get_public_points` takes a public key as input, reads the X and Y coordinates of the
