@@ -68,7 +68,7 @@ typedef enum
   {
     struct enrollment_t
     {
-      std::time_t unixTime;
+      std::time_t unixTime = 0;
       std::list<uint8_t> payload;
     };
     inline void to_json(json &j, const enrollment_t &p)
@@ -106,13 +106,13 @@ typedef enum
   {
     struct issuerEndpoint_t
     {
-      uint8_t endpointId[6];
-      uint32_t last_used_at;
-      int counter;
-      int key_type;
-      uint8_t publicKey[65];
-      uint8_t endpoint_key_x[32];
-      uint8_t persistent_key[32];
+      uint8_t endpointId[6] = {};
+      uint32_t last_used_at = 0;
+      int counter = 0;
+      int key_type = 0;
+      uint8_t publicKey[65] = {};
+      uint8_t endpoint_key_x[32] = {};
+      uint8_t persistent_key[32] = {};
       endpointEnrollments::enrollments_t enrollments;
     };
     inline void to_json(json &j, const issuerEndpoint_t &p)
@@ -136,9 +136,9 @@ typedef enum
   {
     struct homeKeyIssuers_t
     {
-      uint8_t issuerId[8];
-      uint8_t publicKey[32];
-      uint8_t issuer_key_x[32];
+      uint8_t issuerId[8] = {};
+      uint8_t publicKey[32] = {};
+      uint8_t issuer_key_x[32] = {};
       std::list<issuerEndpoint::issuerEndpoint_t> endpoints;
     };
     inline void to_json(json &j, const homeKeyIssuers_t &p)
@@ -186,11 +186,11 @@ namespace homeKeyReader
 
   struct readerData_t
   {
-    uint8_t reader_private_key[32];
-    uint8_t reader_public_key[65];
-    uint8_t reader_key_x[32];
-    uint8_t reader_identifier[8];
-    uint8_t identifier[8];
+    uint8_t reader_private_key[32] = {};
+    uint8_t reader_public_key[65] = {};
+    uint8_t reader_key_x[32] = {};
+    uint8_t reader_identifier[8] = {};
+    uint8_t identifier[8] = {};
     std::list<Issuers::homeKeyIssuers_t> issuers;
   };
 

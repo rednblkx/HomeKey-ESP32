@@ -130,7 +130,7 @@ struct LockMechanism : Service::LockMechanism
     mqtt.subscribe(
         MQTT_SET_CURRENT_STATE_TOPIC, [this](const char *payload)
         {
-        Serial.printf("\nReceived message in topic set_target_state: %s\n", payload);
+        Serial.printf("\nReceived message in topic set_current_state: %s\n", payload);
         int state = atoi(payload);
         lockCurrentState->setVal(state == 0 || state == 1 ? state : lockCurrentState->getVal()); },
         false);
@@ -215,8 +215,7 @@ struct LockMechanism : Service::LockMechanism
               {
                 delete std::get<1>(auth1);
                 unsigned long stopTime = millis();
-                ESP_LOGI(TAG, "Transaction took %lu ms", stopTime - startTime);
-                ESP_LOGI(TAG, "Device has been authenticated, toggling lock state");
+                ESP_LOGI(TAG, "Device has been authenticated, transaction took %lu ms", stopTime - startTime);
                 mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockTargetState->getNewVal()).c_str());
                 // lockTargetState->setVal(!lockCurrentState->getVal());
                 // lockCurrentState->setVal(lockTargetState->getVal());
@@ -235,7 +234,7 @@ struct LockMechanism : Service::LockMechanism
                 if (foundIssuer != nullptr)
                 {
                   payload["issuerId"] = utils::bufToHexString(foundIssuer->issuerId, 8);
-                  payload["endpointId"] = utils::bufToHexString(std::get<0>(auth)->endpointId, 6);
+                  payload["endpointId"] = utils::bufToHexString(foundEndpoint->endpointId, 6);
                   payload["homekey"] = true;
                   mqtt.publish(MQTT_AUTH_TOPIC, payload.dump().c_str());
                   std::vector<uint8_t> persistentKey = std::get<2>(auth1);
