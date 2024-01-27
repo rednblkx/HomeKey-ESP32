@@ -181,7 +181,7 @@ struct LockMechanism : Service::LockMechanism
             {
               unsigned long stopTime = millis();
               ESP_LOGI(TAG, "Transaction took %lu ms", stopTime - startTime);
-              ESP_LOGI(TAG, "Device has been authenticated, toggling lock state");
+              ESP_LOGI(TAG, "Device has been authenticated, transaction took %lu ms", stopTime - startTime);
               int newTargetState = lockTargetState->getNewVal();
               int targetState = lockTargetState->getVal();
               mqtt.publish(MQTT_STATE_TOPIC, std::to_string(newTargetState == targetState ? !lockCurrentState->getVal() : newTargetState).c_str());
@@ -216,7 +216,9 @@ struct LockMechanism : Service::LockMechanism
                 delete std::get<1>(auth1);
                 unsigned long stopTime = millis();
                 ESP_LOGI(TAG, "Device has been authenticated, transaction took %lu ms", stopTime - startTime);
-                mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockTargetState->getNewVal()).c_str());
+                int newTargetState = lockTargetState->getNewVal();
+                int targetState = lockTargetState->getVal();
+                mqtt.publish(MQTT_STATE_TOPIC, std::to_string(newTargetState == targetState ? !lockCurrentState->getVal() : newTargetState).c_str());
                 // lockTargetState->setVal(!lockCurrentState->getVal());
                 // lockCurrentState->setVal(lockTargetState->getVal());
                 json payload;
