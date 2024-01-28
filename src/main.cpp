@@ -113,7 +113,7 @@ struct LockMechanism : Service::LockMechanism
     mqtt.subscribe(
         MQTT_SET_STATE_TOPIC, [this](const char *payload)
         {
-        Serial.printf("\nReceived message in topic set_state: %s\n", payload);
+        ESP_LOGD(TAG, "Received message in topic set_state: %s", payload);
         int state = atoi(payload);
         lockTargetState->setVal(state == 0 || state == 1 ? state : lockTargetState->getVal());
         lockCurrentState->setVal(state == 0 || state == 1 ? state : lockCurrentState->getVal());
@@ -122,7 +122,7 @@ struct LockMechanism : Service::LockMechanism
     mqtt.subscribe(
         MQTT_SET_TARGET_STATE_TOPIC, [this](const char *payload)
         {
-        Serial.printf("\nReceived message in topic set_target_state: %s\n", payload);
+        ESP_LOGD(TAG, "Received message in topic set_target_state: %s", payload);
         int state = atoi(payload);
         lockTargetState->setVal(state == 0 || state == 1 ? state : lockTargetState->getVal());
         },
@@ -130,7 +130,7 @@ struct LockMechanism : Service::LockMechanism
     mqtt.subscribe(
         MQTT_SET_CURRENT_STATE_TOPIC, [this](const char *payload)
         {
-        Serial.printf("\nReceived message in topic set_current_state: %s\n", payload);
+        ESP_LOGD(TAG, "Received message in topic set_current_state: %s", payload);
         int state = atoi(payload);
         lockCurrentState->setVal(state == 0 || state == 1 ? state : lockCurrentState->getVal()); },
         false);
