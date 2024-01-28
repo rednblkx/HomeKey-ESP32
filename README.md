@@ -11,6 +11,7 @@ Additionaly, thanks to the Arduino library [HomeSpan](https://github.com/HomeSpa
 - Lock State can be received and controlled via MQTT through user-defined topics
 - Any NFC Target that's not identified as homekey will skip the flow and at least at the moment it only just publishes the UID, ATQA and SAK to the same MQTT topic as homekey with the property `homekey` set to false
 - It is not made for battery-powered applications (yet)
+- Designed for a board with 4MB Flash size as OTA is enabled and it needs a second partition of the same size
 
 ## Configuration
 
@@ -72,6 +73,13 @@ On the `MQTT_AUTH_TOPIC` topic, the data format is as follows, depending whether
   "uid": "00000000"
 }
 ```
+
+## OTA
+
+Authentication is enabled and the default password is `homespan-ota`.
+
+If the default password is being used then the PlatformIO environment `ota` can be used right away, otherwise, first set the environment variable `PLATFORMIO_UPLOAD_FLAGS` to `auth=<ota-password>`
+
 The code still needs some working so it's very much a work in progress, but the main implementation is roughly there.
 
 Goal of the project is to make it easy to add the homekey functionality to locks that don't support it or to anything for that matter :) .

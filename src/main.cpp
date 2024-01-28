@@ -823,6 +823,8 @@ void setup()
   {
     ESP_LOGD(TAG, "Issuer ID: %s, Public Key: %s", utils::bufToHexString(issuer.issuerId, sizeof(issuer.issuerId)).c_str(), utils::bufToHexString(issuer.publicKey, sizeof(issuer.publicKey)).c_str());
   }
+  homeSpan.setHostNameSuffix("-homekey");
+  homeSpan.enableOTA();
   homeSpan.begin(Category::Locks, "Test NFC Lock");
 
   new SpanUserCommand('D', "Delete NFC Reader Data", deleteReaderData);
