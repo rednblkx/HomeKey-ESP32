@@ -139,8 +139,6 @@ std::vector<BERTLV> BERTLV::unpack_array(const std::vector<uint8_t>& data) {
     ESP_LOGD("BERTLV::unpack_array", "TLV %02x[%d]: %s", tag.data()[0], length.data.data()[0], utils::bufToHexString(value.data(), value.size()).c_str());
   }
 
-  delete loggable;
-
   return result;
 }
 
@@ -158,8 +156,6 @@ std::vector<BERTLV> BERTLV::unpack_array(const uint8_t *data, const size_t len) 
     index += value.size();
     ESP_LOGD("BERTLV::unpack_array", "TLV %02x[%d]: %s", tag.data()[0], length.data.data()[0], utils::bufToHexString(value.data(), value.size()).c_str());
   }
-
-  delete loggable;
 
   return result;
 }

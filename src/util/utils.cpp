@@ -9,6 +9,9 @@ void utils::pack(uint8_t *buf, size_t buflen, uint8_t *out, int *olen)
 
 std::string utils::bufToHexString(const uint8_t *buf, size_t len){
   std::string result;
+  if(buf == NULL || buf == nullptr){
+    return result;
+  }
   // if(esp32m::Logging::level() >= esp32m::LogLevel::Debug){
     result.reserve(2 * len);
     for (size_t i = 0; i < len; ++i) {
@@ -68,10 +71,8 @@ std::vector<uint8_t> utils::decodeB64(const char *src)
   else if (ret == MBEDTLS_ERR_BASE64_INVALID_CHARACTER)
     ESP_LOGW(TAG, "*** WARNING:  Data is not in base-64 format");
   if(ret != 0){
-    delete loggable;
     return std::vector<uint8_t>();
   }
-  delete loggable;
   return dec_vec;
 }
 
@@ -132,6 +133,5 @@ std::vector<unsigned char> utils::simple_tlv(unsigned char tag, const unsigned c
     ESP_LOGD(TAG, "TLV %x[%d]: %s", tag, valLength, bufToHexString(buf.data() + (lenExt ? 3 : 2), len - (lenExt ? 3 : 2)).c_str());
     return buf;
   }
-  delete loggable;
   return std::vector<uint8_t>{};
 }
