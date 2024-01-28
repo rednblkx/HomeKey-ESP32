@@ -108,14 +108,14 @@ struct LockMechanism : Service::LockMechanism
   {
     ESP_LOGI(TAG, "Configuring LockMechanism"); // initialization message
     new Characteristic::Name("NFC Lock");
-    lockCurrentState = new Characteristic::LockCurrentState(0, true);
-    lockTargetState = new Characteristic::LockTargetState();
+    lockCurrentState = new Characteristic::LockCurrentState(1, true);
+    lockTargetState = new Characteristic::LockTargetState(1, true);
     mqtt.subscribe(
         MQTT_SET_STATE_TOPIC, [this](const char *payload)
         {
         Serial.printf("\nReceived message in topic set_state: %s\n", payload);
         int state = atoi(payload);
-        lockTargetState->setVal(state == 0 || state == 1 ? state : lockTargetState->getVal(), false);
+        lockTargetState->setVal(state == 0 || state == 1 ? state : lockTargetState->getVal());
         lockCurrentState->setVal(state == 0 || state == 1 ? state : lockCurrentState->getVal());
         },
         false);
@@ -124,7 +124,7 @@ struct LockMechanism : Service::LockMechanism
         {
         Serial.printf("\nReceived message in topic set_target_state: %s\n", payload);
         int state = atoi(payload);
-        lockTargetState->setVal(state == 0 || state == 1 ? state : lockTargetState->getVal(), false);
+        lockTargetState->setVal(state == 0 || state == 1 ? state : lockTargetState->getVal());
         },
         false);
     mqtt.subscribe(
