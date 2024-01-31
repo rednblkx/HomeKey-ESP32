@@ -13,6 +13,10 @@ Additionaly, thanks to the Arduino library [HomeSpan](https://github.com/HomeSpa
 - It is not made for battery-powered applications (yet)
 - Designed for a board with 4MB Flash size as OTA is enabled and it needs a second partition of the same size
 
+The code still needs some working so it's very much a work in progress, but the main implementation is roughly there.
+
+Goal of the project is to make it easy to add the homekey functionality to locks that don't support it or to anything for that matter :) .
+
 ## Configuration
 
 Currently the WiFi can only be configured from the terminal, though the library [HomeSpan](https://github.com/HomeSpan/HomeSpan) that this is based on also has the option of a hotspot but requires a button so haven't bothered with it.
@@ -74,12 +78,10 @@ On the `MQTT_AUTH_TOPIC` topic, the data format is as follows, depending whether
 }
 ```
 
-## OTA
+### OTA
 
 Authentication is enabled and the default password is `homespan-ota`.
 
-If the default password is being used then the PlatformIO environment `ota` can be used right away, otherwise, first set the environment variable `PLATFORMIO_UPLOAD_FLAGS` to `auth=<ota-password>`
+To upload via OTA, define the address of the ESP on the environment variable `PLATFORMIO_UPLOAD_PORT` and then use the PlatformIO environment `ota`, 
 
-The code still needs some working so it's very much a work in progress, but the main implementation is roughly there.
-
-Goal of the project is to make it easy to add the homekey functionality to locks that don't support it or to anything for that matter :) .
+If the default password is not used, you probably know what you are doing, however, a custom password can be used by setting the environment variable `PLATFORMIO_UPLOAD_FLAGS` to `--auth=<ota-password>`
