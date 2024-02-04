@@ -160,8 +160,6 @@ struct LockMechanism : Service::LockMechanism
       ESP_LOGD(TAG, "SAK: %s", utils::bufToHexString(sak, 1).c_str());
       ESP_LOGD(TAG, "UID: %s", utils::bufToHexString(uid, uidLen).c_str());
       ESP_LOGI(TAG, "*** PASSIVE TARGET DETECTED ***");
-      if (sak[0] == 0x20 && atqa[0] == 0x04)
-      {
         unsigned long startTime = millis();
         uint8_t data[13] = {0x00, 0xA4, 0x04, 0x00, 0x07, 0xA0, 0x00, 0x00, 0x08, 0x58, 0x01, 0x01, 0x0};
         uint8_t selectCmdRes[32];
@@ -264,15 +262,12 @@ struct LockMechanism : Service::LockMechanism
             mqtt.publish(MQTT_AUTH_TOPIC, payload.dump().c_str());
           }
         }
-      }
-      else
+      bool deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
+      while (deviceStillInField)
       {
-        json payload;
-        payload["atqa"] = utils::bufToHexString(atqa, 1);
-        payload["sak"] = utils::bufToHexString(sak, 1);
-        payload["uid"] = utils::bufToHexString(uid, uidLen);
-        payload["homekey"] = false;
-        mqtt.publish(MQTT_AUTH_TOPIC, payload.dump().c_str());
+        nfc.inRelease();
+        deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
+        vTaskDelay(100 / portTICK_PERIOD_MS);
       }
     }
     else
