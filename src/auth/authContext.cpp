@@ -17,11 +17,14 @@ std::vector<uint8_t> HKAuthenticationContext::get_x(std::vector<uint8_t> &pubKey
   mbedtls_ecp_point_init(&point);
   mbedtls_ecp_group_init(&grp);
   mbedtls_ecp_group_load(&grp, MBEDTLS_ECP_DP_SECP256R1);
-  int ret = mbedtls_ecp_point_read_binary(&grp, &point, pubKey.data(), pubKey.size());
-  ESP_LOGV(TAG, "mbedtls_ecp_point_read_binary status: %d", ret);
+  int ecp_read = mbedtls_ecp_point_read_binary(&grp, &point, pubKey.data(), pubKey.size());
+  if(ecp_read != 0)
+    ESP_LOGE(TAG, "get_x > ecp_read - %s: %s", mbedtls_high_level_strerr(ecp_read), mbedtls_low_level_strerr(ecp_read));
   size_t buffer_size_x = mbedtls_mpi_size(&point.X);
   std::vector<uint8_t> X(buffer_size_x);
-  mbedtls_mpi_write_binary(&point.X, X.data(), buffer_size_x);
+  int ecp_write = mbedtls_mpi_write_binary(&point.X, X.data(), buffer_size_x);
+  if(ecp_write != 0)
+    ESP_LOGE(TAG, "get_x > ecp_write - %s: %s", mbedtls_high_level_strerr(ecp_write), mbedtls_low_level_strerr(ecp_write));
   ESP_LOGV(TAG, "PublicKey: %s, X Coordinate: %s", utils::bufToHexString(pubKey.data(), pubKey.size()).c_str(), utils::bufToHexString(X.data(), X.size()).c_str());
   mbedtls_ecp_group_free(&grp);
   mbedtls_ecp_point_free(&point);
@@ -46,13 +49,17 @@ std::vector<uint8_t> HKAuthenticationContext::get_x(uint8_t *pubKey, size_t len)
   mbedtls_ecp_group_init(&grp);
   mbedtls_ecp_group_load(&grp, MBEDTLS_ECP_DP_SECP256R1);
   int ecp_read = mbedtls_ecp_point_read_binary(&grp, &point, pubKey, len);
-  if(ecp_read != 0)
-    ESP_LOGE(TAG, "%s: %s", mbedtls_high_level_strerr(ecp_read), mbedtls_low_level_strerr(ecp_read));
+  if(ecp_read != 0){
+    ESP_LOGE(TAG, "get_x > ecp_read - %s: %s", mbedtls_high_level_strerr(ecp_read), mbedtls_low_level_strerr(ecp_read));
+    return std::vector<uint8_t>();
+  }
   size_t buffer_size_x = mbedtls_mpi_size(&point.X);
   std::vector<uint8_t> X(buffer_size_x);
   int ecp_write = mbedtls_mpi_write_binary(&point.X, X.data(), buffer_size_x);
-  if(ecp_write != 0)
-    ESP_LOGE(TAG, "%s: %s", mbedtls_high_level_strerr(ecp_write), mbedtls_low_level_strerr(ecp_write));
+  if(ecp_write != 0){
+    ESP_LOGE(TAG, "get_x > ecp_write - %s: %s", mbedtls_high_level_strerr(ecp_write), mbedtls_low_level_strerr(ecp_write));
+    return std::vector<uint8_t>();
+  }
   ESP_LOGV(TAG, "PublicKey: %s, X Coordinate: %s", utils::bufToHexString(pubKey, len).c_str(), utils::bufToHexString(X.data(), X.size()).c_str());
   mbedtls_ecp_group_free(&grp);
   mbedtls_ecp_point_free(&point);
@@ -78,21 +85,27 @@ std::tuple<std::vector<uint8_t>, std::vector<uint8_t>> HKAuthenticationContext::
   mbedtls_ecp_keypair ephemeral;
   mbedtls_ecp_keypair_init(&ephemeral);
   int gen_key = mbedtls_ecp_gen_key(MBEDTLS_ECP_DP_SECP256R1, &ephemeral, esp_rng, NULL);
-  if(gen_key != 0)
-    ESP_LOGE(TAG, "%s: %s", mbedtls_high_level_strerr(gen_key), mbedtls_low_level_strerr(gen_key));
+  if(gen_key != 0){
+    ESP_LOGE(TAG, "generateEphemeralKey > gen_key - %s: %s", mbedtls_high_level_strerr(gen_key), mbedtls_low_level_strerr(gen_key));
+    return std::make_tuple(std::vector<uint8_t>(), std::vector<uint8_t>());
+  }
   std::vector<uint8_t> bufPriv(mbedtls_mpi_size(&ephemeral.d));
   int mpi_write = mbedtls_mpi_write_binary(&ephemeral.d, bufPriv.data(), bufPriv.capacity());
-  if(mpi_write != 0)
-    ESP_LOGE(TAG, "%s: %s", mbedtls_high_level_strerr(mpi_write), mbedtls_low_level_strerr(mpi_write));
+  if(mpi_write != 0){
+    ESP_LOGE(TAG, "generateEphemeralKey > mpi_write - %s: %s", mbedtls_high_level_strerr(mpi_write), mbedtls_low_level_strerr(mpi_write));
+    return std::make_tuple(std::vector<uint8_t>(), std::vector<uint8_t>());
+  }
   std::vector<uint8_t> bufPub(MBEDTLS_ECP_MAX_BYTES);
   size_t olen = 0;
   int ecp_write = mbedtls_ecp_point_write_binary(&ephemeral.grp, &ephemeral.Q, MBEDTLS_ECP_PF_UNCOMPRESSED, &olen, bufPub.data(), bufPub.capacity());
-  bufPub.resize(olen);
-  mbedtls_ecp_keypair_free(&ephemeral);
   if(!ecp_write){
     ESP_LOGD(TAG, "Ephemeral Key generated -- private: %s, public: %s", utils::bufToHexString(bufPriv.data(), bufPriv.size()).c_str(), utils::bufToHexString(bufPub.data(), bufPub.size()).c_str());
-  } else
-    ESP_LOGE(TAG, "%s : %s", mbedtls_high_level_strerr(ecp_write), mbedtls_low_level_strerr(ecp_write));
+  } else{
+    ESP_LOGE(TAG, "generateEphemeralKey > ecp_write - %s : %s", mbedtls_high_level_strerr(ecp_write), mbedtls_low_level_strerr(ecp_write));
+    return std::make_tuple(std::vector<uint8_t>(), std::vector<uint8_t>());
+  }
+  bufPub.resize(olen);
+  mbedtls_ecp_keypair_free(&ephemeral);
   return std::make_tuple(bufPriv, bufPub);
 }
 /**
@@ -120,12 +133,27 @@ std::vector<uint8_t> HKAuthenticationContext::signSharedInfo(uint8_t *stdTlv, si
 
   mbedtls_md(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), stdTlv, len, hash);
 
-  mbedtls_ecp_read_key(MBEDTLS_ECP_DP_SECP256R1, &keypair, readerData.reader_private_key, 32);
-
-  mbedtls_ecdsa_sign_det_ext(&keypair.grp, &sigMpi1, &sigMpi2, &keypair.d, hash, 32, MBEDTLS_MD_SHA256, esp_rng, NULL);
+  int ecp_read = mbedtls_ecp_read_key(MBEDTLS_ECP_DP_SECP256R1, &keypair, readerData.reader_private_key, 32);
+  if(ecp_read != 0){
+    ESP_LOGE(TAG, "signSharedInfo > ecp_read - %s: %s", mbedtls_high_level_strerr(ecp_read), mbedtls_low_level_strerr(ecp_read));
+    return std::vector<uint8_t>();
+  }
+  int ecdsa_sign = mbedtls_ecdsa_sign_det_ext(&keypair.grp, &sigMpi1, &sigMpi2, &keypair.d, hash, 32, MBEDTLS_MD_SHA256, esp_rng, NULL);
+  if(ecdsa_sign != 0){
+    ESP_LOGE(TAG, "signSharedInfo > ecdsa_sign - %s: %s", mbedtls_high_level_strerr(ecdsa_sign), mbedtls_low_level_strerr(ecdsa_sign));
+    return std::vector<uint8_t>();
+  }
   uint8_t sigPoint[mbedtls_mpi_size(&sigMpi1) + mbedtls_mpi_size(&sigMpi2)];
-  mbedtls_mpi_write_binary(&sigMpi1, sigPoint, mbedtls_mpi_size(&sigMpi1));
-  mbedtls_mpi_write_binary(&sigMpi2, sigPoint + mbedtls_mpi_size(&sigMpi1), mbedtls_mpi_size(&sigMpi2));
+  int ecp_write_1 = mbedtls_mpi_write_binary(&sigMpi1, sigPoint, mbedtls_mpi_size(&sigMpi1));
+  if(ecp_write_1 != 0){
+    ESP_LOGE(TAG, "signSharedInfo > ecp_write_1 - %s: %s", mbedtls_high_level_strerr(ecp_write_1), mbedtls_low_level_strerr(ecp_write_1));
+    return std::vector<uint8_t>();
+  }
+  int ecp_write_2 = mbedtls_mpi_write_binary(&sigMpi2, sigPoint + mbedtls_mpi_size(&sigMpi1), mbedtls_mpi_size(&sigMpi2));
+  if(ecp_write_2 != 0){
+    ESP_LOGE(TAG, "signSharedInfo > ecp_write_2 - %s: %s", mbedtls_high_level_strerr(ecp_write_2), mbedtls_low_level_strerr(ecp_write_2));
+    return std::vector<uint8_t>();
+  }
   mbedtls_ecp_keypair_free(&keypair);
   mbedtls_mpi_free(&sigMpi1);
   mbedtls_mpi_free(&sigMpi2);
@@ -155,16 +183,33 @@ void HKAuthenticationContext::get_shared_key(uint8_t *outBuf, size_t oLen)
   mbedtls_ecp_group_load(&grp, MBEDTLS_ECP_DP_SECP256R1);
 
   // Set the reader's ephemeral private key
-  mbedtls_mpi_read_binary(&reader_ephemeral_private_key, readerEphPrivKey.data(), readerEphPrivKey.size());
+  int mpi_read = mbedtls_mpi_read_binary(&reader_ephemeral_private_key, readerEphPrivKey.data(), readerEphPrivKey.size());
+
+  if(mpi_read != 0){
+    ESP_LOGE(TAG, "get_shared_key > mpi_read - %s: %s", mbedtls_high_level_strerr(mpi_read), mbedtls_low_level_strerr(mpi_read));
+    return;
+  }
 
   // Set the endpoint's ephemeral public key
-  mbedtls_ecp_point_read_binary(&grp, &endpoint_ephemeral_public_key, endpointEphPubKey.data(), endpointEphPubKey.size());
+  int ecp_read = mbedtls_ecp_point_read_binary(&grp, &endpoint_ephemeral_public_key, endpointEphPubKey.data(), endpointEphPubKey.size());
+  if(ecp_read != 0){
+    ESP_LOGE(TAG, "get_shared_key > ecp_read - %s: %s", mbedtls_high_level_strerr(ecp_read), mbedtls_low_level_strerr(ecp_read));
+    return;
+  }
 
   // Perform key exchange
-  mbedtls_ecdh_compute_shared(&grp, &shared_key, &endpoint_ephemeral_public_key, &reader_ephemeral_private_key,
+  int ecdh_compute_shared = mbedtls_ecdh_compute_shared(&grp, &shared_key, &endpoint_ephemeral_public_key, &reader_ephemeral_private_key,
                               esp_rng, NULL);
+  if(ecdh_compute_shared != 0){
+    ESP_LOGE(TAG, "get_shared_key > ecdh_compute_shared - %s: %s", mbedtls_high_level_strerr(ecdh_compute_shared), mbedtls_low_level_strerr(ecdh_compute_shared));
+    return;
+  }
 
-  mbedtls_mpi_write_binary(&shared_key, outBuf, oLen);
+  int mpi_write = mbedtls_mpi_write_binary(&shared_key, outBuf, oLen);
+  if(mpi_write != 0){
+    ESP_LOGE(TAG, "get_shared_key > mpi_write - %s: %s", mbedtls_high_level_strerr(mpi_write), mbedtls_low_level_strerr(mpi_write));
+    return;
+  }
 
   mbedtls_ecp_group_free(&grp);
   mbedtls_mpi_free(&reader_ephemeral_private_key);
