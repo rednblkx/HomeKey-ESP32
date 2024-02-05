@@ -16,8 +16,10 @@
 #include <util/x963kdf.h>
 #include <esp32-hal.h>
 #include <nvs.h>
+#include <util/CommonCryptoUtils.h>
+#include <chrono>
 
-class HKAuthenticationContext
+class HKAuthenticationContext : CommonCryptoUtils
 {
 private:
   const char *TAG = "HKAuthCtx";
@@ -27,14 +29,10 @@ private:
   std::vector<uint8_t> readerEphPubKey;
   std::vector<uint8_t> endpointEphPubKey;
   std::vector<uint8_t> endpointEphX;
-  bool (*nfcInDataExchange)(uint8_t *data, size_t lenData, uint8_t *res, uint8_t *resLen) = NULL;
+  bool (*nfcInDataExchange)(uint8_t *data, size_t lenData, uint8_t *res, uint8_t *resLen){};
   std::vector<uint8_t> transactionIdentifier;
   std::vector<uint8_t> readerIdentifier;
-  std::tuple<std::vector<uint8_t>, std::vector<uint8_t>> generateEphemeralKey();
-  std::vector<uint8_t> signSharedInfo(uint8_t *stdTlv, size_t len);
-  std::vector<uint8_t> get_x(std::vector<uint8_t> &pubKey);
-  std::vector<uint8_t> get_x(uint8_t *pubKey, size_t len);
-  void Auth0_keying_material(const char *context, uint8_t ePub_X[32], uint8_t *keyingMaterial, uint8_t *out, size_t outLen);
+  void Auth0_keying_material(const char *context, const uint8_t *ePub_X, const uint8_t *keyingMaterial, uint8_t *out, size_t outLen);
   void Auth1_keys_generator(uint8_t *persistentKey, uint8_t *volatileKey);
   void get_shared_key(uint8_t *outBuf, size_t oLen);
   std::tuple<homeKeyIssuer::issuer_t *, homeKeyEndpoint::endpoint_t *> find_endpoint_by_cryptogram(std::vector<uint8_t>& cryptogram);
