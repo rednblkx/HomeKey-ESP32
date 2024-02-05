@@ -27,7 +27,7 @@ private:
   std::vector<uint8_t> readerEphPubKey;
   std::vector<uint8_t> endpointEphPubKey;
   std::vector<uint8_t> endpointEphX;
-  PN532 &nfc;
+  bool (*nfcInDataExchange)(uint8_t *data, size_t lenData, uint8_t *res, uint8_t *resLen) = NULL;
   std::vector<uint8_t> transactionIdentifier;
   std::vector<uint8_t> readerIdentifier;
   std::tuple<std::vector<uint8_t>, std::vector<uint8_t>> generateEphemeralKey();
@@ -44,6 +44,6 @@ private:
   std::tuple<homeKeyIssuer::issuer_t *, homeKeyEndpoint::endpoint_t *, DigitalKeySecureContext, std::vector<uint8_t>, homeKeyReader::KeyFlow> std_auth();
 
 public:
-  HKAuthenticationContext(PN532 &nfc, homeKeyReader::readerData_t &readerData);
+  HKAuthenticationContext(bool (*nfcInDataExchange)(uint8_t *data, size_t lenData, uint8_t *res, uint8_t *resLen), homeKeyReader::readerData_t &readerData);
   std::tuple<uint8_t *, uint8_t *, homeKeyReader::KeyFlow> authenticate(bool, nvs_handle &);
 };

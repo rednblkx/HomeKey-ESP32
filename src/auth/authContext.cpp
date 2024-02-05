@@ -180,7 +180,7 @@ void HKAuthenticationContext::get_shared_key(uint8_t *outBuf, size_t oLen)
    * @param nfc A pointer to an instance of the PN532 class, which is used for NFC communication.
    * @param readerData readerData is a pointer to a structure of type readerData_t.
    */
-HKAuthenticationContext::HKAuthenticationContext(PN532 &nfc, homeKeyReader::readerData_t &readerData) : readerData(readerData), nfc(nfc)
+HKAuthenticationContext::HKAuthenticationContext(bool (*nfcInDataExchange)(uint8_t *data, size_t lenData, uint8_t *res, uint8_t *resLen), homeKeyReader::readerData_t &readerData) : readerData(readerData), nfcInDataExchange(nfcInDataExchange)
 {
   auto readerEphKey = generateEphemeralKey();
   readerEphPrivKey = std::get<0>(readerEphKey);
@@ -205,7 +205,6 @@ std::tuple<uint8_t *, uint8_t *, homeKeyReader::KeyFlow> HKAuthenticationContext
     foundEndpoint = std::get<1>(fastAuth);
     unsigned long stopTime = millis();
     ESP_LOGI(TAG, "Home Key authenticated, transaction took %lu ms", stopTime - startTime);
-    nfc.inRelease();
     return std::make_tuple(foundIssuer->issuerId, foundEndpoint->endpointId, homeKeyReader::kFlowFAST);
   }
   else if (std::get<2>(fastAuth) == homeKeyReader::kFlowSTANDARD)
@@ -225,11 +224,9 @@ std::tuple<uint8_t *, uint8_t *, homeKeyReader::KeyFlow> HKAuthenticationContext
       esp_err_t commit_nvs = nvs_commit(savedData);
       ESP_LOGV(TAG, "NVS SET STATUS: %s", esp_err_to_name(set_nvs));
       ESP_LOGV(TAG, "NVS COMMIT STATUS: %s", esp_err_to_name(commit_nvs));
-      nfc.inRelease();
       return std::make_tuple(foundIssuer->issuerId, foundEndpoint->endpointId, homeKeyReader::kFlowSTANDARD);
     }
   }
-  nfc.inRelease();
   return std::make_tuple(foundIssuer->issuerId, foundEndpoint->endpointId, homeKeyReader::kFlowFailed);
 }
 
@@ -311,7 +308,7 @@ std::vector<uint8_t> HKAuthenticationContext::commandFlow(homeKeyReader::Command
   std::vector<uint8_t> cmdFlowRes(4);
   uint8_t cmdFlowResLen = cmdFlowRes.size();
   ESP_LOGD(TAG, "APDU: %s, Length: %d", utils::bufToHexString(apdu, sizeof(apdu)).c_str(), sizeof(apdu));
-  nfc.inDataExchange(apdu, sizeof(apdu), cmdFlowRes.data(), &cmdFlowResLen);
+  nfcInDataExchange(apdu, sizeof(apdu), cmdFlowRes.data(), &cmdFlowResLen);
   return cmdFlowRes;
 }
 
@@ -409,7 +406,7 @@ std::tuple<homeKeyIssuer::issuer_t *, homeKeyEndpoint::endpoint_t *, homeKeyRead
   uint8_t response[128];
   uint8_t responseLength = 128;
   ESP_LOGD(TAG, "Auth0 APDU Length: %d, DATA: %s", apdu.size(), utils::bufToHexString(apdu.data(), apdu.size()).c_str());
-  nfc.inDataExchange(apdu.data(), apdu.size(), response, &responseLength);
+  nfcInDataExchange(apdu.data(), apdu.size(), response, &responseLength);
   ESP_LOGD(TAG, "Auth0 Response Length: %d, DATA: %s", responseLength, utils::bufToHexString(response, responseLength).c_str());
   homeKeyIssuer::issuer_t *issuer = nullptr;
   homeKeyEndpoint::endpoint_t *endpoint = nullptr;
@@ -482,7 +479,7 @@ std::tuple<homeKeyIssuer::issuer_t *, homeKeyEndpoint::endpoint_t *, DigitalKeyS
   uint8_t response[128];
   uint8_t responseLength = 128;
   ESP_LOGD(TAG, "Auth1 APDU Length: %d, DATA: %s", apdu.size(), utils::bufToHexString(apdu.data(), apdu.size()).c_str());
-  nfc.inDataExchange(apdu.data(), apdu.size(), response, &responseLength);
+  nfcInDataExchange(apdu.data(), apdu.size(), response, &responseLength);
   ESP_LOGD(TAG, "Auth1 Response Length: %d, DATA: %s", responseLength, utils::bufToHexString(response, responseLength).c_str());
   homeKeyEndpoint::endpoint_t *foundEndpoint = nullptr;
   homeKeyIssuer::issuer_t *foundIssuer = nullptr;

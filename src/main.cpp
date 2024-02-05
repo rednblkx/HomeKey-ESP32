@@ -171,7 +171,9 @@ struct LockMechanism : Service::LockMechanism
         {
           ESP_LOGI(TAG, "*** SELECT HOMEKEY APPLET SUCCESSFUL ***");
           ESP_LOGD(TAG, "Reader Private Key: %s", utils::bufToHexString((const uint8_t *)readerData.reader_private_key, sizeof(readerData.reader_private_key)).c_str());
-          HKAuthenticationContext authCtx(nfc, readerData);
+          HKAuthenticationContext authCtx([](uint8_t *apdu, size_t apduLen, uint8_t *res, uint8_t *resLen)
+                                          {  return nfc.inDataExchange(apdu, apduLen, res, resLen); },
+                                          readerData);
           auto authResult = authCtx.authenticate(defaultToStd, savedData);
           if (std::get<2>(authResult) != homeKeyReader::kFlowFailed)
           {
