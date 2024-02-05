@@ -1,31 +1,29 @@
 #include "utils.h"
 
-void utils::pack(uint8_t *buf, size_t buflen, uint8_t *out, int *olen)
+void utils::pack(const uint8_t *buf, size_t buflen, uint8_t *out, size_t *olen)
 {
-  memcpy(out + *olen, buf, buflen);
-  size_t l = *olen + buflen;
-  memcpy(olen, &l, 1);
+  std::move(buf, buf + buflen, out + *olen);
+  *olen += buflen;
 }
 
-std::string utils::bufToHexString(const uint8_t *buf, size_t len){
+std::string utils::bufToHexString(const uint8_t *buf, size_t len, bool ignoreLevel){
   std::string result;
   if(buf == NULL || buf == nullptr){
     return result;
   }
-  // if(esp32m::Logging::level() >= esp32m::LogLevel::Debug){
+  if(esp_log_level_get("*") >= esp_log_level_t::ESP_LOG_DEBUG || ignoreLevel){
     result.reserve(2 * len);
     for (size_t i = 0; i < len; ++i) {
       result.push_back("0123456789ABCDEF"[buf[i] >> 4]);
       result.push_back("0123456789ABCDEF"[buf[i] & 0xF]);
     }
     // ESP_LOGV("Utils::bufToHexString", "%s", result.c_str());
-  // }
+  }
   return result;
 }
-std::string utils::bufToHexString(const uint16_t *buf, size_t len) {
+std::string utils::bufToHexString(const uint16_t *buf, size_t len, bool ignoreLevel) {
   std::string result;
-  // if (esp32m::Logging::level() >= esp32m::LogLevel::Debug)
-  // {
+  if(esp_log_level_get("*") >= esp_log_level_t::ESP_LOG_DEBUG || ignoreLevel){
     result.reserve(4 * len); // Reserve space for 4 characters per uint16_t
     for (size_t i = 0; i < len; ++i) {
       result.push_back("0123456789ABCDEF"[(buf[i] >> 12) & 0xF]);
@@ -34,7 +32,7 @@ std::string utils::bufToHexString(const uint16_t *buf, size_t len) {
       result.push_back("0123456789ABCDEF"[buf[i] & 0xF]);
     }
     // ESP_LOGV("Utils::bufToHexString", "%s", result.c_str());
-  // }
+  }
 
   return result;
 }
@@ -116,20 +114,27 @@ std::vector<unsigned char> utils::simple_tlv(unsigned char tag, const unsigned c
   size_t len = sizeof(tag) + valLength + (lenExt ? 2 : 1);
   if (out != NULL && olen != NULL)
   {
-    memcpy(out, &tag, sizeof(tag));
-    memcpy(out + sizeof(tag), dataLen, lenExt ? 2 : 1);
-    memcpy(out + sizeof(tag) + (lenExt ? 2 : 1), value, valLength);
-    size_t l = len + *olen;
-    memcpy(olen, &l, sizeof(len));
+    // memcpy(out, &tag, sizeof(tag));
+    std::move(&tag, &tag + sizeof(tag), out);
+    // memcpy(out + sizeof(tag), dataLen, lenExt ? 2 : 1);
+    std::move(dataLen, dataLen + (lenExt ? 2 : 1), out + sizeof(tag));
+    // memcpy(out + sizeof(tag) + (lenExt ? 2 : 1), value, valLength);
+    std::move(value, value + valLength, out + sizeof(tag) + (lenExt ? 2 : 1));
+    // size_t l = len + *olen;
+    // memcpy(olen, &l, sizeof(len));
+    *olen += len;
     ESP_LOGD(TAG, "TLV %x[%d]: %s", tag, valLength, bufToHexString(out + (lenExt ? 3 : 2), len - (lenExt ? 3 : 2)).c_str());
     return std::vector<uint8_t>{};
   }
   else
   {
     std::vector<unsigned char> buf(len);
-    memcpy(buf.data(), &tag, sizeof(tag));
-    memcpy(buf.data() + sizeof(tag), dataLen, lenExt ? 2 : 1);
-    memcpy(buf.data() + sizeof(tag) + (lenExt ? 2 : 1), value, valLength);
+    // memcpy(buf.data(), &tag, sizeof(tag));
+    std::move(&tag, &tag + sizeof(tag), buf.data());
+    // memcpy(buf.data() + sizeof(tag), dataLen, lenExt ? 2 : 1);
+    std::move(dataLen, dataLen + (lenExt ? 2 : 1), buf.data() + sizeof(tag));
+    // memcpy(buf.data() + sizeof(tag) + (lenExt ? 2 : 1), value, valLength);
+    std::move(value, value + valLength, buf.data() + sizeof(tag) + (lenExt ? 2 : 1));
     ESP_LOGD(TAG, "TLV %x[%d]: %s", tag, valLength, bufToHexString(buf.data() + (lenExt ? 3 : 2), len - (lenExt ? 3 : 2)).c_str());
     return buf;
   }

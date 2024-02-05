@@ -102,9 +102,9 @@ typedef enum
     }
   }
 
-  namespace issuerEndpoint
+  namespace homeKeyEndpoint
   {
-    struct issuerEndpoint_t
+    struct endpoint_t
     {
       uint8_t endpointId[6] = {};
       uint32_t last_used_at = 0;
@@ -115,12 +115,12 @@ typedef enum
       uint8_t persistent_key[32] = {};
       endpointEnrollments::enrollments_t enrollments;
     };
-    inline void to_json(json &j, const issuerEndpoint_t &p)
+    inline void to_json(json &j, const endpoint_t &p)
     {
       j = json{{"endpointId", p.endpointId}, {"last_used_at", p.last_used_at}, {"counter", p.counter}, {"key_type", p.key_type}, {"publicKey", p.publicKey}, {"endpoint_key_x", p.endpoint_key_x}, {"persistent_key", p.persistent_key}, {"enrollments", p.enrollments}};
     }
 
-    inline void from_json(const json &j, issuerEndpoint_t &p)
+    inline void from_json(const json &j, endpoint_t &p)
     {
       j.at("endpointId").get_to(p.endpointId);
       j.at("last_used_at").get_to(p.last_used_at);
@@ -132,21 +132,21 @@ typedef enum
       j.at("enrollments").get_to(p.enrollments);
     }
   }
-  namespace Issuers
+  namespace homeKeyIssuer
   {
-    struct homeKeyIssuers_t
+    struct issuer_t
     {
       uint8_t issuerId[8] = {};
       uint8_t publicKey[32] = {};
       uint8_t issuer_key_x[32] = {};
-      std::list<issuerEndpoint::issuerEndpoint_t> endpoints;
+      std::list<homeKeyEndpoint::endpoint_t> endpoints;
     };
-    inline void to_json(json &j, const homeKeyIssuers_t &p)
+    inline void to_json(json &j, const issuer_t &p)
     {
       j = json{{"issuerId", p.issuerId}, {"publicKey", p.publicKey}, {"issuer_key_x", p.issuer_key_x}, {"endpoints", p.endpoints}};
     }
 
-    inline void from_json(const json &j, homeKeyIssuers_t &p)
+    inline void from_json(const json &j, issuer_t &p)
     {
       j.at("issuerId").get_to(p.issuerId);
       j.at("publicKey").get_to(p.publicKey);
@@ -157,6 +157,12 @@ typedef enum
 
 namespace homeKeyReader
 {
+  typedef enum
+  {
+    kCmdFlowFailed = 0x0,
+    kCmdFlowSuccess = 0x01,
+    kCmdFlowAttestation = 0x40
+  } CommandFlowStatus;
   typedef enum
   {
     UNLOCK = 0x01
@@ -191,7 +197,7 @@ namespace homeKeyReader
     uint8_t reader_key_x[32] = {};
     uint8_t reader_identifier[8] = {};
     uint8_t identifier[8] = {};
-    std::list<Issuers::homeKeyIssuers_t> issuers;
+    std::list<homeKeyIssuer::issuer_t> issuers;
   };
 
   inline void to_json(json &j, const readerData_t &p)
