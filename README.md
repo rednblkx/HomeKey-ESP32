@@ -7,6 +7,8 @@ Additionaly, thanks to the Arduino library [HomeSpan](https://github.com/HomeSpa
 
 ## Overview
 
+Only the PN532 is supported as an NFC module.
+
 - Only the FAST and STANDARD flows are implementated right now, the ATTESTATION flow will be implemented at a later time since STANDARD can be used in most cases
 - Lock State can be received and controlled via MQTT through user-defined topics
 - Any NFC Target that's not identified as homekey will skip the flow and at least at the moment it only just publishes the UID, ATQA and SAK to the same MQTT topic as homekey with the property `homekey` set to false
@@ -17,13 +19,29 @@ The code still needs some working so it's very much a work in progress, but the 
 
 Goal of the project is to make it easy to add the homekey functionality to locks that don't support it or to anything for that matter :) .
 
+## Wiring
+
+The current implementation is using SPI for communication.
+
+Pins are the default Arduino pins for SPI which should be as follows:
+
+GPIO18 - SCK
+
+GPIO19 - MISO
+
+GPIO23 - MOSI
+
+GPIO5 - SS
+
 ## Configuration
 
 Currently the WiFi can only be configured from the terminal, though the library [HomeSpan](https://github.com/HomeSpan/HomeSpan) that this is based on also has the option of a hotspot but requires a button so haven't bothered with it.
 
 ### WIFI
 
-To connect it to WiFi, open the serial terminal, press <kbd>W</kbd> + <kbd>Return</kbd>, and now it should start searching for networks and then proceed accordingly.
+To connect it to WiFi there are two options
+- Open the serial terminal, press <kbd>W</kbd> + <kbd>Return</kbd>, and now it should start searching for networks from which to select.
+- Open the serial terminal, press <kbd>A</kbd> to start a temporary Access Point then connect to the Wifi network "HomeSpan-Setup" with the password `homespan` and if you are on a phone it should automatically open up the page where you can configure the Wifi credentials, alternatively you can access the page manually on `http://192.168.4.1/hotspot-detect.html`
 
 ### HomeKit
 
