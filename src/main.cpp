@@ -711,7 +711,7 @@ void setup()
     LOG(D, "Issuer ID: %s, Public Key: %s", utils::bufToHexString(issuer.issuerId, sizeof(issuer.issuerId)).c_str(), utils::bufToHexString(issuer.publicKey, sizeof(issuer.publicKey)).c_str());
   }
   homeSpan.enableOTA();
-  homeSpan.begin(Category::Locks, "Test NFC Lock");
+  homeSpan.begin(Category::Locks, "HK Lock");
 
   new SpanUserCommand('D', "Delete Home Key Data", deleteReaderData);
   new SpanUserCommand('L', "Set Log Level", setLogLevel);
@@ -742,7 +742,7 @@ void setup()
   new Characteristic::Model("HomeKey-ESP32");
   new Characteristic::Name("NFC Lock");
   new Characteristic::SerialNumber("HK-360");
-  new Characteristic::FirmwareRevision("0.1beta");
+  new Characteristic::FirmwareRevision("0.1");
   new Characteristic::HardwareFinish();
 
   new LockManagement();
