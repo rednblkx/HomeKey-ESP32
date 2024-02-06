@@ -69,7 +69,6 @@ struct LockManagement : Service::LockManagement
   {
 
     Serial.print("Configuring LockManagement\n"); // initialization message
-    new Characteristic::Name("Lock Management");
 
     lockControlPoint = new Characteristic::LockControlPoint();
     version = new Characteristic::Version();
@@ -110,7 +109,6 @@ struct LockMechanism : Service::LockMechanism
   LockMechanism() : Service::LockMechanism()
   {
     LOG(I, "Configuring LockMechanism"); // initialization message
-    new Characteristic::Name("NFC Lock");
     lockCurrentState = new Characteristic::LockCurrentState(1, true);
     lockTargetState = new Characteristic::LockTargetState(1, true);
     mqtt.subscribe(
@@ -202,10 +200,10 @@ struct LockMechanism : Service::LockMechanism
           mqtt.publish(MQTT_AUTH_TOPIC, payload.dump().c_str());
         }
       }
+      nfc.inRelease();
       bool deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
       while (deviceStillInField)
       {
-        nfc.inRelease();
         deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
         vTaskDelay(100 / portTICK_PERIOD_MS);
       }
@@ -233,7 +231,6 @@ struct NFCAccess : Service::NFCAccess, CommonCryptoUtils
   NFCAccess() : Service::NFCAccess()
   {
     LOG(I, "Configuring NFCAccess"); // initialization message
-    new Characteristic::Name("NFC Access");
     configurationState = new Characteristic::ConfigurationState();
     nfcControlPoint = new Characteristic::NFCAccessControlPoint();
     nfcSupportedConfiguration = new Characteristic::NFCAccessSupportedConfiguration();
@@ -714,7 +711,7 @@ void setup()
     LOG(D, "Issuer ID: %s, Public Key: %s", utils::bufToHexString(issuer.issuerId, sizeof(issuer.issuerId)).c_str(), utils::bufToHexString(issuer.publicKey, sizeof(issuer.publicKey)).c_str());
   }
   homeSpan.enableOTA();
-  homeSpan.begin(Category::Locks, "Test NFC Lock");
+  homeSpan.begin(Category::Locks, "HK Lock");
 
   new SpanUserCommand('D', "Delete Home Key Data", deleteReaderData);
   new SpanUserCommand('L', "Set Log Level", setLogLevel);
@@ -741,11 +738,11 @@ void setup()
   new SpanAccessory();                 // Begin by creating a new Accessory using SpanAccessory(), no arguments needed
   new Service::AccessoryInformation(); // HAP requires every Accessory to implement an AccessoryInformation Service, with the required Identify Characteristic
   new Characteristic::Identify();
-  new Characteristic::Manufacturer();
-  new Characteristic::Model();
+  new Characteristic::Manufacturer("Kodeative");
+  new Characteristic::Model("HomeKey-ESP32");
   new Characteristic::Name("NFC Lock");
-  new Characteristic::SerialNumber();
-  new Characteristic::FirmwareRevision();
+  new Characteristic::SerialNumber("HK-360");
+  new Characteristic::FirmwareRevision("0.1");
   new Characteristic::HardwareFinish();
 
   new LockManagement();

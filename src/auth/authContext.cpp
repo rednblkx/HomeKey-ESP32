@@ -2,70 +2,13 @@
 #define LOG(x, format, ...) ESP_LOG##x(TAG, "%s > " format , __FUNCTION__ __VA_OPT__(,) __VA_ARGS__)
 
 /**
- * The function performs an elliptic curve Diffie-Hellman key exchange to compute a shared key between
- * the reader and the endpoint.
- *
- * @param outBuf The `outBuf` parameter is a pointer to a buffer where the computed shared key will be
- * stored. It should be allocated with enough space to hold `oLen` bytes.
- * @param oLen oLen is the length of the output buffer (outBuf) where the shared key will be written.
+ * The HKAuthenticationContext constructor initializes various member variables and generates an
+ * ephemeral key for the reader.
+ * 
+ * @param nfcInDataExchange nfcInDataExchange is a function pointer that points to a function with the
+ * following signature: bool (*)(uint8_t *data, size_t lenData, uint8_t *res, uint8_t *resLen)
+ * @param readerData readerData is a reference to an object of type homeKeyReader::readerData_t.
  */
-void HKAuthenticationContext::get_shared_key(uint8_t *outBuf, size_t oLen)
-{
-  mbedtls_ecp_group grp;
-  mbedtls_mpi reader_ephemeral_private_key, shared_key;
-  mbedtls_ecp_point endpoint_ephemeral_public_key;
-
-  mbedtls_ecp_group_init(&grp);
-  mbedtls_mpi_init(&reader_ephemeral_private_key);
-  mbedtls_mpi_init(&shared_key);
-  mbedtls_ecp_point_init(&endpoint_ephemeral_public_key);
-
-  // Initialize the elliptic curve group (e.g., SECP256R1)
-  mbedtls_ecp_group_load(&grp, MBEDTLS_ECP_DP_SECP256R1);
-
-  // Set the reader's ephemeral private key
-  int mpi_read = mbedtls_mpi_read_binary(&reader_ephemeral_private_key, readerEphPrivKey.data(), readerEphPrivKey.size());
-
-  if(mpi_read != 0){
-    LOG(E, "get_shared_key > mpi_read - %s: %s", mbedtls_high_level_strerr(mpi_read), mbedtls_low_level_strerr(mpi_read));
-    return;
-  }
-
-  // Set the endpoint's ephemeral public key
-  int ecp_read = mbedtls_ecp_point_read_binary(&grp, &endpoint_ephemeral_public_key, endpointEphPubKey.data(), endpointEphPubKey.size());
-  if(ecp_read != 0){
-    LOG(E, "get_shared_key > ecp_read - %s: %s", mbedtls_high_level_strerr(ecp_read), mbedtls_low_level_strerr(ecp_read));
-    return;
-  }
-
-  // Perform key exchange
-  int ecdh_compute_shared = mbedtls_ecdh_compute_shared(&grp, &shared_key, &endpoint_ephemeral_public_key, &reader_ephemeral_private_key,
-                              esp_rng, NULL);
-  if(ecdh_compute_shared != 0){
-    LOG(E, "get_shared_key > ecdh_compute_shared - %s: %s", mbedtls_high_level_strerr(ecdh_compute_shared), mbedtls_low_level_strerr(ecdh_compute_shared));
-    return;
-  }
-
-  int mpi_write = mbedtls_mpi_write_binary(&shared_key, outBuf, oLen);
-  if(mpi_write != 0){
-    LOG(E, "get_shared_key > mpi_write - %s: %s", mbedtls_high_level_strerr(mpi_write), mbedtls_low_level_strerr(mpi_write));
-    return;
-  }
-
-  mbedtls_ecp_group_free(&grp);
-  mbedtls_mpi_free(&reader_ephemeral_private_key);
-  mbedtls_mpi_free(&shared_key);
-  mbedtls_ecp_point_free(&endpoint_ephemeral_public_key);
-}
-
-/**
-   * The function `HKAuthenticationContext::HKAuthenticationContext` initializes the HKAuthenticationContext
-   * object by generating an ephemeral key, filling the transaction identifier with random data, and
-   * copying reader identifiers.
-   *
-   * @param nfc A pointer to an instance of the PN532 class, which is used for NFC communication.
-   * @param readerData readerData is a pointer to a structure of type readerData_t.
-   */
 HKAuthenticationContext::HKAuthenticationContext(bool (*nfcInDataExchange)(uint8_t *data, size_t lenData, uint8_t *res, uint8_t *resLen), homeKeyReader::readerData_t &readerData) : readerData(readerData), nfcInDataExchange(nfcInDataExchange)
 {
   auto startTime = std::chrono::high_resolution_clock::now();
@@ -80,41 +23,80 @@ HKAuthenticationContext::HKAuthenticationContext(bool (*nfcInDataExchange)(uint8
   readerIdentifier.insert(readerIdentifier.end(), readerData.identifier, readerData.identifier + sizeof(readerData.identifier));
   readerEphX = std::move(get_x(readerEphPubKey));
   auto stopTime = std::chrono::high_resolution_clock::now();
+  endpointEphX = std::vector<uint8_t>();
+  endpointEphPubKey = std::vector<uint8_t>();
   LOG(I, "Initialization Time: %lli ms", std::chrono::duration_cast<std::chrono::milliseconds>(stopTime - startTime).count());
 }
 
+/**
+ * The function `HKAuthenticationContext::authenticate` performs authentication using various
+ * parameters and returns the result along with the authentication flow type.
+ * 
+ * @param defaultToStd The parameter "defaultToStd" is a boolean flag that determines whether the
+ * authentication process should default to the standard flow.
+ * @param savedData The parameter `savedData` is a reference to an `nvs_handle` object. It is used to
+ * store and retrieve data in the Non-Volatile Storage (NVS) of the device. The NVS is a key-value
+ * storage system that allows persistent storage of data even when the device is
+ * 
+ * @return a tuple containing three elements:
+ * 1. A pointer to a uint8_t array.
+ * 2. A pointer to a uint8_t array.
+ * 3. An enum value of type `homeKeyReader::KeyFlow`.
+ */
 std::tuple<uint8_t *, uint8_t *, homeKeyReader::KeyFlow> HKAuthenticationContext::authenticate(bool defaultToStd, nvs_handle &savedData){
   auto startTime = std::chrono::high_resolution_clock::now();
-  auto fastAuth = fast_auth(defaultToStd);
+  uint8_t prot_v_data[2] = {0x02, 0x0};
+
+  std::vector<uint8_t> fastTlv(sizeof(prot_v_data) + readerEphPubKey.size() + transactionIdentifier.size() + readerIdentifier.size() + 8);
+  size_t len = 0;
+  utils::simple_tlv(0x5C, prot_v_data, sizeof(prot_v_data), fastTlv.data(), &len);
+
+  utils::simple_tlv(0x87, readerEphPubKey.data(), readerEphPubKey.size(), fastTlv.data() + len, &len);
+
+  utils::simple_tlv(0x4C, transactionIdentifier.data(), transactionIdentifier.size(), fastTlv.data() + len, &len);
+
+  utils::simple_tlv(0x4D, readerIdentifier.data(), readerIdentifier.size(), fastTlv.data() + len, &len);
+  std::vector<uint8_t> apdu{0x80, 0x80, 0x01, 0x01, (uint8_t)len};
+  apdu.insert(apdu.begin() + 5, fastTlv.begin(), fastTlv.end());
+  uint8_t response[128];
+  uint8_t responseLength = 128;
+  LOG(D, "Auth0 APDU Length: %d, DATA: %s", apdu.size(), utils::bufToHexString(apdu.data(), apdu.size()).c_str());
+  nfcInDataExchange(apdu.data(), apdu.size(), response, &responseLength);
+  LOG(D, "Auth0 Response Length: %d, DATA: %s", responseLength, utils::bufToHexString(response, responseLength).c_str());
   homeKeyIssuer::issuer_t *foundIssuer = nullptr;
   homeKeyEndpoint::endpoint_t *foundEndpoint = nullptr;
-  if (std::get<1>(fastAuth) != nullptr && std::get<2>(fastAuth) != homeKeyReader::kFlowFailed)
-  {
-    foundIssuer = std::get<0>(fastAuth);
-    foundEndpoint = std::get<1>(fastAuth);
-    auto stopTime = std::chrono::high_resolution_clock::now();
-    LOG(I, "Home Key authenticated, transaction took %lli ms", std::chrono::duration_cast<std::chrono::milliseconds>(stopTime - startTime).count());
-    return std::make_tuple(foundIssuer->issuerId, foundEndpoint->endpointId, homeKeyReader::kFlowFAST);
-  }
-  else if (std::get<2>(fastAuth) == homeKeyReader::kFlowSTANDARD)
-  {
-    auto stdAuth = std_auth();
-    foundIssuer = std::get<0>(stdAuth);
-    foundEndpoint = std::get<1>(stdAuth);
-    if (foundEndpoint != nullptr && std::get<4>(stdAuth) == homeKeyReader::kFlowSTANDARD)
+  if(!defaultToStd){
+    auto fastAuth = fast_auth(response, responseLength);
+    if (std::get<1>(fastAuth) != nullptr && std::get<2>(fastAuth) != homeKeyReader::kFlowFailed)
     {
+      foundIssuer = std::get<0>(fastAuth);
+      foundEndpoint = std::get<1>(fastAuth);
       auto stopTime = std::chrono::high_resolution_clock::now();
       LOG(I, "Home Key authenticated, transaction took %lli ms", std::chrono::duration_cast<std::chrono::milliseconds>(stopTime - startTime).count());
-      std::vector<uint8_t> persistentKey = std::get<3>(stdAuth);
-      memcpy(foundEndpoint->persistent_key, persistentKey.data(), 32);
-      json serializedData = readerData;
-      auto msgpack = json::to_msgpack(serializedData);
-      esp_err_t set_nvs = nvs_set_blob(savedData, "READERDATA", msgpack.data(), msgpack.size());
-      esp_err_t commit_nvs = nvs_commit(savedData);
-      LOG(V, "NVS SET STATUS: %s", esp_err_to_name(set_nvs));
-      LOG(V, "NVS COMMIT STATUS: %s", esp_err_to_name(commit_nvs));
-      return std::make_tuple(foundIssuer->issuerId, foundEndpoint->endpointId, homeKeyReader::kFlowSTANDARD);
+      return std::make_tuple(foundIssuer->issuerId, foundEndpoint->endpointId, homeKeyReader::kFlowFAST);
     }
+  } else {
+    auto Auth0Res = BERTLV::unpack_array(response, responseLength);
+    auto endpointPubKey = BERTLV::findTag(kEndpoint_Public_Key, Auth0Res);
+    endpointEphPubKey = std::move(endpointPubKey.value);
+    endpointEphX = std::move(get_x(endpointEphPubKey));
+  }
+  auto stdAuth = std_auth();
+  foundIssuer = std::get<0>(stdAuth);
+  foundEndpoint = std::get<1>(stdAuth);
+  if (foundEndpoint != nullptr && std::get<4>(stdAuth) == homeKeyReader::kFlowSTANDARD)
+  {
+    auto stopTime = std::chrono::high_resolution_clock::now();
+    LOG(I, "Home Key authenticated, transaction took %lli ms", std::chrono::duration_cast<std::chrono::milliseconds>(stopTime - startTime).count());
+    std::vector<uint8_t> persistentKey = std::get<3>(stdAuth);
+    memcpy(foundEndpoint->persistent_key, persistentKey.data(), 32);
+    json serializedData = readerData;
+    auto msgpack = json::to_msgpack(serializedData);
+    esp_err_t set_nvs = nvs_set_blob(savedData, "READERDATA", msgpack.data(), msgpack.size());
+    esp_err_t commit_nvs = nvs_commit(savedData);
+    LOG(V, "NVS SET STATUS: %s", esp_err_to_name(set_nvs));
+    LOG(V, "NVS COMMIT STATUS: %s", esp_err_to_name(commit_nvs));
+    return std::make_tuple(foundIssuer->issuerId, foundEndpoint->endpointId, homeKeyReader::kFlowSTANDARD);
   }
   return std::make_tuple(foundIssuer->issuerId, foundEndpoint->endpointId, homeKeyReader::kFlowFailed);
 }
@@ -191,6 +173,14 @@ void HKAuthenticationContext::Auth1_keying_material(uint8_t *keyingMaterial, con
   mbedtls_hkdf(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), NULL, 0, keyingMaterial, 32, dataMaterial, olen, out, outLen);
 }
 
+/**
+ * The function `HKAuthenticationContext::commandFlow` sends the command flow status APDU command
+ * and returns the response.
+ * 
+ * @param status The parameter "status" is of type "homeKeyReader::CommandFlowStatus"
+ * 
+ * @return a std::vector<uint8_t> object, which contains the received response
+ */
 std::vector<uint8_t> HKAuthenticationContext::commandFlow(homeKeyReader::CommandFlowStatus status)
 {
   uint8_t apdu[4] = {0x80, 0x3c, status, status == homeKeyReader::kCmdFlowAttestation ? (uint8_t)0xa0 : (uint8_t)0x0};
@@ -219,10 +209,10 @@ std::tuple<homeKeyIssuer::issuer_t *, homeKeyEndpoint::endpoint_t *> HKAuthentic
     for (auto &&endpoint : issuer.endpoints)
     {
       LOG(V, "Endpoint: %s, Persistent Key: %s", utils::bufToHexString(endpoint.endpointId, sizeof(endpoint.endpointId)).c_str(), utils::bufToHexString(endpoint.persistent_key, sizeof(endpoint.persistent_key)).c_str());
-      uint8_t hkdf[58];
-      Auth0_keying_material("VolatileFast", endpoint.endpoint_key_x, endpoint.persistent_key, hkdf, sizeof(hkdf));
-      LOG(V, "HKDF Derived Key: %s", utils::bufToHexString(hkdf, sizeof(hkdf)).c_str());
-      if (!memcmp(hkdf, cryptogram.data(), 16))
+      std::vector<uint8_t> hkdf(58, 0);
+      Auth0_keying_material("VolatileFast", endpoint.endpoint_key_x, endpoint.persistent_key, hkdf.data(), hkdf.size());
+      LOG(V, "HKDF Derived Key: %s", utils::bufToHexString(hkdf.data(), hkdf.size()).c_str());
+      if (!memcmp(hkdf.data(), cryptogram.data(), 16))
       {
         LOG(D, "Endpoint %s matches cryptogram", utils::bufToHexString(endpoint.endpointId, sizeof(endpoint.endpointId)).c_str());
         foundEndpoint = &endpoint;
@@ -251,7 +241,7 @@ void HKAuthenticationContext::Auth1_keys_generator(uint8_t *persistentKey, uint8
 {
   uint8_t sharedKey[32];
 
-  get_shared_key(sharedKey, sizeof(sharedKey));
+  get_shared_key(readerEphPrivKey, endpointEphPubKey, sharedKey, sizeof(sharedKey));
   LOG(D, "Shared Key: %s", utils::bufToHexString(sharedKey, 32).c_str());
 
   X963KDF kdf(MBEDTLS_MD_SHA256, 32, transactionIdentifier.data(), 16);
@@ -267,70 +257,45 @@ void HKAuthenticationContext::Auth1_keys_generator(uint8_t *persistentKey, uint8
 }
 
 /**
- * The function `fast_auth` performs a fast authentication process and returns the endpoint and
- * authentication flow type.
- *
- * @param fallbackToStd The `fallbackToStd` parameter is a boolean flag that indicates whether to
- * fallback to the standard authentication flow if the fast authentication flow fails. If
- * `fallbackToStd` is `true`, the function will return a tuple with `endpoint` set to `nullptr` and the
- * second value set to `
- *
- * @return a std::tuple containing a pointer to an endpoint_t object and an integer value.
+ * Performs a fast authentication process using the given data and returns the
+ * issuer, endpoint, and key flow status.
+ * 
+ * @param data A pointer to an array of uint8_t (unsigned 8-bit integers) representing a TLV object
+ * that should contain the endpoint's public key and a cryptogram
+ * @param dataLen Length of the `data` array
+ * 
+ * @return a tuple containing three elements: a pointer to the issuer, a pointer to the endpoint, and a
+ * value of the enum type `homeKeyReader::KeyFlow`
  */
-std::tuple<homeKeyIssuer::issuer_t *, homeKeyEndpoint::endpoint_t *, homeKeyReader::KeyFlow> HKAuthenticationContext::fast_auth(bool fallbackToStd)
+std::tuple<homeKeyIssuer::issuer_t *, homeKeyEndpoint::endpoint_t *, homeKeyReader::KeyFlow> HKAuthenticationContext::fast_auth(uint8_t *data, size_t dataLen)
 {
-  uint8_t prot_v_data[2] = {0x02, 0x0};
-
-  std::vector<uint8_t> fastTlv(sizeof(prot_v_data) + readerEphPubKey.size() + transactionIdentifier.size() + readerIdentifier.size() + 8);
-  size_t len = 0;
-  utils::simple_tlv(0x5C, prot_v_data, sizeof(prot_v_data), fastTlv.data(), &len);
-
-  utils::simple_tlv(0x87, readerEphPubKey.data(), readerEphPubKey.size(), fastTlv.data() + len, &len);
-
-  utils::simple_tlv(0x4C, transactionIdentifier.data(), transactionIdentifier.size(), fastTlv.data() + len, &len);
-
-  utils::simple_tlv(0x4D, readerIdentifier.data(), readerIdentifier.size(), fastTlv.data() + len, &len);
-  std::vector<uint8_t> apdu{0x80, 0x80, 0x01, 0x01, (uint8_t)len};
-  apdu.insert(apdu.begin() + 5, fastTlv.begin(), fastTlv.end());
-  uint8_t response[128];
-  uint8_t responseLength = 128;
-  LOG(D, "fast_auth: Auth0 APDU Length: %d, DATA: %s", apdu.size(), utils::bufToHexString(apdu.data(), apdu.size()).c_str());
-  nfcInDataExchange(apdu.data(), apdu.size(), response, &responseLength);
-  LOG(D, "fast_auth: Auth0 Response Length: %d, DATA: %s", responseLength, utils::bufToHexString(response, responseLength).c_str());
   homeKeyIssuer::issuer_t *issuer = nullptr;
   homeKeyEndpoint::endpoint_t *endpoint = nullptr;
-  if (response[responseLength - 2] == 0x90 && response[0] == 0x86)
+  if (data[dataLen - 2] == 0x90 && data[0] == 0x86)
   {
-    auto Auth0Res = BERTLV::unpack_array(response, responseLength);
+    auto Auth0Res = BERTLV::unpack_array(data, dataLen);
     auto endpointPubKey = BERTLV::findTag(kEndpoint_Public_Key, Auth0Res);
-    endpointEphPubKey = std::move(endpointPubKey.value);
+    endpointEphPubKey = endpointPubKey.value;
     auto encryptedMessage = BERTLV::findTag(kAuth0_Cryptogram, Auth0Res);
     endpointEphX = std::move(get_x(endpointEphPubKey));
-    if (fallbackToStd)
+    auto foundData = find_endpoint_by_cryptogram(encryptedMessage.value);
+    endpoint = std::get<1>(foundData);
+    issuer = std::get<0>(foundData);
+    if (endpoint != nullptr)
     {
-      return std::make_tuple(issuer, endpoint, homeKeyReader::kFlowSTANDARD);
+      LOG(D, "Endpoint %s Authenticated via FAST Flow", utils::bufToHexString(endpoint->endpointId, sizeof(endpoint->endpointId), true).c_str());
+      std::vector<uint8_t> cmdFlowStatus = commandFlow(homeKeyReader::kCmdFlowSuccess);
+      LOG(D, "RESPONSE: %s, Length: %d", utils::bufToHexString(cmdFlowStatus.data(), cmdFlowStatus.size()).c_str(), cmdFlowStatus.size());
+      if (cmdFlowStatus.data()[0] == 0x90)
+      {
+        LOG(D, "Command Status 0x90, FAST Flow Complete");
+        return std::make_tuple(issuer, endpoint, homeKeyReader::kFlowFAST);
+      }
     }
     else
     {
-      auto foundData = find_endpoint_by_cryptogram(encryptedMessage.value);
-      endpoint = std::get<1>(foundData);
-      issuer = std::get<0>(foundData);
-      if (endpoint != nullptr)
-      {
-        LOG(D, "Endpoint %s Authenticated via FAST Flow", utils::bufToHexString(endpoint->endpointId, sizeof(endpoint->endpointId), true).c_str());
-        std::vector<uint8_t> cmdFlowStatus = commandFlow(homeKeyReader::kCmdFlowSuccess);
-        LOG(D, "RESPONSE: %s, Length: %d", utils::bufToHexString(cmdFlowStatus.data(), cmdFlowStatus.size()).c_str(), cmdFlowStatus.size());
-        if (cmdFlowStatus.data()[0] == 0x90)
-        {
-          LOG(D, "Command Status 0x90, FAST Flow Complete");
-          return std::make_tuple(issuer, endpoint, homeKeyReader::kFlowFAST);
-        }
-      }
-      else
-      {
-        LOG(W, "FAST Flow failed!");
-        return std::make_tuple(issuer, endpoint, homeKeyReader::kFlowSTANDARD);
-      }
+      LOG(W, "FAST Flow failed!");
+      return std::make_tuple(issuer, endpoint, homeKeyReader::kFlowSTANDARD);
     }
   }
   LOG(E, "Response not valid, something went wrong!");
@@ -339,14 +304,14 @@ std::tuple<homeKeyIssuer::issuer_t *, homeKeyEndpoint::endpoint_t *, homeKeyRead
 }
 
 /**
- * The function `std_auth()` performs a standard authentication process using various cryptographic
- * operations and NFC communication.
- *
- * @return a tuple containing four elements:
- * 1. A pointer to an object of type `homeKeyEndpoint::endpoint_t*`
- * 2. An object of type `DigitalKeySecureContext`
- * 3. A vector of type `std::vector<uint8_t>`
- * 4. An object of type `homeKeyReader::KeyFlow`
+ * Performs authentication using the STANDARD flow.
+ * 
+ * @return a tuple containing the following elements:
+ * 1. A pointer to the issuer object (`homeKeyIssuer::issuer_t*`)
+ * 2. A pointer to the endpoint object (`homeKeyEndpoint::endpoint_t*`)
+ * 3. An object of type `DigitalKeySecureContext`
+ * 4. A vector of `uint8_t` elements
+ * 5. An enum value of type `homeKeyReader::
  */
 std::tuple<homeKeyIssuer::issuer_t *, homeKeyEndpoint::endpoint_t *, DigitalKeySecureContext, std::vector<uint8_t>, homeKeyReader::KeyFlow> HKAuthenticationContext::std_auth()
 {
@@ -362,7 +327,8 @@ std::tuple<homeKeyIssuer::issuer_t *, homeKeyEndpoint::endpoint_t *, DigitalKeyS
   utils::simple_tlv(0x87, readerEphX.data(), readerEphX.size(), stdTlv.data() + len, &len);
   utils::simple_tlv(0x4C, transactionIdentifier.data(), 16, stdTlv.data() + len, &len);
   utils::simple_tlv(0x93, readerCtx, 4, stdTlv.data() + len, &len);
-  auto sigTlv = signSharedInfo(stdTlv.data(), len, readerData.reader_private_key, sizeof(readerData.reader_private_key));
+  std::vector<uint8_t> sigPoint = signSharedInfo(stdTlv.data(), len, readerData.reader_private_key, sizeof(readerData.reader_private_key));
+  std::vector<uint8_t> sigTlv = utils::simple_tlv(0x9E, sigPoint.data(), sigPoint.size());
   std::vector<uint8_t> apdu{0x80, 0x81, 0x0, 0x0, (uint8_t)sigTlv.size()};
   apdu.resize(apdu.size() + sigTlv.size());
   std::move(sigTlv.begin(), sigTlv.end(), apdu.begin() + 5);
@@ -380,10 +346,10 @@ std::tuple<homeKeyIssuer::issuer_t *, homeKeyEndpoint::endpoint_t *, DigitalKeyS
     Auth1_keys_generator(persistentKey.data(), volatileKey);
     DigitalKeySecureContext context = DigitalKeySecureContext(volatileKey);
     auto response_result = context.decrypt_response(response, responseLength - 2);
-    LOG(D, "Decrypted Length: %d, Data: %s", std::get<0>(response_result).size(), utils::bufToHexString(std::get<0>(response_result).data(), std::get<0>(response_result).size()).c_str());
-    if (std::get<1>(response_result) > 0)
+    LOG(D, "Decrypted Length: %d, Data: %s", response_result.size(), utils::bufToHexString(response_result.data(), response_result.size()).c_str());
+    if (response_result.size() > 0)
     {
-      std::vector<BERTLV> decryptedTlv = BERTLV::unpack_array(std::vector<unsigned char>{std::get<0>(response_result).data(), std::get<0>(response_result).data() + std::get<1>(response_result)});
+      std::vector<BERTLV> decryptedTlv = BERTLV::unpack_array(std::vector<unsigned char>{response_result.data(), response_result.data() + response_result.size()});
       BERTLV *signature = nullptr;
       BERTLV *device_identifier = nullptr;
       for (auto &data : decryptedTlv)
@@ -462,7 +428,7 @@ std::tuple<homeKeyIssuer::issuer_t *, homeKeyEndpoint::endpoint_t *, DigitalKeyS
           }
           return std::make_tuple(foundIssuer, foundEndpoint, context, persistentKey, homeKeyReader::kFlowSTANDARD);
         }
-        else if (device_identifier != nullptr)
+        else if (device_identifier->tag.size() > 0)
         {
           return std::make_tuple(foundIssuer, foundEndpoint, context, persistentKey, homeKeyReader::kFlowATTESTATION);
         }
