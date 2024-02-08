@@ -324,7 +324,7 @@ struct NFCAccess : Service::NFCAccess, CommonCryptoUtils
       {
         LOG(D, "Endpoint already exists - ID: %s", utils::bufToHexString(foundEndpoint->endpointId, 6).c_str());
         save_to_nvs();
-        return std::make_tuple(foundEndpoint->endpointId, homeKeyReader::DUPLICATE);
+        return std::make_tuple(tlv8.buf(kDevice_Req_Issuer_Key_Identifier), homeKeyReader::DUPLICATE);
       }
       tlv8.clear();
     }
