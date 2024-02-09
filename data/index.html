@@ -1,0 +1,43 @@
+<html style="height: 100dvh;">
+
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HK Configuration Center</title>
+  <script>
+    async function addComponent(name) {
+      let element = document.querySelector("#component");
+      if(element){
+        element.remove();
+      }
+      switch (name) {
+        case "mqtt":
+          let data = await fetch("mqtt");
+          let string = await data.text();
+          let el = document.createElement("div");
+          el.id = "component";
+          el.innerHTML = string;
+          document.body.appendChild(el);
+          eval(document.querySelector("#component").querySelector("script").innerText);
+          break;
+        case "info":
+          let data1 = await fetch("info");
+          let string1 = await data1.text();
+          let el1 = document.createElement("div");
+          el1.id = "component";
+          el1.innerHTML = string1;
+          document.body.appendChild(el1);
+          break;
+      }
+    } 
+  </script>
+</head>
+
+<body style="display: flex; flex-direction: column; align-items: center;">
+  <h1>HK Configuration</h1>
+  <div>
+    <button onclick='addComponent("info")' style="border: 2px;padding: .6rem;border-style: groove;cursor: pointer;margin-right: 1rem;" rel="noopener noreferrer">HK Info</a>
+    <button onclick='addComponent("mqtt")' style="border: 2px;padding: .6rem;border-style: groove;cursor: pointer;margin-right: 1rem;" rel="noopener noreferrer">MQTT Config</a>
+  </div>
+</body>
+
+</html>

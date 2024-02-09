@@ -17,6 +17,10 @@
 #include <sstream>
 #include <PicoMQTT.h>
 #include <chrono>
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
+#include <LittleFS.h>
+
 
 #if __has_include("config.h")
 #include <config.h>
@@ -46,13 +50,48 @@ int currentState = 0;
 const char* TAG = "MAIN";
 
 PicoMQTT::Client mqtt;
+AsyncWebServer webServer(80);
 
 #define PN532_SS (5)
 PN532_SPI pn532spi(SPI, PN532_SS);
 PN532 nfc(pn532spi);
 
-nvs_handle savedData;
+nvs_handle_t savedData;
+nvs_handle_t mqttDataHandle;
 homeKeyReader::readerData_t readerData;
+namespace mqttConfig{
+  struct mqttConfig_t
+  {
+    std::string mqttBroker = "";
+    uint16_t mqttPort = 1883;
+    std::string mqttUsername = "";
+    std::string mqttPassword = "";
+    std::string mqttClientId = "";
+    std::string hkTopic = "";
+    std::string lockStateTopic = "";
+    std::string lockStateCmd = "";
+    std::string lockCStateCmd = "";
+    std::string lockTStateCmd = "";
+  } mqttData;
+  inline void to_json(json &j, const mqttConfig_t &p)
+  {
+    j = json{{"broker", p.mqttBroker}, {"username", p.mqttUsername}, {"password", p.mqttPassword}, {"client_id", p.mqttClientId}, {"HKTopic", p.hkTopic}, {"lockStateTopic", p.lockStateTopic}, {"lockStateCmd", p.lockStateCmd}, {"lockCStateCmd", p.lockCStateCmd}, {"lockTStateCmd", p.lockTStateCmd}};
+  }
+
+  inline void from_json(const json &j, mqttConfig_t &p)
+  {
+    j.at("broker").get_to(p.mqttBroker);
+    j.at("username").get_to(p.mqttUsername);
+    j.at("password").get_to(p.mqttPassword);
+    j.at("client_id").get_to(p.mqttClientId);
+    j.at("HKTopic").get_to(p.hkTopic);
+    j.at("lockStateTopic").get_to(p.lockStateTopic);
+    j.at("lockStateCmd").get_to(p.lockStateCmd);
+    j.at("lockCStateCmd").get_to(p.lockCStateCmd);
+    j.at("lockTStateCmd").get_to(p.lockTStateCmd);
+  }
+}
+
 int hkFlow = 0;
 
 bool save_to_nvs() {
@@ -115,20 +154,23 @@ struct LockMechanism : Service::LockMechanism
     lockCurrentState = new Characteristic::LockCurrentState(1, true);
     lockTargetState = new Characteristic::LockTargetState(1, true);
     mqtt.subscribe(
-      MQTT_SET_STATE_TOPIC, [this](const char* payload) {
+        mqttConfig::mqttData.lockStateCmd.c_str(), [this](const char *payload)
+        {
         LOG(D, "Received message in topic set_state: %s", payload);
         int state = atoi(payload);
         lockTargetState->setVal(state == 0 || state == 1 ? state : lockTargetState->getVal());
         lockCurrentState->setVal(state == 0 || state == 1 ? state : lockCurrentState->getVal()); },
       false);
     mqtt.subscribe(
-      MQTT_SET_TARGET_STATE_TOPIC, [this](const char* payload) {
+        mqttConfig::mqttData.lockTStateCmd.c_str(), [this](const char *payload)
+        {
         LOG(D, "Received message in topic set_target_state: %s", payload);
         int state = atoi(payload);
         lockTargetState->setVal(state == 0 || state == 1 ? state : lockTargetState->getVal()); },
       false);
     mqtt.subscribe(
-      MQTT_SET_CURRENT_STATE_TOPIC, [this](const char* payload) {
+        mqttConfig::mqttData.lockCStateCmd.c_str(), [this](const char *payload)
+        {
         LOG(D, "Received message in topic set_current_state: %s", payload);
         int state = atoi(payload);
         lockCurrentState->setVal(state == 0 || state == 1 ? state : lockCurrentState->getVal()); },
@@ -140,7 +182,7 @@ struct LockMechanism : Service::LockMechanism
     LOG(I, "New LockState=%d, Current LockState=%d", targetState, lockCurrentState->getVal());
 
     // lockCurrentState->setVal(targetState);
-    mqtt.publish(MQTT_STATE_TOPIC, std::to_string(targetState).c_str());
+    mqtt.publish(mqttConfig::mqttData.lockStateTopic.c_str(), std::to_string(targetState).c_str());
 
     return (true);
   }
@@ -172,12 +214,12 @@ struct LockMechanism : Service::LockMechanism
         if (std::get<2>(authResult) != homeKeyReader::kFlowFailed) {
           int newTargetState = lockTargetState->getNewVal();
           int targetState = lockTargetState->getVal();
-          mqtt.publish(MQTT_STATE_TOPIC, std::to_string(newTargetState == targetState ? !lockCurrentState->getVal() : newTargetState).c_str());
+          mqtt.publish(mqttConfig::mqttData.lockStateTopic.c_str(), std::to_string(newTargetState == targetState ? !lockCurrentState->getVal() : newTargetState).c_str());
           json payload;
           payload["issuerId"] = utils::bufToHexString(std::get<0>(authResult), 8, true);
           payload["endpointId"] = utils::bufToHexString(std::get<1>(authResult), 6, true);
           payload["homekey"] = true;
-          mqtt.publish(MQTT_AUTH_TOPIC, payload.dump().c_str());
+          mqtt.publish(mqttConfig::mqttData.hkTopic.c_str(), payload.dump().c_str());
           auto stopTime = std::chrono::high_resolution_clock::now();
           LOG(I, "Total Time (from detection to mqtt publish): %lli ms", std::chrono::duration_cast<std::chrono::milliseconds>(stopTime - startTime).count());
         }
@@ -191,7 +233,7 @@ struct LockMechanism : Service::LockMechanism
         payload["sak"] = utils::bufToHexString(sak, 1, true);
         payload["uid"] = utils::bufToHexString(uid, uidLen, true);
         payload["homekey"] = false;
-        mqtt.publish(MQTT_AUTH_TOPIC, payload.dump().c_str());
+        mqtt.publish(mqttConfig::mqttData.hkTopic.c_str(), payload.dump().c_str());
       }
       delay(1000);
       nfc.inRelease();
@@ -641,32 +683,205 @@ void print_issuers(const char* buf) {
   }
 }
 
-void wifiCallback() {
-  mqtt.host = MQTT_HOST;
-  mqtt.port = MQTT_PORT;
-  mqtt.client_id = MQTT_CLIENTID;
-  mqtt.username = MQTT_USERNAME;
-  mqtt.password = MQTT_PASSWORD;
+void notFound(AsyncWebServerRequest *request) {
+    request->send(404, "text/plain", "Not found");
+}
+
+void listDir(fs::FS &fs, const char * dirname, uint8_t levels){
+    Serial.printf("Listing directory: %s\r\n", dirname);
+
+    File root = fs.open(dirname);
+    if(!root){
+        Serial.println("- failed to open directory");
+        return;
+    }
+    if(!root.isDirectory()){
+        Serial.println(" - not a directory");
+        return;
+    }
+
+    File file = root.openNextFile();
+    while(file){
+        if(file.isDirectory()){
+            Serial.print("  DIR : ");
+            Serial.println(file.name());
+            if(levels){
+                listDir(fs, file.name(), levels -1);
+            }
+        } else {
+            Serial.print("  FILE: ");
+            Serial.print(file.name());
+            Serial.print("\tSIZE: ");
+            Serial.println(file.size());
+        }
+        file = root.openNextFile();
+    }
+}
+
+String processor(const String& var){
+  String result = "";
+  if(var == "READERGID"){
+    return String(utils::bufToHexString(readerData.reader_identifier, 8, true).c_str());
+  } else if(var == "READERID"){
+    return String(utils::bufToHexString(readerData.identifier, 8, true).c_str());
+  } else if(var == "ISSUERSNO"){
+    return String(readerData.issuers.size());
+  } else if(var == "ISSUERSLIST"){
+    for (auto &&issuer : readerData.issuers)
+    {
+      char issuerBuff[21 + 8];
+      result += "<li>";
+      snprintf(issuerBuff, sizeof(issuerBuff), "Issuer ID: %s", utils::bufToHexString(issuer.issuerId, 8, true).c_str());
+      result += issuerBuff;
+      result += "</li>\n";
+      result += "\t\t<ul>";
+      for (auto &&endpoint : issuer.endpoints)
+      {
+        char endBuff[23 + 6];
+        result += "\n\t\t\t<li>";
+        snprintf(endBuff, sizeof(endBuff), "Endpoint ID: %s", utils::bufToHexString(endpoint.endpointId, 6, true).c_str());
+        result += endBuff;
+        result += "</li>\n";
+      }
+      result += "\t\t</ul>";
+    }
+    return result;
+  } else if(var == "MQTTBROKER"){
+    return String(mqttConfig::mqttData.mqttBroker.c_str());
+  } else if (var == "MQTTPORT"){
+    return String(mqttConfig::mqttData.mqttPort);
+  } else if(var == "MQTTCLIENTID"){
+    return String(mqttConfig::mqttData.mqttClientId.c_str());
+  } else if(var == "MQTTUSERNAME"){
+    return String(mqttConfig::mqttData.mqttUsername.c_str());
+  }else if(var == "MQTTPASSWORD"){
+    return String(mqttConfig::mqttData.mqttPassword.c_str());
+  }else if(var == "HKTOPIC"){
+    return String(mqttConfig::mqttData.hkTopic.c_str());
+  }else if(var == "STATETOPIC"){
+    return String(mqttConfig::mqttData.lockStateTopic.c_str());
+  }else if(var == "STATECMD"){
+    return String(mqttConfig::mqttData.lockStateCmd.c_str());
+  }else if(var == "CSTATECMD"){
+    return String(mqttConfig::mqttData.lockCStateCmd.c_str());
+  }else if(var == "TSTATECMD"){
+    return String(mqttConfig::mqttData.lockTStateCmd.c_str());
+  }
+  return result;
+}
+
+void setupWeb(){
+  
+  Serial.printf("Starting HK Server Hub \n");
+  webServer.on("/info", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(LittleFS, "/info.html","text/html", false, processor);
+  });  
+  webServer.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(LittleFS, "/index.html","text/html", false, processor);
+  });  
+  webServer.on("/mqtt", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(LittleFS, "/mqtt.html","text/html", false, processor);
+  });
+  webServer.on("/mqttconfig", HTTP_POST, [](AsyncWebServerRequest *request)
+               {
+    const char *TAG = "mqttconfig";
+    int params = request->params();
+    for (int i = 0; i < params; i++) {
+      AsyncWebParameter* p = request->getParam(i);
+      LOG(V,"POST[%s]: %s\n", p->name().c_str(), p->value().c_str());
+      if(!strcmp(p->name().c_str(), "mqtt-broker")){
+        mqttConfig::mqttData.mqttBroker = p->value().c_str();
+      } else if(!strcmp(p->name().c_str(), "mqtt-port")){
+        int port = atoi(p->value().c_str());
+        if(port > 0 && port < 65535){
+          mqttConfig::mqttData.mqttPort = port;
+        }
+      } else if(!strcmp(p->name().c_str(), "mqtt-clientid")){
+        mqttConfig::mqttData.mqttClientId = p->value().c_str();
+      } else if(!strcmp(p->name().c_str(), "mqtt-username")){
+        mqttConfig::mqttData.mqttUsername = p->value().c_str();
+      } else if(!strcmp(p->name().c_str(), "mqtt-password")){
+        mqttConfig::mqttData.mqttPassword = p->value().c_str();
+      } else if(!strcmp(p->name().c_str(), "mqtt-hktopic")){
+        mqttConfig::mqttData.hkTopic = p->value().c_str();
+      } else if(!strcmp(p->name().c_str(), "mqtt-statetopic")){
+        mqttConfig::mqttData.lockStateTopic = p->value().c_str();
+      } else if(!strcmp(p->name().c_str(), "mqtt-statecmd")){
+        mqttConfig::mqttData.lockStateCmd = p->value().c_str();
+      } else if(!strcmp(p->name().c_str(), "mqtt-cstatecmd")){
+        mqttConfig::mqttData.lockCStateCmd = p->value().c_str();
+      } else if(!strcmp(p->name().c_str(), "mqtt-tstatecmd")){
+        mqttConfig::mqttData.lockTStateCmd = p->value().c_str();
+      }
+    }
+    json serializedData = mqttConfig::mqttData;
+    auto msgpack = json::to_msgpack(serializedData);
+    esp_err_t set_nvs = nvs_set_blob(mqttDataHandle, "MQTTDATA", msgpack.data(), msgpack.size());
+    esp_err_t commit_nvs = nvs_commit(mqttDataHandle);
+    LOG(V, "SET_STATUS: %s", esp_err_to_name(set_nvs));
+    LOG(V, "COMMIT_STATUS: %s", esp_err_to_name(commit_nvs));
+    request->send(200, "text/plain", "Received Config, Restarting..."); 
+    ESP.restart();
+  });
+  webServer.onNotFound(notFound);
+  webServer.begin();
+}
+
+void mqttConfigReset(const char* buf){
+  nvs_erase_key(mqttDataHandle, "MQTTDATA");
+  nvs_commit(mqttDataHandle);
+  ESP.restart();
+}
+
+void wifiCallback()
+{
+  mqtt.host = mqttConfig::mqttData.mqttBroker.c_str();
+  mqtt.port = mqttConfig::mqttData.mqttPort;
+  mqtt.client_id = mqttConfig::mqttData.mqttClientId.c_str();
+  mqtt.username = mqttConfig::mqttData.mqttUsername.c_str();
+  mqtt.password = mqttConfig::mqttData.mqttPassword.c_str();
   mqtt.begin();
+  setupWeb();
 }
 
 void setup() {
   Serial.begin(115200);
   size_t len;
+  size_t mqttLen;
   const char* TAG = "SETUP";
   nvs_open("SAVED_DATA", NVS_READWRITE, &savedData);
-  if (!nvs_get_blob(savedData, "READERDATA", NULL, &len)) {
+  nvs_open("MQTTDATA", NVS_READWRITE, &mqttDataHandle);
+  if (!nvs_get_blob(savedData, "READERDATA", NULL, &len))
+  {
     uint8_t msgpack[len];
     nvs_get_blob(savedData, "READERDATA", msgpack, &len);
     LOG(V, "READERDATA - MSGPACK(%d): %s", len, utils::bufToHexString(msgpack, len).c_str());
-    json data = json::from_msgpack(msgpack, msgpack + len);
+    json data = json::from_msgpack(msgpack, msgpack + len, true, false);
     LOG(D, "READERDATA - JSON(%d): %s", len, data.dump(-1).c_str());
-    homeKeyReader::readerData_t p = data.template get<homeKeyReader::readerData_t>();
-    readerData = p;
+    if(!data.is_discarded()){
+      readerData = data.template get<homeKeyReader::readerData_t>();
+    }
   }
   homeSpan.setControlPin(CONTROL_PIN);
   homeSpan.setStatusPin(LED_PIN);
   homeSpan.setStatusAutoOff(15);
+  if(!nvs_get_blob(mqttDataHandle, "MQTTDATA", NULL, &mqttLen)){
+    uint8_t msgpack[len];
+    nvs_get_blob(mqttDataHandle, "MQTTDATA", msgpack, &len);
+    LOG(V, "MQTTDATA - MSGPACK(%d): %s", len, utils::bufToHexString(msgpack, len).c_str());
+    json data = json::from_msgpack(msgpack, msgpack + len, true, false);
+    LOG(D, "MQTTDATA - JSON(%d): %s", len, data.dump(-1).c_str());
+    if(!data.is_discarded()){
+      mqttConfig::mqttData = data.template get<mqttConfig::mqttConfig_t>();
+    }
+  }
+  if(!LittleFS.begin(true)){
+    Serial.println("An Error has occurred while mounting LITTLEFS");
+    return;
+  }
+  listDir(LittleFS, "/", 0);
+  // homeSpan.setStatusPin(2);
+  // homeSpan.setStatusAutoOff(5);
   homeSpan.reserveSocketConnections(2);
   homeSpan.setPairingCode(HK_CODE);
   homeSpan.setLogLevel(0);
@@ -674,18 +889,23 @@ void setup() {
   LOG(D, "READER GROUP ID (%d): %s", strlen((const char*)readerData.reader_identifier), utils::bufToHexString(readerData.reader_identifier, sizeof(readerData.reader_identifier)).c_str());
   LOG(D, "READER UNIQUE ID (%d): %s", strlen((const char*)readerData.identifier), utils::bufToHexString(readerData.identifier, sizeof(readerData.identifier)).c_str());
 
-  LOG(I, "HOMEKEY ISSUERS: %d", readerData.issuers.size());
+  LOG(D, "HOMEKEY ISSUERS: %d", readerData.issuers.size());
   for (auto& issuer : readerData.issuers) {
     LOG(D, "Issuer ID: %s, Public Key: %s", utils::bufToHexString(issuer.issuerId, sizeof(issuer.issuerId)).c_str(), utils::bufToHexString(issuer.publicKey, sizeof(issuer.publicKey)).c_str());
   }
   homeSpan.enableOTA(OTA_PWD);
   homeSpan.begin(Category::Locks, NAME);
+  homeSpan.setPortNum(1201);
+  homeSpan.setPairCallback(pairCallback);
+  homeSpan.setWifiCallback(wifiCallback);
+  homeSpan.begin(Category::Locks, "HK Lock");
 
   new SpanUserCommand('D', "Delete Home Key Data", deleteReaderData);
   new SpanUserCommand('L', "Set Log Level", setLogLevel);
   new SpanUserCommand('F', "Set HomeKey Flow", setFlow);
   new SpanUserCommand('I', "Add dummy Issuers and endpoints", insertDummyIssuers);
   new SpanUserCommand('P', "Print Issuers", print_issuers);
+  new SpanUserCommand('M', "Erase MQTT Config and restart", mqttConfigReset);
   new SpanUserCommand('R', "Remove Endpoints", [](const char*) {
     for (auto&& issuer : readerData.issuers) {
       issuer.endpoints.clear();

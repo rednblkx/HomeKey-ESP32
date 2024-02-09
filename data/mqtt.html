@@ -1,0 +1,46 @@
+<h2 style="text-align: center;">MQTT Configuration</h2>
+<form id="mqttConfig" action="mqttconfig" method="post" style="display: inline-flex; flex-direction: column;margin-bottom: 1rem;">
+  <label for="mqtt-broker">Address</label>
+  <input type="text" name="mqtt-broker" id="mqtt-broker" placeholder="0.0.0.0" required value="%MQTTBROKER%">
+  <label for="mqtt-port">Port</label>
+  <input type="number" name="mqtt-port" id="mqtt-port" placeholder="1883" required inputmode="numeric"
+    value="%MQTTPORT%">
+  <label for="mqtt-clientid">Client ID</label>
+  <input type="text" name="mqtt-clientid" id="mqtt-clientid" placeholder="homekey_mqtt" required value="%MQTTCLIENTID%">
+  <label for="mqtt-username">Username</label>
+  <input type="text" name="mqtt-username" id="mqtt-username" placeholder="username" required value="%MQTTUSERNAME%">
+  <label for="mqtt-password">Password</label>
+  <input type="password" name="mqtt-password" id="mqtt-password" placeholder="password" required value="%MQTTPASSWORD%">
+  <label for="mqtt-hktopic">HK Auth Topic</label>
+  <input type="text" name="mqtt-hktopic" id="mqtt-hktopic" placeholder="topic/auth" required value="%HKTOPIC%">
+  <label for="mqtt-statetopic">Lock State Topic</label>
+  <input type="text" name="mqtt-statetopic" id="mqtt-statetopic" placeholder="topic/state" required
+    value="%STATETOPIC%">
+  <label for="mqtt-statecmd">Lock State Cmd Topic</label>
+  <input type="text" name="mqtt-statecmd" id="mqtt-statecmd" placeholder="topic/set_state" required value="%STATECMD%">
+  <label for="mqtt-cstatecmd">Lock Current State Cmd Topic</label>
+  <input type="text" name="mqtt-cstatecmd" id="mqtt-cstatecmd" placeholder="topic/set_current_state" required
+    value="%CSTATECMD%">
+  <label for="mqtt-tstatecmd">Lock Target State Cmd Topic</label>
+  <input type="text" name="mqtt-tstatecmd" id="mqtt-tstatecmd" placeholder="topic/set_target_state" required
+    value="%TSTATECMD%">
+  <button type="submit" style="margin-top: 1rem; cursor: pointer;">Submit</button>
+  <button type="reset" style="cursor: pointer;">Reset</button>
+</form>
+<script>
+  var form = document.getElementById("mqttConfig");
+  async function handleForm(event) {
+    event.preventDefault();
+    let response = await fetch("mqttconfig", {
+      body: new FormData(form),
+      method: "post",
+    });
+    let string = await response.text();
+    var component = document.getElementById("component");
+    let elStatus = document.createElement("p");
+    elStatus.style = "color: red;"
+    elStatus.innerText = string;
+    document.querySelector("#component > h2").insertAdjacentElement("afterend", elStatus);
+  }
+  form.addEventListener('submit', handleForm);
+</script>
