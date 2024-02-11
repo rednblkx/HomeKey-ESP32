@@ -96,7 +96,7 @@ In order to connect to your MQTT Broker and WiFi, first modify the file called `
 
  `NAME` is the name for the lock in homekit
  
- `DISCOVERY` controls if discovery messages for the Home Assistant tag functionality are send at startup, set to 1 to enable.
+ `DISCOVERY` controls if [discovery](https://www.home-assistant.io/integrations/tag.mqtt/) messages for the [Home Assistant tag functionality](https://www.home-assistant.io/integrations/tag/) are send at startup, set to 1 to enable, 0 to disable.
 
 On the `MQTT_AUTH_TOPIC` topic, the data format is as follows, depending whether a homekey was authenticated or just an NFC Target was sensed.
 
