@@ -166,46 +166,57 @@ struct LockMechanism : Service::LockMechanism
       LOG(D, "SELECT HomeKey Applet, APDU: %s", utils::bufToHexString(data, sizeof(data)).c_str());
       bool exchange = nfc.inDataExchange(data, sizeof(data), selectCmdRes, &selectCmdResLength);
       LOG(D, "SELECT HomeKey Applet, Response: %s, Length: %d", utils::bufToHexString(selectCmdRes, selectCmdResLength).c_str(), selectCmdResLength);
-      if (exchange)
+      if (selectCmdRes[selectCmdResLength - 2] == 0x90 && selectCmdRes[selectCmdResLength - 1] == 0x00)
       {
-        if (selectCmdRes[selectCmdResLength - 2] == 0x90 && selectCmdRes[selectCmdResLength - 1] == 0x00)
+        LOG(I, "*** SELECT HOMEKEY APPLET SUCCESSFUL ***");
+        LOG(D, "Reader Private Key: %s", utils::bufToHexString((const uint8_t *)readerData.reader_private_key, sizeof(readerData.reader_private_key)).c_str());
+        HKAuthenticationContext authCtx([](uint8_t *apdu, size_t apduLen, uint8_t *res, uint8_t *resLen)
+                                        {  return nfc.inDataExchange(apdu, apduLen, res, resLen); },
+                                        readerData);
+        auto authResult = authCtx.authenticate(defaultToStd, savedData);
+        if (std::get<2>(authResult) != homeKeyReader::kFlowFailed)
         {
-          LOG(I, "*** SELECT HOMEKEY APPLET SUCCESSFUL ***");
-          LOG(D, "Reader Private Key: %s", utils::bufToHexString((const uint8_t *)readerData.reader_private_key, sizeof(readerData.reader_private_key)).c_str());
-          HKAuthenticationContext authCtx([](uint8_t *apdu, size_t apduLen, uint8_t *res, uint8_t *resLen)
-                                          {  return nfc.inDataExchange(apdu, apduLen, res, resLen); },
-                                          readerData);
-          auto authResult = authCtx.authenticate(defaultToStd, savedData);
-          if (std::get<2>(authResult) != homeKeyReader::kFlowFailed)
-          {
-            int newTargetState = lockTargetState->getNewVal();
-            int targetState = lockTargetState->getVal();
-            mqtt.publish(MQTT_STATE_TOPIC, std::to_string(newTargetState == targetState ? !lockCurrentState->getVal() : newTargetState).c_str());
-            json payload;
-            payload["issuerId"] = utils::bufToHexString(std::get<0>(authResult), 8, true);
-            payload["endpointId"] = utils::bufToHexString(std::get<1>(authResult), 6, true);
-            payload["homekey"] = true;
-            mqtt.publish(MQTT_AUTH_TOPIC, payload.dump().c_str());
-            auto stopTime = std::chrono::high_resolution_clock::now();
-            LOG(I, "Total Time (from detection to mqtt publish): %lli ms", std::chrono::duration_cast<std::chrono::milliseconds>(stopTime - startTime).count());
-          }
-        }
-        else
-        {
+          int newTargetState = lockTargetState->getNewVal();
+          int targetState = lockTargetState->getVal();
+          mqtt.publish(MQTT_STATE_TOPIC, std::to_string(newTargetState == targetState ? !lockCurrentState->getVal() : newTargetState).c_str());
           json payload;
-          payload["atqa"] = utils::bufToHexString(atqa, 1, true);
-          payload["sak"] = utils::bufToHexString(sak, 1, true);
-          payload["uid"] = utils::bufToHexString(uid, uidLen, true);
-          payload["homekey"] = false;
+          payload["issuerId"] = utils::bufToHexString(std::get<0>(authResult), 8, true);
+          payload["endpointId"] = utils::bufToHexString(std::get<1>(authResult), 6, true);
+          payload["homekey"] = true;
           mqtt.publish(MQTT_AUTH_TOPIC, payload.dump().c_str());
+          auto stopTime = std::chrono::high_resolution_clock::now();
+          LOG(I, "Total Time (from detection to mqtt publish): %lli ms", std::chrono::duration_cast<std::chrono::milliseconds>(stopTime - startTime).count());
+        }
+        nfc.inRelease();
+        bool deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
+        LOG(V, "Target still present: %d", deviceStillInField);
+        while (deviceStillInField)
+        {
+          nfc.inRelease();
+          deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
+          LOG(V, "Target still present: %d", deviceStillInField);
+          vTaskDelay(100 / portTICK_PERIOD_MS);
         }
       }
-      nfc.inRelease();
-      bool deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
-      while (deviceStillInField)
+      else
       {
-        deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
-        vTaskDelay(100 / portTICK_PERIOD_MS);
+        json payload;
+        payload["atqa"] = utils::bufToHexString(atqa, 1, true);
+        payload["sak"] = utils::bufToHexString(sak, 1, true);
+        payload["uid"] = utils::bufToHexString(uid, uidLen, true);
+        payload["homekey"] = false;
+        mqtt.publish(MQTT_AUTH_TOPIC, payload.dump().c_str());
+        nfc.inRelease();
+        delay(500);
+        bool deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
+        LOG(V, "Target still present: %d", deviceStillInField);
+        while (deviceStillInField)
+        {
+          nfc.inRelease();
+          delay(500);
+          deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
+          LOG(V, "Target still present: %d", deviceStillInField);
+        }
       }
     }
     else
