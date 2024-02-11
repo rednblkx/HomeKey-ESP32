@@ -20,8 +20,8 @@
 
 #define LOG(x, format, ...) ESP_LOG##x(TAG, "%s > " format , __FUNCTION__ __VA_OPT__(,) __VA_ARGS__)
 
-#if __has_include("mqtt.h")
-#include <mqtt.h>
+#if __has_include("config.h")
+#include <config.h>
 #else
 #define MQTT_HOST "0.0.0.0"
 #define MQTT_PORT 1883
@@ -708,9 +708,11 @@ void setup()
     homeKeyReader::readerData_t p = data.template get<homeKeyReader::readerData_t>();
     readerData = p;
   }
-  // homeSpan.setStatusPin(2);
-  // homeSpan.setStatusAutoOff(5);
+  homeSpan.setWifiCredentials(SSID, WIFI_PWD);
+  homeSpan.setStatusPin(LED_PIN);
+  homeSpan.setStatusAutoOff(15);
   homeSpan.reserveSocketConnections(2);
+  homeSpan.setPairingCode(HK_CODE);
   homeSpan.setLogLevel(0);
 
   LOG(D, "READER GROUP ID (%d): %s", strlen((const char *)readerData.reader_identifier), utils::bufToHexString(readerData.reader_identifier, sizeof(readerData.reader_identifier)).c_str());
@@ -721,8 +723,8 @@ void setup()
   {
     LOG(D, "Issuer ID: %s, Public Key: %s", utils::bufToHexString(issuer.issuerId, sizeof(issuer.issuerId)).c_str(), utils::bufToHexString(issuer.publicKey, sizeof(issuer.publicKey)).c_str());
   }
-  homeSpan.enableOTA();
-  homeSpan.begin(Category::Locks, "HK Lock");
+  homeSpan.enableOTA(OTA_PWD);
+  homeSpan.begin(Category::Locks, NAME);
 
   new SpanUserCommand('D', "Delete Home Key Data", deleteReaderData);
   new SpanUserCommand('L', "Set Log Level", setLogLevel);
@@ -763,6 +765,29 @@ void setup()
   new Characteristic::Version();
   homeSpan.setPairCallback(pairCallback);
   homeSpan.setWifiCallback(wifiCallback);
+  mqtt.connected_callback = [] {
+    char bufferpub[256]; // create a local char array to store the JSON string
+    char device[100]; // create a local char array to store the device JSON string
+    Serial.println("MQTT connected");
+  if (strcmp(DISCOVERY, "1") == 0) {
+      json payload;
+      payload["topic"] = MQTT_AUTH_TOPIC;
+      payload["value_template"] = "{{ value_json.uid }}";
+      json device; // create a JSON object for the device
+      device["name"] = NAME; // assign the name value
+      device["identifiers"] = {NAME}; // assign the identifiers array
+      payload["device"] = device; // assign the device object to the payload object
+      std::string bufferpub = payload.dump(-1, ' ', false, json::error_handler_t::strict); // use dump instead of dump_to
+      mqtt.publish(("homeassistant/tag/" NAME "/" NAME "-rfid/config"), bufferpub.c_str(), true, 1);     
+      payload = json();
+      payload["topic"] = MQTT_AUTH_TOPIC;
+      payload["value_template"] = "{{ value_json.issuerId }}";
+      payload["device"] = device; // reuse the device object for the second message
+      bufferpub = payload.dump(-1, ' ', false, json::error_handler_t::strict); // use dump instead of dump_to
+      mqtt.publish(("homeassistant/tag/" NAME "/" NAME "-homekey/config"), bufferpub.c_str(), true, 1);
+      Serial.println("MQTT PUBLISHED DISCOVERY");
+    }
+    };
 }
 
 //////////////////////////////////////
