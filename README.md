@@ -40,6 +40,7 @@ Currently the WiFi can only be configured from the terminal, though the library 
 ### WIFI
 
 To connect it to WiFi there are two options
+- Add your WiFi details in the `config.h` file
 - Open the serial terminal, press <kbd>W</kbd> + <kbd>Return</kbd>, and now it should start searching for networks from which to select.
 - Open the serial terminal, press <kbd>A</kbd> to start a temporary Access Point then connect to the Wifi network "HomeSpan-Setup" with the password `homespan` and if you are on a phone it should automatically open up the page where you can configure the Wifi credentials, alternatively you can access the page manually on `http://192.168.4.1/hotspot-detect.html`
 
@@ -49,9 +50,9 @@ The pairing code is the default `466-37-726` from the HomeSpan library that can 
 
 For any informations regarding the HomeKit implementation not related to the HomeKey feature, please see the repository for HomeSpan [here](https://github.com/HomeSpan/HomeSpan) where you will also found the documentation.
 
-### MQTT
+### Configuration file
 
-In order to connect to your MQTT Broker, first create a file called `mqtt.h` in the src folder with the following content and modify it accordingly with your details
+In order to connect to your MQTT Broker and WiFi, first modify the file called `config.h` in the src folder with the following content and modify it accordingly with your details
 
 ```cpp
 #define MQTT_HOST "0.0.0.0"
@@ -64,6 +65,13 @@ In order to connect to your MQTT Broker, first create a file called `mqtt.h` in 
 #define MQTT_SET_TARGET_STATE_TOPIC "topic/set_target_state"
 #define MQTT_SET_CURRENT_STATE_TOPIC "topic/set_current_state"
 #define MQTT_STATE_TOPIC "topic/state"
+#define HK_CODE "46637726"
+#define LED_PIN 2
+#define OTA_PWD "homespan-ota"
+#define SSID "ssid"
+#define WIFI_PWD "password"
+#define NAME "HK Lock"
+#define DISCOVERY "1"
 ```
 
  `MQTT_AUTH_TOPIC` is where authentication details will be published on success
@@ -76,6 +84,20 @@ In order to connect to your MQTT Broker, first create a file called `mqtt.h` in 
  
  `MQTT_STATE_TOPIC` is where changes to the lock state will be published.
  
+ `HK_CODE` is the paring code for HomeKit
+ 
+ `LED_PIN` is the pin for the status led
+
+ `OTA_PWD` is the password for OTA
+
+ `SSID` is the name of your network
+ 
+ `WIFI_PWD` is the Wi-Fi password for your network
+
+ `NAME` is the name for the lock in homekit
+ 
+ `DISCOVERY` controls if discovery messages for the Home Assistant tag functionality are send at startup, set to 1 to enable.
+
 On the `MQTT_AUTH_TOPIC` topic, the data format is as follows, depending whether a homekey was authenticated or just an NFC Target was sensed.
 
 - HomeKey
