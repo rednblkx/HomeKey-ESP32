@@ -33,6 +33,12 @@
 #define MQTT_SET_TARGET_STATE_TOPIC "topic/set_target_state"
 #define MQTT_SET_CURRENT_STATE_TOPIC "topic/set_current_state"
 #define MQTT_STATE_TOPIC "topic/state"
+#define HK_CODE "46637726"
+#define LED_PIN 2
+#define OTA_PWD "homespan-ota"
+#define NAME "HK Lock"
+#define DISCOVERY "1"
+#define CONTROL_PIN 26
 #endif
 
 using namespace nlohmann;
@@ -708,7 +714,7 @@ void setup()
     homeKeyReader::readerData_t p = data.template get<homeKeyReader::readerData_t>();
     readerData = p;
   }
-  homeSpan.setWifiCredentials(SSID, WIFI_PWD);
+  homeSpan.setControlPin(CONTROL_PIN);
   homeSpan.setStatusPin(LED_PIN);
   homeSpan.setStatusAutoOff(15);
   homeSpan.reserveSocketConnections(2);
@@ -753,7 +759,7 @@ void setup()
   new Characteristic::Identify();
   new Characteristic::Manufacturer("Kodeative");
   new Characteristic::Model("HomeKey-ESP32");
-  new Characteristic::Name("NFC Lock");
+  new Characteristic::Name(NAME);
   new Characteristic::SerialNumber("HK-360");
   new Characteristic::FirmwareRevision("0.1");
   new Characteristic::HardwareFinish();
