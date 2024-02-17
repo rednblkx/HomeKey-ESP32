@@ -35,14 +35,19 @@ GPIO5 - SS
 
 ## Configuration
 
-Currently the WiFi can only be configured from the terminal, though the library [HomeSpan](https://github.com/HomeSpan/HomeSpan) that this is based on also has the option of a hotspot but requires a button so haven't bothered with it.
+Currently the WiFi can either be configured from the terminal or with the help of the HomeSpan's Configuration Mode for which a GPIO pin needs to be assigned to a button(see [Configuration File](#configuration-file)), more info about the Configuration Mode can be found on HomeSpan's wiki [here](https://github.com/HomeSpan/HomeSpan/blob/master/docs/UserGuide.md#device-configuration-mode)
 
 ### WIFI
 
-To connect it to WiFi there are two options
-- Add your WiFi details in the `config.h` file
-- Open the serial terminal, press <kbd>W</kbd> + <kbd>Return</kbd>, and now it should start searching for networks from which to select.
-- Open the serial terminal, press <kbd>A</kbd> to start a temporary Access Point then connect to the Wifi network "HomeSpan-Setup" with the password `homespan` and if you are on a phone it should automatically open up the page where you can configure the Wifi credentials, alternatively you can access the page manually on `http://192.168.4.1/hotspot-detect.html`
+To connect it to WiFi there are three options
+- Open the serial terminal, press <kbd>W</kbd> + <kbd>Return</kbd>
+  - Now it should start searching for networks and after a few seconds a list of names should appear from which you can select using their respective numbers or just type the name   manually.
+- Open the serial terminal, press <kbd>A</kbd> to start a temporary Access Point
+  - Connect to the Wifi network "HomeSpan-Setup" with the password `homespan` and if you are on a phone it should automatically open up the page where you can configure the Wifi credentials, alternatively once connected to the AP you can access the page manually on `http://192.168.4.1/hotspot-detect.html`
+- Enter Configuration Mode by pressing the Control Button for 3 seconds, at which point the Status LED should begin to flash rapidly (10 times per second). Upon releasing the button the device will switch into the Device Configuration Mode.
+  - Press the button briefly two times(with a brief pause in-between) and the Status LED should now blink three times with a pause in-between indicating Action 3 is selected which is *Launch HomeSpan’s temporary WiFi network*
+  - Hold the button for 3 seconds to execute the action
+  - Same steps as when starting the AP from terminal apply, connect to the `HomeSpan-Setup` network with the password `homespan`
 
 ### HomeKit
 
@@ -68,8 +73,7 @@ In order to connect to your MQTT Broker and WiFi, first modify the file called `
 #define HK_CODE "46637726"
 #define LED_PIN 2
 #define OTA_PWD "homespan-ota"
-#define SSID "ssid"
-#define WIFI_PWD "password"
+#define CONTROL_PIN 26
 #define NAME "HK Lock"
 #define DISCOVERY "1"
 ```
@@ -90,11 +94,9 @@ In order to connect to your MQTT Broker and WiFi, first modify the file called `
 
  `OTA_PWD` is the password for OTA
 
- `SSID` is the name of your network
- 
- `WIFI_PWD` is the Wi-Fi password for your network
+ `CONTROL_PIN` is the pin for HomeSpan's Configuration Mode button
 
- `NAME` is the name for the lock in homekit
+ `NAME` is the name for the lock in HomeKit
  
  `DISCOVERY` controls if [discovery](https://www.home-assistant.io/integrations/tag.mqtt/) messages for the [Home Assistant tag functionality](https://www.home-assistant.io/integrations/tag/) are send at startup, set to 1 to enable, 0 to disable.
 
@@ -109,7 +111,7 @@ On the `MQTT_AUTH_TOPIC` topic, the data format is as follows, depending whether
 }
 ```
 - ISO14443A card
-```json
+```yaml
 {
   "atqa": "0004",
   "homekey": false,
