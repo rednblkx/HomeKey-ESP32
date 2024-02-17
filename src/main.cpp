@@ -20,8 +20,8 @@
 
 #define LOG(x, format, ...) ESP_LOG##x(TAG, "%s > " format , __FUNCTION__ __VA_OPT__(,) __VA_ARGS__)
 
-#if __has_include("mqtt.h")
-#include <mqtt.h>
+#if __has_include("config.h")
+#include <config.h>
 #else
 #define MQTT_HOST "0.0.0.0"
 #define MQTT_PORT 1883
@@ -33,6 +33,12 @@
 #define MQTT_SET_TARGET_STATE_TOPIC "topic/set_target_state"
 #define MQTT_SET_CURRENT_STATE_TOPIC "topic/set_current_state"
 #define MQTT_STATE_TOPIC "topic/state"
+#define HK_CODE "46637726"
+#define LED_PIN 2
+#define OTA_PWD "homespan-ota"
+#define NAME "HK Lock"
+#define DISCOVERY "1"
+#define CONTROL_PIN 26
 #endif
 
 using namespace nlohmann;
@@ -708,9 +714,11 @@ void setup()
     homeKeyReader::readerData_t p = data.template get<homeKeyReader::readerData_t>();
     readerData = p;
   }
-  // homeSpan.setStatusPin(2);
-  // homeSpan.setStatusAutoOff(5);
+  homeSpan.setControlPin(CONTROL_PIN);
+  homeSpan.setStatusPin(LED_PIN);
+  homeSpan.setStatusAutoOff(15);
   homeSpan.reserveSocketConnections(2);
+  homeSpan.setPairingCode(HK_CODE);
   homeSpan.setLogLevel(0);
 
   LOG(D, "READER GROUP ID (%d): %s", strlen((const char *)readerData.reader_identifier), utils::bufToHexString(readerData.reader_identifier, sizeof(readerData.reader_identifier)).c_str());
@@ -721,8 +729,8 @@ void setup()
   {
     LOG(D, "Issuer ID: %s, Public Key: %s", utils::bufToHexString(issuer.issuerId, sizeof(issuer.issuerId)).c_str(), utils::bufToHexString(issuer.publicKey, sizeof(issuer.publicKey)).c_str());
   }
-  homeSpan.enableOTA();
-  homeSpan.begin(Category::Locks, "HK Lock");
+  homeSpan.enableOTA(OTA_PWD);
+  homeSpan.begin(Category::Locks, NAME);
 
   new SpanUserCommand('D', "Delete Home Key Data", deleteReaderData);
   new SpanUserCommand('L', "Set Log Level", setLogLevel);
@@ -751,7 +759,7 @@ void setup()
   new Characteristic::Identify();
   new Characteristic::Manufacturer("Kodeative");
   new Characteristic::Model("HomeKey-ESP32");
-  new Characteristic::Name("NFC Lock");
+  new Characteristic::Name(NAME);
   new Characteristic::SerialNumber("HK-360");
   new Characteristic::FirmwareRevision("0.1");
   new Characteristic::HardwareFinish();
@@ -763,6 +771,36 @@ void setup()
   new Characteristic::Version();
   homeSpan.setPairCallback(pairCallback);
   homeSpan.setWifiCallback(wifiCallback);
+  mqtt.connected_callback = []
+  {
+    const char *TAG = "MQTT::connected_callback";
+    LOG(D, "MQTT connected");
+    if (!strcmp(DISCOVERY, "1"))
+    {
+      json payload;
+      payload["topic"] = MQTT_AUTH_TOPIC;
+      payload["value_template"] = "{{ value_json.uid }}";
+      json device; // create a JSON object for the device
+      device["name"] = NAME; // assign the name value
+      device["identifiers"] = {NAME}; // assign the identifiers array
+      payload["device"] = device; // assign the device object to the payload object
+      std::string bufferpub = payload.dump(-1, ' ', false, json::error_handler_t::strict); // use dump instead of dump_to
+      mqtt.publish(("homeassistant/tag/hk-lock/rfid/config"), bufferpub.c_str(), true, 1);     
+      payload = json();
+      payload["topic"] = MQTT_AUTH_TOPIC;
+      payload["value_template"] = "{{ value_json.issuerId }}";
+      payload["device"] = device; // reuse the device object for the second message
+      bufferpub = payload.dump(-1, ' ', false, json::error_handler_t::strict); // use dump instead of dump_to
+      mqtt.publish(("homeassistant/tag/hk-lock/hkIssuer/config"), bufferpub.c_str(), true, 1);
+      payload = json();
+      payload["topic"] = MQTT_AUTH_TOPIC;
+      payload["value_template"] = "{{ value_json.endpointId }}";
+      payload["device"] = device; // reuse the device object for the third message
+      bufferpub = payload.dump(-1, ' ', false, json::error_handler_t::strict); // use dump instead of dump_to
+      mqtt.publish(("homeassistant/tag/hk-lock/hkEndpoint/config"), bufferpub.c_str(), true, 1);
+      LOG(D, "MQTT PUBLISHED DISCOVERY");
+    }
+  };
 }
 
 //////////////////////////////////////
