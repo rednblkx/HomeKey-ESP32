@@ -784,14 +784,13 @@ void setup()
       device["identifiers"] = {NAME}; // assign the identifiers array
       payload["device"] = device; // assign the device object to the payload object
       std::string bufferpub = payload.dump(-1, ' ', false, json::error_handler_t::strict); // use dump instead of dump_to
-      mqtt.publish(("homeassistant/tag/" NAME "/" NAME "-rfid/config"), bufferpub.c_str(), true, 1);     
+      mqtt.publish(("homeassistant/tag/hk-lock/rfid/config"), bufferpub.c_str(), true, 1);     
       payload = json();
       payload["topic"] = MQTT_AUTH_TOPIC;
       payload["value_template"] = "{{ value_json.issuerId }}";
       payload["device"] = device; // reuse the device object for the second message
       bufferpub = payload.dump(-1, ' ', false, json::error_handler_t::strict); // use dump instead of dump_to
-      mqtt.publish(("homeassistant/tag/" NAME "/" NAME "-homekey/config"), bufferpub.c_str(), true, 1);
-      Serial.println("MQTT PUBLISHED DISCOVERY");
+      mqtt.publish(("homeassistant/tag/hk-lock/hkIssuer/config"), bufferpub.c_str(), true, 1);
     }
     };
 }
