@@ -7,34 +7,30 @@ void utils::pack(const uint8_t *buf, size_t buflen, uint8_t *out, size_t *olen)
 }
 
 std::string utils::bufToHexString(const uint8_t *buf, size_t len, bool ignoreLevel){
-  std::string result;
-  if(buf == NULL || buf == nullptr){
-    return result;
+  if(buf == nullptr){
+    return std::string();
   }
+  std::stringstream ss;
   if(esp_log_level_get("*") >= esp_log_level_t::ESP_LOG_DEBUG || ignoreLevel){
-    result.reserve(2 * len);
     for (size_t i = 0; i < len; ++i) {
-      result.push_back("0123456789ABCDEF"[buf[i] >> 4]);
-      result.push_back("0123456789ABCDEF"[buf[i] & 0xF]);
+        ss << std::hex << std::setw(2) << std::setfill('0') << (int) buf[i];
     }
-    // ESP_LOGV("Utils::bufToHexString", "%s", result.c_str());
+    return ss.str();
   }
-  return result;
+  return std::string();
 }
 std::string utils::bufToHexString(const uint16_t *buf, size_t len, bool ignoreLevel) {
-  std::string result;
-  if(esp_log_level_get("*") >= esp_log_level_t::ESP_LOG_DEBUG || ignoreLevel){
-    result.reserve(4 * len); // Reserve space for 4 characters per uint16_t
-    for (size_t i = 0; i < len; ++i) {
-      result.push_back("0123456789ABCDEF"[(buf[i] >> 12) & 0xF]);
-      result.push_back("0123456789ABCDEF"[(buf[i] >> 8) & 0xF]);
-      result.push_back("0123456789ABCDEF"[(buf[i] >> 4) & 0xF]);
-      result.push_back("0123456789ABCDEF"[buf[i] & 0xF]);
-    }
-    // ESP_LOGV("Utils::bufToHexString", "%s", result.c_str());
+  if(buf == nullptr){
+    return std::string();
   }
-
-  return result;
+  std::ostringstream ss;
+  if (esp_log_level_get("*") >= esp_log_level_t::ESP_LOG_DEBUG || ignoreLevel){
+      for(size_t i = 0; i < len; ++i) {
+          ss << std::hex << std::setw(2) << std::setfill('0') << (buf[i] & 0xFFF);
+      }
+    return ss.str();
+  }
+  return std::string();
 }
 
 std::vector<uint8_t> utils::encodeB64(const uint8_t *src, size_t len){
