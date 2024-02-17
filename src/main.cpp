@@ -771,11 +771,12 @@ void setup()
   new Characteristic::Version();
   homeSpan.setPairCallback(pairCallback);
   homeSpan.setWifiCallback(wifiCallback);
-  mqtt.connected_callback = [] {
-    char bufferpub[256]; // create a local char array to store the JSON string
-    char device[100]; // create a local char array to store the device JSON string
-    Serial.println("MQTT connected");
-  if (strcmp(DISCOVERY, "1") == 0) {
+  mqtt.connected_callback = []
+  {
+    const char *TAG = "MQTT::connected_callback";
+    LOG(D, "MQTT connected");
+    if (!strcmp(DISCOVERY, "1"))
+    {
       json payload;
       payload["topic"] = MQTT_AUTH_TOPIC;
       payload["value_template"] = "{{ value_json.uid }}";
@@ -791,8 +792,15 @@ void setup()
       payload["device"] = device; // reuse the device object for the second message
       bufferpub = payload.dump(-1, ' ', false, json::error_handler_t::strict); // use dump instead of dump_to
       mqtt.publish(("homeassistant/tag/hk-lock/hkIssuer/config"), bufferpub.c_str(), true, 1);
+      payload = json();
+      payload["topic"] = MQTT_AUTH_TOPIC;
+      payload["value_template"] = "{{ value_json.endpointId }}";
+      payload["device"] = device; // reuse the device object for the third message
+      bufferpub = payload.dump(-1, ' ', false, json::error_handler_t::strict); // use dump instead of dump_to
+      mqtt.publish(("homeassistant/tag/hk-lock/hkEndpoint/config"), bufferpub.c_str(), true, 1);
+      LOG(D, "MQTT PUBLISHED DISCOVERY");
     }
-    };
+  };
 }
 
 //////////////////////////////////////
