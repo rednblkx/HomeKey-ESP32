@@ -1,4 +1,4 @@
-#include <auth/authContext.h>
+#include <auth/hkAuthContext.h>
 #include <HomeKey.h>
 #include <util/utils.h>
 #include "HomeSpan.h"
@@ -192,6 +192,8 @@ struct LockMechanism : Service::LockMechanism
           mqtt.publish(MQTT_AUTH_TOPIC, payload.dump().c_str());
           auto stopTime = std::chrono::high_resolution_clock::now();
           LOG(I, "Total Time (from detection to mqtt publish): %lli ms", std::chrono::duration_cast<std::chrono::milliseconds>(stopTime - startTime).count());
+        } else {
+          LOG(W, "We got status FlowFailed, mqtt untouched!");
         }
         nfc.inRelease();
         bool deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);

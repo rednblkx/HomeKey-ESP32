@@ -18,6 +18,7 @@
 #include <nvs.h>
 #include <util/CommonCryptoUtils.h>
 #include <chrono>
+#include <auth/hkFastAuth.h>
 
 class HKAuthenticationContext : CommonCryptoUtils
 {
@@ -32,12 +33,9 @@ private:
   bool (*nfcInDataExchange)(uint8_t *data, size_t lenData, uint8_t *res, uint8_t *resLen){};
   std::vector<uint8_t> transactionIdentifier;
   std::vector<uint8_t> readerIdentifier;
-  void Auth0_keying_material(const char *context, const uint8_t *ePub_X, const uint8_t *keyingMaterial, uint8_t *out, size_t outLen);
   void Auth1_keys_generator(uint8_t *persistentKey, uint8_t *volatileKey);
-  std::tuple<homeKeyIssuer::issuer_t *, homeKeyEndpoint::endpoint_t *> find_endpoint_by_cryptogram(std::vector<uint8_t>& cryptogram);
   void Auth1_keying_material(uint8_t *keyingMaterial, const char *context, uint8_t *out, size_t outLen);
   std::vector<uint8_t> commandFlow(homeKeyReader::CommandFlowStatus status);
-  std::tuple<homeKeyIssuer::issuer_t *, homeKeyEndpoint::endpoint_t *,homeKeyReader::KeyFlow> fast_auth(uint8_t *data, size_t dataLen);
   std::tuple<homeKeyIssuer::issuer_t *, homeKeyEndpoint::endpoint_t *, DigitalKeySecureContext, std::vector<uint8_t>, homeKeyReader::KeyFlow> std_auth();
 
 public:
