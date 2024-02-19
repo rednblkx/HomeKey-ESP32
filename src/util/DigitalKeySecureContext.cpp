@@ -3,7 +3,6 @@
  */
 
 #include "util/DigitalKeySecureContext.h"
-#define LOG(x, format, ...) ESP_LOG##x(TAG, "%s > " format , __FUNCTION__ __VA_OPT__(,) __VA_ARGS__)
 
 /**
  * The function `pad_mode_3` pads a given message with a specified pad byte and block size, and returns

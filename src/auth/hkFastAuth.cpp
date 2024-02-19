@@ -1,5 +1,4 @@
 #include <auth/hkFastAuth.h>
-#define LOG(x, format, ...) ESP_LOG##x(TAG, "%s > " format, __FUNCTION__ __VA_OPT__(, ) __VA_ARGS__)
 
 /**
  * The function `Auth0_keying_material` generates keying material using the HKDF algorithm based on

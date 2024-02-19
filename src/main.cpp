@@ -18,8 +18,6 @@
 #include <PicoMQTT.h>
 #include <chrono>
 
-#define LOG(x, format, ...) ESP_LOG##x(TAG, "%s > " format , __FUNCTION__ __VA_OPT__(,) __VA_ARGS__)
-
 #if __has_include("config.h")
 #include <config.h>
 #else

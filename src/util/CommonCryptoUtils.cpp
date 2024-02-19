@@ -1,5 +1,4 @@
 #include <util/CommonCryptoUtils.h>
-#define LOG(x, format, ...) ESP_LOG##x(TAG, "%s > " format , __FUNCTION__ __VA_OPT__(,) __VA_ARGS__)
 
 CommonCryptoUtils::CommonCryptoUtils()
 {
