@@ -13,13 +13,13 @@ While functional, **the project is still a work in progress so expect breaking c
 
 ## Overview
 
-Only the PN532 is supported as an NFC module.
+Right now only the PN532 is supported as the NFC module, however, beware of cheap clones espcially clones of Elechouse's as it will cause issues, i recommend the Elechouse PN532 NFC Module V3 just make sure to buy from a trusted vendor.
 
-- Only the FAST and STANDARD flows are implementated right now, the ATTESTATION flow will be implemented at a later time since STANDARD can be used in most cases
-- Lock State can be received and controlled via MQTT through user-defined topics
-- Any NFC Target that's not identified as homekey will skip the flow and at least at the moment it only just publishes the UID, ATQA and SAK to the same MQTT topic as homekey with the property `homekey` set to false
+- It integrates with HomeAssistant's Tags and can be used to create automations based on a person(issuer) or device(endpoint).
+- Lock State is published and controlled via MQTT through user-defined topics
+- Any NFC Target that's not identified as homekey will skip the flow and publishes the UID, ATQA and SAK on the same Authentication MQTT topic 
 - It is not made for battery-powered applications (yet)
-- Designed for a board with 4MB Flash size as OTA is enabled and it needs a second partition of the same size
+- Designed for a board with an ESP32 chip and 4MB Flash size
 
 Goal of the project is to make it easy to add the homekey functionality to locks that don't support it or to anything for that matter :) .
 
