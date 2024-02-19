@@ -95,10 +95,7 @@ std::tuple<homeKeyIssuer::issuer_t *, homeKeyEndpoint::endpoint_t *, homeKeyRead
   if (data[dataLen - 2] == 0x90 && data[0] == 0x86)
   {
     auto Auth0Res = BERTLV::unpack_array(data, dataLen);
-    auto endpointPubKey = BERTLV::findTag(kEndpoint_Public_Key, Auth0Res);
-    endpointEphPubKey = endpointPubKey.value;
     auto encryptedMessage = BERTLV::findTag(kAuth0_Cryptogram, Auth0Res);
-    endpointEphX = std::move(get_x(endpointEphPubKey));
     auto foundData = find_endpoint_by_cryptogram(encryptedMessage.value);
     endpoint = std::get<1>(foundData);
     issuer = std::get<0>(foundData);
