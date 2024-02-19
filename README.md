@@ -5,6 +5,12 @@
 Credit to [@kormax](https://github.com/kormax) for reverse-engineering the Homekey [NFC Protocol](https://github.com/kormax/apple-home-key) and publishing a [POC](https://github.com/kormax/apple-home-key-reader) and credit to [@kupa22](https://github.com/kupa22) for the [research](https://github.com/kupa22/apple-homekey) on the HAP side of things, this project was possible thanks to their work.
 Additionaly, thanks to the Arduino library [HomeSpan](https://github.com/HomeSpan/HomeSpan) for being a great library that eased my work on HAP and other things and allowed me to just focus on the homekey functionality.
 
+## Disclaimer
+
+Use this at your own risk, i'm not a cryptographic expert, just a hobbyist. Keep in mind that the HomeKey was implemented through reverse-engineering as indicated above so it might be lacking stuff from Apple's specification to which us private individuals do not have access.
+
+While functional, **the project is still a work in progress so expect breaking changes** as i'm figuring out how everything should fit together and the overrall structure of the code.
+
 ## Overview
 
 Only the PN532 is supported as an NFC module.
@@ -14,8 +20,6 @@ Only the PN532 is supported as an NFC module.
 - Any NFC Target that's not identified as homekey will skip the flow and at least at the moment it only just publishes the UID, ATQA and SAK to the same MQTT topic as homekey with the property `homekey` set to false
 - It is not made for battery-powered applications (yet)
 - Designed for a board with 4MB Flash size as OTA is enabled and it needs a second partition of the same size
-
-The code still needs some working so it's very much a work in progress, but the main implementation is roughly there.
 
 Goal of the project is to make it easy to add the homekey functionality to locks that don't support it or to anything for that matter :) .
 
