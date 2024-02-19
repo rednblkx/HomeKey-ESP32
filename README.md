@@ -1,3 +1,5 @@
+<img src="https://github.com/rednblkx/HomeKey-ESP32/assets/29458132/6c2e1ea8-f74e-41ac-a690-461e339525acb" width="250" height="250">
+
 # HomeKey-ESP32
 [![CI](https://github.com/rednblkx/HomeKey-ESP32/actions/workflows/main.yml/badge.svg?branch=main)](https://github.com/rednblkx/HomeKey-ESP32/actions/workflows/main.yml)
 ### ESP32 HomeKit Lock with support for the HomeKey
