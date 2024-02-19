@@ -51,7 +51,7 @@ PN532 nfc(pn532spi);
 
 nvs_handle savedData;
 homeKeyReader::readerData_t readerData;
-bool defaultToStd = false;
+int hkFlow = 0;
 
 bool save_to_nvs()
 {
@@ -177,7 +177,7 @@ struct LockMechanism : Service::LockMechanism
         HKAuthenticationContext authCtx([](uint8_t *apdu, size_t apduLen, uint8_t *res, uint8_t *resLen)
                                         {  return nfc.inDataExchange(apdu, apduLen, res, resLen); },
                                         readerData);
-        auto authResult = authCtx.authenticate(defaultToStd, savedData);
+        auto authResult = authCtx.authenticate(hkFlow, savedData);
         if (std::get<2>(authResult) != homeKeyReader::kFlowFailed)
         {
           int newTargetState = lockTargetState->getNewVal();
@@ -560,12 +560,12 @@ void setFlow(const char *buf)
   switch (buf[1])
   {
   case '0':
-    defaultToStd = false;
+    hkFlow = 0;
     Serial.println("FAST Flow");
     break;
 
   case '1':
-    defaultToStd = true;
+    hkFlow = 1;
     Serial.println("STANDARD Flow");
     break;
 

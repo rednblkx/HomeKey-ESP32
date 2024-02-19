@@ -41,7 +41,7 @@ HKAuthenticationContext::HKAuthenticationContext(bool (*nfcInDataExchange)(uint8
  * 2. A pointer to a uint8_t array.
  * 3. An enum value of type `homeKeyReader::KeyFlow`.
  */
-std::tuple<uint8_t *, uint8_t *, homeKeyReader::KeyFlow> HKAuthenticationContext::authenticate(bool defaultToStd, nvs_handle &savedData){
+std::tuple<uint8_t *, uint8_t *, homeKeyReader::KeyFlow> HKAuthenticationContext::authenticate(int hkFlow, nvs_handle &savedData){
   auto startTime = std::chrono::high_resolution_clock::now();
   uint8_t prot_v_data[2] = {0x02, 0x0};
 

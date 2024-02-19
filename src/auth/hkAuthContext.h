@@ -26,5 +26,5 @@ private:
 
 public:
   HKAuthenticationContext(bool (*nfcInDataExchange)(uint8_t *data, size_t lenData, uint8_t *res, uint8_t *resLen), homeKeyReader::readerData_t &readerData);
-  std::tuple<uint8_t *, uint8_t *, homeKeyReader::KeyFlow> authenticate(bool, nvs_handle &);
+  std::tuple<uint8_t *, uint8_t *, homeKeyReader::KeyFlow> authenticate(int, nvs_handle &);
 };
