@@ -8,6 +8,7 @@
 #include <chrono>
 #include <auth/hkFastAuth.h>
 #include <auth/hkStdAuth.h>
+#include <auth/hkAttestationAuth.h>
 
 class HKAuthenticationContext : CommonCryptoUtils
 {

@@ -69,37 +69,54 @@ std::tuple<uint8_t *, uint8_t *, homeKeyReader::KeyFlow> HKAuthenticationContext
   homeKeyEndpoint::endpoint_t *foundEndpoint = nullptr;
   std::vector<uint8_t> persistentKey;
   homeKeyReader::KeyFlow flowUsed = homeKeyReader::kFlowFailed;
-  if(hkFlow == 0){
+  if(hkFlow == homeKeyReader::kFlowFAST){
     auto fastAuth = HKFastAuth(*readerData.reader_key_x, readerData.issuers, readerEphX, endpointEphPubKey, endpointEphX, transactionIdentifier, readerIdentifier).attest(response, responseLength);
     if (std::get<1>(fastAuth) != nullptr && std::get<2>(fastAuth) != homeKeyReader::kFlowFailed)
     {
       foundIssuer = std::get<0>(fastAuth);
       foundEndpoint = std::get<1>(fastAuth);
       flowUsed = std::get<2>(fastAuth);
-      LOG(I, "Authentication complete, transaction took %lli ms", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - startTime).count());
+      LOG(I, "Flow complete, transaction took %lli ms", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - startTime).count());
       LOG(D, "Endpoint %s Authenticated via FAST Flow", utils::bufToHexString(foundEndpoint->endpointId, sizeof(foundEndpoint->endpointId), true).c_str());
     }
   }
   if(foundEndpoint == nullptr){
     auto stdAuth = HKStdAuth(nfcInDataExchange, *readerData.reader_private_key, readerEphPrivKey, readerData.issuers, readerEphX, endpointEphPubKey, endpointEphX, transactionIdentifier, readerIdentifier).attest();
-    if (std::get<1>(stdAuth) != nullptr && std::get<4>(stdAuth) != homeKeyReader::kFlowFailed)
-    {
+    if(std::get<1>(stdAuth) != nullptr){
       foundIssuer = std::get<0>(stdAuth);
       foundEndpoint = std::get<1>(stdAuth);
-      flowUsed = std::get<4>(stdAuth);
-      LOG(I, "Authentication complete, transaction took %lli ms", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - startTime).count());
-      LOG(D, "Endpoint %s Authenticated via STANDARD Flow", utils::bufToHexString(foundEndpoint->endpointId, sizeof(foundEndpoint->endpointId), true).c_str());
-      persistentKey = std::get<3>(stdAuth);
-      memcpy(foundEndpoint->persistent_key, persistentKey.data(), 32);
-      LOG(D, "New Persistent Key: %s", utils::bufToHexString(foundEndpoint->persistent_key, 32).c_str());
+      if (std::get<4>(stdAuth) != homeKeyReader::kFlowFailed)
+      {
+        flowUsed = std::get<4>(stdAuth);
+        LOG(I, "Flow complete, transaction took %lli ms", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - startTime).count());
+        LOG(D, "Endpoint %s Authenticated via STANDARD Flow", utils::bufToHexString(foundEndpoint->endpointId, sizeof(foundEndpoint->endpointId), true).c_str());
+        persistentKey = std::get<3>(stdAuth);
+        memcpy(foundEndpoint->persistent_key, persistentKey.data(), 32);
+        LOG(D, "New Persistent Key: %s", utils::bufToHexString(foundEndpoint->persistent_key, 32).c_str());
+      }
+      if(std::get<4>(stdAuth) == homeKeyReader::kFlowFailed || hkFlow == homeKeyReader::kFlowATTESTATION){
+        homeKeyReader::KeyFlow attestation = HKAttestationAuth(std::get<2>(stdAuth), nfcInDataExchange).attest();
+        if (attestation == homeKeyReader::kFlowATTESTATION){
+          LOG(I, "Flow complete, transaction took %lli ms", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - startTime).count());
+          LOG(D, "Endpoint %s Authenticated via ATTESTATION Flow", utils::bufToHexString(foundEndpoint->endpointId, sizeof(foundEndpoint->endpointId), true).c_str());
+          persistentKey = std::get<3>(stdAuth);
+          flowUsed = attestation;
+          memcpy(foundEndpoint->persistent_key, persistentKey.data(), 32);
+          LOG(D, "New Persistent Key: %s", utils::bufToHexString(foundEndpoint->persistent_key, 32).c_str());
+        }
+      }
     }
   }
   if(foundEndpoint != nullptr && flowUsed != homeKeyReader::kFlowFailed) {
-    std::vector<uint8_t> cmdFlowStatus = commandFlow(homeKeyReader::kCmdFlowSuccess);
-    LOG(D, "CONTROL FLOW RESPONSE: %s, Length: %d", utils::bufToHexString(cmdFlowStatus.data(), cmdFlowStatus.size()).c_str(), cmdFlowStatus.size());
-    if (cmdFlowStatus.data()[0] == 0x90)
+    std::vector<uint8_t> cmdFlowStatus;
+    if (flowUsed != homeKeyReader::kFlowATTESTATION)
     {
-      if(flowUsed == homeKeyReader::kFlowSTANDARD && persistentKey.size() > 0){
+      cmdFlowStatus = commandFlow(homeKeyReader::kCmdFlowSuccess);
+      LOG(D, "CONTROL FLOW RESPONSE: %s, Length: %d", utils::bufToHexString(cmdFlowStatus.data(), cmdFlowStatus.size()).c_str(), cmdFlowStatus.size());
+    }
+    if (flowUsed == homeKeyReader::kFlowATTESTATION || cmdFlowStatus.data()[0] == 0x90)
+    {
+      if(flowUsed == homeKeyReader::kFlowSTANDARD && persistentKey.size() > 0 || flowUsed == homeKeyReader::kFlowATTESTATION){
         json serializedData = readerData;
         auto msgpack = json::to_msgpack(serializedData);
         esp_err_t set_nvs = nvs_set_blob(savedData, "READERDATA", msgpack.data(), msgpack.size());

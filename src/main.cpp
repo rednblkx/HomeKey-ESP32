@@ -567,10 +567,14 @@ void setFlow(const char *buf)
   case '1':
     hkFlow = 1;
     Serial.println("STANDARD Flow");
+    break;  
+  case '2':
+    hkFlow = 2;
+    Serial.println("ATTESTATION Flow");
     break;
 
   default:
-    Serial.println("0 = FAST flow, 1 = STANDARD Flow");
+    Serial.println("0 = FAST flow, 1 = STANDARD Flow, 2 = ATTESTATION Flow");
     break;
   }
 }
