@@ -1,6 +1,6 @@
 #include <auth/hkAttestationAuth.h>
 
-std::vector<unsigned char> HKAttestationAuth::attestation_salt(std::vector<unsigned char> env1Data, std::vector<unsigned char> readerCmd)
+std::vector<unsigned char> HKAttestationAuth::attestation_salt(std::vector<unsigned char> &env1Data, std::vector<unsigned char> &readerCmd)
 {
   auto env1ResTlv = BERTLV::unpack_array(env1Data);
   auto env1Ndef = BERTLV::findTag(kNDEF_MESSAGE, env1ResTlv);
@@ -34,7 +34,13 @@ std::vector<unsigned char> HKAttestationAuth::attestation_salt(std::vector<unsig
   LOG(D, "CBOR MATERIAL DATA: %s", utils::bufToHexString(tag2.get_buffer(), tag2.length()).c_str());
 
   std::vector<uint8_t> salt(32);
-  mbedtls_sha256((const unsigned char *)tag2.get_buffer(), tag2.length(), salt.data(), false);
+  int shaRet = mbedtls_sha256_ret((const unsigned char *)tag2.get_buffer(), tag2.length(), salt.data(), false);
+
+  if (shaRet != 0)
+  {
+      LOG(E, "SHA256 Failed - %s", mbedtls_high_level_strerr(shaRet));
+      return std::vector<unsigned char>();
+  }
 
   LOG(D, "ATTESTATION SALT: %s", utils::bufToHexString(salt.data(), salt.size()).c_str());
 
@@ -80,10 +86,8 @@ std::tuple<std::vector<uint8_t>, std::vector<uint8_t>> HKAttestationAuth::envelo
   return std::make_tuple(std::vector<uint8_t>(), std::vector<uint8_t>());
 }
 
-std::vector<unsigned char> HKAttestationAuth::envelope2Cmd(std::vector<uint8_t> &env1Data, std::vector<uint8_t> &readerCmd)
+std::vector<unsigned char> HKAttestationAuth::envelope2Cmd(std::vector<uint8_t> &salt)
 {
-  auto salt = attestation_salt(env1Data, readerCmd);
-
   ISO18013SecureContext secureCtx = ISO18013SecureContext(attestation_exchange_common_secret, salt, 16);
   json ex1 = json::parse(R"({ "docType":"com.apple.HomeKit.1.credential","nameSpaces":{"com.apple.HomeKit":{"credential_id": false}}})");
   auto cbor = ex1.to_cbor(ex1);
@@ -163,10 +167,13 @@ homeKeyReader::KeyFlow HKAttestationAuth::attest()
     std::vector<uint8_t> env1Res = std::get<0>(env1Data);
     if (env1Res.size() > 2 && env1Res.data()[env1Res.size() - 2] == 0x90)
     {
-      auto env2DataDec = envelope2Cmd(std::get<0>(env1Data), std::get<1>(env1Data));
-      if (env2DataDec.size() > 0)
-      {
-        return homeKeyReader::kFlowATTESTATION;
+      auto salt = attestation_salt(std::get<0>(env1Data), std::get<1>(env1Data));
+      if(salt.size() > 0){
+        auto env2DataDec = envelope2Cmd(salt);
+        if (env2DataDec.size() > 0)
+        {
+          return homeKeyReader::kFlowATTESTATION;
+        }
       }
     }
   }
