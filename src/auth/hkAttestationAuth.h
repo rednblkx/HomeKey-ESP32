@@ -14,8 +14,9 @@ private:
   bool (*nfcInDataExchange)(uint8_t *data, size_t lenData, uint8_t *res, uint8_t *resLen){};
   std::vector<uint8_t> attestation_exchange_common_secret;
   DigitalKeySecureContext &DKSContext;
+  std::vector<unsigned char> attestation_salt(std::vector<unsigned char> env1Data, std::vector<unsigned char> readerCmd);
   std::tuple<std::vector<uint8_t>, std::vector<uint8_t>> envelope1Cmd();
-  std::vector<unsigned char> envelope2Cmd(std::vector<uint8_t> env1Data, std::vector<uint8_t> readerCmd, std::vector<uint8_t> shared_secret);
+  std::vector<unsigned char> envelope2Cmd(std::vector<uint8_t> &env1Data, std::vector<uint8_t> &readerCmd);
 
 public:
   HKAttestationAuth(DigitalKeySecureContext &context, bool (*nfcInDataExchange)(uint8_t *data, size_t lenData, uint8_t *res, uint8_t *resLen)) : nfcInDataExchange(nfcInDataExchange), DKSContext(context){};

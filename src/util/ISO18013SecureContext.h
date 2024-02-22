@@ -17,6 +17,7 @@
 #include <mbedtls/ctr_drbg.h>
 #include <iomanip>
 #include <YACL.h>
+#include <util/utils.h>
 
 #include <nlohmann/json.hpp>
 
@@ -39,6 +40,7 @@ public:
     std::vector<uint8_t> decryptMessageFromEndpoint(const std::vector<uint8_t>& message);
 
 private:
+  const char *TAG = "ISO18013_SC";
   size_t keyLength;
   size_t readerCounter;
   size_t endpointCounter;

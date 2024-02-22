@@ -107,7 +107,7 @@ int BERTLVLength::fromBytes(const std::vector<uint8_t> &bytes) const
   return result;
 }
 
-BERTLV::BERTLV() : tag(std::vector<uint8_t>{}), length(BERTLVLength()), value(std::vector<uint8_t>()) {}
+BERTLV::BERTLV() : tag(std::vector<uint8_t>()), length(BERTLVLength()), value(std::vector<uint8_t>()) {}
 
 BERTLV::BERTLV(int tag, const std::vector<uint8_t> length, const std::vector<uint8_t> &value)
     : tag(tag), length(length), value(value) {}

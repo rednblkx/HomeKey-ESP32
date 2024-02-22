@@ -67,12 +67,12 @@ std::vector<unsigned char> NDEFMessage::pack()
   }
   this->packedData.clear();
   this->packedData.insert(this->packedData.begin(), result, result + olen);
+  LOG(D, "NDEF MSG PACKED - LENGTH: %d, DATA: %s", packedData.size(), utils::bufToHexString(packedData.data(), packedData.size()).c_str());
   return this->packedData;
 }
 
 std::vector<NDEFRecord> NDEFMessage::unpack(){
   std::vector<NDEFRecord> records;
-  // printf("packed_len: %d\n", this->packedData.size());
   unsigned char header[1];
   unsigned char type_length[1];
   unsigned char payload_length[1];
@@ -82,9 +82,6 @@ std::vector<NDEFRecord> NDEFMessage::unpack(){
   {
     header[0] = this->packedData.data()[i];
     i++;
-    // unsigned char mb = (header[0] >> 7 << 7);
-    // unsigned char me = ((header[0] >> 6 << 7) & 0xFF) >> 1;
-    // unsigned char ch = ((header[0] >> 5 << 7) & 0xFF) >> 2;
     unsigned char sr = ((header[0] >> 4 << 7) & 0xFF) >> 3;
     unsigned char il = ((header[0] >> 3 << 7) & 0xFF) >> 4;
     unsigned char tnf = ((header[0] << 5) & 0xFF) >> 5;
@@ -93,17 +90,11 @@ std::vector<NDEFRecord> NDEFMessage::unpack(){
     i++;
 
     if(sr){
-      // payload_length.clear();
-      // payload_length.reserve(1);
-      // payload_length.insert(payload_length.begin(), this->packedData.data() + i, this->packedData.data() + i + 1);
       payload_length[0] = this->packedData.data()[i];
       i++;
     }
     else
     {
-      // payload_length.clear();
-      // payload_length.reserve(1);
-      // payload_length.insert(payload_length.begin(), this->packedData.data() + i, this->packedData.data() + i + 4);
       payload_length[0] = this->packedData.data()[i];
       i += 4;
     }
@@ -120,38 +111,35 @@ std::vector<NDEFRecord> NDEFMessage::unpack(){
     std::vector<unsigned char> type_vec;
     type_vec.insert(type_vec.begin(), this->packedData.data() + i, this->packedData.data() + i + type_length[0]);
     type_vec.push_back('\0');
-    // printf("\ntype_length: %d \n", type_length[0]);
-    // printf("\ntype_vec_length: %d \n", type_vec.size());
     i += type_length[0];
 
     std::vector<unsigned char> id_vec;
     id_vec.resize(id_length[0] + 1);
     id_vec.insert(id_vec.begin(), this->packedData.data() + i, this->packedData.data() + i + id_length[0]);
     id_vec.push_back('\0');
-    // printf("\nid_length: %d \n", id_length[0]);
-    // printf("\nid_vec_length: %d \n", id_vec.size());
     i += id_length[0];
 
     std::vector<unsigned char> payload_vec;
     payload_vec.insert(payload_vec.begin(), this->packedData.data() + i, this->packedData.data() + i + payload_length[0]);
     payload_vec.push_back('\0');
-    // printf("\npayload_length: %d \n", payload_length[0]);
     i += payload_length[0];
     
+    LOG(D, "NDEF RECORD ID: %s, TNF: %d, TYPE: %s, PAYLOAD: %s", utils::bufToHexString(id_vec.data(), id_vec.size()).c_str(), utils::bufToHexString(&tnf, 1).c_str(), utils::bufToHexString(type_vec.data(), type_vec.size()).c_str(), utils::bufToHexString(payload_vec.data(), payload_vec.size()).c_str());
     records.emplace_back(id_vec, tnf, type_vec, payload_vec);
   }
   this->records.insert(this->records.begin(), records.data(), records.data() + records.size());
   return this->records;
 }
 
-NDEFRecord NDEFMessage::findType(const char * type){
-  NDEFRecord foundRecord;
-  for (int i = 0; i < this->records.size(); i++)
+NDEFRecord* NDEFMessage::findType(const char * type){
+  NDEFRecord *foundRecord = nullptr;
+  for (auto &&record : records)
   {
-    if(!strcmp(type, (const char *)this->records.data()[i].type.data())){
-      foundRecord = this->records[i];
+    if(!strcmp(type, (const char *)record.type.data())){
+      foundRecord = &record;
       break;
     }
   }
+  LOG(D, "NDEF RECORD ID: %s, TNF: %s, TYPE: %s, PAYLOAD: %s", utils::bufToHexString(foundRecord->id.data(), foundRecord->id.size()).c_str(), utils::bufToHexString(&foundRecord->tnf, 1).c_str(), utils::bufToHexString(foundRecord->type.data(), foundRecord->type.size()).c_str(), utils::bufToHexString(foundRecord->data.data(), foundRecord->data.size()).c_str());
   return foundRecord;
 }

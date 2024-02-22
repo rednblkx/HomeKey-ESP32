@@ -11,17 +11,18 @@
 #include <stdio.h>
 #include <vector>
 #include <initializer_list>
+#include <util/utils.h>
 
 class NDEFRecord
 {
-public:
-  NDEFRecord();
-  NDEFRecord(const char *id, unsigned char tnf, const char *type, unsigned char *data, size_t dataLen);
-  NDEFRecord(std::vector<unsigned char> id, unsigned char tnf, std::vector<unsigned char> type, std::vector<unsigned char> data);
-  std::vector<unsigned char> id;
-  unsigned char tnf;
-  std::vector<unsigned char> type;
-  std::vector<unsigned char> data;
+  public:
+    NDEFRecord();
+    NDEFRecord(const char *id, unsigned char tnf, const char *type, unsigned char *data, size_t dataLen);
+    NDEFRecord(std::vector<unsigned char> id, unsigned char tnf, std::vector<unsigned char> type, std::vector<unsigned char> data);
+    std::vector<unsigned char> id;
+    unsigned char tnf;
+    std::vector<unsigned char> type;
+    std::vector<unsigned char> data;
 };
 
 class NDEFMessage
@@ -31,9 +32,10 @@ public:
   NDEFMessage(std::initializer_list<NDEFRecord>);
   std::vector<unsigned char> pack();
   std::vector<NDEFRecord> unpack();
-  NDEFRecord findType(const char * type);
+  NDEFRecord* findType(const char * type);
 
 private:
+  const char *TAG = "NDEFMessage";
   std::vector<NDEFRecord> records;
   std::vector<unsigned char> packedData;
 };
