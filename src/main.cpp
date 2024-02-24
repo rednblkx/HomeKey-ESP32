@@ -193,47 +193,30 @@ struct LockMechanism : Service::LockMechanism
         } else {
           LOG(W, "We got status FlowFailed, mqtt untouched!");
         }
-        nfc.inRelease();
-        bool deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
-        LOG(V, "Target still present: %d", deviceStillInField);
-        while (deviceStillInField)
-        {
-          nfc.inRelease();
-          deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
-          LOG(V, "Target still present: %d", deviceStillInField);
-          vTaskDelay(100 / portTICK_PERIOD_MS);
-        }
       }
-      else
-      {
+      else {
         json payload;
         payload["atqa"] = utils::bufToHexString(atqa, 1, true);
         payload["sak"] = utils::bufToHexString(sak, 1, true);
         payload["uid"] = utils::bufToHexString(uid, uidLen, true);
         payload["homekey"] = false;
         mqtt.publish(MQTT_AUTH_TOPIC, payload.dump().c_str());
-        nfc.inRelease();
-        delay(500);
-        bool deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
+      }
+      delay(1000);
+      nfc.inRelease();
+      bool deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
+      while (deviceStillInField) {
         LOG(V, "Target still present: %d", deviceStillInField);
-        while (deviceStillInField)
-        {
-          nfc.inRelease();
-          delay(500);
-          deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
-          LOG(V, "Target still present: %d", deviceStillInField);
-        }
+        delay(1000);
+        nfc.inRelease();
+        deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
       }
     }
-    else
-    {
-      uint8_t data[18] = {0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0};
-      memcpy(data + 8, readerData.reader_identifier, sizeof(readerData.reader_identifier));
-      with_crc16(data, 16, data + 16);
-      uint8_t response[64];
-      uint8_t length = 64;
+    else {
+      uint8_t response[2];
+      uint8_t length = 2;
       nfc.writeRegister(0x633d, 0);
-      nfc.inCommunicateThru(data, sizeof(data), response, &length, 100);
+      nfc.inCommunicateThru(ecpData, sizeof(ecpData), response, &length, 100);
     }
   }
 };
