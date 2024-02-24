@@ -32,8 +32,8 @@ private:
     unsigned char kmac[16];
     unsigned char krmac[16];
 
-    std::vector<uint8_t> encrypt(unsigned char* plaintext, size_t data_size, const unsigned char* pcb, const unsigned char* key, int counter);
-    std::vector<uint8_t> decrypt(const unsigned char* ciphertext, size_t data_size, const unsigned char* pcb, const unsigned char* key, int counter);
+    std::vector<uint8_t> encrypt(unsigned char* plaintext, size_t data_size, const unsigned char* pcb, const unsigned char* key);
+    std::vector<uint8_t> decrypt(const unsigned char* ciphertext, size_t data_size, const unsigned char* pcb, const unsigned char* key);
     std::tuple<std::vector<uint8_t>, size_t> pad_mode_3(unsigned char* message, size_t message_size, unsigned char pad_byte, size_t block_size);
     int unpad_mode_3(unsigned char* message, size_t message_size, unsigned char pad_flag_byte, size_t block_size);
     int encrypt_aes_cbc(const unsigned char* key, unsigned char* iv, const unsigned char* plaintext, size_t length, unsigned char* ciphertext);

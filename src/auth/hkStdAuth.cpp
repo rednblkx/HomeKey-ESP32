@@ -94,14 +94,14 @@ std::tuple<homeKeyIssuer::issuer_t *, homeKeyEndpoint::endpoint_t *, DigitalKeyS
   LOG(D, "Auth1 APDU Length: %d, DATA: %s", apdu.size(), utils::bufToHexString(apdu.data(), apdu.size()).c_str());
   nfcInDataExchange(apdu.data(), apdu.size(), response, &responseLength);
   LOG(D, "Auth1 Response Length: %d, DATA: %s", responseLength, utils::bufToHexString(response, responseLength).c_str());
+  std::vector<uint8_t> persistentKey(32);
+  uint8_t volatileKey[48];
+  Auth1_keys_generator(persistentKey.data(), volatileKey);
+  DigitalKeySecureContext context = DigitalKeySecureContext(volatileKey);
   homeKeyEndpoint::endpoint_t *foundEndpoint = nullptr;
   homeKeyIssuer::issuer_t *foundIssuer = nullptr;
   if (responseLength > 2 && response[responseLength - 2] == 0x90)
   {
-    std::vector<uint8_t> persistentKey(32);
-    uint8_t volatileKey[48];
-    Auth1_keys_generator(persistentKey.data(), volatileKey);
-    DigitalKeySecureContext context = DigitalKeySecureContext(volatileKey);
     auto response_result = context.decrypt_response(response, responseLength - 2);
     LOG(D, "Decrypted Length: %d, Data: %s", response_result.size(), utils::bufToHexString(response_result.data(), response_result.size()).c_str());
     if (response_result.size() > 0)
@@ -123,7 +123,7 @@ std::tuple<homeKeyIssuer::issuer_t *, homeKeyEndpoint::endpoint_t *, DigitalKeyS
       if (device_identifier == nullptr)
       {
         // commandFlow(homeKeyReader::kCmdFlowFailed);
-        return std::make_tuple(foundIssuer, foundEndpoint, context, std::vector<uint8_t>{}, homeKeyReader::kFlowFailed);
+        return std::make_tuple(foundIssuer, foundEndpoint, context, persistentKey, homeKeyReader::kFlowFailed);
       }
       for (auto &issuer : issuers)
       {
@@ -186,16 +186,16 @@ std::tuple<homeKeyIssuer::issuer_t *, homeKeyEndpoint::endpoint_t *, DigitalKeyS
         }
       }
       // commandFlow(homeKeyReader::kCmdFlowFailed);
-      return std::make_tuple(foundIssuer, foundEndpoint, context, std::vector<uint8_t>{}, homeKeyReader::kFlowFailed);
+      return std::make_tuple(foundIssuer, foundEndpoint, context, persistentKey, homeKeyReader::kFlowFailed);
     }
     else
     {
       LOG(W, "STANDARD Flow failed!");
       // commandFlow(homeKeyReader::kCmdFlowFailed);
-      return std::make_tuple(foundIssuer, foundEndpoint, context, std::vector<uint8_t>{}, homeKeyReader::kFlowFailed);
+      return std::make_tuple(foundIssuer, foundEndpoint, context, persistentKey, homeKeyReader::kFlowFailed);
     }
   }
   LOG(E, "Response Status not 0x90, something went wrong!");
   // commandFlow(homeKeyReader::kCmdFlowFailed);
-  return std::make_tuple(foundIssuer, foundEndpoint, DigitalKeySecureContext(), std::vector<uint8_t>{}, homeKeyReader::kFlowFailed);
+  return std::make_tuple(foundIssuer, foundEndpoint, context, persistentKey, homeKeyReader::kFlowFailed);
 }

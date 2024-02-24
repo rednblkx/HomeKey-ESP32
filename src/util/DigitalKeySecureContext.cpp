@@ -178,14 +178,18 @@ DigitalKeySecureContext::DigitalKeySecureContext(const unsigned char* volatileKe
  * containing the calculated rmac.
  */
 std::tuple<std::vector<uint8_t>, std::vector<uint8_t>> DigitalKeySecureContext::encrypt_command(unsigned char* data, size_t dataSize) {
-    std::vector<uint8_t> ciphertext = encrypt(data, dataSize, command_pcb, kenc, counter);;
+    LOG(D, "kenc= %s", utils::bufToHexString(kenc, sizeof(kenc)).c_str());
+    LOG(D, "kmac= %s", utils::bufToHexString(kmac, sizeof(kmac)).c_str());
+    LOG(D, "krmac= %s", utils::bufToHexString(krmac, sizeof(krmac)).c_str());
+    std::vector<uint8_t> ciphertext = encrypt(data, dataSize, command_pcb, kenc);
+    ;
     std::vector<uint8_t> calculated_rmac(16);
     size_t input_dataSize = 16 + ciphertext.size();
     std::vector<uint8_t> input_data = concatenate_arrays(mac_chaining_value, ciphertext.data(), 16, ciphertext.size());
     int cmac_status = aes_cmac(kmac, input_data.data(), input_dataSize, calculated_rmac.data());
     if(cmac_status) return std::make_tuple(std::vector<uint8_t>(), std::vector<uint8_t>());
 
-    std::vector<uint8_t> result = concatenate_arrays(ciphertext.data(), calculated_rmac.data(), ciphertext.size(), calculated_rmac.size());
+    std::vector<uint8_t> result = concatenate_arrays(ciphertext.data(), calculated_rmac.data(), ciphertext.size(), 8);
 
     return std::make_tuple(result, calculated_rmac);
 }
@@ -202,6 +206,9 @@ std::tuple<std::vector<uint8_t>, std::vector<uint8_t>> DigitalKeySecureContext::
  * @return a vector of uint8_t, which represents the decrypted plaintext.
  */
 std::vector<uint8_t> DigitalKeySecureContext::decrypt_response(const unsigned char* data, size_t dataSize) {
+    LOG(D, "kenc= %s", utils::bufToHexString(kenc, sizeof(kenc)).c_str());
+    LOG(D, "kmac= %s", utils::bufToHexString(kmac, sizeof(kmac)).c_str());
+    LOG(D, "krmac= %s", utils::bufToHexString(krmac, sizeof(krmac)).c_str());
     LOG(V, "encrypted_data: %s", utils::bufToHexString(data, dataSize).c_str());
     std::vector<uint8_t> calculated_rmac(16);
     size_t input_dataSize = 16 + (dataSize - 8);
@@ -216,9 +223,8 @@ std::vector<uint8_t> DigitalKeySecureContext::decrypt_response(const unsigned ch
         return std::vector<uint8_t>();
     }
 
-    std::vector<uint8_t> plaintext = decrypt(data, dataSize - 8, response_pcb, kenc, counter);
+    std::vector<uint8_t> plaintext = decrypt(data, dataSize - 8, response_pcb, kenc);
 
-    counter++;
     return plaintext;
 }
 
@@ -239,13 +245,15 @@ std::vector<uint8_t> DigitalKeySecureContext::decrypt_response(const unsigned ch
  * 
  * @return a std::vector<uint8_t> object, which contains the encrypted data.
  */
-std::vector<uint8_t> DigitalKeySecureContext::encrypt(unsigned char* plaintext, size_t data_size, const unsigned char* pcb, const unsigned char* key, int counter) {
+std::vector<uint8_t> DigitalKeySecureContext::encrypt(unsigned char* plaintext, size_t data_size, const unsigned char* pcb, const unsigned char* key) {
     if (data_size == 0) {
         return std::vector<uint8_t>();
     }
 
     // Pad plaintext
     auto padded = pad_mode_3(plaintext, data_size, 0x80, 16);
+
+    LOG(D, "padded plaintext=%s", utils::bufToHexString(std::get<0>(padded).data(), std::get<0>(padded).size()).c_str());
 
     std::vector<uint8_t> icv(16);
     std::vector<uint8_t> iv(16);
@@ -288,7 +296,7 @@ std::vector<uint8_t> DigitalKeySecureContext::encrypt(unsigned char* plaintext, 
  * 
  * @return a std::vector<uint8_t> object.
  */
-std::vector<uint8_t> DigitalKeySecureContext::decrypt(const unsigned char* ciphertext, size_t cipherTextLen, const unsigned char* pcb, const unsigned char* key, int counter) {
+std::vector<uint8_t> DigitalKeySecureContext::decrypt(const unsigned char* ciphertext, size_t cipherTextLen, const unsigned char* pcb, const unsigned char* key) {
     if (cipherTextLen == 0) {
         return std::vector<uint8_t>();
     }
@@ -316,6 +324,8 @@ std::vector<uint8_t> DigitalKeySecureContext::decrypt(const unsigned char* ciphe
     int padding_index = unpad_mode_3(dec.data(), cipherTextLen);
 
     dec.resize(padding_index);
+
+    counter++;
 
     return dec;
 }
