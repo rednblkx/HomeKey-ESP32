@@ -1,4 +1,5 @@
 #include <auth/hkAttestationAuth.h>
+#include <sodium/crypto_sign_ed25519.h>
 
 std::vector<unsigned char> HKAttestationAuth::attestation_salt(std::vector<unsigned char> &env1Data, std::vector<unsigned char> &readerCmd)
 {
@@ -139,7 +140,58 @@ std::vector<unsigned char> HKAttestationAuth::envelope2Cmd(std::vector<uint8_t> 
   return std::vector<uint8_t>();
 }
 
-homeKeyReader::KeyFlow HKAttestationAuth::attest()
+std::tuple<homeKeyIssuer::issuer_t *, std::vector<uint8_t>, std::vector<uint8_t>> HKAttestationAuth::verify(std::vector<uint8_t> &decryptedCbor){
+  CBOR issuerSignedCbor = CBOR(decryptedCbor.data(), decryptedCbor.size());
+  std::vector<uint8_t> protectedHeaders(issuerSignedCbor["documents"][0]["issuerSigned"]["issuerAuth"][0].get_bytestring_len());
+  std::vector<uint8_t> issuerId(issuerSignedCbor["documents"][0]["issuerSigned"]["issuerAuth"][1][4].get_bytestring_len());
+  std::vector<uint8_t> data(issuerSignedCbor["documents"][0]["issuerSigned"]["issuerAuth"][2].get_bytestring_len());
+  uint8_t signature[issuerSignedCbor["documents"][0]["issuerSigned"]["issuerAuth"][3].get_bytestring_len()];
+  issuerSignedCbor["documents"][0]["issuerSigned"]["issuerAuth"][0].get_bytestring(protectedHeaders.data());
+  issuerSignedCbor["documents"][0]["issuerSigned"]["issuerAuth"][1][4].get_bytestring(issuerId.data());
+  issuerSignedCbor["documents"][0]["issuerSigned"]["issuerAuth"][2].get_bytestring(data.data());
+  issuerSignedCbor["documents"][0]["issuerSigned"]["issuerAuth"][3].get_bytestring(signature);
+  CBOR cborTag = CBOR(data.data(), data.size());
+  uint8_t deviceInfo[cborTag.get_tag_item().get_bytestring_len()];
+  cborTag.get_tag_item().get_bytestring(deviceInfo);
+  CBOR cborDevice = CBOR(deviceInfo, sizeof(deviceInfo));
+  CBOR cborKeyX = cborDevice["deviceKeyInfo"]["deviceKey"].find_by_key(-2);
+  CBOR cborKeyY = cborDevice["deviceKeyInfo"]["deviceKey"].find_by_key(-3);
+  uint8_t deviceKeyX[cborKeyX.get_bytestring_len()];
+  uint8_t deviceKeyY[cborKeyY.get_bytestring_len()];
+  cborKeyX.get_bytestring(deviceKeyX);
+  cborKeyY.get_bytestring(deviceKeyY);
+  std::vector<uint8_t> devicePubKey;
+  devicePubKey.push_back(0x04);
+  devicePubKey.insert(devicePubKey.end(), deviceKeyX, deviceKeyX + sizeof(deviceKeyX));
+  devicePubKey.insert(devicePubKey.end(), deviceKeyY, deviceKeyY + sizeof(deviceKeyY));
+
+  homeKeyIssuer::issuer_t *foundIssuer = nullptr;
+
+  for (auto &&issuer : issuers)
+  {
+    if(!memcmp(issuer.issuerId, issuerId.data(), 8)){
+      foundIssuer = &issuer;
+    }
+  }
+
+  if (foundIssuer != nullptr) {
+    json signedData;
+    signedData.push_back("Signature1");
+    signedData.push_back(json::binary(protectedHeaders));
+    signedData.push_back(json::binary({}));
+    signedData.push_back(json::binary(data));
+    std::vector<uint8_t> cbor_data = json::to_cbor(signedData);
+
+    int res = crypto_sign_ed25519_verify_detached(signature, cbor_data.data(), cbor_data.size(), foundIssuer->publicKey);
+    if (res) {
+      LOG(E, "Failed to verify attestation signature: %d", res);
+      return std::make_tuple(foundIssuer, std::vector<uint8_t>(), std::vector<uint8_t>());
+    }
+    return std::make_tuple(foundIssuer, devicePubKey, std::vector<uint8_t>{deviceKeyX, deviceKeyX + sizeof(deviceKeyX)});
+  }
+}
+
+std::tuple<std::tuple<homeKeyIssuer::issuer_t *, std::vector<uint8_t>, std::vector<uint8_t>>, homeKeyReader::KeyFlow> HKAttestationAuth::attest()
 {
   attestation_exchange_common_secret.resize(32);
   attestation_exchange_common_secret.reserve(32);
@@ -160,7 +212,7 @@ homeKeyReader::KeyFlow HKAttestationAuth::attest()
   uint8_t xchResLen = 16;
   nfcInDataExchange(xchApdu, sizeof(xchApdu), xchRes, &xchResLen);
   LOG(D, "APDU RES LENGTH: %d, DATA: %s", xchResLen, utils::bufToHexString(xchRes, xchResLen).c_str());
-
+  homeKeyIssuer::issuer_t* foundIssuer = nullptr;
   if (xchResLen > 2 && xchRes[xchResLen - 2] == 0x90)
   {
     auto env1Data = envelope1Cmd();
@@ -172,10 +224,13 @@ homeKeyReader::KeyFlow HKAttestationAuth::attest()
         auto env2DataDec = envelope2Cmd(salt);
         if (env2DataDec.size() > 0)
         {
-          return homeKeyReader::kFlowATTESTATION;
+          auto verify_result = verify(env2DataDec);
+          if (std::get<1>(verify_result).size() > 0) {
+            return std::make_tuple(verify_result, homeKeyReader::kFlowATTESTATION);
+          }
         }
       }
     }
   }
-  return homeKeyReader::kFlowFailed;
+  return std::make_tuple(std::make_tuple(foundIssuer, std::vector<uint8_t>(), std::vector<uint8_t>()), homeKeyReader::kFlowFailed);
 }
