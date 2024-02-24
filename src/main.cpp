@@ -553,12 +553,48 @@ void pairCallback(bool isPaired)
   {
     deleteReaderData(NULL);
   }
+  else if (!isPaired) {
+    readerData.issuers.erase(std::remove_if(readerData.issuers.begin(), readerData.issuers.end(),
+      [](homeKeyIssuer::issuer_t x) {
+        for (size_t i = 0; i < 16; i++) {
+          if (HAPClient::controllers[i].allocated) {
+            std::vector<uint8_t> id = utils::getHashIdentifier(HAPClient::controllers[i].LTPK, 32, true);
+            LOG(D, "Found allocated controller - Hash: %s", utils::bufToHexString(id.data(), 8).c_str());
+            if (!memcmp(x.publicKey, id.data(), 8)) {
+              return false;
+            }
+          }
+        }
+        LOG(D, "Issuer ID: %s - Associated controller was removed from Home, erasing from reader data.", utils::bufToHexString(x.issuerId, 8).c_str());
+        return true;
+      }),
+      readerData.issuers.end());
+  }
+  if (isPaired) {
+    for (size_t i = 0; i < 16; i++) {
+      if (HAPClient::controllers[i].allocated) {
+        std::vector<uint8_t> id = utils::getHashIdentifier(HAPClient::controllers[i].LTPK, 32, true);
+        LOG(D, "Found allocated controller - Hash: %s", utils::bufToHexString(id.data(), 8).c_str());
+        homeKeyIssuer::issuer_t* foundIssuer = nullptr;
+        for (auto& issuer : readerData.issuers) {
+          if (!memcmp(issuer.issuerId, id.data(), 8)) {
+            LOG(D, "Issuer %s already added, skipping", utils::bufToHexString(issuer.issuerId, 8).c_str());
+            foundIssuer = &issuer;
+            break;
+          }
+        }
+        if (foundIssuer == nullptr) {
+          LOG(D, "Adding new issuer - ID: %s", utils::bufToHexString(id.data(), 8).c_str());
+          homeKeyIssuer::issuer_t issuer;
+          memcpy(issuer.issuerId, id.data(), 8);
+          memcpy(issuer.publicKey, HAPClient::controllers[i].LTPK, 32);
+          readerData.issuers.emplace_back(issuer);
+        }
+      }
+    }
+    save_to_nvs();
+  }
 }
-
-void setFlow(const char *buf)
-{
-  switch (buf[1])
-  {
   case '0':
     hkFlow = 0;
     Serial.println("FAST Flow");
