@@ -2,6 +2,7 @@
 #include <ctime>
 #include <list>
 #include <nlohmann/json.hpp>
+#include <TLV8.h>
 
 using nlohmann::literals::operator""_json;
 using namespace nlohmann::literals;
@@ -27,12 +28,26 @@ typedef enum
   kRequest_Reader_Key_Request = 0x06
 } Reader_Key_Request;
 
+const TLV8_names RK_REQ_TLV_NAMES[] = {
+  {kReader_Req_Key_Type,"KEY.TYPE"},
+  {kReader_Req_Reader_Private_Key,"PRIV.KEY"},
+  {kReader_Req_Identifier,"UNIQUE.IDENTIFIER"},
+  {kReader_Req_Key_Identifier,"KEY.IDENTIFIER"},
+  {kRequest_Reader_Key_Request,"READER.REQ"}
+};
+
 typedef enum
 {
   kReader_Res_Key_Identifier = 0x01,
   kReader_Res_Status = 0x02,
   kReader_Res_Reader_Key_Response = 0x07
 } Reader_Key_Response;
+
+const TLV8_names RK_RES_TLV_NAMES[] = {
+  {kReader_Res_Key_Identifier,"KEY.IDENTIFIER"},
+  {kReader_Res_Status,"STATUS"},
+  {kReader_Res_Reader_Key_Response,"READER.RES"}
+};
 
 typedef enum
 {
@@ -43,6 +58,14 @@ typedef enum
   kDevice_Req_Key_Identifier = 0x05 // This is only relevant for "remove" operation
 } Device_Credential_Request;
 
+const TLV8_names DCR_REQ_TLV_NAMES[] = {
+  {kDevice_Req_Key_Type,"KEY.TYPE"},
+  {kDevice_Req_Public_Key,"PUBLIC.KEY"},
+  {kDevice_Req_Issuer_Key_Identifier,"ISSUER.IDENTIFIER"},
+  {kDevice_Req_Key_State,"KEY.STATE"},
+  {kDevice_Req_Key_Identifier,"KEY.IDENTIFIER"},
+};
+
 typedef enum
 {
   kDevice_Res_Key_Identifier = 0x01,
@@ -50,6 +73,13 @@ typedef enum
   kDevice_Res_Status = 0x03,
   kDevice_Credential_Response = 0x05
 } Device_Credential_Response;
+
+const TLV8_names DCR_RES_TLV_NAMES[] = {
+  {kDevice_Req_Issuer_Key_Identifier,"ISSUER.IDENTIFIER"},
+  {kDevice_Res_Status,"STATUS"},
+  {kDevice_Res_Status,"STATUS"},
+  {kDevice_Credential_Response,"DCR.RES"}
+};
 
 typedef enum
 {
