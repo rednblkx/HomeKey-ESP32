@@ -193,15 +193,19 @@ struct LockMechanism : Service::LockMechanism
         payload["homekey"] = false;
         mqtt.publish(MQTT_AUTH_TOPIC, payload.dump().c_str());
       }
-      delay(1000);
+      delay(500);
       nfc.inRelease();
+      nfc.setPassiveActivationRetries(10);
       bool deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
+      LOG(V, "Target still present: %d", deviceStillInField);
       while (deviceStillInField) {
-        LOG(V, "Target still present: %d", deviceStillInField);
-        delay(1000);
+        delay(300);
         nfc.inRelease();
         deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
+        LOG(V, "Target still present: %d", deviceStillInField);
       }
+      nfc.inRelease();
+      nfc.setPassiveActivationRetries(0);
     }
     else {
       uint8_t response[2];
