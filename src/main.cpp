@@ -134,7 +134,7 @@ struct LockMechanism : Service::LockMechanism
       false);
   } // end constructor
 
-  boolean update(std::vector<char>* callback, int* callbackLen) {
+  boolean update(std::vector<char>* callback) {
     int targetState = lockTargetState->getNewVal();
     LOG(I, "New LockState=%d, Current LockState=%d", targetState, lockCurrentState->getVal());
 
@@ -321,7 +321,7 @@ struct NFCAccess : Service::NFCAccess, CommonCryptoUtils
       return 1;
   }
 
-  boolean update(std::vector<char>* callback, int* callbackLen) {
+  boolean update(std::vector<char>* callback) {
     LOG(D, "PROVISIONED READER KEY: %s", utils::bufToHexString(readerData.reader_private_key, sizeof(readerData.reader_private_key)).c_str());
     LOG(D, "READER GROUP IDENTIFIER: %s", utils::bufToHexString(readerData.reader_identifier, sizeof(readerData.reader_identifier)).c_str());
     LOG(D, "READER UNIQUE IDENTIFIER: %s", utils::bufToHexString(readerData.identifier, sizeof(readerData.identifier)).c_str());
