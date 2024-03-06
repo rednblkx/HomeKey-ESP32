@@ -68,10 +68,11 @@ struct LockManagement : Service::LockManagement
 {
   SpanCharacteristic* lockControlPoint;
   SpanCharacteristic* version;
+  const char* TAG = "LockManagement";
 
   LockManagement() : Service::LockManagement() {
 
-    Serial.print("Configuring LockManagement\n"); // initialization message
+    LOG(D,"Configuring LockManagement"); // initialization message
 
     lockControlPoint = new Characteristic::LockControlPoint();
     version = new Characteristic::Version();
