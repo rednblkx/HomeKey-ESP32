@@ -10,7 +10,7 @@ on:
     paths:
       - 'src/**'
       - 'platformio.ini'
-      - 'sdkconfig.wemos_d1_mini32'
+      - 'sdkconfig.defaults'
   pull_request:
     branches: [ main, dev ]
 

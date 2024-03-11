@@ -112,20 +112,20 @@ std::vector<unsigned char> HKAttestationAuth::envelope2Cmd(std::vector<uint8_t> 
     unsigned char apdu[6 + tlv.size()] = {0x0, 0xC3, 0x0, 0x0, (unsigned char)tlv.size()};
 
     memcpy(apdu + 5, tlv.data(), tlv.size());
-    LOG(D, "ENV2 APDU - LENGTH: %d, DATA: %s", sizeof(apdu), utils::bufToHexString(apdu, sizeof(apdu)).c_str());
+    LOG(D, "ENV2 APDU - LENGTH: %d, DATA: %s\n", sizeof(apdu), utils::bufToHexString(apdu, sizeof(apdu)).c_str());
     uint8_t newLen = 255;
     uint8_t *env2Res = new unsigned char[255];
     std::vector<unsigned char> attestation_package;
     uint8_t getData[5] = {0x0, 0xc0, 0x0, 0x0, 0x0};
-    LOG(D, "ENV2 APDU Len: %d, Data: %s", sizeof(apdu), utils::bufToHexString(apdu, sizeof(apdu)).c_str());
+    LOG(D, "ENV2 APDU Len: %d, Data: %s\n", sizeof(apdu), utils::bufToHexString(apdu, sizeof(apdu)).c_str());
     nfcInDataExchange(apdu, sizeof(apdu), env2Res, &newLen);
     attestation_package.insert(attestation_package.begin(), env2Res + 1, env2Res + newLen - 1);
-    LOG(D, "env2Res Len: %d, Data: %s", newLen, utils::bufToHexString(env2Res + 1, newLen).c_str());
-    while (env2Res[newLen - 1] == 0xFD)
+    LOG(D, "env2Res Len: %d, Data: %s\n", newLen, utils::bufToHexString(env2Res + 1, newLen - 1).c_str());
+    while (env2Res[newLen - 1] >= 0xFD)
     {
       nfcInDataExchange(getData, sizeof(getData), env2Res, &newLen);
       attestation_package.insert(attestation_package.end(), env2Res + (newLen == 255 ? 1 : 0), env2Res + newLen - (newLen == 255 ? 1 : 0));
-      LOG(D, "env2Res Len: %d, Data: %s", newLen, utils::bufToHexString(env2Res + 1, newLen).c_str());
+      LOG(D, "env2Res Len: %d, Data: %s\n", newLen, utils::bufToHexString(env2Res + 1, newLen - 1).c_str());
     }
     delete[] env2Res;
     LOG(V, "ATT PKG LENGTH: %d - DATA: %s", attestation_package.size(), utils::bufToHexString(attestation_package.data(), attestation_package.size()).c_str());
@@ -189,6 +189,7 @@ std::tuple<homeKeyIssuer::issuer_t *, std::vector<uint8_t>, std::vector<uint8_t>
     }
     return std::make_tuple(foundIssuer, devicePubKey, std::vector<uint8_t>{deviceKeyX, deviceKeyX + sizeof(deviceKeyX)});
   }
+  return std::make_tuple(foundIssuer, std::vector<uint8_t>(), std::vector<uint8_t>());
 }
 
 std::tuple<std::tuple<homeKeyIssuer::issuer_t *, std::vector<uint8_t>, std::vector<uint8_t>>, homeKeyReader::KeyFlow> HKAttestationAuth::attest()

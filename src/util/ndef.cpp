@@ -124,7 +124,7 @@ std::vector<NDEFRecord> NDEFMessage::unpack(){
     payload_vec.push_back('\0');
     i += payload_length[0];
     
-    LOG(D, "NDEF RECORD ID: %s, TNF: %d, TYPE: %s, PAYLOAD: %s", utils::bufToHexString(id_vec.data(), id_vec.size()).c_str(), utils::bufToHexString(&tnf, 1).c_str(), utils::bufToHexString(type_vec.data(), type_vec.size()).c_str(), utils::bufToHexString(payload_vec.data(), payload_vec.size()).c_str());
+    LOG(D, "NDEF RECORD ID: %s, TNF: %d, TYPE: %s, PAYLOAD: %s", utils::bufToHexString(id_vec.data(), id_vec.size()).c_str(), (int)tnf, utils::bufToHexString(type_vec.data(), type_vec.size()).c_str(), utils::bufToHexString(payload_vec.data(), payload_vec.size()).c_str());
     records.emplace_back(id_vec, tnf, type_vec, payload_vec);
   }
   this->records.insert(this->records.begin(), records.data(), records.data() + records.size());
