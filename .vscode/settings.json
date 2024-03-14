@@ -52,6 +52,22 @@
     "typeinfo": "cpp",
     "common.h": "c",
     "alignment.h": "c",
-    "cmac.h": "c"
+    "cmac.h": "c",
+    "any": "cpp",
+    "bitset": "cpp",
+    "chrono": "cpp",
+    "codecvt": "cpp",
+    "condition_variable": "cpp",
+    "csignal": "cpp",
+    "forward_list": "cpp",
+    "list": "cpp",
+    "ratio": "cpp",
+    "regex": "cpp",
+    "set": "cpp",
+    "future": "cpp",
+    "mutex": "cpp",
+    "thread": "cpp",
+    "valarray": "cpp",
+    "*.ipp": "cpp"
   }
 }
