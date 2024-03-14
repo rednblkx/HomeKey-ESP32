@@ -45,7 +45,7 @@ PN532 nfc(pn532spi);
 
 nvs_handle savedData;
 homeKeyReader::readerData_t readerData;
-int hkFlow = 0;
+homeKeyReader::KeyFlow hkFlow = homeKeyReader::KeyFlow::kFlowFAST;
 
 bool save_to_nvs() {
   json serializedData = readerData;
@@ -159,9 +159,8 @@ struct LockMechanism : Service::LockMechanism
       if (selectCmdRes[selectCmdResLength - 2] == 0x90 && selectCmdRes[selectCmdResLength - 1] == 0x00) {
         LOG(D, "*** SELECT HOMEKEY APPLET SUCCESSFUL ***");
         LOG(D, "Reader Private Key: %s", utils::bufToHexString((const uint8_t*)readerData.reader_private_key, sizeof(readerData.reader_private_key)).c_str());
-        HKAuthenticationContext authCtx([](uint8_t* apdu, size_t apduLen, uint8_t* res, uint8_t* resLen) {  return nfc.inDataExchange(apdu, apduLen, res, resLen); },
-          readerData);
-        auto authResult = authCtx.authenticate(hkFlow, savedData);
+        HKAuthenticationContext authCtx([](uint8_t* apdu, size_t apduLen, uint8_t* res, uint8_t* resLen) {  return nfc.inDataExchange(apdu, apduLen, res, resLen); }, readerData, savedData);
+        auto authResult = authCtx.authenticate(hkFlow);
         if (std::get<2>(authResult) != homeKeyReader::kFlowFailed) {
           int newTargetState = lockTargetState->getNewVal();
           int targetState = lockTargetState->getVal();
@@ -310,16 +309,16 @@ void pairCallback(bool isPaired) {
 void setFlow(const char* buf) {
   switch (buf[1]) {
   case '0':
-    hkFlow = 0;
+    hkFlow = homeKeyReader::KeyFlow::kFlowFAST;
     Serial.println("FAST Flow");
     break;
 
   case '1':
-    hkFlow = 1;
+    hkFlow = homeKeyReader::KeyFlow::kFlowSTANDARD;
     Serial.println("STANDARD Flow");
     break;
   case '2':
-    hkFlow = 2;
+    hkFlow = homeKeyReader::KeyFlow::kFlowATTESTATION;
     Serial.println("ATTESTATION Flow");
     break;
 
