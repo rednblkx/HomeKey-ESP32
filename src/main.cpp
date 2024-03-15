@@ -109,6 +109,13 @@ struct LockMechanism : Service::LockMechanism
   uint8_t ecpData[18] = { 0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0 };
 
   LockMechanism() : Service::LockMechanism() {
+    enum
+    {
+      UNLOCKED,
+      LOCKED,
+      JAMMED,
+      UNKNOWN
+    };
     memcpy(ecpData + 8, readerData.reader_identifier, sizeof(readerData.reader_identifier));
     with_crc16(ecpData, 16, ecpData + 16);
     LOG(I, "Configuring LockMechanism"); // initialization message
@@ -118,20 +125,41 @@ struct LockMechanism : Service::LockMechanism
       MQTT_SET_STATE_TOPIC, [this](const char* payload) {
         LOG(D, "Received message in topic set_state: %s", payload);
         int state = atoi(payload);
-        lockTargetState->setVal(state == 0 || state == 1 ? state : lockTargetState->getVal());
-        lockCurrentState->setVal(state == 0 || state == 1 ? state : lockCurrentState->getVal()); },
+        switch (state)
+        {
+          case UNLOCKED:
+          case LOCKED:
+            lockTargetState->setVal(state);
+            lockCurrentState->setVal(state);
+            break;
+          default:
+            LOG(D, "Update state failed! Recv value not valid");
+            break;
+        }
+      },
       false);
     mqtt.subscribe(
       MQTT_SET_TARGET_STATE_TOPIC, [this](const char* payload) {
         LOG(D, "Received message in topic set_target_state: %s", payload);
         int state = atoi(payload);
-        lockTargetState->setVal(state == 0 || state == 1 ? state : lockTargetState->getVal()); },
+        lockTargetState->setVal(state == UNLOCKED || state == LOCKED ? state : lockTargetState->getVal()); },
       false);
     mqtt.subscribe(
       MQTT_SET_CURRENT_STATE_TOPIC, [this](const char* payload) {
         LOG(D, "Received message in topic set_current_state: %s", payload);
         int state = atoi(payload);
-        lockCurrentState->setVal(state == 0 || state == 1 ? state : lockCurrentState->getVal()); },
+        switch (state)
+        {
+          case UNLOCKED:
+          case LOCKED:
+          case JAMMED:
+          case UNKNOWN:
+            lockCurrentState->setVal(state);
+            break;
+          default:
+            LOG(D, "Update state failed! Recv value not valid");
+            break;
+        }},
       false);
   } // end constructor
 
