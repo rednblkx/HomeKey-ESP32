@@ -114,8 +114,7 @@ struct LockMechanism : Service::LockMechanism
             LOG(D, "Update state failed! Recv value not valid");
             break;
         }
-      },
-      false);
+      },1);
     mqtt.subscribe(
       MQTT_SET_TARGET_STATE_TOPIC, [this](const char* payload) {
         LOG(D, "Received message in topic set_target_state: %s", payload);
@@ -124,7 +123,7 @@ struct LockMechanism : Service::LockMechanism
           lockTargetState->setVal(state);
           mqtt.publish(MQTT_STATE_TOPIC, state == UNLOCKED ? "4" : "5", 1, true);
         }
-      },false);
+      },1);
     mqtt.subscribe(
       MQTT_SET_CURRENT_STATE_TOPIC, [this](const char* payload) {
         LOG(D, "Received message in topic set_current_state: %s", payload);
@@ -141,8 +140,7 @@ struct LockMechanism : Service::LockMechanism
           default:
             LOG(D, "Update state failed! Recv value not valid");
             break;
-        }},
-      false);
+        }},1);
   } // end constructor
 
   boolean update(std::vector<char>* callback) {
@@ -443,6 +441,10 @@ void print_issuers(const char* buf) {
 }
 
 void wifiCallback() {
+  mqtt.will.topic = MQTT_CLIENTID"/status";
+  mqtt.will.payload = "offline";
+  mqtt.will.qos = 1;
+  mqtt.will.retain = true;
   mqtt.host = MQTT_HOST;
   mqtt.port = MQTT_PORT;
   mqtt.client_id = MQTT_CLIENTID;
@@ -510,10 +512,16 @@ void setup() {
   new SpanAccessory();                 // Begin by creating a new Accessory using SpanAccessory(), no arguments needed
   new Service::AccessoryInformation(); // HAP requires every Accessory to implement an AccessoryInformation Service, with the required Identify Characteristic
   new Characteristic::Identify();
-  new Characteristic::Manufacturer("Kodeative");
+  new Characteristic::Manufacturer("rednblkx");
   new Characteristic::Model("HomeKey-ESP32");
   new Characteristic::Name(NAME);
-  new Characteristic::SerialNumber("HK-360");
+  uint8_t mac[6];
+  WiFi.macAddress(mac);
+  char macStr[18] = { 0 };
+  sprintf(macStr, "%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3]);
+  std::string serialNumber = "HK-";
+  serialNumber.append(macStr);
+  new Characteristic::SerialNumber(serialNumber.c_str());
   new Characteristic::FirmwareRevision("0.1");
   new Characteristic::HardwareFinish();
 
@@ -524,7 +532,7 @@ void setup() {
   new Characteristic::Version();
   homeSpan.setPairCallback(pairCallback);
   homeSpan.setWifiCallback(wifiCallback);
-  mqtt.connected_callback = [] {
+  mqtt.connected_callback = [serialNumber] {
     const char* TAG = "MQTT::connected_callback";
     LOG(D, "MQTT connected");
     if (!strcmp(DISCOVERY, "1")) {
@@ -535,22 +543,44 @@ void setup() {
       device["name"] = NAME; // assign the name value
       char identifier[18];
       sprintf(identifier, "%.2s%.2s%.2s%.2s%.2s%.2s", HAPClient::accessory.ID, HAPClient::accessory.ID + 3, HAPClient::accessory.ID + 6, HAPClient::accessory.ID + 9, HAPClient::accessory.ID + 12, HAPClient::accessory.ID + 15);
-      device["identifiers"] = { identifier }; // assign the identifiers array
+      device["identifiers"] = { identifier, serialNumber }; // assign the identifiers array
+      device["manufacturer"] = "rednblkx";
+      device["model"] = "HomeKey-ESP32";
+      device["sw_version"] = "v0.1beta";
+      device["serial_number"] = serialNumber;
       payload["device"] = device; // assign the device object to the payload object
-      std::string bufferpub = payload.dump(-1, ' ', false, json::error_handler_t::strict); // use dump instead of dump_to
+      std::string bufferpub = payload.dump(-1, ' ', false, json::error_handler_t::strict);
       mqtt.publish(("homeassistant/tag/" MQTT_CLIENTID "/rfid/config"), bufferpub.c_str(), true, 1);
       payload = json();
       payload["topic"] = MQTT_AUTH_TOPIC;
       payload["value_template"] = "{{ value_json.issuerId }}";
       payload["device"] = device; // reuse the device object for the second message
-      bufferpub = payload.dump(-1, ' ', false, json::error_handler_t::strict); // use dump instead of dump_to
+      bufferpub = payload.dump(-1, ' ', false, json::error_handler_t::strict);
       mqtt.publish(("homeassistant/tag/" MQTT_CLIENTID "/hkIssuer/config"), bufferpub.c_str(), true, 1);
       payload = json();
       payload["topic"] = MQTT_AUTH_TOPIC;
       payload["value_template"] = "{{ value_json.endpointId }}";
       payload["device"] = device; // reuse the device object for the third message
-      bufferpub = payload.dump(-1, ' ', false, json::error_handler_t::strict); // use dump instead of dump_to
+      bufferpub = payload.dump(-1, ' ', false, json::error_handler_t::strict);
       mqtt.publish(("homeassistant/tag/" MQTT_CLIENTID "/hkEndpoint/config"), bufferpub.c_str(), true, 1);
+      mqtt.publish(MQTT_CLIENTID"/status", "online", true, true);
+      payload = json();
+      payload["name"] = NAME;
+      payload["state_topic"] = MQTT_STATE_TOPIC;
+      payload["command_topic"] = MQTT_SET_STATE_TOPIC;
+      payload["payload_lock"] = "1";
+      payload["payload_unlock"] = "0";
+      payload["state_locked"] = "1";
+      payload["state_unlocked"] = "0";
+      payload["state_unlocking"] = "4";
+      payload["state_locking"] = "5";
+      payload["state_jammed"] = "2";
+      payload["availability_topic"] = MQTT_CLIENTID"/status";
+      payload["unique_id"] = identifier;
+      payload["device"] = device;
+      payload["retain"] = "true";
+      bufferpub = payload.dump(-1, ' ', false, json::error_handler_t::strict);
+      mqtt.publish(("homeassistant/lock/" MQTT_CLIENTID "/lock/config"), bufferpub.c_str(), 1, true);
       LOG(D, "MQTT PUBLISHED DISCOVERY");
     }
     };
