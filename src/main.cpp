@@ -9,27 +9,7 @@
 #include <PicoMQTT.h>
 #include <chrono>
 #include <HK_HomeKit.h>
-
-#if __has_include("config.h")
 #include <config.h>
-#else
-#define MQTT_HOST "0.0.0.0"
-#define MQTT_PORT 1883
-#define MQTT_CLIENTID "homekey_mqtt"
-#define MQTT_USERNAME "username"
-#define MQTT_PASSWORD "password"
-#define MQTT_AUTH_TOPIC "topic/auth"
-#define MQTT_SET_STATE_TOPIC "topic/set_state"
-#define MQTT_SET_TARGET_STATE_TOPIC "topic/set_target_state"
-#define MQTT_SET_CURRENT_STATE_TOPIC "topic/set_current_state"
-#define MQTT_STATE_TOPIC "topic/state"
-#define HK_CODE "46637726"
-#define LED_PIN 2
-#define OTA_PWD "homespan-ota"
-#define NAME "HK Lock"
-#define DISCOVERY "1"
-#define CONTROL_PIN 26
-#endif
 
 using namespace nlohmann;
 
@@ -124,7 +104,12 @@ struct LockMechanism : Service::LockMechanism
           case LOCKED:
             lockTargetState->setVal(state);
             lockCurrentState->setVal(state);
+            mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockCurrentState->getVal()).c_str(), 1, true);
             break;
+          case JAMMED:
+          case UNKNOWN:
+            lockCurrentState->setVal(state);
+            mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockCurrentState->getVal()).c_str(), 1, true);
           default:
             LOG(D, "Update state failed! Recv value not valid");
             break;
@@ -135,8 +120,11 @@ struct LockMechanism : Service::LockMechanism
       MQTT_SET_TARGET_STATE_TOPIC, [this](const char* payload) {
         LOG(D, "Received message in topic set_target_state: %s", payload);
         int state = atoi(payload);
-        lockTargetState->setVal(state == UNLOCKED || state == LOCKED ? state : lockTargetState->getVal()); },
-      false);
+        if (state == UNLOCKED || state == LOCKED) {
+          lockTargetState->setVal(state);
+          mqtt.publish(MQTT_STATE_TOPIC, state == UNLOCKED ? "4" : "5", 1, true);
+        }
+      },false);
     mqtt.subscribe(
       MQTT_SET_CURRENT_STATE_TOPIC, [this](const char* payload) {
         LOG(D, "Received message in topic set_current_state: %s", payload);
@@ -148,6 +136,7 @@ struct LockMechanism : Service::LockMechanism
           case JAMMED:
           case UNKNOWN:
             lockCurrentState->setVal(state);
+            mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockCurrentState->getVal()).c_str(), 1, true);
             break;
           default:
             LOG(D, "Update state failed! Recv value not valid");
@@ -161,7 +150,7 @@ struct LockMechanism : Service::LockMechanism
     LOG(I, "New LockState=%d, Current LockState=%d", targetState, lockCurrentState->getVal());
 
     // lockCurrentState->setVal(targetState);
-    mqtt.publish(MQTT_STATE_TOPIC, std::to_string(targetState).c_str());
+    mqtt.publish(MQTT_STATE_TOPIC, targetState == 0 ? "4" : "5" , 1, true);
 
     return (true);
   }
@@ -190,9 +179,6 @@ struct LockMechanism : Service::LockMechanism
         HKAuthenticationContext authCtx([](uint8_t* apdu, size_t apduLen, uint8_t* res, uint8_t* resLen) {  return nfc.inDataExchange(apdu, apduLen, res, resLen); }, readerData, savedData);
         auto authResult = authCtx.authenticate(hkFlow);
         if (std::get<2>(authResult) != homeKeyReader::kFlowFailed) {
-          int newTargetState = lockTargetState->getNewVal();
-          int targetState = lockTargetState->getVal();
-          mqtt.publish(MQTT_STATE_TOPIC, std::to_string(newTargetState == targetState ? !lockCurrentState->getVal() : newTargetState).c_str());
           json payload;
           payload["issuerId"] = utils::bufToHexString(std::get<0>(authResult), 8, true);
           payload["endpointId"] = utils::bufToHexString(std::get<1>(authResult), 6, true);

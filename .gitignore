@@ -7,5 +7,5 @@ lib
 *.log
 .cache
 compile_commands.json
-src/mqtt*.h
+src/config.h
 sdkconfig.*
