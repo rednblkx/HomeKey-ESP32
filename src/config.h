@@ -22,8 +22,12 @@ enum customLockActions
 #define MQTT_USERNAME "username"  //username to connect to mqtt broker
 #define MQTT_PASSWORD "password"  //password to connect to mqtt broker
 
+//MQTT Flags
+#define MQTT_CUSTOM_STATE_ENABLED 0 // Flag to enable the use of custom states and relevant MQTT Topics
+#define MQTT_HOMEKEY_ALWAYS_UNLOCK 0 // Flag indicating if a successful Homekey authentication should always set and publish the unlock state
+#define MQTT_HOMEKEY_ALWAYS_LOCK 0  // Flag indicating if a successful Homekey authentication should always set and publish the lock state
+
 // MQTT Topics
-#define USE_MQTT_CUSTOM_STATE 0 // Flag to enable the use of custom states and relevant MQTT Topics
 #define MQTT_CUSTOM_STATE_TOPIC "topic/custom_state" // MQTT Topic for publishing custom lock state
 #define MQTT_CUSTOM_STATE_CTRL_TOPIC "topic/set_custom_state" // MQTT Control Topic with custom lock state
 #define MQTT_AUTH_TOPIC "topic/auth" // MQTT Topic for publishing HomeKey authentication data or RFID UID
@@ -37,5 +41,5 @@ enum customLockActions
 #define LED_PIN 2 //status led pin, built in is pin 2
 #define OTA_PWD "homespan-ota" //custom password for ota
 #define NAME "HK Lock" //Device name
-#define DISCOVERY 0 //Enable or disable discovery for home assistant tags functionality, set to "1" to enable.
+#define DISCOVERY 0 //Enable or disable discovery for home assistant tags functionality, set to 1 to enable.
 #define CONTROL_PIN 26 // GPIO Pin for a Configuration Mode button (more info on https://github.com/HomeSpan/HomeSpan/blob/master/docs/UserGuide.md#device-configuration-mode)

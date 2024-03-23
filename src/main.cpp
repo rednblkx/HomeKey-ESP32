@@ -96,7 +96,7 @@ struct LockMechanism : Service::LockMechanism
     LOG(I, "Configuring LockMechanism"); // initialization message
     lockCurrentState = new Characteristic::LockCurrentState(1, true);
     lockTargetState = new Characteristic::LockTargetState(1, true);
-    if (USE_MQTT_CUSTOM_STATE) {
+    if (MQTT_CUSTOM_STATE_ENABLED) {
       mqtt.subscribe(
       MQTT_CUSTOM_STATE_CTRL_TOPIC, [this](const char* payload) {
         LOG(D, "Received message in topic set_state: %s", payload);
@@ -142,7 +142,7 @@ struct LockMechanism : Service::LockMechanism
             lockTargetState->setVal(state);
             lockCurrentState->setVal(state);
             mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockCurrentState->getVal()).c_str(), 1, true);
-            if (USE_MQTT_CUSTOM_STATE) {
+            if (MQTT_CUSTOM_STATE_ENABLED) {
               mqtt.publish(MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::UNLOCK).c_str(), 0, false);
             }
             break;
@@ -150,7 +150,7 @@ struct LockMechanism : Service::LockMechanism
             lockTargetState->setVal(state);
             lockCurrentState->setVal(state);
             mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockCurrentState->getVal()).c_str(), 1, true);
-            if (USE_MQTT_CUSTOM_STATE) {
+            if (MQTT_CUSTOM_STATE_ENABLED) {
               mqtt.publish(MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::LOCK).c_str(), 0, false);
             }
             break;
@@ -201,7 +201,7 @@ struct LockMechanism : Service::LockMechanism
     else {
       mqtt.publish(MQTT_STATE_TOPIC, std::to_string(currentState).c_str(), 1, true);
     }
-    if (USE_MQTT_CUSTOM_STATE) {
+    if (MQTT_CUSTOM_STATE_ENABLED) {
       if (targetState == lockStates::UNLOCKED) {
         mqtt.publish(MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::UNLOCK).c_str(), 0, false);
       }
@@ -242,13 +242,31 @@ struct LockMechanism : Service::LockMechanism
           payload["endpointId"] = utils::bufToHexString(std::get<1>(authResult), 6, true);
           payload["homekey"] = true;
           mqtt.publish(MQTT_AUTH_TOPIC, payload.dump().c_str());
-          if (USE_MQTT_CUSTOM_STATE) {
-            int currentState = lockCurrentState->getVal();
-            if (currentState == lockStates::UNLOCKED) {
-              mqtt.publish(MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::LOCK).c_str(), 0, false);
+          if (MQTT_HOMEKEY_ALWAYS_UNLOCK) {
+            lockCurrentState->setVal(lockStates::UNLOCKED);
+            lockTargetState->setVal(lockStates::UNLOCKED);
+            mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockStates::UNLOCKED).c_str(), 1, false);
+            if (MQTT_CUSTOM_STATE_ENABLED) {
+              mqtt.publish(MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::UNLOCK).c_str(), 1, false);
             }
-            else if(currentState == lockStates::LOCKED) {
-              mqtt.publish(MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::UNLOCK).c_str(), 0, false);
+          }
+          else if (MQTT_HOMEKEY_ALWAYS_LOCK) {
+            lockCurrentState->setVal(lockStates::LOCKED);
+            lockTargetState->setVal(lockStates::LOCKED);
+            mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockStates::LOCKED).c_str(), 1, false);
+            if (MQTT_CUSTOM_STATE_ENABLED) {
+              mqtt.publish(MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::LOCK).c_str(), 1, false);
+            }
+          }
+          else {
+            if (MQTT_CUSTOM_STATE_ENABLED) {
+              int currentState = lockCurrentState->getVal();
+              if (currentState == lockStates::UNLOCKED) {
+                mqtt.publish(MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::LOCK).c_str(), 1, false);
+              }
+              else if(currentState == lockStates::LOCKED) {
+                mqtt.publish(MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::UNLOCK).c_str(), 1, false);
+              }
             }
           }
           auto stopTime = std::chrono::high_resolution_clock::now();
