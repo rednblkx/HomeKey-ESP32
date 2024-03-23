@@ -245,10 +245,10 @@ struct LockMechanism : Service::LockMechanism
           if (USE_MQTT_CUSTOM_STATE) {
             int currentState = lockCurrentState->getVal();
             if (currentState == lockStates::UNLOCKED) {
-              mqtt.publish(MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::UNLOCK).c_str(), 0, false);
+              mqtt.publish(MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::LOCK).c_str(), 0, false);
             }
             else if(currentState == lockStates::LOCKED) {
-              mqtt.publish(MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::LOCK).c_str(), 0, false);
+              mqtt.publish(MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::UNLOCK).c_str(), 0, false);
             }
           }
           auto stopTime = std::chrono::high_resolution_clock::now();
