@@ -37,5 +37,5 @@ enum customLockActions
 #define LED_PIN 2 //status led pin, built in is pin 2
 #define OTA_PWD "homespan-ota" //custom password for ota
 #define NAME "HK Lock" //Device name
-#define DISCOVERY "1" //Enable or disable discovery for home assistant tags functionality, set to "1" to enable.
+#define DISCOVERY 0 //Enable or disable discovery for home assistant tags functionality, set to "1" to enable.
 #define CONTROL_PIN 26 // GPIO Pin for a Configuration Mode button (more info on https://github.com/HomeSpan/HomeSpan/blob/master/docs/UserGuide.md#device-configuration-mode)
