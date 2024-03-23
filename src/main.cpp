@@ -80,48 +80,96 @@ struct LockMechanism : Service::LockMechanism
   SpanCharacteristic* lockTargetState;
   const char* TAG = "LockMechanism";
   uint8_t ecpData[18] = { 0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0 };
-
-  LockMechanism() : Service::LockMechanism() {
-    enum
+    enum lockStates
     {
       UNLOCKED,
       LOCKED,
       JAMMED,
-      UNKNOWN
+      UNKNOWN,
+      UNLOCKING,
+      LOCKING
     };
+
+  LockMechanism() : Service::LockMechanism() {
     memcpy(ecpData + 8, readerData.reader_identifier, sizeof(readerData.reader_identifier));
     with_crc16(ecpData, 16, ecpData + 16);
     LOG(I, "Configuring LockMechanism"); // initialization message
     lockCurrentState = new Characteristic::LockCurrentState(1, true);
     lockTargetState = new Characteristic::LockTargetState(1, true);
+    if (USE_MQTT_CUSTOM_STATE) {
+      mqtt.subscribe(
+      MQTT_CUSTOM_STATE_CTRL_TOPIC, [this](const char* payload) {
+        LOG(D, "Received message in topic set_state: %s", payload);
+        int state = atoi(payload);
+        switch (state)
+        {
+          case customLockStates::UNLOCKING:
+            lockTargetState->setVal(lockStates::UNLOCKED);
+            mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockStates::UNLOCKING).c_str(), 1, true);
+            break;
+          case customLockStates::LOCKING:
+            lockTargetState->setVal(lockStates::LOCKED);
+            mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockStates::LOCKING).c_str(), 1, true);
+            break;
+          case customLockStates::UNLOCKED:
+            lockCurrentState->setVal(lockStates::UNLOCKED);
+            mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockCurrentState->getVal()).c_str(), 1, true);
+            break;
+          case customLockStates::LOCKED:
+            lockCurrentState->setVal(lockStates::LOCKED);
+            mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockCurrentState->getVal()).c_str(), 1, true);
+            break;
+          case customLockStates::JAMMED:
+            lockCurrentState->setVal(lockStates::JAMMED);
+            mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockCurrentState->getVal()).c_str(), 1, true);
+            break;
+          case customLockStates::UNKNOWN:
+            lockCurrentState->setVal(lockStates::UNKNOWN);
+            mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockCurrentState->getVal()).c_str(), 1, true);
+          default:
+            LOG(D, "Update state failed! Recv value not valid");
+            break;
+        }
+      }, 3);
+    }
     mqtt.subscribe(
       MQTT_SET_STATE_TOPIC, [this](const char* payload) {
         LOG(D, "Received message in topic set_state: %s", payload);
         int state = atoi(payload);
         switch (state)
         {
-          case UNLOCKED:
-          case LOCKED:
+          case lockStates::UNLOCKED:
             lockTargetState->setVal(state);
             lockCurrentState->setVal(state);
             mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockCurrentState->getVal()).c_str(), 1, true);
+            if (USE_MQTT_CUSTOM_STATE) {
+              mqtt.publish(MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::UNLOCK).c_str(), 0, false);
+            }
             break;
-          case JAMMED:
-          case UNKNOWN:
+          case lockStates::LOCKED:
+            lockTargetState->setVal(state);
+            lockCurrentState->setVal(state);
+            mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockCurrentState->getVal()).c_str(), 1, true);
+            if (USE_MQTT_CUSTOM_STATE) {
+              mqtt.publish(MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::LOCK).c_str(), 0, false);
+            }
+            break;
+          case lockStates::JAMMED:
+          case lockStates::UNKNOWN:
             lockCurrentState->setVal(state);
             mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockCurrentState->getVal()).c_str(), 1, true);
           default:
             LOG(D, "Update state failed! Recv value not valid");
             break;
         }
-      },1);
+      }, 1);
     mqtt.subscribe(
       MQTT_SET_TARGET_STATE_TOPIC, [this](const char* payload) {
         LOG(D, "Received message in topic set_target_state: %s", payload);
         int state = atoi(payload);
-        if (state == UNLOCKED || state == LOCKED) {
+        if (state == lockStates::UNLOCKED || state == lockStates::LOCKED) {
           lockTargetState->setVal(state);
-          mqtt.publish(MQTT_STATE_TOPIC, state == UNLOCKED ? "4" : "5", 1, true);
+          mqtt.publish(MQTT_STATE_TOPIC, state == lockStates::UNLOCKED ? std::to_string(lockStates::UNLOCKING).c_str() : std::to_string(lockStates::LOCKING).c_str(), 1, true);
         }
       },1);
     mqtt.subscribe(
@@ -130,10 +178,10 @@ struct LockMechanism : Service::LockMechanism
         int state = atoi(payload);
         switch (state)
         {
-          case UNLOCKED:
-          case LOCKED:
-          case JAMMED:
-          case UNKNOWN:
+          case lockStates::UNLOCKED:
+          case lockStates::LOCKED:
+          case lockStates::JAMMED:
+          case lockStates::UNKNOWN:
             lockCurrentState->setVal(state);
             mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockCurrentState->getVal()).c_str(), 1, true);
             break;
@@ -145,10 +193,22 @@ struct LockMechanism : Service::LockMechanism
 
   boolean update(std::vector<char>* callback) {
     int targetState = lockTargetState->getNewVal();
+    int currentState = lockCurrentState->getVal();
     LOG(I, "New LockState=%d, Current LockState=%d", targetState, lockCurrentState->getVal());
-
-    // lockCurrentState->setVal(targetState);
-    mqtt.publish(MQTT_STATE_TOPIC, targetState == 0 ? "4" : "5" , 1, true);
+    if (targetState != currentState) {
+      mqtt.publish(MQTT_STATE_TOPIC, targetState == lockStates::UNLOCKED ? std::to_string(lockStates::UNLOCKING).c_str() : std::to_string(lockStates::LOCKING).c_str(), 1, true);
+    }
+    else {
+      mqtt.publish(MQTT_STATE_TOPIC, std::to_string(currentState).c_str(), 1, true);
+    }
+    if (USE_MQTT_CUSTOM_STATE) {
+      if (targetState == lockStates::UNLOCKED) {
+        mqtt.publish(MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::UNLOCK).c_str(), 0, false);
+      }
+      else if(targetState == lockStates::LOCKED) {
+        mqtt.publish(MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::LOCK).c_str(), 0, false);
+      }
+    }
 
     return (true);
   }
@@ -182,6 +242,15 @@ struct LockMechanism : Service::LockMechanism
           payload["endpointId"] = utils::bufToHexString(std::get<1>(authResult), 6, true);
           payload["homekey"] = true;
           mqtt.publish(MQTT_AUTH_TOPIC, payload.dump().c_str());
+          if (USE_MQTT_CUSTOM_STATE) {
+            int currentState = lockCurrentState->getVal();
+            if (currentState == lockStates::UNLOCKED) {
+              mqtt.publish(MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::UNLOCK).c_str(), 0, false);
+            }
+            else if(currentState == lockStates::LOCKED) {
+              mqtt.publish(MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::LOCK).c_str(), 0, false);
+            }
+          }
           auto stopTime = std::chrono::high_resolution_clock::now();
           LOG(I, "Total Time (from detection to mqtt publish): %lli ms", std::chrono::duration_cast<std::chrono::milliseconds>(stopTime - startTime).count());
         }
@@ -535,7 +604,7 @@ void setup() {
   mqtt.connected_callback = [serialNumber] {
     const char* TAG = "MQTT::connected_callback";
     LOG(D, "MQTT connected");
-    if (!strcmp(DISCOVERY, "1")) {
+    if (DISCOVERY) {
       json payload;
       payload["topic"] = MQTT_AUTH_TOPIC;
       payload["value_template"] = "{{ value_json.uid }}";
@@ -578,7 +647,7 @@ void setup() {
       payload["availability_topic"] = MQTT_CLIENTID"/status";
       payload["unique_id"] = identifier;
       payload["device"] = device;
-      payload["retain"] = "true";
+      payload["retain"] = "false";
       bufferpub = payload.dump(-1, ' ', false, json::error_handler_t::strict);
       mqtt.publish(("homeassistant/lock/" MQTT_CLIENTID "/lock/config"), bufferpub.c_str(), 1, true);
       LOG(D, "MQTT PUBLISHED DISCOVERY");
