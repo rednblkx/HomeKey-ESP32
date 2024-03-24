@@ -6,18 +6,24 @@
 #include <PN532_SPI.h>
 #include "PN532.h"
 #include "HAP.h"
-#include <PicoMQTT.h>
 #include <chrono>
 #include <HK_HomeKit.h>
 #include <config.h>
+#include <mqtt_client.h>
 
 using namespace nlohmann;
 
-int currentState = 0;
-
 const char* TAG = "MAIN";
 
-PicoMQTT::Client mqtt;
+enum lockStates
+{
+  UNLOCKED,
+  LOCKED,
+  JAMMED,
+  UNKNOWN,
+  UNLOCKING,
+  LOCKING
+};
 
 #define PN532_SS (5)
 PN532_SPI pn532spi(SPI, PN532_SS);
@@ -26,6 +32,9 @@ PN532 nfc(pn532spi);
 nvs_handle savedData;
 homeKeyReader::readerData_t readerData;
 homeKeyReader::KeyFlow hkFlow = homeKeyReader::KeyFlow::kFlowFAST;
+SpanCharacteristic* lockCurrentState;
+SpanCharacteristic* lockTargetState;
+esp_mqtt_client_handle_t client = nullptr;
 
 bool save_to_nvs() {
   json serializedData = readerData;
@@ -76,19 +85,8 @@ void with_crc16(unsigned char* data, unsigned int size, unsigned char* result) {
 
 struct LockMechanism : Service::LockMechanism
 {
-  SpanCharacteristic* lockCurrentState;
-  SpanCharacteristic* lockTargetState;
   const char* TAG = "LockMechanism";
   uint8_t ecpData[18] = { 0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0 };
-    enum lockStates
-    {
-      UNLOCKED,
-      LOCKED,
-      JAMMED,
-      UNKNOWN,
-      UNLOCKING,
-      LOCKING
-    };
 
   LockMechanism() : Service::LockMechanism() {
     memcpy(ecpData + 8, readerData.reader_identifier, sizeof(readerData.reader_identifier));
@@ -96,119 +94,28 @@ struct LockMechanism : Service::LockMechanism
     LOG(I, "Configuring LockMechanism"); // initialization message
     lockCurrentState = new Characteristic::LockCurrentState(1, true);
     lockTargetState = new Characteristic::LockTargetState(1, true);
-    if (MQTT_CUSTOM_STATE_ENABLED) {
-      mqtt.subscribe(
-      MQTT_CUSTOM_STATE_CTRL_TOPIC, [this](const char* payload) {
-        LOG(D, "Received message in topic set_state: %s", payload);
-        int state = atoi(payload);
-        switch (state)
-        {
-          case customLockStates::UNLOCKING:
-            lockTargetState->setVal(lockStates::UNLOCKED);
-            mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockStates::UNLOCKING).c_str(), 1, true);
-            break;
-          case customLockStates::LOCKING:
-            lockTargetState->setVal(lockStates::LOCKED);
-            mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockStates::LOCKING).c_str(), 1, true);
-            break;
-          case customLockStates::UNLOCKED:
-            lockCurrentState->setVal(lockStates::UNLOCKED);
-            mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockCurrentState->getVal()).c_str(), 1, true);
-            break;
-          case customLockStates::LOCKED:
-            lockCurrentState->setVal(lockStates::LOCKED);
-            mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockCurrentState->getVal()).c_str(), 1, true);
-            break;
-          case customLockStates::JAMMED:
-            lockCurrentState->setVal(lockStates::JAMMED);
-            mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockCurrentState->getVal()).c_str(), 1, true);
-            break;
-          case customLockStates::UNKNOWN:
-            lockCurrentState->setVal(lockStates::UNKNOWN);
-            mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockCurrentState->getVal()).c_str(), 1, true);
-          default:
-            LOG(D, "Update state failed! Recv value not valid");
-            break;
-        }
-      }, 3);
-    }
-    mqtt.subscribe(
-      MQTT_SET_STATE_TOPIC, [this](const char* payload) {
-        LOG(D, "Received message in topic set_state: %s", payload);
-        int state = atoi(payload);
-        switch (state)
-        {
-          case lockStates::UNLOCKED:
-            lockTargetState->setVal(state);
-            lockCurrentState->setVal(state);
-            mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockCurrentState->getVal()).c_str(), 1, true);
-            if (MQTT_CUSTOM_STATE_ENABLED) {
-              mqtt.publish(MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::UNLOCK).c_str(), 0, false);
-            }
-            break;
-          case lockStates::LOCKED:
-            lockTargetState->setVal(state);
-            lockCurrentState->setVal(state);
-            mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockCurrentState->getVal()).c_str(), 1, true);
-            if (MQTT_CUSTOM_STATE_ENABLED) {
-              mqtt.publish(MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::LOCK).c_str(), 0, false);
-            }
-            break;
-          case lockStates::JAMMED:
-          case lockStates::UNKNOWN:
-            lockCurrentState->setVal(state);
-            mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockCurrentState->getVal()).c_str(), 1, true);
-          default:
-            LOG(D, "Update state failed! Recv value not valid");
-            break;
-        }
-      }, 1);
-    mqtt.subscribe(
-      MQTT_SET_TARGET_STATE_TOPIC, [this](const char* payload) {
-        LOG(D, "Received message in topic set_target_state: %s", payload);
-        int state = atoi(payload);
-        if (state == lockStates::UNLOCKED || state == lockStates::LOCKED) {
-          lockTargetState->setVal(state);
-          mqtt.publish(MQTT_STATE_TOPIC, state == lockStates::UNLOCKED ? std::to_string(lockStates::UNLOCKING).c_str() : std::to_string(lockStates::LOCKING).c_str(), 1, true);
-        }
-      },1);
-    mqtt.subscribe(
-      MQTT_SET_CURRENT_STATE_TOPIC, [this](const char* payload) {
-        LOG(D, "Received message in topic set_current_state: %s", payload);
-        int state = atoi(payload);
-        switch (state)
-        {
-          case lockStates::UNLOCKED:
-          case lockStates::LOCKED:
-          case lockStates::JAMMED:
-          case lockStates::UNKNOWN:
-            lockCurrentState->setVal(state);
-            mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockCurrentState->getVal()).c_str(), 1, true);
-            break;
-          default:
-            LOG(D, "Update state failed! Recv value not valid");
-            break;
-        }},1);
   } // end constructor
 
   boolean update(std::vector<char>* callback) {
     int targetState = lockTargetState->getNewVal();
     int currentState = lockCurrentState->getVal();
     LOG(I, "New LockState=%d, Current LockState=%d", targetState, lockCurrentState->getVal());
-    if (targetState != currentState) {
-      mqtt.publish(MQTT_STATE_TOPIC, targetState == lockStates::UNLOCKED ? std::to_string(lockStates::UNLOCKING).c_str() : std::to_string(lockStates::LOCKING).c_str(), 1, true);
-    }
-    else {
-      mqtt.publish(MQTT_STATE_TOPIC, std::to_string(currentState).c_str(), 1, true);
-    }
-    if (MQTT_CUSTOM_STATE_ENABLED) {
-      if (targetState == lockStates::UNLOCKED) {
-        mqtt.publish(MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::UNLOCK).c_str(), 0, false);
+    if (client != nullptr) {
+      if (targetState != currentState) {
+          esp_mqtt_client_publish(client, MQTT_STATE_TOPIC, targetState == lockStates::UNLOCKED ? std::to_string(lockStates::UNLOCKING).c_str() : std::to_string(lockStates::LOCKING).c_str(), 1, 1, true);
+        }
+      else {
+        esp_mqtt_client_publish(client, MQTT_STATE_TOPIC, std::to_string(currentState).c_str(), 1, 1, true);
       }
-      else if(targetState == lockStates::LOCKED) {
-        mqtt.publish(MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::LOCK).c_str(), 0, false);
+      if (MQTT_CUSTOM_STATE_ENABLED) {
+        if (targetState == lockStates::UNLOCKED) {
+          esp_mqtt_client_publish(client, MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::UNLOCK).c_str(), 0, 0, false);
+        }
+        else if(targetState == lockStates::LOCKED) {
+          esp_mqtt_client_publish(client, MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::LOCK).c_str(), 0, 0, false);
+        }
       }
-    }
+    } LOG(W, "MQTT Client not initialized, cannot publish message");
 
     return (true);
   }
@@ -229,7 +136,7 @@ struct LockMechanism : Service::LockMechanism
       uint8_t selectCmdRes[32];
       uint8_t selectCmdResLength = 32;
       LOG(D, "SELECT HomeKey Applet, APDU: %s", utils::bufToHexString(data, sizeof(data)).c_str());
-      bool exchange = nfc.inDataExchange(data, sizeof(data), selectCmdRes, &selectCmdResLength);
+      nfc.inDataExchange(data, sizeof(data), selectCmdRes, &selectCmdResLength);
       LOG(D, "SELECT HomeKey Applet, Response: %s, Length: %d", utils::bufToHexString(selectCmdRes, selectCmdResLength).c_str(), selectCmdResLength);
       if (selectCmdRes[selectCmdResLength - 2] == 0x90 && selectCmdRes[selectCmdResLength - 1] == 0x00) {
         LOG(D, "*** SELECT HOMEKEY APPLET SUCCESSFUL ***");
@@ -241,34 +148,39 @@ struct LockMechanism : Service::LockMechanism
           payload["issuerId"] = utils::bufToHexString(std::get<0>(authResult), 8, true);
           payload["endpointId"] = utils::bufToHexString(std::get<1>(authResult), 6, true);
           payload["homekey"] = true;
-          mqtt.publish(MQTT_AUTH_TOPIC, payload.dump().c_str());
-          if (MQTT_HOMEKEY_ALWAYS_UNLOCK) {
-            lockCurrentState->setVal(lockStates::UNLOCKED);
-            lockTargetState->setVal(lockStates::UNLOCKED);
-            mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockStates::UNLOCKED).c_str(), 1, false);
-            if (MQTT_CUSTOM_STATE_ENABLED) {
-              mqtt.publish(MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::UNLOCK).c_str(), 1, false);
-            }
-          }
-          else if (MQTT_HOMEKEY_ALWAYS_LOCK) {
-            lockCurrentState->setVal(lockStates::LOCKED);
-            lockTargetState->setVal(lockStates::LOCKED);
-            mqtt.publish(MQTT_STATE_TOPIC, std::to_string(lockStates::LOCKED).c_str(), 1, false);
-            if (MQTT_CUSTOM_STATE_ENABLED) {
-              mqtt.publish(MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::LOCK).c_str(), 1, false);
-            }
-          }
-          else {
-            if (MQTT_CUSTOM_STATE_ENABLED) {
-              int currentState = lockCurrentState->getVal();
-              if (currentState == lockStates::UNLOCKED) {
-                mqtt.publish(MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::LOCK).c_str(), 1, false);
-              }
-              else if(currentState == lockStates::LOCKED) {
-                mqtt.publish(MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::UNLOCK).c_str(), 1, false);
+          std::string payloadStr = payload.dump();
+          if (client != nullptr) {
+            esp_mqtt_client_publish(client, MQTT_AUTH_TOPIC, payloadStr.c_str(), payloadStr.length(), 0, false);
+            if (MQTT_HOMEKEY_ALWAYS_UNLOCK) {
+              lockCurrentState->setVal(lockStates::UNLOCKED);
+              lockTargetState->setVal(lockStates::UNLOCKED);
+              esp_mqtt_client_publish(client, MQTT_STATE_TOPIC, std::to_string(lockStates::UNLOCKED).c_str(), 1, 1, true);
+              if (MQTT_CUSTOM_STATE_ENABLED) {
+                esp_mqtt_client_publish(client, MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::UNLOCK).c_str(), 0, 0, false);
               }
             }
+            else if (MQTT_HOMEKEY_ALWAYS_LOCK) {
+              lockCurrentState->setVal(lockStates::LOCKED);
+              lockTargetState->setVal(lockStates::LOCKED);
+              esp_mqtt_client_publish(client, MQTT_STATE_TOPIC, std::to_string(lockStates::LOCKED).c_str(), 1, 1, true);
+              if (MQTT_CUSTOM_STATE_ENABLED) {
+                esp_mqtt_client_publish(client, MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::LOCK).c_str(), 0, 0, false);
+              }
+            }
+            else {
+              if (MQTT_CUSTOM_STATE_ENABLED) {
+                int currentState = lockCurrentState->getVal();
+                if (currentState == lockStates::UNLOCKED) {
+                esp_mqtt_client_publish(client, MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::LOCK).c_str(), 0, 0, false);
+                }
+                else if(currentState == lockStates::LOCKED) {
+                esp_mqtt_client_publish(client, MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::UNLOCK).c_str(), 0, 0, false);
+                }
+              }
+            }
           }
+          else LOG(W, "MQTT Client not initialized, cannot publish message");
+
           auto stopTime = std::chrono::high_resolution_clock::now();
           LOG(I, "Total Time (from detection to mqtt publish): %lli ms", std::chrono::duration_cast<std::chrono::milliseconds>(stopTime - startTime).count());
         }
@@ -282,7 +194,9 @@ struct LockMechanism : Service::LockMechanism
         payload["sak"] = utils::bufToHexString(sak, 1, true);
         payload["uid"] = utils::bufToHexString(uid, uidLen, true);
         payload["homekey"] = false;
-        mqtt.publish(MQTT_AUTH_TOPIC, payload.dump().c_str());
+        if (client != nullptr) {
+          esp_mqtt_client_publish(client, MQTT_AUTH_TOPIC, payload.dump().c_str(), 0, 0, false);
+        } else LOG(W, "MQTT Client not initialized, cannot publish message");
       }
       delay(500);
       nfc.inRelease();
@@ -527,17 +441,191 @@ void print_issuers(const char* buf) {
   }
 }
 
+void set_custom_state_handler(esp_mqtt_client_handle_t client, int state) {
+  switch (state)
+  {
+    case customLockStates::C_UNLOCKING:
+      lockTargetState->setVal(lockStates::UNLOCKED);
+      esp_mqtt_client_publish(client, MQTT_STATE_TOPIC, std::to_string(lockStates::UNLOCKING).c_str(), 0, 1, true);
+      break;
+    case customLockStates::C_LOCKING:
+      lockTargetState->setVal(lockStates::LOCKED);
+      esp_mqtt_client_publish(client, MQTT_STATE_TOPIC, std::to_string(lockStates::LOCKING).c_str(), 0, 1, true);
+      break;
+    case customLockStates::C_UNLOCKED:
+      lockCurrentState->setVal(lockStates::UNLOCKED);
+      esp_mqtt_client_publish(client, MQTT_STATE_TOPIC, std::to_string(lockStates::UNLOCKED).c_str(), 0, 1, true);
+      break;
+    case customLockStates::C_LOCKED:
+      lockCurrentState->setVal(lockStates::LOCKED);
+      esp_mqtt_client_publish(client, MQTT_STATE_TOPIC, std::to_string(lockStates::LOCKED).c_str(), 0, 1, true);
+      break;
+    case customLockStates::C_JAMMED:
+      lockCurrentState->setVal(lockStates::JAMMED);
+      esp_mqtt_client_publish(client, MQTT_STATE_TOPIC, std::to_string(lockStates::JAMMED).c_str(), 0, 1, true);
+      break;
+    case customLockStates::C_UNKNOWN:
+      lockCurrentState->setVal(lockStates::UNKNOWN);
+      esp_mqtt_client_publish(client, MQTT_STATE_TOPIC, std::to_string(lockStates::UNKNOWN).c_str(), 0, 1, true);
+    default:
+      LOG(D, "Update state failed! Recv value not valid");
+      break;
+  }
+}
+
+void set_state_handler(esp_mqtt_client_handle_t client, int state) {
+  switch (state)
+  {
+    case lockStates::UNLOCKED:
+      lockTargetState->setVal(state);
+      lockCurrentState->setVal(state);
+      esp_mqtt_client_publish(client, MQTT_STATE_TOPIC, std::to_string(lockStates::UNLOCKED).c_str(), 0, 1, true);
+      if (MQTT_CUSTOM_STATE_ENABLED) {
+        esp_mqtt_client_publish(client, MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::UNLOCK).c_str(), 0, 0, false);
+      }
+      break;
+    case lockStates::LOCKED:
+      lockTargetState->setVal(state);
+      lockCurrentState->setVal(state);
+      esp_mqtt_client_publish(client, MQTT_STATE_TOPIC, std::to_string(lockStates::LOCKED).c_str(), 0, 1, true);
+      if (MQTT_CUSTOM_STATE_ENABLED) {
+        esp_mqtt_client_publish(client, MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::LOCK).c_str(), 0, 0, false);
+      }
+      break;
+    case lockStates::JAMMED:
+    case lockStates::UNKNOWN:
+      lockCurrentState->setVal(state);
+      esp_mqtt_client_publish(client, MQTT_STATE_TOPIC, std::to_string(state).c_str(), 0, 1, true);
+      break;
+    default:
+      LOG(D, "Update state failed! Recv value not valid");
+      break;
+  }
+}
+
+/*
+ * @brief Event handler callback for MQTT events
+ *
+ *
+ * @param event_data The data for the event, esp_mqtt_event_handle_t.
+ *
+ *  @return esp_err_t
+ */
+esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event_data)
+{
+  ESP_LOGD(TAG, "Event dispatched from callback type=%d", event_data->event_id);
+  esp_mqtt_client_handle_t client = event_data->client;
+  std::string topic(event_data->topic, event_data->topic + event_data->topic_len);
+  std::string data(event_data->data, event_data->data + event_data->data_len);
+  int msg_id = event_data->msg_id;
+  if (event_data->event_id == MQTT_EVENT_CONNECTED) {
+    uint8_t mac[6];
+    WiFi.macAddress(mac);
+    char macStr[18] = { 0 };
+    sprintf(macStr, "%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3]);
+    std::string serialNumber = "HK-";
+    serialNumber.append(macStr);
+    LOG(D, "MQTT connected");
+    if (DISCOVERY) {
+      json payload;
+      payload["topic"] = MQTT_AUTH_TOPIC;
+      payload["value_template"] = "{{ value_json.uid }}";
+      json device; // create a JSON object for the device
+      device["name"] = NAME; // assign the name value
+      char identifier[18];
+      sprintf(identifier, "%.2s%.2s%.2s%.2s%.2s%.2s", HAPClient::accessory.ID, HAPClient::accessory.ID + 3, HAPClient::accessory.ID + 6, HAPClient::accessory.ID + 9, HAPClient::accessory.ID + 12, HAPClient::accessory.ID + 15);
+      device["identifiers"] = { identifier, serialNumber }; // assign the identifiers array
+      device["manufacturer"] = "rednblkx";
+      device["model"] = "HomeKey-ESP32";
+      device["sw_version"] = "v0.1beta";
+      device["serial_number"] = serialNumber;
+      payload["device"] = device; // assign the device object to the payload object
+      std::string bufferpub = payload.dump(-1, ' ', false, json::error_handler_t::strict);
+      esp_mqtt_client_publish(client, ("homeassistant/tag/" MQTT_CLIENTID "/rfid/config"), bufferpub.c_str(), bufferpub.length(), 1, true);
+      payload = json();
+      payload["topic"] = MQTT_AUTH_TOPIC;
+      payload["value_template"] = "{{ value_json.issuerId }}";
+      payload["device"] = device; // reuse the device object for the second message
+      bufferpub = payload.dump(-1, ' ', false, json::error_handler_t::strict);
+      esp_mqtt_client_publish(client, ("homeassistant/tag/" MQTT_CLIENTID "/hkIssuer/config"), bufferpub.c_str(), bufferpub.length(), 1, true);
+      payload = json();
+      payload["topic"] = MQTT_AUTH_TOPIC;
+      payload["value_template"] = "{{ value_json.endpointId }}";
+      payload["device"] = device; // reuse the device object for the third message
+      bufferpub = payload.dump(-1, ' ', false, json::error_handler_t::strict);
+      esp_mqtt_client_publish(client, ("homeassistant/tag/" MQTT_CLIENTID "/hkEndpoint/config"), bufferpub.c_str(), bufferpub.length(), 1, true);
+      payload = json();
+      payload["name"] = NAME;
+      payload["state_topic"] = MQTT_STATE_TOPIC;
+      payload["command_topic"] = MQTT_SET_STATE_TOPIC;
+      payload["payload_lock"] = "1";
+      payload["payload_unlock"] = "0";
+      payload["state_locked"] = "1";
+      payload["state_unlocked"] = "0";
+      payload["state_unlocking"] = "4";
+      payload["state_locking"] = "5";
+      payload["state_jammed"] = "2";
+      payload["availability_topic"] = MQTT_CLIENTID"/status";
+      payload["unique_id"] = identifier;
+      payload["device"] = device;
+      payload["retain"] = "false";
+      bufferpub = payload.dump(-1, ' ', false, json::error_handler_t::strict);
+      esp_mqtt_client_publish(client,("homeassistant/lock/" MQTT_CLIENTID "/lock/config"), bufferpub.c_str(), bufferpub.length(), 1, true);
+      LOG(D, "MQTT PUBLISHED DISCOVERY");
+    }
+    esp_mqtt_client_publish(client, MQTT_CLIENTID"/status", "online", 6, 1, true);
+    if (MQTT_CUSTOM_STATE_ENABLED) {
+      esp_mqtt_client_subscribe(client, MQTT_CUSTOM_STATE_CTRL_TOPIC, 0);
+    }
+    esp_mqtt_client_subscribe(client, MQTT_SET_STATE_TOPIC, 0);
+    esp_mqtt_client_subscribe(client, MQTT_SET_CURRENT_STATE_TOPIC, 0);
+    esp_mqtt_client_subscribe(client, MQTT_SET_TARGET_STATE_TOPIC, 0);
+  }
+  else if (event_data->event_id == MQTT_EVENT_DATA) {
+    LOG(D, "Received message in topic \"%s\": %s", topic.c_str(), data.c_str());
+    int state = atoi(data.c_str());
+    if (!strcmp(MQTT_CUSTOM_STATE_CTRL_TOPIC, topic.c_str())) {
+      set_custom_state_handler(client, state);
+    }
+    else if (!strcmp(MQTT_SET_STATE_TOPIC, topic.c_str())) {
+      set_state_handler(client, state);
+    }
+    else if (!strcmp(MQTT_SET_TARGET_STATE_TOPIC, topic.c_str())) {
+        if (state == lockStates::UNLOCKED || state == lockStates::LOCKED) {
+          lockTargetState->setVal(state);
+          esp_mqtt_client_publish(client, MQTT_STATE_TOPIC, state == lockStates::UNLOCKED ? std::to_string(lockStates::UNLOCKING).c_str() : std::to_string(lockStates::LOCKING).c_str(), 0, 1, true);
+        }
+    }
+    else if (!strcmp(MQTT_SET_CURRENT_STATE_TOPIC, topic.c_str())) {
+      if (state == lockStates::UNLOCKED || state == lockStates::LOCKED || state == lockStates::JAMMED || state == lockStates::UNKNOWN) {
+        lockCurrentState->setVal(state);
+        esp_mqtt_client_publish(client, MQTT_STATE_TOPIC, std::to_string(lockCurrentState->getVal()).c_str(), 0, 1, true);
+      }
+    }
+  }
+  return ESP_OK;
+}
+
+static void mqtt_app_start(void)
+{
+  esp_mqtt_client_config_t mqtt_cfg = { 0 };
+  mqtt_cfg.host = MQTT_HOST;
+  mqtt_cfg.port = MQTT_PORT;
+  mqtt_cfg.client_id = MQTT_CLIENTID;
+  mqtt_cfg.username = MQTT_USERNAME;
+  mqtt_cfg.password = MQTT_PASSWORD;
+  mqtt_cfg.lwt_topic = MQTT_CLIENTID"/status";
+  mqtt_cfg.lwt_msg = "offline";
+  mqtt_cfg.lwt_qos = 1;
+  mqtt_cfg.lwt_retain = 1;
+  mqtt_cfg.lwt_msg_len = 7;
+  mqtt_cfg.event_handle = mqtt_event_handler;
+  client = esp_mqtt_client_init(&mqtt_cfg);
+  esp_mqtt_client_start(client);
+}
+
 void wifiCallback() {
-  mqtt.will.topic = MQTT_CLIENTID"/status";
-  mqtt.will.payload = "offline";
-  mqtt.will.qos = 1;
-  mqtt.will.retain = true;
-  mqtt.host = MQTT_HOST;
-  mqtt.port = MQTT_PORT;
-  mqtt.client_id = MQTT_CLIENTID;
-  mqtt.username = MQTT_USERNAME;
-  mqtt.password = MQTT_PASSWORD;
-  mqtt.begin();
+  mqtt_app_start();
 }
 
 void setup() {
@@ -619,63 +707,10 @@ void setup() {
   new Characteristic::Version();
   homeSpan.setPairCallback(pairCallback);
   homeSpan.setWifiCallback(wifiCallback);
-  mqtt.connected_callback = [serialNumber] {
-    const char* TAG = "MQTT::connected_callback";
-    LOG(D, "MQTT connected");
-    if (DISCOVERY) {
-      json payload;
-      payload["topic"] = MQTT_AUTH_TOPIC;
-      payload["value_template"] = "{{ value_json.uid }}";
-      json device; // create a JSON object for the device
-      device["name"] = NAME; // assign the name value
-      char identifier[18];
-      sprintf(identifier, "%.2s%.2s%.2s%.2s%.2s%.2s", HAPClient::accessory.ID, HAPClient::accessory.ID + 3, HAPClient::accessory.ID + 6, HAPClient::accessory.ID + 9, HAPClient::accessory.ID + 12, HAPClient::accessory.ID + 15);
-      device["identifiers"] = { identifier, serialNumber }; // assign the identifiers array
-      device["manufacturer"] = "rednblkx";
-      device["model"] = "HomeKey-ESP32";
-      device["sw_version"] = "v0.1beta";
-      device["serial_number"] = serialNumber;
-      payload["device"] = device; // assign the device object to the payload object
-      std::string bufferpub = payload.dump(-1, ' ', false, json::error_handler_t::strict);
-      mqtt.publish(("homeassistant/tag/" MQTT_CLIENTID "/rfid/config"), bufferpub.c_str(), true, 1);
-      payload = json();
-      payload["topic"] = MQTT_AUTH_TOPIC;
-      payload["value_template"] = "{{ value_json.issuerId }}";
-      payload["device"] = device; // reuse the device object for the second message
-      bufferpub = payload.dump(-1, ' ', false, json::error_handler_t::strict);
-      mqtt.publish(("homeassistant/tag/" MQTT_CLIENTID "/hkIssuer/config"), bufferpub.c_str(), true, 1);
-      payload = json();
-      payload["topic"] = MQTT_AUTH_TOPIC;
-      payload["value_template"] = "{{ value_json.endpointId }}";
-      payload["device"] = device; // reuse the device object for the third message
-      bufferpub = payload.dump(-1, ' ', false, json::error_handler_t::strict);
-      mqtt.publish(("homeassistant/tag/" MQTT_CLIENTID "/hkEndpoint/config"), bufferpub.c_str(), true, 1);
-      mqtt.publish(MQTT_CLIENTID"/status", "online", true, true);
-      payload = json();
-      payload["name"] = NAME;
-      payload["state_topic"] = MQTT_STATE_TOPIC;
-      payload["command_topic"] = MQTT_SET_STATE_TOPIC;
-      payload["payload_lock"] = "1";
-      payload["payload_unlock"] = "0";
-      payload["state_locked"] = "1";
-      payload["state_unlocked"] = "0";
-      payload["state_unlocking"] = "4";
-      payload["state_locking"] = "5";
-      payload["state_jammed"] = "2";
-      payload["availability_topic"] = MQTT_CLIENTID"/status";
-      payload["unique_id"] = identifier;
-      payload["device"] = device;
-      payload["retain"] = "false";
-      bufferpub = payload.dump(-1, ' ', false, json::error_handler_t::strict);
-      mqtt.publish(("homeassistant/lock/" MQTT_CLIENTID "/lock/config"), bufferpub.c_str(), 1, true);
-      LOG(D, "MQTT PUBLISHED DISCOVERY");
-    }
-    };
 }
 
 //////////////////////////////////////
 
 void loop() {
   homeSpan.poll();
-  mqtt.loop();
 }

@@ -1,12 +1,12 @@
 // Custom Lock States to be used in MQTT_CUSTOM_STATE_CTRL_TOPIC
 enum customLockStates
 {
-  LOCKED = 1,
-  UNLOCKING = 2,
-  UNLOCKED = 3,
-  LOCKING = 4,
-  JAMMED = 254,
-  UNKNOWN = 255
+  C_LOCKED = 1,
+  C_UNLOCKING = 2,
+  C_UNLOCKED = 3,
+  C_LOCKING = 4,
+  C_JAMMED = 254,
+  C_UNKNOWN = 255
 };
 // Custom Lock Actions to be used in MQTT_CUSTOM_STATE_TOPIC
 enum customLockActions
