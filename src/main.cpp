@@ -115,7 +115,7 @@ struct LockMechanism : Service::LockMechanism
           esp_mqtt_client_publish(client, MQTT_CUSTOM_STATE_TOPIC, std::to_string(customLockActions::LOCK).c_str(), 0, 0, false);
         }
       }
-    } LOG(W, "MQTT Client not initialized, cannot publish message");
+    } else LOG(W, "MQTT Client not initialized, cannot publish message");
 
     return (true);
   }
