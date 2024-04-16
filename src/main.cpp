@@ -10,6 +10,7 @@
 #include <HK_HomeKit.h>
 #include <config.h>
 #include <mqtt_client.h>
+#include <esp_ota_ops.h>
 
 using namespace nlohmann;
 
@@ -515,6 +516,8 @@ esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event_data)
 {
   ESP_LOGD(TAG, "Event dispatched from callback type=%d", event_data->event_id);
   esp_mqtt_client_handle_t client = event_data->client;
+  const esp_app_desc_t* app_desc = esp_ota_get_app_description();
+  std::string app_version = app_desc->version;
   std::string topic(event_data->topic, event_data->topic + event_data->topic_len);
   std::string data(event_data->data, event_data->data + event_data->data_len);
   int msg_id = event_data->msg_id;
@@ -537,7 +540,7 @@ esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event_data)
       device["identifiers"] = { identifier, serialNumber }; // assign the identifiers array
       device["manufacturer"] = "rednblkx";
       device["model"] = "HomeKey-ESP32";
-      device["sw_version"] = "v0.1beta";
+      device["sw_version"] = app_version.c_str();
       device["serial_number"] = serialNumber;
       payload["device"] = device; // assign the device object to the payload object
       std::string bufferpub = payload.dump(-1, ' ', false, json::error_handler_t::strict);
@@ -630,6 +633,8 @@ void wifiCallback() {
 
 void setup() {
   Serial.begin(115200);
+  const esp_app_desc_t* app_desc = esp_ota_get_app_description();
+  std::string app_version = app_desc->version;
   size_t len;
   const char* TAG = "SETUP";
   nvs_open("SAVED_DATA", NVS_READWRITE, &savedData);
@@ -648,6 +653,7 @@ void setup() {
   homeSpan.reserveSocketConnections(2);
   homeSpan.setPairingCode(HK_CODE);
   homeSpan.setLogLevel(0);
+  homeSpan.setSketchVersion(app_version.c_str());
 
   LOG(D, "READER GROUP ID (%d): %s", strlen((const char*)readerData.reader_identifier), utils::bufToHexString(readerData.reader_identifier, sizeof(readerData.reader_identifier)).c_str());
   LOG(D, "READER UNIQUE ID (%d): %s", strlen((const char*)readerData.identifier), utils::bufToHexString(readerData.identifier, sizeof(readerData.identifier)).c_str());
@@ -697,7 +703,7 @@ void setup() {
   std::string serialNumber = "HK-";
   serialNumber.append(macStr);
   new Characteristic::SerialNumber(serialNumber.c_str());
-  new Characteristic::FirmwareRevision("0.1");
+  new Characteristic::FirmwareRevision(app_version.c_str());
   new Characteristic::HardwareFinish();
 
   new LockManagement();
