@@ -528,13 +528,14 @@ esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event_data) {
   std::string topic(event_data->topic, event_data->topic + event_data->topic_len);
   std::string data(event_data->data, event_data->data + event_data->data_len);
   if (event_data->event_id == MQTT_EVENT_CONNECTED) {
+    // esp_log_level_set("*", ESP_LOG_DEBUG);
     uint8_t mac[6];
     WiFi.macAddress(mac);
     char macStr[18] = { 0 };
     sprintf(macStr, "%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3]);
     std::string serialNumber = "HK-";
     serialNumber.append(macStr);
-    LOG(D, "MQTT connected");
+    LOG(I, "MQTT connected");
     std::string statusTopic;
     statusTopic.append(espConfig::mqttData.mqttClientId).append("/status");
     if (espConfig::mqttData.hassMqttDiscoveryEnabled) {
@@ -564,7 +565,7 @@ esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event_data) {
       payload["device"] = device;
       bufferpub = payload.as<std::string>();
       std::string issuerTopic;
-      rfidTopic.append("homeassistant/tag/").append(espConfig::mqttData.mqttClientId).append("/hkIssuer/config");
+      issuerTopic.append("homeassistant/tag/").append(espConfig::mqttData.mqttClientId).append("/hkIssuer/config");
       esp_mqtt_client_publish(client, issuerTopic.c_str(), bufferpub.c_str(), bufferpub.length(), 1, true);
       payload = json();
       payload["topic"] = espConfig::mqttData.hkTopic;
@@ -572,7 +573,7 @@ esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event_data) {
       payload["device"] = device;
       bufferpub = payload.as<std::string>();
       std::string endpointTopic;
-      rfidTopic.append("homeassistant/tag/").append(espConfig::mqttData.mqttClientId).append("/hkEndpoint/config");
+      endpointTopic.append("homeassistant/tag/").append(espConfig::mqttData.mqttClientId).append("/hkEndpoint/config");
       esp_mqtt_client_publish(client, endpointTopic.c_str(), bufferpub.c_str(), bufferpub.length(), 1, true);
       payload = json();
       payload["name"] = espConfig::miscConfig.deviceName.c_str();
@@ -588,10 +589,10 @@ esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event_data) {
       payload["availability_topic"] = statusTopic.c_str();
       payload["unique_id"] = id;
       payload["device"] = device;
-      payload["retain"] = "false";
+      payload["retain"] = "true";
       bufferpub = payload.as<std::string>();
       std::string lockConfigTopic;
-      lockConfigTopic.append("homeassistant/lock/").append(espConfig::mqttData.mqttClientId).append("/lock/config");
+      lockConfigTopic.append("homeassistant/lock/").append(espConfig::mqttData.mqttClientId.c_str()).append("/lock/config");
       esp_mqtt_client_publish(client, lockConfigTopic.c_str(), bufferpub.c_str(), bufferpub.length(), 1, true);
       LOG(D, "MQTT PUBLISHED DISCOVERY");
     }
@@ -602,6 +603,12 @@ esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event_data) {
     esp_mqtt_client_subscribe(client, espConfig::mqttData.lockStateCmd.c_str(), 0);
     esp_mqtt_client_subscribe(client, espConfig::mqttData.lockCStateCmd.c_str(), 0);
     esp_mqtt_client_subscribe(client, espConfig::mqttData.lockTStateCmd.c_str(), 0);
+  }
+  else if (event_data->event_id == MQTT_EVENT_DISCONNECTED) {
+    esp_mqtt_client_unsubscribe(client, espConfig::mqttData.lockCustomStateCmd.c_str());
+    esp_mqtt_client_unsubscribe(client, espConfig::mqttData.lockStateCmd.c_str());
+    esp_mqtt_client_unsubscribe(client, espConfig::mqttData.lockCStateCmd.c_str());
+    esp_mqtt_client_unsubscribe(client, espConfig::mqttData.lockTStateCmd.c_str());
   }
   else if (event_data->event_id == MQTT_EVENT_DATA) {
     LOG(D, "Received message in topic \"%s\": %s", topic.c_str(), data.c_str());
@@ -634,9 +641,14 @@ esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event_data) {
  */
 static void mqtt_app_start(void) {
   std::string statusTopic;
-  statusTopic.append(espConfig::mqttData.mqttClientId).append("/status");
+  statusTopic.append(espConfig::mqttData.mqttClientId.c_str()).append("/status");
+  std::string uri = "mqtt://";
+  uri.append(espConfig::mqttData.mqttBroker).append(":").append(std::to_string(espConfig::mqttData.mqttPort));
+  LOG(I, "MQTT URI: %s", uri.c_str());
   esp_mqtt_client_config_t mqtt_cfg = { };
+  mqtt_cfg.event_handle = mqtt_event_handler;
   mqtt_cfg.host = espConfig::mqttData.mqttBroker.c_str();
+  mqtt_cfg.uri = uri.c_str();
   mqtt_cfg.port = espConfig::mqttData.mqttPort;
   mqtt_cfg.client_id = espConfig::mqttData.mqttClientId.c_str();
   mqtt_cfg.username = espConfig::mqttData.mqttUsername.c_str();
@@ -646,7 +658,6 @@ static void mqtt_app_start(void) {
   mqtt_cfg.lwt_qos = 1;
   mqtt_cfg.lwt_retain = 1;
   mqtt_cfg.lwt_msg_len = 7;
-  mqtt_cfg.event_handle = mqtt_event_handler;
   client = esp_mqtt_client_init(&mqtt_cfg);
   esp_mqtt_client_start(client);
 }
@@ -820,9 +831,7 @@ void setupWeb() {
         espConfig::mqttData.lockTStateCmd = p->value().c_str();
       }
       else if (!strcmp(p->name().c_str(), "mqtt-customstate-enable")) {
-        bool value = false;
-        std::istringstream(p->value().c_str()) >> std::boolalpha >> value;
-        espConfig::mqttData.lockEnableCustomState = value;
+        espConfig::mqttData.lockEnableCustomState = p->value().toInt();
       }
       else if (!strcmp(p->name().c_str(), "mqtt-customstate-topic")) {
         espConfig::mqttData.lockCustomStateTopic = p->value().c_str();
@@ -831,30 +840,43 @@ void setupWeb() {
         espConfig::mqttData.lockCustomStateCmd = p->value().c_str();
       }
       else if (!strcmp(p->name().c_str(), "mqtt-discovery-enable")) {
-        bool value = false;
-        std::istringstream(p->value().c_str()) >> std::boolalpha >> value;
-        espConfig::mqttData.hassMqttDiscoveryEnabled = value;
+        espConfig::mqttData.hassMqttDiscoveryEnabled = p->value().toInt();
       }
       else if (!strcmp(p->name().c_str(), "mqtt-always-unlock")) {
-        bool value = false;
-        std::istringstream(p->value().c_str()) >> std::boolalpha >> value;
-        espConfig::mqttData.lockAlwaysUnlock = value;
+        espConfig::mqttData.lockAlwaysUnlock = p->value().toInt();
       }
       else if (!strcmp(p->name().c_str(), "mqtt-always-lock")) {
-        bool value = false;
-        std::istringstream(p->value().c_str()) >> std::boolalpha >> value;
-        espConfig::mqttData.lockAlwaysLock = value;
+        espConfig::mqttData.lockAlwaysLock = p->value().toInt();
       }
     }
+    esp_mqtt_client_disconnect(client);
+    std::string statusTopic;
+    statusTopic.append(espConfig::mqttData.mqttClientId.c_str()).append("/status");
+    std::string uri = "mqtt://";
+    uri.append(espConfig::mqttData.mqttBroker).append(":").append(std::to_string(espConfig::mqttData.mqttPort));
+    esp_mqtt_client_config_t mqtt_cfg = { };
+    mqtt_cfg.event_handle = mqtt_event_handler;
+    mqtt_cfg.host = espConfig::mqttData.mqttBroker.c_str();
+    mqtt_cfg.port = espConfig::mqttData.mqttPort;
+    mqtt_cfg.uri = uri.c_str();
+    mqtt_cfg.client_id = espConfig::mqttData.mqttClientId.c_str();
+    mqtt_cfg.username = espConfig::mqttData.mqttUsername.c_str();
+    mqtt_cfg.password = espConfig::mqttData.mqttPassword.c_str();
+    mqtt_cfg.lwt_topic = statusTopic.c_str();
+    mqtt_cfg.lwt_msg = "offline";
+    mqtt_cfg.lwt_qos = 1;
+    mqtt_cfg.lwt_retain = 1;
+    mqtt_cfg.lwt_msg_len = 7;
+    esp_mqtt_set_config(client, &mqtt_cfg);
+    esp_mqtt_client_reconnect(client);
     json serializedData = espConfig::mqttData;
     auto msgpack = json::to_msgpack(serializedData);
     esp_err_t set_nvs = nvs_set_blob(mqttDataHandle, "MQTTDATA", msgpack.data(), msgpack.size());
     esp_err_t commit_nvs = nvs_commit(mqttDataHandle);
     LOG(V, "SET_STATUS: %s", esp_err_to_name(set_nvs));
     LOG(V, "COMMIT_STATUS: %s", esp_err_to_name(commit_nvs));
-    request->send(200, "text/plain", "Received Config, Restarting...");
-    ESP.restart();
-    });
+    request->send(200, "text/plain", "Received Config, Applying...");
+  });
   webServer.onNotFound(notFound);
   webServer.begin();
 }

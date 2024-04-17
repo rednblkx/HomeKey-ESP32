@@ -30,8 +30,7 @@
     value="%TSTATECMD%">
 
   <label for="mqtt-customstate-enable">Enable MQTT Custom State</label>
-  <input type="checkbox" name="mqtt-customstate-enable" id="mqtt-customstate-enable" placeholder="topic/set_target_state"
-    required value="%CUSTOMSTATE_ENABLED%">
+  <input type="checkbox" name="mqtt-customstate-enable" id="mqtt-customstate-enable" value="1">
 
   <label for="mqtt-customstate-topic">MQTT Custom State Topic</label>
   <input type="text" name="mqtt-customstate-topic" id="mqtt-customstate-topic" placeholder="topic/set_target_state"
@@ -42,16 +41,13 @@
     value="%CUSTOMSTATECMD%">
 
   <label for="mqtt-discovery-enable">Enable HASS MQTT Discovery</label>
-  <input type="checkbox" name="mqtt-discovery-enable" id="mqtt-discovery-enable" placeholder="topic/set_target_state"
-    required value="%DISCOVERY_ENABLED%">
+  <input type="checkbox" name="mqtt-discovery-enable" id="mqtt-discovery-enable" value="1">
 
   <label for="mqtt-always-unlock">Always Unlock on HK Auth</label>
-  <input type="checkbox" name="mqtt-always-unlock" id="mqtt-always-unlock" placeholder="topic/set_target_state" required
-    value="%ALWAYSUNLOCK%">
+  <input type="checkbox" name="mqtt-always-unlock" id="mqtt-always-unlock" value="1">
 
   <label for="mqtt-always-lock">Always Lock on HK Auth</label>
-  <input type="checkbox" name="mqtt-always-lock" id="mqtt-always-lock" placeholder="topic/set_target_state" required
-    value="%ALWAYSLOCK%">
+  <input type="checkbox" name="mqtt-always-lock" id="mqtt-always-lock" value="1">
 
   <button type="submit" style="margin-top: 1rem; cursor: pointer;">Submit</button>
   <button type="reset" style="cursor: pointer;">Reset</button>
