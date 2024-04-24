@@ -528,7 +528,6 @@ esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event_data) {
   std::string topic(event_data->topic, event_data->topic + event_data->topic_len);
   std::string data(event_data->data, event_data->data + event_data->data_len);
   if (event_data->event_id == MQTT_EVENT_CONNECTED) {
-    // esp_log_level_set("*", ESP_LOG_DEBUG);
     uint8_t mac[6];
     WiFi.macAddress(mac);
     char macStr[18] = { 0 };
@@ -604,12 +603,6 @@ esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event_data) {
     esp_mqtt_client_subscribe(client, espConfig::mqttData.lockCStateCmd.c_str(), 0);
     esp_mqtt_client_subscribe(client, espConfig::mqttData.lockTStateCmd.c_str(), 0);
   }
-  else if (event_data->event_id == MQTT_EVENT_DISCONNECTED) {
-    esp_mqtt_client_unsubscribe(client, espConfig::mqttData.lockCustomStateCmd.c_str());
-    esp_mqtt_client_unsubscribe(client, espConfig::mqttData.lockStateCmd.c_str());
-    esp_mqtt_client_unsubscribe(client, espConfig::mqttData.lockCStateCmd.c_str());
-    esp_mqtt_client_unsubscribe(client, espConfig::mqttData.lockTStateCmd.c_str());
-  }
   else if (event_data->event_id == MQTT_EVENT_DATA) {
     LOG(D, "Received message in topic \"%s\": %s", topic.c_str(), data.c_str());
     int state = atoi(data.c_str());
@@ -641,14 +634,9 @@ esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event_data) {
  */
 static void mqtt_app_start(void) {
   std::string statusTopic;
-  statusTopic.append(espConfig::mqttData.mqttClientId.c_str()).append("/status");
-  std::string uri = "mqtt://";
-  uri.append(espConfig::mqttData.mqttBroker).append(":").append(std::to_string(espConfig::mqttData.mqttPort));
-  LOG(I, "MQTT URI: %s", uri.c_str());
+  statusTopic.append(espConfig::mqttData.mqttClientId).append("/status");
   esp_mqtt_client_config_t mqtt_cfg = { };
-  mqtt_cfg.event_handle = mqtt_event_handler;
   mqtt_cfg.host = espConfig::mqttData.mqttBroker.c_str();
-  mqtt_cfg.uri = uri.c_str();
   mqtt_cfg.port = espConfig::mqttData.mqttPort;
   mqtt_cfg.client_id = espConfig::mqttData.mqttClientId.c_str();
   mqtt_cfg.username = espConfig::mqttData.mqttUsername.c_str();
@@ -658,6 +646,7 @@ static void mqtt_app_start(void) {
   mqtt_cfg.lwt_qos = 1;
   mqtt_cfg.lwt_retain = 1;
   mqtt_cfg.lwt_msg_len = 7;
+  mqtt_cfg.event_handle = mqtt_event_handler;
   client = esp_mqtt_client_init(&mqtt_cfg);
   esp_mqtt_client_start(client);
 }
@@ -849,34 +838,15 @@ void setupWeb() {
         espConfig::mqttData.lockAlwaysLock = p->value().toInt();
       }
     }
-    esp_mqtt_client_disconnect(client);
-    std::string statusTopic;
-    statusTopic.append(espConfig::mqttData.mqttClientId.c_str()).append("/status");
-    std::string uri = "mqtt://";
-    uri.append(espConfig::mqttData.mqttBroker).append(":").append(std::to_string(espConfig::mqttData.mqttPort));
-    esp_mqtt_client_config_t mqtt_cfg = { };
-    mqtt_cfg.event_handle = mqtt_event_handler;
-    mqtt_cfg.host = espConfig::mqttData.mqttBroker.c_str();
-    mqtt_cfg.port = espConfig::mqttData.mqttPort;
-    mqtt_cfg.uri = uri.c_str();
-    mqtt_cfg.client_id = espConfig::mqttData.mqttClientId.c_str();
-    mqtt_cfg.username = espConfig::mqttData.mqttUsername.c_str();
-    mqtt_cfg.password = espConfig::mqttData.mqttPassword.c_str();
-    mqtt_cfg.lwt_topic = statusTopic.c_str();
-    mqtt_cfg.lwt_msg = "offline";
-    mqtt_cfg.lwt_qos = 1;
-    mqtt_cfg.lwt_retain = 1;
-    mqtt_cfg.lwt_msg_len = 7;
-    esp_mqtt_set_config(client, &mqtt_cfg);
-    esp_mqtt_client_reconnect(client);
     json serializedData = espConfig::mqttData;
     auto msgpack = json::to_msgpack(serializedData);
     esp_err_t set_nvs = nvs_set_blob(mqttDataHandle, "MQTTDATA", msgpack.data(), msgpack.size());
     esp_err_t commit_nvs = nvs_commit(mqttDataHandle);
     LOG(V, "SET_STATUS: %s", esp_err_to_name(set_nvs));
     LOG(V, "COMMIT_STATUS: %s", esp_err_to_name(commit_nvs));
-    request->send(200, "text/plain", "Received Config, Applying...");
-  });
+    request->send(200, "text/plain", "Received Config, Restarting...");
+    ESP.restart();
+    });
   webServer.onNotFound(notFound);
   webServer.begin();
 }
