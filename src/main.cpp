@@ -68,30 +68,10 @@ namespace espConfig
   {
     std::string deviceName = "HK Lock";
   } miscConfig;
-
-  inline void to_json(json& j, const mqttConfig_t& p) {
-    j = json{ {"broker", p.mqttBroker}, {"port", p.mqttPort}, {"username", p.mqttUsername}, {"password", p.mqttPassword}, {"client_id", p.mqttClientId}, {"HKTopic", p.hkTopic}, {"lockStateTopic", p.lockStateTopic}, {"lockStateCmd", p.lockStateCmd}, {"lockCStateCmd", p.lockCStateCmd}, {"lockTStateCmd", p.lockTStateCmd}, {"customStateEnabled", p.lockEnableCustomState}, {"customStateTopic", p.lockCustomStateTopic}, {"customStateCmd", p.lockCustomStateCmd}, {"alwaysPublishUnlock", p.lockAlwaysUnlock}, {"alwaysPublishLock", p.lockAlwaysLock}, {"hassMqttDiscoveryEnabled", p.hassMqttDiscoveryEnabled} };
-  }
-
-  inline void from_json(const json& j, mqttConfig_t& p) {
-    j.at("broker").get_to(p.mqttBroker);
-    j.at("port").get_to(p.mqttPort);
-    j.at("username").get_to(p.mqttUsername);
-    j.at("password").get_to(p.mqttPassword);
-    j.at("client_id").get_to(p.mqttClientId);
-    j.at("HKTopic").get_to(p.hkTopic);
-    j.at("lockStateTopic").get_to(p.lockStateTopic);
-    j.at("lockStateCmd").get_to(p.lockStateCmd);
-    j.at("lockCStateCmd").get_to(p.lockCStateCmd);
-    j.at("lockTStateCmd").get_to(p.lockTStateCmd);
-    j.at("customStateTopic").get_to(p.lockCustomStateTopic);
-    j.at("customStateCmd").get_to(p.lockCustomStateCmd);
-    j.at("customStateEnabled").get_to(p.lockEnableCustomState);
-    j.at("alwaysPublishUnlock").get_to(p.lockAlwaysUnlock);
-    j.at("alwaysPublishLock").get_to(p.lockAlwaysLock);
-    j.at("hassMqttDiscoveryEnabled").get_to(p.hassMqttDiscoveryEnabled);
-  }
 }
+JSONCONS_ALL_MEMBER_TRAITS(espConfig::mqttConfig_t, mqttBroker, mqttPort, mqttUsername, mqttPassword, mqttClientId, hkTopic, lockStateTopic, lockStateCmd, lockCStateCmd, lockTStateCmd, lockCustomStateTopic, lockCustomStateCmd, lockEnableCustomState, lockAlwaysUnlock, lockAlwaysLock, hassMqttDiscoveryEnabled)
+JSONCONS_ALL_MEMBER_TRAITS(espConfig::misc_config_t, deviceName)
+
 KeyFlow hkFlow = KeyFlow::kFlowFAST;
 SpanCharacteristic* lockCurrentState;
 SpanCharacteristic* lockTargetState;
@@ -690,26 +670,26 @@ void listDir(fs::FS& fs, const char* dirname, uint8_t levels) {
 String processor(const String& var) {
   String result = "";
   if (var == "READERGID") {
-    return String(utils::bufToHexString(readerData.reader_identifier, 8, true).c_str());
+    return String(utils::bufToHexString(readerData.reader_group_id, 8, true).c_str());
   }
   else if (var == "READERID") {
-    return String(utils::bufToHexString(readerData.identifier, 8, true).c_str());
+    return String(utils::bufToHexString(readerData.reader_id, 8, true).c_str());
   }
   else if (var == "ISSUERSNO") {
-    return String(readerData.issuers.size());
+    return String(readerData.issuers_count);
   }
   else if (var == "ISSUERSLIST") {
     for (auto&& issuer : readerData.issuers) {
       char issuerBuff[21 + 8];
       result += "<li>";
-      snprintf(issuerBuff, sizeof(issuerBuff), "Issuer ID: %s", utils::bufToHexString(issuer.issuerId, 8, true).c_str());
+      snprintf(issuerBuff, sizeof(issuerBuff), "Issuer ID: %s", utils::bufToHexString(issuer.issuer_id, 8, true).c_str());
       result += issuerBuff;
       result += "</li>\n";
       result += "\t\t<ul>";
       for (auto&& endpoint : issuer.endpoints) {
         char endBuff[23 + 6];
         result += "\n\t\t\t<li>";
-        snprintf(endBuff, sizeof(endBuff), "Endpoint ID: %s", utils::bufToHexString(endpoint.endpointId, 6, true).c_str());
+        snprintf(endBuff, sizeof(endBuff), "Endpoint ID: %s", utils::bufToHexString(endpoint.ep_id, 6, true).c_str());
         result += endBuff;
         result += "</li>\n";
       }
@@ -838,10 +818,10 @@ void setupWeb() {
         espConfig::mqttData.lockAlwaysLock = p->value().toInt();
       }
     }
-    json serializedData = espConfig::mqttData;
-    auto msgpack = json::to_msgpack(serializedData);
-    esp_err_t set_nvs = nvs_set_blob(mqttDataHandle, "MQTTDATA", msgpack.data(), msgpack.size());
-    esp_err_t commit_nvs = nvs_commit(mqttDataHandle);
+    std::ostringstream strNvs;
+    encode_json(espConfig::mqttData, strNvs, indenting::indent);
+    esp_err_t set_nvs = nvs_set_blob(savedData, "MQTTDATA", strNvs.str().data(), strNvs.str().size());
+    esp_err_t commit_nvs = nvs_commit(savedData);
     LOG(V, "SET_STATUS: %s", esp_err_to_name(set_nvs));
     LOG(V, "COMMIT_STATUS: %s", esp_err_to_name(commit_nvs));
     request->send(200, "text/plain", "Received Config, Restarting...");
@@ -852,8 +832,8 @@ void setupWeb() {
 }
 
 void mqttConfigReset(const char* buf) {
-  nvs_erase_key(mqttDataHandle, "MQTTDATA");
-  nvs_commit(mqttDataHandle);
+  nvs_erase_key(savedData, "MQTTDATA");
+  nvs_commit(savedData);
   ESP.restart();
 }
 
@@ -867,10 +847,8 @@ void setup() {
   const esp_app_desc_t* app_desc = esp_ota_get_app_description();
   std::string app_version = app_desc->version;
   size_t len;
-  size_t mqttLen;
   const char* TAG = "SETUP";
   nvs_open("SAVED_DATA", NVS_READWRITE, &savedData);
-  nvs_open("MQTTDATA", NVS_READWRITE, &mqttDataHandle);
   if (!nvs_get_blob(savedData, "READERDATA", NULL, &len)) {
     uint8_t savedBuf[len];
     pb_istream_t istream;
@@ -884,6 +862,18 @@ void setup() {
       LOG(I, "PB ERROR: %s", PB_GET_ERROR(&istream));
     }
   }
+  if (!nvs_get_blob(savedData, "MQTTDATA", NULL, &len)) {
+    uint8_t msgpack[len];
+    std::string str(msgpack, msgpack + len);
+    nvs_get_blob(savedData, "MQTTDATA", msgpack, &len);
+    LOG(V, "MQTTDATA - MSGPACK(%d): %s", len, utils::bufToHexString(msgpack, len).c_str());
+    espConfig::mqttData = decode_json<espConfig::mqttConfig_t>(str);
+  }
+  if (!LittleFS.begin(true)) {
+    Serial.println("An Error has occurred while mounting LITTLEFS");
+    return;
+  }
+  listDir(LittleFS, "/", 0);
   nfc.begin();
   uint32_t versiondata = nfc.getFirmwareVersion();
   if (!versiondata) {
