@@ -9,3 +9,4 @@ lib
 compile_commands.json
 src/config.h
 sdkconfig.*
+managed_components

@@ -1,0 +1,7 @@
+[submodule "components/esp-homekit-sdk"]
+	path = components/esp-homekit-sdk
+	url = https://github.com/rednblkx/esp-homekit-sdk.git
+[submodule "components/PN532"]
+	path = components/PN532
+	url = https://github.com/rednblkx/PN532.git
+	branch = esp-idf
