@@ -248,10 +248,10 @@ void nfc_thread_entry(void* arg) {
       uint8_t selectCmdResLength = 8;
       LOG(D, "SELECT HomeKey Applet, APDU: ");
       esp_log_buffer_hex_internal(TAG, data, sizeof(data), ESP_LOG_INFO);
-      nfc.inDataExchange(data, sizeof(data), selectCmdRes, &selectCmdResLength);
+      bool status = nfc.inDataExchange(data, sizeof(data), selectCmdRes, &selectCmdResLength);
       LOG(D, "SELECT HomeKey Applet, Response");
       esp_log_buffer_hex_internal(TAG, selectCmdRes, selectCmdResLength, ESP_LOG_INFO);
-      if (selectCmdRes[selectCmdResLength - 2] == 0x90 && selectCmdRes[selectCmdResLength - 1] == 0x00) {
+      if (status && selectCmdRes[selectCmdResLength - 2] == 0x90 && selectCmdRes[selectCmdResLength - 1] == 0x00) {
         LOG(D, "*** SELECT HOMEKEY APPLET SUCCESSFUL ***");
         LOG(D, "Reader Private Key: %s", utils::bufToHexString((const uint8_t*)readerData.reader_pk, sizeof(readerData.reader_pk)).c_str());
         HKAuthenticationContext authCtx(nfc, readerData, savedData);
@@ -260,6 +260,19 @@ void nfc_thread_entry(void* arg) {
           LOG(D, "!!!!!!!!!!!!AUTHENTICATED!!!!!!!!!!!!!");
         }
       }
+      vTaskDelay(500 / portTICK_PERIOD_MS);
+      nfc.inRelease();
+      nfc.setPassiveActivationRetries(10);
+      bool deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
+      LOG(I, "Target still present: %d", deviceStillInField);
+      while (deviceStillInField) {
+        vTaskDelay(300 / portTICK_PERIOD_MS);
+        nfc.inRelease();
+        deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
+        LOG(I, "Target still present: %d", deviceStillInField);
+      }
+      nfc.inRelease();
+      nfc.setPassiveActivationRetries(0);
     }
     else {
       nfc.ecpBroadcast(ecpData, sizeof(ecpData));
