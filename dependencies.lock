@@ -1,4 +1,10 @@
 dependencies:
+  espressif/cbor:
+    component_hash: 440f4ee4504841cc9b4f3a8ef755776a612ac9dace355514c68b999868f990ff
+    source:
+      service_url: https://api.components.espressif.com/
+      type: service
+    version: 0.6.0~1
   espressif/libsodium:
     component_hash: f6e982479a2389cb6868e8fb761cf23aba6c355a8090b3e906299807775f58a3
     source:
@@ -16,6 +22,6 @@ dependencies:
     source:
       type: idf
     version: 5.2.1
-manifest_hash: 4c62a9ac50ee48a7fdc787d7b3fde74fc945ebb95847d3496215ddfa012300fb
+manifest_hash: 4080fd768f635b72e4d8d2474eda21550aaaea6fb4f1ad2ef5985f7f93a1aa99
 target: esp32
 version: 1.0.0

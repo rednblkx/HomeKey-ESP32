@@ -1,3 +1,4 @@
 dependencies:
   idf: ">=4.4"
   espressif/libsodium: "^1.0.20~1"
+  espressif/cbor: "^0.6.0~1"
