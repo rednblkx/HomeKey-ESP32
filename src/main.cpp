@@ -397,6 +397,7 @@ void app_main(void){
     pb_istream_t istream;
     nvs_get_blob(savedData, "READERDATA", savedBuf, &len);
     LOG(I, "NVS DATA LENGTH: %d", len);
+    ESP_LOG_BUFFER_HEX_LEVEL(TAG, savedBuf, len, ESP_LOG_DEBUG);
     istream = pb_istream_from_buffer(savedBuf, len);
     bool decodeStatus = pb_decode(&istream, &HomeKeyData_ReaderData_msg, &readerData);
     LOG(I, "PB DECODE STATUS: %d", decodeStatus);
@@ -409,8 +410,8 @@ void app_main(void){
   LOG(D, "READER UNIQUE ID (%d): %s", strlen((const char*)readerData.reader_id), utils::bufToHexString(readerData.reader_id, sizeof(readerData.reader_id)).c_str());
 
   LOG(I, "HOMEKEY ISSUERS: %d", readerData.issuers_count);
-  for (auto& issuer : readerData.issuers) {
-    LOG(D, "Issuer ID: %s, Public Key: %s", utils::bufToHexString(issuer.issuer_id, sizeof(issuer.issuer_id)).c_str(), utils::bufToHexString(issuer.issuer_pk, sizeof(issuer.issuer_pk)).c_str());
+  for (auto* issuer = readerData.issuers; issuer != (readerData.issuers + readerData.issuers_count); ++issuer) {
+    LOG(D, "Issuer ID: %s, Public Key: %s", utils::bufToHexString(issuer->issuer_id, sizeof(issuer->issuer_id)).c_str(), utils::bufToHexString(issuer->issuer_pk, sizeof(issuer->issuer_pk)).c_str());
   }
 
   nfc.begin();

@@ -68,6 +68,22 @@
     "mutex": "cpp",
     "thread": "cpp",
     "valarray": "cpp",
-    "*.ipp": "cpp"
+    "*.ipp": "cpp",
+    "pn532.h": "c",
+    "inttypes.h": "c",
+    "stdint.h": "c",
+    "stdio.h": "c",
+    "gpio.h": "c",
+    "soc_caps.h": "c",
+    "gpio_types.h": "c",
+    "bit": "cpp",
+    "compare": "cpp",
+    "concepts": "cpp",
+    "numbers": "cpp",
+    "ranges": "cpp",
+    "span": "cpp",
+    "esp_hap_acc.h": "c",
+    "semaphore": "cpp",
+    "stop_token": "cpp"
   }
 }
