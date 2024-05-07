@@ -84,6 +84,17 @@
     "span": "cpp",
     "esp_hap_acc.h": "c",
     "semaphore": "cpp",
-    "stop_token": "cpp"
-  }
+    "stop_token": "cpp",
+    "charconv": "cpp",
+    "scoped_allocator": "cpp",
+    "shared_mutex": "cpp",
+    "variant": "cpp"
+  },
+  "python.terminal.activateEnvironment": false,
+  "python.terminal.activateEnvInCurrentTerminal": true,
+  "cmake.automaticReconfigure": false,
+  "cmake.configureOnEdit": false,
+  "idf.port": "/dev/ttyUSB0",
+  "platformio-ide.useBuiltinPython": false,
+  "platformio-ide.disablePIOHomeStartup": true
 }

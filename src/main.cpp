@@ -24,6 +24,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <pb_common.h>
+#include "console.h"
 
 const char* TAG = "MAIN";
 
@@ -237,15 +238,15 @@ void nfc_thread_entry(void* arg) {
     uint8_t uidLen = 0;
     uint16_t atqa[1];
     uint8_t sak[1];
-    bool passiveTarget = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, atqa, sak, 1000, true);
+    bool passiveTarget = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, atqa, sak, 1000, true, true);
     if (passiveTarget) {
       LOG(D, "ATQA: %02x", atqa[0]);
       LOG(D, "SAK: %02x", sak[0]);
       ESP_LOG_BUFFER_HEX(TAG, uid, (size_t)uidLen);
       LOG(I, "*** PASSIVE TARGET DETECTED ***");
       uint8_t data[13] = { 0x00, 0xA4, 0x04, 0x00, 0x07, 0xA0, 0x00, 0x00, 0x08, 0x58, 0x01, 0x01, 0x0 };
-      uint8_t selectCmdRes[8];
-      uint8_t selectCmdResLength = 8;
+      uint8_t selectCmdRes[9];
+      uint16_t selectCmdResLength = 9;
       LOG(D, "SELECT HomeKey Applet, APDU: ");
       esp_log_buffer_hex_internal(TAG, data, sizeof(data), ESP_LOG_INFO);
       bool status = nfc.inDataExchange(data, sizeof(data), selectCmdRes, &selectCmdResLength);
@@ -260,13 +261,13 @@ void nfc_thread_entry(void* arg) {
           LOG(D, "!!!!!!!!!!!!AUTHENTICATED!!!!!!!!!!!!!");
         }
       }
-      vTaskDelay(500 / portTICK_PERIOD_MS);
+      vTaskDelay(100 / portTICK_PERIOD_MS);
       nfc.inRelease();
       nfc.setPassiveActivationRetries(10);
       bool deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
       LOG(I, "Target still present: %d", deviceStillInField);
       while (deviceStillInField) {
-        vTaskDelay(300 / portTICK_PERIOD_MS);
+        vTaskDelay(100 / portTICK_PERIOD_MS);
         nfc.inRelease();
         deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
         LOG(I, "Target still present: %d", deviceStillInField);
@@ -382,14 +383,16 @@ void lock_thread_entry(void *arg)
     /* After all the initializations are done, start the HAP core */
     /* Start Wi-Fi */
     app_wifi_start(portMAX_DELAY);
-    hap_http_debug_enable();
+    // hap_http_debug_enable();
     hap_start();
+
+    console_init();
     /* The task ends here. The read/write callbacks will be invoked by the HAP Framework */
     vTaskDelete(NULL);
 }
 
 #ifdef __cplusplus
-extern "C" {
+extern "C"
 #endif
 void app_main(void){
   ESP_LOGI(TAG, "[APP] Startup..");
@@ -429,6 +432,9 @@ void app_main(void){
 
   nfc.begin();
 
+  esp_log_level_set("PN532", ESP_LOG_VERBOSE);
+  esp_log_level_set("PN532_SPI", ESP_LOG_VERBOSE);
+
   uint32_t versiondata = nfc.getFirmwareVersion();
   if (!versiondata) {
     ESP_LOGE("NFC_SETUP", "Didn't find PN53x board");
@@ -445,6 +451,3 @@ void app_main(void){
   }
   xTaskCreate(nfc_thread_entry, "nfc_task", 8192, NULL, 2, NULL);
  }
-#ifdef __cplusplus
-}
-#endif
