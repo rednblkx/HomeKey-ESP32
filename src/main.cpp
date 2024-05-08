@@ -229,9 +229,6 @@ int nfcAccess_write(hap_write_data_t write_data[], int count,
 }
 
 void nfc_thread_entry(void* arg) {
-  esp_log_level_set("PN532", ESP_LOG_VERBOSE);
-  esp_log_level_set("PN532_SPI", ESP_LOG_VERBOSE);
-
   nfc.begin();
 
   uint32_t versiondata = nfc.getFirmwareVersion();
