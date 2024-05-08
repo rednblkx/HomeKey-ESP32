@@ -229,6 +229,25 @@ int nfcAccess_write(hap_write_data_t write_data[], int count,
 }
 
 void nfc_thread_entry(void* arg) {
+  esp_log_level_set("PN532", ESP_LOG_VERBOSE);
+  esp_log_level_set("PN532_SPI", ESP_LOG_VERBOSE);
+
+  nfc.begin();
+
+  uint32_t versiondata = nfc.getFirmwareVersion();
+  if (!versiondata) {
+    ESP_LOGE("NFC_SETUP", "Didn't find PN53x board");
+  }
+  else {
+    unsigned int model = (versiondata >> 24) & 0xFF;
+    ESP_LOGI("NFC_SETUP", "Found chip PN5%x", model);
+    int maj = (versiondata >> 16) & 0xFF;
+    int min = (versiondata >> 8) & 0xFF;
+    ESP_LOGI("NFC_SETUP", "Firmware ver. %d.%d", maj, min);
+    nfc.SAMConfig();
+    nfc.setPassiveActivationRetries(0);
+    ESP_LOGI("NFC_SETUP", "Waiting for an ISO14443A card");
+  }
   uint8_t ecpData[18] = { 0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0 };
   memcpy(ecpData + 8, readerData.reader_group_id, sizeof(readerData.reader_group_id));
   with_crc16(ecpData, 16, ecpData + 16);
@@ -430,24 +449,5 @@ void app_main(void){
     LOG(D, "Issuer ID: %s, Public Key: %s", utils::bufToHexString(issuer->issuer_id, sizeof(issuer->issuer_id)).c_str(), utils::bufToHexString(issuer->issuer_pk, sizeof(issuer->issuer_pk)).c_str());
   }
 
-  nfc.begin();
-
-  esp_log_level_set("PN532", ESP_LOG_VERBOSE);
-  esp_log_level_set("PN532_SPI", ESP_LOG_VERBOSE);
-
-  uint32_t versiondata = nfc.getFirmwareVersion();
-  if (!versiondata) {
-    ESP_LOGE("NFC_SETUP", "Didn't find PN53x board");
-  }
-  else {
-    unsigned int model = (versiondata >> 24) & 0xFF;
-    ESP_LOGI("NFC_SETUP", "Found chip PN5%x", model);
-    int maj = (versiondata >> 16) & 0xFF;
-    int min = (versiondata >> 8) & 0xFF;
-    ESP_LOGI("NFC_SETUP", "Firmware ver. %d.%d", maj, min);
-    nfc.SAMConfig();
-    nfc.setPassiveActivationRetries(0);
-    ESP_LOGI("NFC_SETUP", "Waiting for an ISO14443A card");
-  }
   xTaskCreate(nfc_thread_entry, "nfc_task", 8192, NULL, 2, NULL);
  }
