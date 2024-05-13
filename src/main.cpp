@@ -280,20 +280,22 @@ void nfc_thread_entry(void* arg) {
       vTaskDelay(100 / portTICK_PERIOD_MS);
       nfc.inRelease();
       nfc.setPassiveActivationRetries(10);
+      int counter = 50;
       bool deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
       LOG(I, "Target still present: %d", deviceStillInField);
       while (deviceStillInField) {
+        if (counter == 0) break;
         vTaskDelay(100 / portTICK_PERIOD_MS);
         nfc.inRelease();
         deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
-        LOG(I, "Target still present: %d", deviceStillInField);
+        --counter;
+        LOG(I, "Target still present: %d Counter=%d", deviceStillInField, counter);
       }
       nfc.inRelease();
       nfc.setPassiveActivationRetries(0);
     }
     else {
       nfc.ecpBroadcast(ecpData, sizeof(ecpData));
-      vTaskDelay(50 / portTICK_PERIOD_MS);
     }
   }
 }
