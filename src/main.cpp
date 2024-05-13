@@ -56,6 +56,7 @@ nvs_handle savedData;
 HomeKeyData_ReaderData readerData = HomeKeyData_ReaderData_init_zero;
 KeyFlow hkFlow = KeyFlow::kFlowFAST;
 esp_mqtt_client_handle_t client = nullptr;
+uint8_t ecpData[18] = { 0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0 };
 
 bool save_to_nvs() {
   uint8_t *buffer = (uint8_t *)malloc(HomeKeyData_ReaderData_size);
@@ -216,6 +217,10 @@ int nfcAccess_write(hap_write_data_t write_data[], int count,
           HK_HomeKit ctx(readerData, savedData, "READERDATA");
           auto result = ctx.processResult(std::vector<uint8_t>(buf.buf, buf.buf + buf.buflen));
           memcpy(tlv8_data, result.data(), result.size());
+          if (strlen((const char*)readerData.reader_group_id) > 0) {
+            memcpy(ecpData + 8, readerData.reader_group_id, sizeof(readerData.reader_group_id));
+            with_crc16(ecpData, 16, ecpData + 16);
+          }
           hap_val_t new_val;
           new_val.t.buf = tlv8_data;
           new_val.t.buflen = result.size();
@@ -245,11 +250,13 @@ void nfc_thread_entry(void* arg) {
     nfc.setPassiveActivationRetries(0);
     ESP_LOGI("NFC_SETUP", "Waiting for an ISO14443A card");
   }
-  uint8_t ecpData[18] = { 0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0 };
   memcpy(ecpData + 8, readerData.reader_group_id, sizeof(readerData.reader_group_id));
   with_crc16(ecpData, 16, ecpData + 16);
-  nfc.writeRegister(0x633d, 0);
   while (1) {
+    uint8_t res[4];
+    uint16_t resLen = 4;
+    nfc.writeRegister(0x633d, 0);
+    nfc.inCommunicateThru(ecpData, sizeof(ecpData), res, &resLen, 100, true);
     uint8_t uid[16];
     uint8_t uidLen = 0;
     uint16_t atqa[1];
@@ -279,7 +286,7 @@ void nfc_thread_entry(void* arg) {
       }
       vTaskDelay(100 / portTICK_PERIOD_MS);
       nfc.inRelease();
-      nfc.setPassiveActivationRetries(10);
+      nfc.setPassiveActivationRetries(5);
       int counter = 50;
       bool deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
       LOG(I, "Target still present: %d", deviceStillInField);
@@ -293,9 +300,6 @@ void nfc_thread_entry(void* arg) {
       }
       nfc.inRelease();
       nfc.setPassiveActivationRetries(0);
-    }
-    else {
-      nfc.ecpBroadcast(ecpData, sizeof(ecpData));
     }
   }
 }
