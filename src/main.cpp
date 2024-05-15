@@ -679,17 +679,17 @@ String processor(const String& var) {
     return String(readerData.issuers_count);
   }
   else if (var == "ISSUERSLIST") {
-    for (auto&& issuer : readerData.issuers) {
+    for (auto* issuer = readerData.issuers; issuer != (readerData.issuers + readerData.issuers_count); ++issuer) {
       char issuerBuff[21 + 8];
       result += "<li>";
-      snprintf(issuerBuff, sizeof(issuerBuff), "Issuer ID: %s", utils::bufToHexString(issuer.issuer_id, 8, true).c_str());
+      snprintf(issuerBuff, sizeof(issuerBuff), "Issuer ID: %s", utils::bufToHexString(issuer->issuer_id, 8, true).c_str());
       result += issuerBuff;
       result += "</li>\n";
       result += "\t\t<ul>";
-      for (auto&& endpoint : issuer.endpoints) {
+      for (auto* endpoint = issuer->endpoints; endpoint != (issuer->endpoints + issuer->endpoints_count); ++endpoint) {
         char endBuff[23 + 6];
         result += "\n\t\t\t<li>";
-        snprintf(endBuff, sizeof(endBuff), "Endpoint ID: %s", utils::bufToHexString(endpoint.ep_id, 6, true).c_str());
+        snprintf(endBuff, sizeof(endBuff), "Endpoint ID: %s", utils::bufToHexString(endpoint->ep_id, 6, true).c_str());
         result += endBuff;
         result += "</li>\n";
       }
@@ -859,14 +859,14 @@ void setup() {
     bool decodeStatus = pb_decode(&istream, &HomeKeyData_ReaderData_msg, &readerData);
     LOG(I, "PB DECODE STATUS: %d", decodeStatus);
     if (!decodeStatus) {
-      LOG(I, "PB ERROR: %s", PB_GET_ERROR(&istream));
+      LOG(E, "PB ERROR: %s", PB_GET_ERROR(&istream));
     }
   }
   if (!nvs_get_blob(savedData, "MQTTDATA", NULL, &len)) {
     uint8_t msgpack[len];
-    std::string str(msgpack, msgpack + len);
     nvs_get_blob(savedData, "MQTTDATA", msgpack, &len);
-    LOG(V, "MQTTDATA - MSGPACK(%d): %s", len, utils::bufToHexString(msgpack, len).c_str());
+    std::string str(msgpack, msgpack + len);
+    LOG(D, "MQTTDATA - JSON(%d): %s", len, str.c_str());
     espConfig::mqttData = decode_json<espConfig::mqttConfig_t>(str);
   }
   if (!LittleFS.begin(true)) {
@@ -943,7 +943,6 @@ void setup() {
   new Characteristic::Version();
   homeSpan.setControllerCallback(pairCallback);
   homeSpan.setWifiCallback(wifiCallback);
-
 }
 
 //////////////////////////////////////
