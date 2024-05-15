@@ -5,7 +5,6 @@
 #include <HomeKeyData.pb.h>
 #include <utils.h>
 #include <HomeSpan.h>
-// #include <SPI.h>
 #include <PN532_SPI.h>
 #include "PN532.h"
 #include <HAP.h>
@@ -273,9 +272,7 @@ struct NFCAccess : Service::NFCAccess
     return true;
   }
 
-}; // end NFCAccess
-
-//////////////////////////////////////
+};
 
 void deleteReaderData(const char* buf) {
   memset(&readerData, 0, sizeof(readerData));
@@ -381,6 +378,16 @@ void print_issuers(const char* buf) {
   }
 }
 
+/**
+ * The function `set_custom_state_handler` translate the custom states to their HomeKit counterpart
+ * updating the state of the lock and publishes the new state to the `MQTT_STATE_TOPIC` MQTT topic.
+ *
+ * @param client The `client` parameter in the `set_custom_state_handler` function is of type
+ * `esp_mqtt_client_handle_t`, which is a handle to the MQTT client object for this event. This
+ * parameter is used to interact with the MQTT client
+ * @param state The `state` parameter in the `set_custom_state_handler` function represents the
+ *  received custom state value
+ */
 void set_custom_state_handler(esp_mqtt_client_handle_t client, int state) {
   switch (state)
   {
@@ -443,13 +450,16 @@ void set_state_handler(esp_mqtt_client_handle_t client, int state) {
   }
 }
 
-/*
- * @brief Event handler callback for MQTT events
- *
- *
- * @param event_data The data for the event, esp_mqtt_event_handle_t.
- *
- *  @return esp_err_t
+/**
+ * The `mqtt_event_handler` function handles MQTT events, including connection, message reception, and
+ * publishing of device discovery information.
+ * 
+ * @param event_data The `event_data` parameter in the `mqtt_event_handler` function is a handle to the
+ * MQTT event data structure. It contains information about the event that occurred during the MQTT
+ * communication, such as the event type, client handle, topic, data, and other relevant details. The
+ * function processes different MQTT
+ * 
+ * @return The function `mqtt_event_handler` is returning an `esp_err_t` type, specifically `ESP_OK`.
  */
 esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event_data)
 {
@@ -471,8 +481,8 @@ esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event_data)
       json payload;
       payload["topic"] = MQTT_AUTH_TOPIC;
       payload["value_template"] = "{{ value_json.uid }}";
-      json device; // create a JSON object for the device
-      device["name"] = NAME; // assign the name value
+      json device;
+      device["name"] = "Lock";
       char identifier[18];
       sprintf(identifier, "%.2s%.2s%.2s%.2s%.2s%.2s", HAPClient::accessory.ID, HAPClient::accessory.ID + 3, HAPClient::accessory.ID + 6, HAPClient::accessory.ID + 9, HAPClient::accessory.ID + 12, HAPClient::accessory.ID + 15);
       std::string id = identifier;
@@ -483,19 +493,19 @@ esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event_data)
       device["model"] = "HomeKey-ESP32";
       device["sw_version"] = app_version.c_str();
       device["serial_number"] = serialNumber;
-      payload["device"] = device; // assign the device object to the payload object
+      payload["device"] = device;
       std::string bufferpub = payload.as<std::string>();
       esp_mqtt_client_publish(client, ("homeassistant/tag/" MQTT_CLIENTID "/rfid/config"), bufferpub.c_str(), bufferpub.length(), 1, true);
       payload = json();
       payload["topic"] = MQTT_AUTH_TOPIC;
       payload["value_template"] = "{{ value_json.issuerId }}";
-      payload["device"] = device; // reuse the device object for the second message
+      payload["device"] = device;
       bufferpub = payload.as<std::string>();
       esp_mqtt_client_publish(client, ("homeassistant/tag/" MQTT_CLIENTID "/hkIssuer/config"), bufferpub.c_str(), bufferpub.length(), 1, true);
       payload = json();
       payload["topic"] = MQTT_AUTH_TOPIC;
       payload["value_template"] = "{{ value_json.endpointId }}";
-      payload["device"] = device; // reuse the device object for the third message
+      payload["device"] = device;
       bufferpub = payload.as<std::string>();
       esp_mqtt_client_publish(client, ("homeassistant/tag/" MQTT_CLIENTID "/hkEndpoint/config"), bufferpub.c_str(), bufferpub.length(), 1, true);
       payload = json();
@@ -550,6 +560,10 @@ esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event_data)
   return ESP_OK;
 }
 
+/**
+ * The function `mqtt_app_start` initializes and starts an MQTT client with specified configuration
+ * parameters.
+ */
 static void mqtt_app_start(void)
 {
   esp_mqtt_client_config_t mqtt_cfg = { };
@@ -636,8 +650,8 @@ void setup() {
   });
 
 
-  new SpanAccessory();                 // Begin by creating a new Accessory using SpanAccessory(), no arguments needed
-  new Service::AccessoryInformation(); // HAP requires every Accessory to implement an AccessoryInformation Service, with the required Identify Characteristic
+  new SpanAccessory();
+  new Service::AccessoryInformation();
   new Characteristic::Identify();
   new Characteristic::Manufacturer("rednblkx");
   new Characteristic::Model("HomeKey-ESP32");
