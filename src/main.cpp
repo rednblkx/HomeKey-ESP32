@@ -635,7 +635,7 @@ void setup() {
     LOG(D, "Issuer ID: %s, Public Key: %s", utils::bufToHexString(issuer->issuer_id, sizeof(issuer->issuer_id)).c_str(), utils::bufToHexString(issuer->issuer_pk, sizeof(issuer->issuer_pk)).c_str());
   }
   homeSpan.enableOTA(OTA_PWD);
-  homeSpan.begin(Category::Locks, NAME);
+  homeSpan.begin(Category::Locks, NAME, "HK", "HomeKey-ESP32");
 
   new SpanUserCommand('D', "Delete Home Key Data", deleteReaderData);
   new SpanUserCommand('L', "Set Log Level", setLogLevel);
