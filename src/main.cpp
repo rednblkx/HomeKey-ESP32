@@ -279,7 +279,7 @@ struct LockMechanism : Service::LockMechanism
       }
       delay(500);
       nfc.inRelease();
-      nfc.setPassiveActivationRetries(10);
+      nfc.setPassiveActivationRetries(5);
       int counter = 50;
       bool deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
       LOG(D, "Target still present: %d", deviceStillInField);

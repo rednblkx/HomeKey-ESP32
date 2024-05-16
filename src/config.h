@@ -37,9 +37,15 @@ enum customLockActions
 #define MQTT_STATE_TOPIC "topic/state" // MQTT Topic for publishing the HomeKit lock target state
 
 //Miscellaneous
-#define HK_CODE "46637726"  //code used for homekit setup
+#define SETUP_CODE "46637726"  //code used for homekit setup
 #define LED_PIN 2 //status led pin, built in is pin 2
-#define OTA_PWD "homespan-ota" //custom password for ota
-#define NAME "HK Lock" //Device name
-#define DISCOVERY 0 //Enable or disable discovery for home assistant tags functionality, set to 1 to enable.
 #define CONTROL_PIN 26 // GPIO Pin for a Configuration Mode button (more info on https://github.com/HomeSpan/HomeSpan/blob/master/docs/UserGuide.md#device-configuration-mode)
+#define NFC_SUCCESS_PIN 0 // GPIO Pin pulled HIGH or LOW (see NFC_SUCCESS_HL) on success HK Auth
+#define NFC_SUCCESS_HL true // Flag to define if NFC_SUCCESS_PIN should be held High(true) or Low(false)
+#define NFC_SUCCESS_TIME 1000 // How long should NFC_SUCCESS_PIN be held High or Low
+#define NFC_FAIL_PIN 0  // GPIO Pin pulled HIGH or LOW (see NFC_SUCCESS_HL) on failed HK Auth
+#define NFC_FAIL_HL true // Flag to define if NFC_FAIL_PIN should be held High(true) or Low(false)
+#define NFC_FAIL_TIME 1000 // How long should NFC_FAIL_PIN be held High or Low
+#define OTA_PWD "homespan-ota" //custom password for ota
+#define DEVICE_NAME "HK" //Device name
+#define MQTT_DISCOVERY false //Enable or disable discovery for home assistant tags functionality, set to true to enable.
