@@ -179,12 +179,12 @@ struct LockMechanism : Service::LockMechanism
     nfc.inCommunicateThru(ecpData, sizeof(ecpData), res, &resLen, 100, true);
     uint8_t uid[16];
     uint8_t uidLen = 0;
-    uint16_t atqa[1];
-    uint8_t sak[1];
-    bool passiveTarget = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, atqa, sak, 500, true, true);
+    uint8_t atqa[2];
+    uint8_t sak;
+    bool passiveTarget = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, atqa, &sak, 500, true, true);
     if (passiveTarget) {
-      LOG(D, "ATQA: %s", utils::bufToHexString(atqa, 1).c_str());
-      LOG(D, "SAK: %s", utils::bufToHexString(sak, 1).c_str());
+      LOG(D, "ATQA: %s", utils::bufToHexString(atqa, 2).c_str());
+      LOG(D, "SAK: %s", utils::bufToHexString(&sak, 1).c_str());
       LOG(D, "UID: %s", utils::bufToHexString(uid, uidLen).c_str());
       LOG(I, "*** PASSIVE TARGET DETECTED ***");
       auto startTime = std::chrono::high_resolution_clock::now();
@@ -205,11 +205,14 @@ struct LockMechanism : Service::LockMechanism
             delay(espConfig::miscConfig.nfcSuccessTime);
             digitalWrite(espConfig::miscConfig.nfcSuccessPin, !espConfig::miscConfig.nfcSuccessHL);
           }
+          json_options options;
+          options.byte_string_format(byte_string_chars_format::base16);
           json payload;
-          payload["issuerId"] = utils::bufToHexString(std::get<0>(authResult), 8, true);
-          payload["endpointId"] = utils::bufToHexString(std::get<1>(authResult), 6, true);
+          payload["issuerId"] = byte_string(std::get<0>(authResult), 8);
+          payload["endpointId"] = byte_string(std::get<1>(authResult), 6);
           payload["homekey"] = true;
-          std::string payloadStr = payload.as<std::string>();
+          std::string payloadStr;
+          payload.dump(payloadStr, options);
           if (client != nullptr) {
             esp_mqtt_client_publish(client, espConfig::mqttData.hkTopic.c_str(), payloadStr.c_str(), payloadStr.length(), 0, false);
             if (espConfig::mqttData.lockAlwaysUnlock) {
@@ -255,18 +258,22 @@ struct LockMechanism : Service::LockMechanism
         }
       }
       else {
+        if (espConfig::miscConfig.nfcSuccessPin && espConfig::miscConfig.nfcSuccessPin != 0) {
+          digitalWrite(espConfig::miscConfig.nfcSuccessPin, espConfig::miscConfig.nfcSuccessHL);
+          delay(espConfig::miscConfig.nfcSuccessTime);
+          digitalWrite(espConfig::miscConfig.nfcSuccessPin, !espConfig::miscConfig.nfcSuccessHL);
+        }
         json_options options;
         options.byte_string_format(byte_string_chars_format::base16);
         json payload;
-        uint8_t atqa_u8[2];
-        atqa_u8[0] = static_cast<uint8_t>((atqa[0] & 0xFF00) >> 8);
-        atqa_u8[1] = static_cast<uint8_t>(atqa[0] & 0xFF00);
-        payload["atqa"] = byte_string(atqa_u8, 2);
-        payload["sak"] = byte_string(sak, 1);
+        payload["atqa"] = byte_string(atqa, 2);
+        payload["sak"] = byte_string(&sak, 1);
         payload["uid"] = byte_string(uid, uidLen);
         payload["homekey"] = false;
+        std::string payload_dump;
+        payload.dump(payload_dump, options);
         if (client != nullptr) {
-          esp_mqtt_client_publish(client, espConfig::mqttData.hkTopic.c_str(), payload.as<std::string>().c_str(), 0, 0, false);
+          esp_mqtt_client_publish(client, espConfig::mqttData.hkTopic.c_str(), payload_dump.c_str(), 0, 0, false);
         }
         else LOG(W, "MQTT Client not initialized, cannot publish message");
       }
@@ -424,6 +431,8 @@ void setLogLevel(const char* buf) {
   esp_log_level_set("PN532", level);
   esp_log_level_set("PN532_SPI", level);
   esp_log_level_set("ISO18013_SC", level);
+  esp_log_level_set("LockMechanism", level);
+  esp_log_level_set("NFCAccess", level);
 }
 
 void print_issuers(const char* buf) {
