@@ -2,7 +2,7 @@
 
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HK Configuration Center</title>
+  <title>HK Configuration</title>
   <script>
     async function addComponent(name) {
       let element = document.querySelector("#component");
@@ -27,16 +27,26 @@
           el1.innerHTML = string1;
           document.body.appendChild(el1);
           break;
+        case "misc":
+          let data2 = await fetch("misc");
+          let string2 = await data2.text();
+          let el2 = document.createElement("div");
+          el2.id = "component";
+          el2.innerHTML = string2;
+          document.body.appendChild(el2);
+          eval(document.querySelector("#component").querySelector("script").innerText);
+          break;
       }
     } 
   </script>
 </head>
 
 <body style="display: flex; flex-direction: column; align-items: center;">
-  <h1>HK Configuration</h1>
+  <h1>HomeKey-ESP32</h1>
   <div>
     <button onclick='addComponent("info")' style="border: 2px;padding: .6rem;border-style: groove;cursor: pointer;margin-right: 1rem;" rel="noopener noreferrer">HK Info</a>
     <button onclick='addComponent("mqtt")' style="border: 2px;padding: .6rem;border-style: groove;cursor: pointer;margin-right: 1rem;" rel="noopener noreferrer">MQTT Config</a>
+    <button onclick='addComponent("misc")' style="border: 2px;padding: .6rem;border-style: groove;cursor: pointer;margin-right: 1rem;" rel="noopener noreferrer">Misc</a>
   </div>
 </body>
 

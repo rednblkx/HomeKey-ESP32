@@ -60,16 +60,24 @@ namespace espConfig
     bool lockEnableCustomState = MQTT_CUSTOM_STATE_ENABLED;
     bool lockAlwaysUnlock = MQTT_HOMEKEY_ALWAYS_UNLOCK;
     bool lockAlwaysLock = MQTT_HOMEKEY_ALWAYS_LOCK;
-    bool hassMqttDiscoveryEnabled = DISCOVERY;
+    bool hassMqttDiscoveryEnabled = MQTT_DISCOVERY;
   } mqttData;
 
   struct misc_config_t
   {
-    std::string deviceName = "HK Lock";
+    std::string deviceName = DEVICE_NAME;
+    uint8_t controlPin = CONTROL_PIN;
+    uint8_t hsStatusPin = LED_PIN;
+    uint8_t nfcSuccessPin = NFC_SUCCESS_PIN;
+    uint16_t nfcSuccessTime = NFC_SUCCESS_TIME;
+    bool nfcSuccessHL = NFC_SUCCESS_HL;
+    uint8_t nfcFailPin = NFC_FAIL_PIN;
+    uint16_t nfcFailTime = NFC_FAIL_TIME;
+    bool nfcFailHL = NFC_FAIL_HL;
   } miscConfig;
 }
 JSONCONS_ALL_MEMBER_TRAITS(espConfig::mqttConfig_t, mqttBroker, mqttPort, mqttUsername, mqttPassword, mqttClientId, hkTopic, lockStateTopic, lockStateCmd, lockCStateCmd, lockTStateCmd, lockCustomStateTopic, lockCustomStateCmd, lockEnableCustomState, lockAlwaysUnlock, lockAlwaysLock, hassMqttDiscoveryEnabled)
-JSONCONS_ALL_MEMBER_TRAITS(espConfig::misc_config_t, deviceName)
+JSONCONS_ALL_MEMBER_TRAITS(espConfig::misc_config_t, deviceName, controlPin, hsStatusPin, nfcSuccessPin, nfcSuccessHL, nfcFailPin, nfcFailHL)
 
 KeyFlow hkFlow = KeyFlow::kFlowFAST;
 SpanCharacteristic* lockCurrentState;
@@ -192,6 +200,11 @@ struct LockMechanism : Service::LockMechanism
         HKAuthenticationContext authCtx(nfc, readerData, savedData);
         auto authResult = authCtx.authenticate(hkFlow);
         if (std::get<2>(authResult) != KeyFlow::kFlowFailed) {
+          if (espConfig::miscConfig.nfcSuccessPin && espConfig::miscConfig.nfcSuccessPin != 0) {
+            digitalWrite(espConfig::miscConfig.nfcSuccessPin, espConfig::miscConfig.nfcSuccessHL);
+            delay(espConfig::miscConfig.nfcSuccessTime);
+            digitalWrite(espConfig::miscConfig.nfcSuccessPin, !espConfig::miscConfig.nfcSuccessHL);
+          }
           json payload;
           payload["issuerId"] = utils::bufToHexString(std::get<0>(authResult), 8, true);
           payload["endpointId"] = utils::bufToHexString(std::get<1>(authResult), 6, true);
@@ -233,6 +246,11 @@ struct LockMechanism : Service::LockMechanism
           LOG(I, "Total Time (from detection to mqtt publish): %lli ms", std::chrono::duration_cast<std::chrono::milliseconds>(stopTime - startTime).count());
         }
         else {
+          if (espConfig::miscConfig.nfcFailPin && espConfig::miscConfig.nfcFailPin != 0) {
+            digitalWrite(espConfig::miscConfig.nfcFailPin, espConfig::miscConfig.nfcFailHL);
+            delay(espConfig::miscConfig.nfcFailTime);
+            digitalWrite(espConfig::miscConfig.nfcFailPin, !espConfig::miscConfig.nfcFailHL);
+          }
           LOG(W, "We got status FlowFailed, mqtt untouched!");
         }
       }
@@ -666,7 +684,29 @@ void listDir(fs::FS& fs, const char* dirname, uint8_t levels) {
   }
 }
 
-String processor(const String& var) {
+String miscHtmlProcess(const String& var) {
+  if (var == "DEVICENAME") {
+    return String(espConfig::miscConfig.deviceName.c_str());
+  } else if (var == "CONTROLPIN") {
+    return String(espConfig::miscConfig.controlPin);
+  } else if (var == "LEDPIN") {
+    return String(espConfig::miscConfig.hsStatusPin);
+  } else if (var == "NFC1PIN") {
+    return String(espConfig::miscConfig.nfcSuccessPin);
+  } else if (var == "NFC2PIN") {
+    return String(espConfig::miscConfig.nfcFailPin);
+  } else if (var == "NFC1HL") {
+    return String(espConfig::miscConfig.nfcSuccessHL);
+  } else if (var == "NFC2HL") {
+    return String(espConfig::miscConfig.nfcFailHL);
+  } else if (var == "NFC1TIME") {
+    return String(espConfig::miscConfig.nfcSuccessTime);
+  } else if (var == "NFC2TIME") {
+    return String(espConfig::miscConfig.nfcFailTime);
+  }
+}
+
+String hkInfoHtmlProcess(const String& var) {
   String result = "";
   if (var == "READERGID") {
     return String(utils::bufToHexString(readerData.reader_group_id, 8, true).c_str());
@@ -696,7 +736,12 @@ String processor(const String& var) {
     }
     return result;
   }
-  else if (var == "MQTTBROKER") {
+  return result;
+}
+
+String mqttHtmlProcess(const String& var) {
+  String result = "";
+  if (var == "MQTTBROKER") {
     return String(espConfig::mqttData.mqttBroker.c_str());
   }
   else if (var == "MQTTPORT") {
@@ -748,16 +793,17 @@ String processor(const String& var) {
 }
 
 void setupWeb() {
-
-  Serial.printf("Starting HK Server Hub \n");
   webServer.on("/info", HTTP_GET, [](AsyncWebServerRequest* request) {
-    request->send(LittleFS, "/info.html", "text/html", false, processor);
+    request->send(LittleFS, "/info.html", "text/html", false, hkInfoHtmlProcess);
     });
   webServer.on("/", HTTP_GET, [](AsyncWebServerRequest* request) {
-    request->send(LittleFS, "/index.html", "text/html", false, processor);
+    request->send(LittleFS, "/index.html", "text/html", false, nullptr);
     });
   webServer.on("/mqtt", HTTP_GET, [](AsyncWebServerRequest* request) {
-    request->send(LittleFS, "/mqtt.html", "text/html", false, processor);
+    request->send(LittleFS, "/mqtt.html", "text/html", false, mqttHtmlProcess);
+    });
+  webServer.on("/misc", HTTP_GET, [](AsyncWebServerRequest* request) {
+    request->send(LittleFS, "/misc.html", "text/html", false, miscHtmlProcess);
     });
   webServer.on("/mqttconfig", HTTP_POST, [](AsyncWebServerRequest* request) {
     const char* TAG = "mqttconfig";
@@ -834,6 +880,49 @@ void setupWeb() {
     request->send(200, "text/plain", "Received Config, Restarting...");
     ESP.restart();
     });
+  webServer.on("/misc-config", HTTP_POST, [](AsyncWebServerRequest* request) {
+    const char* TAG = "misc-config";
+    int params = request->params();
+    for (int i = 0; i < params; i++) {
+      AsyncWebParameter* p = request->getParam(i);
+      LOG(V, "POST[%s]: %s\n", p->name().c_str(), p->value().c_str());
+      if (!strcmp(p->name().c_str(), "device-name")) {
+        espConfig::miscConfig.deviceName = p->value().c_str();
+      } else if (!strcmp(p->name().c_str(), "control-pin")) {
+        espConfig::miscConfig.controlPin = p->value().toInt();
+      } else if (!strcmp(p->name().c_str(), "led-pin")) {
+        espConfig::miscConfig.hsStatusPin = p->value().toInt();
+      } else if (!strcmp(p->name().c_str(), "nfc-s-pin")) {
+        espConfig::miscConfig.nfcSuccessPin = p->value().toInt();
+      } else if (!strcmp(p->name().c_str(), "nfc-f-pin")) {
+        espConfig::miscConfig.nfcFailPin = p->value().toInt();
+      } else if (!strcmp(p->name().c_str(), "nfc-s-hl")) {
+        espConfig::miscConfig.nfcSuccessHL = p->value().toInt();
+      } else if (!strcmp(p->name().c_str(), "nfc-f-hl")) {
+        espConfig::miscConfig.nfcFailHL = p->value().toInt();
+      } else if (!strcmp(p->name().c_str(), "nfc-s-time")) {
+        espConfig::miscConfig.nfcSuccessTime = p->value().toInt();
+      } else if (!strcmp(p->name().c_str(), "nfc-f-time")) {
+        espConfig::miscConfig.nfcFailTime = p->value().toInt();
+      }
+    }
+    try
+    {
+      std::string strNvs;
+      encode_json(espConfig::miscConfig, strNvs, indenting::indent);
+      esp_err_t set_nvs = nvs_set_blob(savedData, "MISCDATA", strNvs.data(), strNvs.size());
+      esp_err_t commit_nvs = nvs_commit(savedData);
+      LOG(V, "SET_STATUS: %s", esp_err_to_name(set_nvs));
+      LOG(V, "COMMIT_STATUS: %s", esp_err_to_name(commit_nvs));
+    }
+    catch(const std::exception& e)
+    {
+      LOG(E, "%s", e.what());
+    }
+    
+    request->send(200, "text/plain", "Received Config, Restarting...");
+    ESP.restart();
+    });
   webServer.onNotFound(notFound);
   webServer.begin();
 }
@@ -882,7 +971,26 @@ void setup() {
     {
       LOG(E, "%s", e.what());
     }
-    
+  }
+  if (!nvs_get_blob(savedData, "MISCDATA", NULL, &len)) {
+    uint8_t msgpack[len];
+    nvs_get_blob(savedData, "MISCDATA", msgpack, &len);
+    std::string str(msgpack, msgpack + len);
+    LOG(D, "MISCDATA - JSON(%d): %s", len, str.c_str());
+    try
+    {
+      espConfig::miscConfig = decode_json<espConfig::misc_config_t>(str);
+    }
+    catch(const std::exception& e)
+    {
+      LOG(E, "%s", e.what());
+    }
+  }
+  if (espConfig::miscConfig.nfcSuccessPin && espConfig::miscConfig.nfcSuccessPin != 0) {
+    pinMode(espConfig::miscConfig.nfcSuccessPin, OUTPUT); 
+  }
+  if (espConfig::miscConfig.nfcFailPin && espConfig::miscConfig.nfcFailPin != 0) {
+    pinMode(espConfig::miscConfig.nfcFailPin, OUTPUT); 
   }
   if (!LittleFS.begin(true)) {
     Serial.println("An Error has occurred while mounting LITTLEFS");
@@ -902,11 +1010,13 @@ void setup() {
     nfc.writeRegister(0x633d, 0);
     ESP_LOGI("NFC_SETUP", "Waiting for an ISO14443A card");
   }
-  homeSpan.setControlPin(CONTROL_PIN);
-  homeSpan.setStatusPin(LED_PIN);
+  homeSpan.setControlPin(espConfig::miscConfig.controlPin);
+  homeSpan.setStatusPin(espConfig::miscConfig.hsStatusPin);
   homeSpan.setStatusAutoOff(15);
   homeSpan.reserveSocketConnections(2);
-  homeSpan.setPairingCode(HK_CODE);
+  if (strcmp(SETUP_CODE, "46637726")) {
+    homeSpan.setPairingCode(SETUP_CODE);
+  }
   homeSpan.setLogLevel(0);
   homeSpan.setSketchVersion(app_version.c_str());
 
@@ -919,7 +1029,7 @@ void setup() {
   }
   homeSpan.enableOTA(OTA_PWD);
   homeSpan.setPortNum(1201);
-  homeSpan.begin(Category::Locks, NAME, "HK", "HomeKey-ESP32");
+  homeSpan.begin(Category::Locks, espConfig::miscConfig.deviceName.c_str(), "HK", "HomeKey-ESP32");
 
   new SpanUserCommand('D', "Delete Home Key Data", deleteReaderData);
   new SpanUserCommand('L', "Set Log Level", setLogLevel);
@@ -940,7 +1050,7 @@ void setup() {
   new Characteristic::Identify();
   new Characteristic::Manufacturer("rednblkx");
   new Characteristic::Model("HomeKey-ESP32");
-  new Characteristic::Name(NAME);
+  new Characteristic::Name(DEVICE_NAME);
   uint8_t mac[6];
   WiFi.macAddress(mac);
   char macStr[18] = { 0 };
