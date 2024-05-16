@@ -16,7 +16,6 @@
 #include <config.h>
 #include <mqtt_client.h>
 #include <esp_ota_ops.h>
-#include <sstream>
 
 const char* TAG = "MAIN";
 
@@ -818,12 +817,20 @@ void setupWeb() {
         espConfig::mqttData.lockAlwaysLock = p->value().toInt();
       }
     }
-    std::ostringstream strNvs;
-    encode_json(espConfig::mqttData, strNvs, indenting::indent);
-    esp_err_t set_nvs = nvs_set_blob(savedData, "MQTTDATA", strNvs.str().data(), strNvs.str().size());
-    esp_err_t commit_nvs = nvs_commit(savedData);
-    LOG(V, "SET_STATUS: %s", esp_err_to_name(set_nvs));
-    LOG(V, "COMMIT_STATUS: %s", esp_err_to_name(commit_nvs));
+    try
+    {
+      std::string strNvs;
+      encode_json(espConfig::mqttData, strNvs, indenting::indent);
+      esp_err_t set_nvs = nvs_set_blob(savedData, "MQTTDATA", strNvs.data(), strNvs.size());
+      esp_err_t commit_nvs = nvs_commit(savedData);
+      LOG(V, "SET_STATUS: %s", esp_err_to_name(set_nvs));
+      LOG(V, "COMMIT_STATUS: %s", esp_err_to_name(commit_nvs));
+    }
+    catch(const std::exception& e)
+    {
+      LOG(E, "%s", e.what());
+    }
+    
     request->send(200, "text/plain", "Received Config, Restarting...");
     ESP.restart();
     });
@@ -867,7 +874,15 @@ void setup() {
     nvs_get_blob(savedData, "MQTTDATA", msgpack, &len);
     std::string str(msgpack, msgpack + len);
     LOG(D, "MQTTDATA - JSON(%d): %s", len, str.c_str());
-    espConfig::mqttData = decode_json<espConfig::mqttConfig_t>(str);
+    try
+    {
+      espConfig::mqttData = decode_json<espConfig::mqttConfig_t>(str);
+    }
+    catch(const std::exception& e)
+    {
+      LOG(E, "%s", e.what());
+    }
+    
   }
   if (!LittleFS.begin(true)) {
     Serial.println("An Error has occurred while mounting LITTLEFS");
