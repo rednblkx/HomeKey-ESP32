@@ -82,6 +82,7 @@
     elStatus.style = "color: red;"
     elStatus.innerText = string;
     document.querySelector("#component > h2").insertAdjacentElement("afterend", elStatus);
+    setTimeout(() => {document.querySelector("#status-text").remove()}, 5000);
   }
   form.addEventListener('submit', handleForm);
 </script>
