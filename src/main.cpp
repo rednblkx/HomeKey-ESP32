@@ -258,6 +258,7 @@ struct LockMechanism : Service::LockMechanism
         }
       }
       else {
+        LOG(I, "Invalid Response, probably not Homekey, publishing target's UID");
         if (espConfig::miscConfig.nfcSuccessPin && espConfig::miscConfig.nfcSuccessPin != 0) {
           digitalWrite(espConfig::miscConfig.nfcSuccessPin, espConfig::miscConfig.nfcSuccessHL);
           delay(espConfig::miscConfig.nfcSuccessTime);

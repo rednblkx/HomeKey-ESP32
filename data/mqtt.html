@@ -79,6 +79,7 @@
     let string = await response.text();
     let component = document.getElementById("component");
     let elStatus = document.createElement("p");
+    elStatus.id = "status-text";
     elStatus.style = "color: red;"
     elStatus.innerText = string;
     document.querySelector("#component > h2").insertAdjacentElement("afterend", elStatus);
