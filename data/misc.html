@@ -12,12 +12,14 @@
   <label for="nfc-s-time">NFC Success GPIO Time</label>
   <input type="number" name="nfc-s-time" id="nfc-s-time" placeholder="26" required value="%NFC1TIME%">
   <label for="nfc-s-hl">NFC Success High-Low</label>
+  <input type='hidden' name='nfc-s-hl' value='0'>
   <input type="checkbox" name="nfc-s-hl" id="nfc-s-hl" value="1">
   <label for="nfc-f-pin">NFC Fail GPIO Pin</label>
   <input type="number" name="nfc-f-pin" id="nfc-f-pin" placeholder="2" required value="%NFC2PIN%">
   <label for="nfc-f-time">NFC Fail GPIO Time</label>
   <input type="number" name="nfc-f-time" id="nfc-f-time" placeholder="26" required value="%NFC2TIME%">
   <label for="nfc-f-hl">NFC Fail High-Low</label>
+  <input type='hidden' name='nfc-f-hl' value='0'>
   <input type="checkbox" name="nfc-f-hl" id="nfc-f-hl" value="1">
   <div style="display: flex;justify-content: space-around;margin-top: 1rem;">
     <button type="submit" style="cursor: pointer;padding-inline: 1rem;padding-block: .5rem;">Submit</button>

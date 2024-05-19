@@ -3,14 +3,14 @@
 #include <utils.h>
 #include <HomeSpan.h>
 #include <PN532_SPI.h>
-#include "PN532.h"
+#include <PN532.h>
 #include <HAP.h>
 #include <chrono>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <LittleFS.h>
 #include <HK_HomeKit.h>
-#include <config.h>
+#include "config.h"
 #include <mqtt_client.h>
 #include <esp_ota_ops.h>
 
@@ -201,8 +201,8 @@ struct LockMechanism : Service::LockMechanism
           json_options options;
           options.byte_string_format(byte_string_chars_format::base16);
           json payload;
-          payload["issuerId"] = json(byte_string_arg, std::get<0>(authResult));
-          payload["endpointId"] = json(byte_string_arg, std::get<1>(authResult));
+          payload["issuerId"] = json(byte_string_arg, std::get<0>(authResult), semantic_tag::base16);
+          payload["endpointId"] = json(byte_string_arg, std::get<1>(authResult), semantic_tag::base16);
           payload["homekey"] = true;
           std::string payloadStr = payload.as<std::string>();
           if (client != nullptr) {
