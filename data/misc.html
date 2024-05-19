@@ -19,16 +19,18 @@
   <input type="number" name="nfc-f-time" id="nfc-f-time" placeholder="26" required value="%NFC2TIME%">
   <label for="nfc-f-hl">NFC Fail High-Low</label>
   <input type="checkbox" name="nfc-f-hl" id="nfc-f-hl" value="1">
-  <button type="submit" style="margin-top: 1rem; cursor: pointer;">Submit</button>
-  <button type="reset" style="cursor: pointer;">Reset</button>
+  <div style="display: flex;justify-content: space-around;margin-top: 1rem;">
+    <button type="submit" style="cursor: pointer;padding-inline: 1rem;padding-block: .5rem;">Submit</button>
+    <button type="reset" style="cursor: pointer;padding-inline: 1rem;padding-block: .5rem;">Reset</button>
+  </div>
 </form>
 <script>
   let nfcSuccessHL = "%NFC1HL%" == true;
   let nfcFailHL = "%NFC2HL%" == true;
-  if(nfcSuccessHL){
+  if (nfcSuccessHL) {
     document.getElementById("nfc-s-hl").setAttribute("checked", "");
   }
-  if(nfcFailHL){
+  if (nfcFailHL) {
     document.getElementById("nfc-f-hl").setAttribute("checked", "");
   }
   let form = document.getElementById("misc-config");
@@ -40,7 +42,7 @@
     });
     let string = await response.text();
     let element = document.querySelector("#status-text");
-    if(element){
+    if (element) {
       element.remove();
     }
     let component = document.getElementById("component");
@@ -49,7 +51,7 @@
     elStatus.style = "color: red;";
     elStatus.innerText = string;
     document.querySelector("#component > h2").insertAdjacentElement("afterend", elStatus);
-    setTimeout(() => {document.querySelector("#status-text").remove()}, 5000);
+    setTimeout(() => { document.querySelector("#status-text").remove() }, 5000);
   }
   form.addEventListener('submit', handleForm);
 </script>

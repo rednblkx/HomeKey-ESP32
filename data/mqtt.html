@@ -49,8 +49,10 @@
   <label for="mqtt-always-lock">Always Lock on HK Auth</label>
   <input type="checkbox" name="mqtt-always-lock" id="mqtt-always-lock" value="1">
 
-  <button type="submit" style="margin-top: 1rem; cursor: pointer;">Submit</button>
-  <button type="reset" style="cursor: pointer;">Reset</button>
+  <div style="display: flex;justify-content: space-around;margin-top: 1rem;">
+    <button type="submit" style="cursor: pointer;padding-inline: 1rem;padding-block: .5rem;">Submit</button>
+    <button type="reset" style="cursor: pointer;padding-inline: 1rem;padding-block: .5rem;">Reset</button>
+  </div>
 </form>
 <script>
   let customStateEnabled = "%CUSTOMSTATE_ENABLED%" == true;
