@@ -1,26 +1,58 @@
 <h2 style="text-align: center;">Device Configuration</h2>
-<form id="misc-config" action="misc-config" method="post"
-  style="display: inline-flex; flex-direction: column;margin-bottom: 1rem;">
+<form id="misc-config" action="misc-config" method="post" style="display: inline-flex; flex-direction: column;margin-bottom: 1rem;">
+
   <label for="device-name">Device Name</label>
   <input type="text" name="device-name" id="device-name" placeholder="HK" required value="%DEVICENAME%">
+
   <label for="control-pin">HomeSpan Control GPIO Pin</label>
   <input type="number" name="control-pin" id="control-pin" placeholder="26" required value="%CONTROLPIN%">
+
   <label for="led-pin">HomeSpan Status LED GPIO Pin</label>
   <input type="number" name="led-pin" id="led-pin" placeholder="2" required value="%LEDPIN%">
+
+  <label for="hk-always-unlock">Always Unlock on HK Auth</label>
+  <input type='hidden' name='hk-always-unlock' value='0'>
+  <input type="checkbox" name="hk-always-unlock" id="hk-always-unlock" value="1">
+
+  <label for="hk-always-lock">Always Lock on HK Auth</label>
+  <input type='hidden' name='hk-always-lock' value='0'>
+  <input type="checkbox" name="hk-always-lock" id="hk-always-lock" value="1">
+
   <label for="nfc-s-pin">NFC Success GPIO Pin</label>
   <input type="number" name="nfc-s-pin" id="nfc-s-pin" placeholder="2" required value="%NFC1PIN%">
+
   <label for="nfc-s-time">NFC Success GPIO Time</label>
   <input type="number" name="nfc-s-time" id="nfc-s-time" placeholder="26" required value="%NFC1TIME%">
-  <label for="nfc-s-hl">NFC Success High-Low</label>
+
+  <label for="nfc-s-hl">NFC Success GPIO State(checked=HIGH, unchecked=LOW)</label>
   <input type='hidden' name='nfc-s-hl' value='0'>
   <input type="checkbox" name="nfc-s-hl" id="nfc-s-hl" value="1">
+
   <label for="nfc-f-pin">NFC Fail GPIO Pin</label>
   <input type="number" name="nfc-f-pin" id="nfc-f-pin" placeholder="2" required value="%NFC2PIN%">
+
   <label for="nfc-f-time">NFC Fail GPIO Time</label>
   <input type="number" name="nfc-f-time" id="nfc-f-time" placeholder="26" required value="%NFC2TIME%">
-  <label for="nfc-f-hl">NFC Fail High-Low</label>
+
+  <label for="nfc-f-hl">NFC Fail GPIO State(checked=HIGH, unchecked=LOW)</label>
   <input type='hidden' name='nfc-f-hl' value='0'>
   <input type="checkbox" name="nfc-f-hl" id="nfc-f-hl" value="1">
+
+  <label for="gpio-a-en">Enable GPIO Actions</label>
+  <input type='hidden' name='gpio-a-en' value='0'>
+  <input type="checkbox" name="gpio-a-en" id="gpio-a-en" value="1">
+
+  <label for="gpio-a-pin">GPIO Action Pin</label>
+  <input type="number" name="gpio-a-pin" id="gpio-a-pin" placeholder="2" required value="%GPIOAPIN%">
+
+  <label for="gpio-a-lock">GPIO Lock State(checked=HIGH, unchecked=LOW)</label>
+  <input type='hidden' name='gpio-a-lock' value='0'>
+  <input type="checkbox" name="gpio-a-lock" id="gpio-a-lock" value="1">
+
+  <label for="gpio-a-unlock">GPIO Unlock State(checked=HIGH, unchecked=LOW)</label>
+  <input type='hidden' name='gpio-a-unlock' value='0'>
+  <input type="checkbox" name="gpio-a-unlock" id="gpio-a-unlock" value="1">
+
   <div style="display: flex;justify-content: space-around;margin-top: 1rem;">
     <button type="submit" style="cursor: pointer;padding-inline: 1rem;padding-block: .5rem;">Submit</button>
     <button type="reset" style="cursor: pointer;padding-inline: 1rem;padding-block: .5rem;">Reset</button>
@@ -29,11 +61,31 @@
 <script>
   let nfcSuccessHL = "%NFC1HL%" == true;
   let nfcFailHL = "%NFC2HL%" == true;
+  let alwaysUnlock = "%ALWAYSUNLOCK%" == true;
+  let alwaysLock = "%ALWAYSLOCK%" == true;
+  let gpioActionEn = "%GPIOAEN%" == true;
+  let gpioActionLock = "%GPIOALOCK%" == true;
+  let gpioActionUnlock = "%GPIOAUNLOCK%" == true;
   if (nfcSuccessHL) {
     document.getElementById("nfc-s-hl").setAttribute("checked", "");
   }
   if (nfcFailHL) {
     document.getElementById("nfc-f-hl").setAttribute("checked", "");
+  }
+  if(alwaysUnlock){
+    document.getElementById("hk-always-unlock").setAttribute("checked", "");
+  }
+  if(alwaysLock){
+    document.getElementById("hk-always-lock").setAttribute("checked", "");
+  }
+  if(gpioActionEn){
+    document.getElementById("gpio-a-en").setAttribute("checked", "");
+  }
+  if(gpioActionLock){
+    document.getElementById("gpio-a-lock").setAttribute("checked", "");
+  }
+  if(gpioActionUnlock){
+    document.getElementById("gpio-a-unlock").setAttribute("checked", "");
   }
   let form = document.getElementById("misc-config");
   async function handleForm(event) {
