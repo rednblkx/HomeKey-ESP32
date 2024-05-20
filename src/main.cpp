@@ -13,6 +13,7 @@
 #include "config.h"
 #include <mqtt_client.h>
 #include <esp_ota_ops.h>
+#include <esp_task_wdt.h>
 
 const char* TAG = "MAIN";
 
@@ -30,6 +31,7 @@ AsyncWebServer webServer(80);
 #define PN532_SS (5)
 PN532_SPI pn532spi;
 PN532 nfc(pn532spi);
+QueueHandle_t gpio_led_handle = nullptr;
 
 nvs_handle savedData;
 readerData_t readerData;
@@ -164,130 +166,6 @@ struct LockMechanism : Service::LockMechanism
 
     return (true);
   }
-
-  void loop() {
-    uint8_t res[4];
-    uint16_t resLen = 4;
-    nfc.writeRegister(0x633d, 0, true);
-    nfc.inCommunicateThru(ecpData, sizeof(ecpData), res, &resLen, 100, true);
-    uint8_t uid[16];
-    uint8_t uidLen = 0;
-    uint8_t atqa[2];
-    uint8_t sak;
-    bool passiveTarget = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, atqa, &sak, 500, true, true);
-    if (passiveTarget) {
-      LOG(D, "ATQA: %s", utils::bufToHexString(atqa, 2).c_str());
-      LOG(D, "SAK: %s", utils::bufToHexString(&sak, 1).c_str());
-      LOG(D, "UID: %s", utils::bufToHexString(uid, uidLen).c_str());
-      LOG(I, "*** PASSIVE TARGET DETECTED ***");
-      auto startTime = std::chrono::high_resolution_clock::now();
-      uint8_t data[13] = { 0x00, 0xA4, 0x04, 0x00, 0x07, 0xA0, 0x00, 0x00, 0x08, 0x58, 0x01, 0x01, 0x0 };
-      uint8_t selectCmdRes[32];
-      uint16_t selectCmdResLength = 32;
-      LOG(D, "SELECT HomeKey Applet, APDU: %s", utils::bufToHexString(data, sizeof(data)).c_str());
-      nfc.inDataExchange(data, sizeof(data), selectCmdRes, &selectCmdResLength);
-      LOG(D, "SELECT HomeKey Applet, Response: %s, Length: %d", utils::bufToHexString(selectCmdRes, selectCmdResLength).c_str(), selectCmdResLength);
-      if (selectCmdRes[selectCmdResLength - 2] == 0x90 && selectCmdRes[selectCmdResLength - 1] == 0x00) {
-        LOG(D, "*** SELECT HOMEKEY APPLET SUCCESSFUL ***");
-        LOG(D, "Reader Private Key: %s", utils::bufToHexString(readerData.reader_pk.data(), readerData.reader_pk.size()).c_str());
-        HKAuthenticationContext authCtx(nfc, readerData, savedData);
-        auto authResult = authCtx.authenticate(hkFlow);
-        if (std::get<2>(authResult) != KeyFlow::kFlowFailed) {
-          if (espConfig::miscConfig.nfcSuccessPin && espConfig::miscConfig.nfcSuccessPin != 0) {
-            digitalWrite(espConfig::miscConfig.nfcSuccessPin, espConfig::miscConfig.nfcSuccessHL);
-            delay(espConfig::miscConfig.nfcSuccessTime);
-            digitalWrite(espConfig::miscConfig.nfcSuccessPin, !espConfig::miscConfig.nfcSuccessHL);
-          }
-          json_options options;
-          options.byte_string_format(byte_string_chars_format::base16);
-          json payload;
-          payload["issuerId"] = json(byte_string_arg, std::get<0>(authResult), semantic_tag::base16);
-          payload["endpointId"] = json(byte_string_arg, std::get<1>(authResult), semantic_tag::base16);
-          payload["homekey"] = true;
-          std::string payloadStr = payload.as<std::string>();
-          if (client != nullptr) {
-            esp_mqtt_client_publish(client, espConfig::mqttData.hkTopic.c_str(), payloadStr.c_str(), payloadStr.length(), 0, false);
-            if (espConfig::mqttData.lockAlwaysUnlock) {
-              lockCurrentState->setVal(lockStates::UNLOCKED);
-              lockTargetState->setVal(lockStates::UNLOCKED);
-              esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockStates::UNLOCKED).c_str(), 1, 1, true);
-              if (espConfig::mqttData.lockEnableCustomState) {
-                esp_mqtt_client_publish(client, espConfig::mqttData.lockCustomStateTopic.c_str(), std::to_string(customLockActions::UNLOCK).c_str(), 0, 0, false);
-              }
-            }
-            else if (espConfig::mqttData.lockAlwaysLock) {
-              lockCurrentState->setVal(lockStates::LOCKED);
-              lockTargetState->setVal(lockStates::LOCKED);
-              esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockStates::LOCKED).c_str(), 1, 1, true);
-              if (espConfig::mqttData.lockEnableCustomState) {
-                esp_mqtt_client_publish(client, espConfig::mqttData.lockCustomStateTopic.c_str(), std::to_string(customLockActions::LOCK).c_str(), 0, 0, false);
-              }
-            }
-            else {
-              if (espConfig::mqttData.lockEnableCustomState) {
-                int currentState = lockCurrentState->getVal();
-                if (currentState == lockStates::UNLOCKED) {
-                  esp_mqtt_client_publish(client, espConfig::mqttData.lockCustomStateTopic.c_str(), std::to_string(customLockActions::LOCK).c_str(), 0, 0, false);
-                }
-                else if (currentState == lockStates::LOCKED) {
-                  esp_mqtt_client_publish(client, espConfig::mqttData.lockCustomStateTopic.c_str(), std::to_string(customLockActions::UNLOCK).c_str(), 0, 0, false);
-                }
-              }
-            }
-          }
-          else LOG(W, "MQTT Client not initialized, cannot publish message");
-
-          auto stopTime = std::chrono::high_resolution_clock::now();
-          LOG(I, "Total Time (detection->auth->gpio->mqtt): %lli ms", std::chrono::duration_cast<std::chrono::milliseconds>(stopTime - startTime).count());
-        }
-        else {
-          if (espConfig::miscConfig.nfcFailPin && espConfig::miscConfig.nfcFailPin != 0) {
-            digitalWrite(espConfig::miscConfig.nfcFailPin, espConfig::miscConfig.nfcFailHL);
-            delay(espConfig::miscConfig.nfcFailTime);
-            digitalWrite(espConfig::miscConfig.nfcFailPin, !espConfig::miscConfig.nfcFailHL);
-          }
-          LOG(W, "We got status FlowFailed, mqtt untouched!");
-        }
-      }
-      else {
-        LOG(I, "Invalid Response, probably not Homekey, publishing target's UID");
-        if (espConfig::miscConfig.nfcSuccessPin && espConfig::miscConfig.nfcSuccessPin != 0) {
-          digitalWrite(espConfig::miscConfig.nfcSuccessPin, espConfig::miscConfig.nfcSuccessHL);
-          delay(espConfig::miscConfig.nfcSuccessTime);
-          digitalWrite(espConfig::miscConfig.nfcSuccessPin, !espConfig::miscConfig.nfcSuccessHL);
-        }
-        json_options options;
-        options.byte_string_format(byte_string_chars_format::base16);
-        json payload;
-        payload["atqa"] = byte_string(atqa, 2);
-        payload["sak"] = byte_string(&sak, 1);
-        payload["uid"] = byte_string(uid, uidLen);
-        payload["homekey"] = false;
-        std::string payload_dump;
-        payload.dump(payload_dump, options);
-        if (client != nullptr) {
-          esp_mqtt_client_publish(client, espConfig::mqttData.hkTopic.c_str(), payload_dump.c_str(), 0, 0, false);
-        }
-        else LOG(W, "MQTT Client not initialized, cannot publish message");
-      }
-      delay(500);
-      nfc.inRelease();
-      nfc.setPassiveActivationRetries(5);
-      int counter = 50;
-      bool deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
-      LOG(D, "Target still present: %d", deviceStillInField);
-      while (deviceStillInField) {
-        if (counter == 0) break;
-        delay(300);
-        nfc.inRelease();
-        deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
-        --counter;
-        LOG(D, "Target still present: %d counter=%d", deviceStillInField, counter);
-      }
-      nfc.inRelease();
-      nfc.setPassiveActivationRetries(0);
-    }
-  }
 };
 
 struct NFCAccess : Service::NFCAccess
@@ -304,10 +182,9 @@ struct NFCAccess : Service::NFCAccess
     nfcSupportedConfiguration = new Characteristic::NFCAccessSupportedConfiguration();
   }
 
-
   boolean update() {
     LOG(D, "PROVISIONED READER KEY: %s", utils::bufToHexString(readerData.reader_pk.data(), readerData.reader_pk.size()).c_str());
-    LOG(D, "READER GROUP IDENTIFIER: %s", utils::bufToHexString(readerData.reader_gid.data(),readerData.reader_gid.size()).c_str());
+    LOG(D, "READER GROUP IDENTIFIER: %s", utils::bufToHexString(readerData.reader_gid.data(), readerData.reader_gid.size()).c_str());
     LOG(D, "READER UNIQUE IDENTIFIER: %s", utils::bufToHexString(readerData.reader_id.data(), readerData.reader_id.size()).c_str());
 
     // char* dataConfState = configurationState->getNewString(); // Underlying functionality currently unknown
@@ -336,10 +213,10 @@ void deleteReaderData(const char* buf) {
   memset(&readerData, 0, sizeof(readerData));
   esp_err_t erase_nvs = nvs_erase_key(savedData, "READERDATA");
   esp_err_t commit_nvs = nvs_commit(savedData);
-  LOG(D,"*** NVS W STATUS");
-  LOG(D,"ERASE: %s", esp_err_to_name(erase_nvs));
-  LOG(D,"COMMIT: %s", esp_err_to_name(commit_nvs));
-  LOG(D,"*** NVS W STATUS");
+  LOG(D, "*** NVS W STATUS");
+  LOG(D, "ERASE: %s", esp_err_to_name(erase_nvs));
+  LOG(D, "COMMIT: %s", esp_err_to_name(commit_nvs));
+  LOG(D, "*** NVS W STATUS");
 }
 
 void pairCallback() {
@@ -347,24 +224,24 @@ void pairCallback() {
     deleteReaderData(NULL);
     return;
   }
-  for (auto it=homeSpan.controllerListBegin(); it!=homeSpan.controllerListEnd(); ++it) {
-      std::vector<uint8_t> id = utils::getHashIdentifier(it->getLTPK(), 32, true);
-      LOG(D, "Found allocated controller - Hash: %s", utils::bufToHexString(id.data(), 8).c_str());
-      hkIssuer_t* foundIssuer = nullptr;
-      for (auto &&issuer : readerData.issuers) {
-        if (std::equal(issuer.issuer_id.begin(), issuer.issuer_id.end(), id.begin())) {
-          LOG(D, "Issuer %s already added, skipping", utils::bufToHexString(issuer.issuer_id.data(), issuer.issuer_id.size()).c_str());
-          foundIssuer = &issuer;
-          break;
-        }
+  for (auto it = homeSpan.controllerListBegin(); it != homeSpan.controllerListEnd(); ++it) {
+    std::vector<uint8_t> id = utils::getHashIdentifier(it->getLTPK(), 32, true);
+    LOG(D, "Found allocated controller - Hash: %s", utils::bufToHexString(id.data(), 8).c_str());
+    hkIssuer_t* foundIssuer = nullptr;
+    for (auto&& issuer : readerData.issuers) {
+      if (std::equal(issuer.issuer_id.begin(), issuer.issuer_id.end(), id.begin())) {
+        LOG(D, "Issuer %s already added, skipping", utils::bufToHexString(issuer.issuer_id.data(), issuer.issuer_id.size()).c_str());
+        foundIssuer = &issuer;
+        break;
       }
-      if (foundIssuer == nullptr) {
-        LOG(D, "Adding new issuer - ID: %s", utils::bufToHexString(id.data(), 8).c_str());
-        hkIssuer_t newIssuer;
-        newIssuer.issuer_id = id;
-        newIssuer.issuer_pk.insert(newIssuer.issuer_pk.begin(), it->getLTPK(), it->getLTPK() + 32);
-        readerData.issuers.emplace_back(newIssuer);
-      }
+    }
+    if (foundIssuer == nullptr) {
+      LOG(D, "Adding new issuer - ID: %s", utils::bufToHexString(id.data(), 8).c_str());
+      hkIssuer_t newIssuer;
+      newIssuer.issuer_id = id;
+      newIssuer.issuer_pk.insert(newIssuer.issuer_pk.begin(), it->getLTPK(), it->getLTPK() + 32);
+      readerData.issuers.emplace_back(newIssuer);
+    }
   }
   save_to_nvs();
 }
@@ -432,9 +309,9 @@ void setLogLevel(const char* buf) {
 }
 
 void print_issuers(const char* buf) {
-  for (auto &&issuer : readerData.issuers) {
+  for (auto&& issuer : readerData.issuers) {
     LOG(D, "Issuer ID: %s, Public Key: %s", utils::bufToHexString(issuer.issuer_id.data(), issuer.issuer_id.size()).c_str(), utils::bufToHexString(issuer.issuer_pk.data(), issuer.issuer_pk.size()).c_str());
-    for (auto  &&endpoint : issuer.endpoints) {
+    for (auto&& endpoint : issuer.endpoints) {
       LOG(D, "Endpoint ID: %s, Public Key: %s", utils::bufToHexString(endpoint.endpoint_id.data(), endpoint.endpoint_id.size()).c_str(), utils::bufToHexString(endpoint.endpoint_pk.data(), endpoint.endpoint_pk.size()).c_str());
     }
   }
@@ -513,12 +390,12 @@ void set_state_handler(esp_mqtt_client_handle_t client, int state) {
 /**
  * The `mqtt_event_handler` function handles MQTT events, including connection, message reception, and
  * publishing of device discovery information.
- * 
+ *
  * @param event_data The `event_data` parameter in the `mqtt_event_handler` function is a handle to the
  * MQTT event data structure. It contains information about the event that occurred during the MQTT
  * communication, such as the event type, client handle, topic, data, and other relevant details. The
  * function processes different MQTT
- * 
+ *
  * @return The function `mqtt_event_handler` is returning an `esp_err_t` type, specifically `ESP_OK`.
  */
 esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event_data) {
@@ -691,21 +568,29 @@ void listDir(fs::FS& fs, const char* dirname, uint8_t levels) {
 String miscHtmlProcess(const String& var) {
   if (var == "DEVICENAME") {
     return String(espConfig::miscConfig.deviceName.c_str());
-  } else if (var == "CONTROLPIN") {
+  }
+  else if (var == "CONTROLPIN") {
     return String(espConfig::miscConfig.controlPin);
-  } else if (var == "LEDPIN") {
+  }
+  else if (var == "LEDPIN") {
     return String(espConfig::miscConfig.hsStatusPin);
-  } else if (var == "NFC1PIN") {
+  }
+  else if (var == "NFC1PIN") {
     return String(espConfig::miscConfig.nfcSuccessPin);
-  } else if (var == "NFC2PIN") {
+  }
+  else if (var == "NFC2PIN") {
     return String(espConfig::miscConfig.nfcFailPin);
-  } else if (var == "NFC1HL") {
+  }
+  else if (var == "NFC1HL") {
     return String(espConfig::miscConfig.nfcSuccessHL);
-  } else if (var == "NFC2HL") {
+  }
+  else if (var == "NFC2HL") {
     return String(espConfig::miscConfig.nfcFailHL);
-  } else if (var == "NFC1TIME") {
+  }
+  else if (var == "NFC1TIME") {
     return String(espConfig::miscConfig.nfcSuccessTime);
-  } else if (var == "NFC2TIME") {
+  }
+  else if (var == "NFC2TIME") {
     return String(espConfig::miscConfig.nfcFailTime);
   }
   return String();
@@ -723,14 +608,14 @@ String hkInfoHtmlProcess(const String& var) {
     return String(readerData.issuers.size());
   }
   else if (var == "ISSUERSLIST") {
-    for (auto &&issuer : readerData.issuers) {
+    for (auto&& issuer : readerData.issuers) {
       char issuerBuff[21 + 8];
       result += "<li>";
       snprintf(issuerBuff, sizeof(issuerBuff), "Issuer ID: %s", utils::bufToHexString(issuer.issuer_id.data(), issuer.issuer_id.size(), true).c_str());
       result += issuerBuff;
       result += "</li>\n";
       result += "\t\t<ul>";
-      for (auto &&endpoint : issuer.endpoints) {
+      for (auto&& endpoint : issuer.endpoints) {
         char endBuff[23 + 6];
         result += "\n\t\t\t<li>";
         snprintf(endBuff, sizeof(endBuff), "Endpoint ID: %s", utils::bufToHexString(endpoint.endpoint_id.data(), endpoint.endpoint_id.size(), true).c_str());
@@ -868,8 +753,7 @@ void setupWeb() {
         espConfig::mqttData.lockAlwaysLock = p->value().toInt();
       }
     }
-    try
-    {
+    try {
       std::string strNvs;
       encode_json(espConfig::mqttData, strNvs, indenting::indent);
       esp_err_t set_nvs = nvs_set_blob(savedData, "MQTTDATA", strNvs.data(), strNvs.size());
@@ -877,11 +761,10 @@ void setupWeb() {
       LOG(V, "SET_STATUS: %s", esp_err_to_name(set_nvs));
       LOG(V, "COMMIT_STATUS: %s", esp_err_to_name(commit_nvs));
     }
-    catch(const std::exception& e)
-    {
+    catch (const std::exception& e) {
       LOG(E, "%s", e.what());
     }
-    
+
     request->send(200, "text/plain", "Received Config, Restarting...");
     ESP.restart();
     });
@@ -893,26 +776,33 @@ void setupWeb() {
       LOG(V, "POST[%s]: %s\n", p->name().c_str(), p->value().c_str());
       if (!strcmp(p->name().c_str(), "device-name")) {
         espConfig::miscConfig.deviceName = p->value().c_str();
-      } else if (!strcmp(p->name().c_str(), "control-pin")) {
+      }
+      else if (!strcmp(p->name().c_str(), "control-pin")) {
         espConfig::miscConfig.controlPin = p->value().toInt();
-      } else if (!strcmp(p->name().c_str(), "led-pin")) {
+      }
+      else if (!strcmp(p->name().c_str(), "led-pin")) {
         espConfig::miscConfig.hsStatusPin = p->value().toInt();
-      } else if (!strcmp(p->name().c_str(), "nfc-s-pin")) {
+      }
+      else if (!strcmp(p->name().c_str(), "nfc-s-pin")) {
         espConfig::miscConfig.nfcSuccessPin = p->value().toInt();
-      } else if (!strcmp(p->name().c_str(), "nfc-f-pin")) {
+      }
+      else if (!strcmp(p->name().c_str(), "nfc-f-pin")) {
         espConfig::miscConfig.nfcFailPin = p->value().toInt();
-      } else if (!strcmp(p->name().c_str(), "nfc-s-hl")) {
+      }
+      else if (!strcmp(p->name().c_str(), "nfc-s-hl")) {
         espConfig::miscConfig.nfcSuccessHL = p->value().toInt();
-      } else if (!strcmp(p->name().c_str(), "nfc-f-hl")) {
+      }
+      else if (!strcmp(p->name().c_str(), "nfc-f-hl")) {
         espConfig::miscConfig.nfcFailHL = p->value().toInt();
-      } else if (!strcmp(p->name().c_str(), "nfc-s-time")) {
+      }
+      else if (!strcmp(p->name().c_str(), "nfc-s-time")) {
         espConfig::miscConfig.nfcSuccessTime = p->value().toInt();
-      } else if (!strcmp(p->name().c_str(), "nfc-f-time")) {
+      }
+      else if (!strcmp(p->name().c_str(), "nfc-f-time")) {
         espConfig::miscConfig.nfcFailTime = p->value().toInt();
       }
     }
-    try
-    {
+    try {
       std::string strNvs;
       encode_json(espConfig::miscConfig, strNvs, indenting::indent);
       esp_err_t set_nvs = nvs_set_blob(savedData, "MISCDATA", strNvs.data(), strNvs.size());
@@ -920,11 +810,10 @@ void setupWeb() {
       LOG(V, "SET_STATUS: %s", esp_err_to_name(set_nvs));
       LOG(V, "COMMIT_STATUS: %s", esp_err_to_name(commit_nvs));
     }
-    catch(const std::exception& e)
-    {
+    catch (const std::exception& e) {
       LOG(E, "%s", e.what());
     }
-    
+
     request->send(200, "text/plain", "Received Config, Restarting...");
     ESP.restart();
     });
@@ -943,10 +832,175 @@ void wifiCallback() {
   setupWeb();
 }
 
+void nfc_thread_entry(void* arg) {
+  nfc.begin();
+
+  uint32_t versiondata = nfc.getFirmwareVersion();
+  if (!versiondata) {
+    ESP_LOGE("NFC_SETUP", "Didn't find PN53x board");
+  }
+  else {
+    unsigned int model = (versiondata >> 24) & 0xFF;
+    ESP_LOGI("NFC_SETUP", "Found chip PN5%x", model);
+    int maj = (versiondata >> 16) & 0xFF;
+    int min = (versiondata >> 8) & 0xFF;
+    ESP_LOGI("NFC_SETUP", "Firmware ver. %d.%d", maj, min);
+    nfc.SAMConfig();
+    nfc.setPassiveActivationRetries(0);
+    ESP_LOGI("NFC_SETUP", "Waiting for an ISO14443A card");
+  }
+  memcpy(ecpData + 8, readerData.reader_gid.data(), readerData.reader_gid.size());
+  with_crc16(ecpData, 16, ecpData + 16);
+  while (1) {
+    uint8_t res[4];
+    uint16_t resLen = 4;
+    nfc.writeRegister(0x633d, 0, true);
+    nfc.inCommunicateThru(ecpData, sizeof(ecpData), res, &resLen, 100, true);
+    uint8_t uid[16];
+    uint8_t uidLen = 0;
+    uint8_t atqa[2];
+    uint8_t sak[1];
+    bool passiveTarget = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, atqa, sak, 500, true, true);
+    if (passiveTarget) {
+      nfc.setPassiveActivationRetries(10);
+      LOG(D, "ATQA: %02x", atqa[0]);
+      LOG(D, "SAK: %02x", sak[0]);
+      ESP_LOG_BUFFER_HEX_LEVEL(TAG, uid, (size_t)uidLen, ESP_LOG_VERBOSE);
+      LOG(I, "*** PASSIVE TARGET DETECTED ***");
+      auto startTime = std::chrono::high_resolution_clock::now();
+      uint8_t data[13] = { 0x00, 0xA4, 0x04, 0x00, 0x07, 0xA0, 0x00, 0x00, 0x08, 0x58, 0x01, 0x01, 0x0 };
+      uint8_t selectCmdRes[9];
+      uint16_t selectCmdResLength = 9;
+      LOG(D, "SELECT HomeKey Applet, APDU: ");
+      esp_log_buffer_hex_internal(TAG, data, sizeof(data), ESP_LOG_VERBOSE);
+      bool status = nfc.inDataExchange(data, sizeof(data), selectCmdRes, &selectCmdResLength);
+      LOG(D, "SELECT HomeKey Applet, Response");
+      esp_log_buffer_hex_internal(TAG, selectCmdRes, selectCmdResLength, ESP_LOG_VERBOSE);
+      if (status && selectCmdRes[selectCmdResLength - 2] == 0x90 && selectCmdRes[selectCmdResLength - 1] == 0x00) {
+        LOG(D, "*** SELECT HOMEKEY APPLET SUCCESSFUL ***");
+        LOG(D, "Reader Private Key: %s", utils::bufToHexString(readerData.reader_pk.data(), readerData.reader_pk.size()).c_str());
+        HKAuthenticationContext authCtx(nfc, readerData, savedData);
+        auto authResult = authCtx.authenticate(hkFlow);
+        if (std::get<2>(authResult) != kFlowFailed) {
+          bool status = true;
+          xQueueSend(gpio_led_handle, &status, 0);
+          json_options options;
+          options.byte_string_format(byte_string_chars_format::base16);
+          json payload;
+          payload["issuerId"] = json(byte_string_arg, std::get<0>(authResult));
+          payload["endpointId"] = json(byte_string_arg, std::get<1>(authResult));
+          payload["homekey"] = true;
+          std::string payloadStr = payload.as<std::string>();
+          if (client != nullptr) {
+            esp_mqtt_client_publish(client, espConfig::mqttData.hkTopic.c_str(), payloadStr.c_str(), payloadStr.length(), 0, false);
+            if (espConfig::mqttData.lockAlwaysUnlock) {
+              lockCurrentState->setVal(lockStates::UNLOCKED);
+              lockTargetState->setVal(lockStates::UNLOCKED);
+              esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockStates::UNLOCKED).c_str(), 1, 1, true);
+              if (espConfig::mqttData.lockEnableCustomState) {
+                esp_mqtt_client_publish(client, espConfig::mqttData.lockCustomStateTopic.c_str(), std::to_string(customLockActions::UNLOCK).c_str(), 0, 0, false);
+              }
+            }
+            else if (espConfig::mqttData.lockAlwaysLock) {
+              lockCurrentState->setVal(lockStates::LOCKED);
+              lockTargetState->setVal(lockStates::LOCKED);
+              esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockStates::LOCKED).c_str(), 1, 1, true);
+              if (espConfig::mqttData.lockEnableCustomState) {
+                esp_mqtt_client_publish(client, espConfig::mqttData.lockCustomStateTopic.c_str(), std::to_string(customLockActions::LOCK).c_str(), 0, 0, false);
+              }
+            }
+            else {
+              if (espConfig::mqttData.lockEnableCustomState) {
+                int currentState = lockCurrentState->getVal();
+                if (currentState == lockStates::UNLOCKED) {
+                  esp_mqtt_client_publish(client, espConfig::mqttData.lockCustomStateTopic.c_str(), std::to_string(customLockActions::LOCK).c_str(), 0, 0, false);
+                }
+                else if (currentState == lockStates::LOCKED) {
+                  esp_mqtt_client_publish(client, espConfig::mqttData.lockCustomStateTopic.c_str(), std::to_string(customLockActions::UNLOCK).c_str(), 0, 0, false);
+                }
+              }
+            }
+          }
+          else LOG(W, "MQTT Client not initialized, cannot publish message");
+
+          auto stopTime = std::chrono::high_resolution_clock::now();
+          LOG(I, "Total Time (detection->auth->gpio->mqtt): %lli ms", std::chrono::duration_cast<std::chrono::milliseconds>(stopTime - startTime).count());
+        }
+        else {
+          bool status = false;
+          xQueueSend(gpio_led_handle, &status, 0);
+          LOG(W, "We got status FlowFailed, mqtt untouched!");
+        }
+      }
+      else {
+        LOG(I, "Invalid Response, probably not Homekey, publishing target's UID");
+        bool status = true;
+        xQueueSend(gpio_led_handle, &status, 0);
+        json_options options;
+        options.byte_string_format(byte_string_chars_format::base16);
+        json payload;
+        payload["atqa"] = byte_string(atqa, 2);
+        payload["sak"] = byte_string(sak, 1);
+        payload["uid"] = byte_string(uid, uidLen);
+        payload["homekey"] = false;
+        std::string payload_dump;
+        payload.dump(payload_dump, options);
+        if (client != nullptr) {
+          esp_mqtt_client_publish(client, espConfig::mqttData.hkTopic.c_str(), payload_dump.c_str(), 0, 0, false);
+        }
+        else LOG(W, "MQTT Client not initialized, cannot publish message");
+      }
+      vTaskDelay(50 / portTICK_PERIOD_MS);
+      nfc.inRelease();
+      int counter = 50;
+      bool deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
+      LOG(D, "Target still present: %d", deviceStillInField);
+      while (deviceStillInField) {
+        if (counter == 0) break;
+        vTaskDelay(50 / portTICK_PERIOD_MS);
+        nfc.inRelease();
+        deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
+        --counter;
+        LOG(D, "Target still present: %d Counter=%d", deviceStillInField, counter);
+      }
+      nfc.inRelease();
+      nfc.setPassiveActivationRetries(0);
+    }
+    vTaskDelay(50 / portTICK_PERIOD_MS);
+  }
+}
+
+void gpio_task(void* arg) {
+  bool status = false;
+  while (1) {
+    if (gpio_led_handle != nullptr) {
+      if (uxQueueMessagesWaiting(gpio_led_handle) > 0) {
+        LOG(D, "Got something in queue");
+        xQueueReceive(gpio_led_handle, &status, 0);
+        if (status) {
+          if (espConfig::miscConfig.nfcSuccessPin && espConfig::miscConfig.nfcSuccessPin != 0) {
+            digitalWrite(espConfig::miscConfig.nfcSuccessPin, espConfig::miscConfig.nfcSuccessHL);
+            delay(espConfig::miscConfig.nfcSuccessTime);
+            digitalWrite(espConfig::miscConfig.nfcSuccessPin, !espConfig::miscConfig.nfcSuccessHL);
+          }
+        } else {
+          if (espConfig::miscConfig.nfcFailPin && espConfig::miscConfig.nfcFailPin != 0) {
+            digitalWrite(espConfig::miscConfig.nfcFailPin, espConfig::miscConfig.nfcFailHL);
+            delay(espConfig::miscConfig.nfcFailTime);
+            digitalWrite(espConfig::miscConfig.nfcFailPin, !espConfig::miscConfig.nfcFailHL);
+          }
+        }
+      }
+    }
+    vTaskDelay(50 / portTICK_PERIOD_MS);
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   const esp_app_desc_t* app_desc = esp_ota_get_app_description();
   std::string app_version = app_desc->version;
+  gpio_led_handle = xQueueCreate(2, sizeof(bool));
   size_t len;
   const char* TAG = "SETUP";
   nvs_open("SAVED_DATA", NVS_READWRITE, &savedData);
@@ -955,27 +1009,23 @@ void setup() {
     nvs_get_blob(savedData, "READERDATA", savedBuf.data(), &len);
     LOG(I, "NVS DATA LENGTH: %d", len);
     ESP_LOG_BUFFER_HEX_LEVEL(TAG, savedBuf.data(), savedBuf.size(), ESP_LOG_DEBUG);
-    try
-    {
+    try {
       readerData = cbor::decode_cbor<readerData_t>(savedBuf);
     }
-    catch(const std::exception& e)
-    {
+    catch (const std::exception& e) {
       std::cerr << e.what() << '\n';
     }
-    
+
   }
   if (!nvs_get_blob(savedData, "MQTTDATA", NULL, &len)) {
     uint8_t msgpack[len];
     nvs_get_blob(savedData, "MQTTDATA", msgpack, &len);
     std::string str(msgpack, msgpack + len);
     LOG(D, "MQTTDATA - JSON(%d): %s", len, str.c_str());
-    try
-    {
+    try {
       espConfig::mqttData = decode_json<espConfig::mqttConfig_t>(str);
     }
-    catch(const std::exception& e)
-    {
+    catch (const std::exception& e) {
       LOG(E, "%s", e.what());
     }
   }
@@ -984,39 +1034,24 @@ void setup() {
     nvs_get_blob(savedData, "MISCDATA", msgpack, &len);
     std::string str(msgpack, msgpack + len);
     LOG(D, "MISCDATA - JSON(%d): %s", len, str.c_str());
-    try
-    {
+    try {
       espConfig::miscConfig = decode_json<espConfig::misc_config_t>(str);
     }
-    catch(const std::exception& e)
-    {
+    catch (const std::exception& e) {
       LOG(E, "%s", e.what());
     }
   }
   if (espConfig::miscConfig.nfcSuccessPin && espConfig::miscConfig.nfcSuccessPin != 0) {
-    pinMode(espConfig::miscConfig.nfcSuccessPin, OUTPUT); 
+    pinMode(espConfig::miscConfig.nfcSuccessPin, OUTPUT);
   }
   if (espConfig::miscConfig.nfcFailPin && espConfig::miscConfig.nfcFailPin != 0) {
-    pinMode(espConfig::miscConfig.nfcFailPin, OUTPUT); 
+    pinMode(espConfig::miscConfig.nfcFailPin, OUTPUT);
   }
   if (!LittleFS.begin(true)) {
     Serial.println("An Error has occurred while mounting LITTLEFS");
     return;
   }
   listDir(LittleFS, "/", 0);
-  nfc.begin();
-  uint32_t versiondata = nfc.getFirmwareVersion();
-  if (!versiondata) {
-    ESP_LOGE("NFC_SETUP", "Didn't find PN53x board");
-  }
-  else {
-    ESP_LOGI("NFC_SETUP", "Found chip PN5%x", (versiondata >> 24) & 0xFF);
-    ESP_LOGI("NFC_SETUP", "Firmware ver. %d.%d", (versiondata >> 16) & 0xFF, (versiondata >> 8) & 0xFF);
-    nfc.SAMConfig();
-    nfc.setPassiveActivationRetries(0);
-    nfc.writeRegister(0x633d, 0);
-    ESP_LOGI("NFC_SETUP", "Waiting for an ISO14443A card");
-  }
   homeSpan.setControlPin(espConfig::miscConfig.controlPin);
   homeSpan.setStatusPin(espConfig::miscConfig.hsStatusPin);
   homeSpan.setStatusAutoOff(15);
@@ -1031,12 +1066,13 @@ void setup() {
   LOG(I, "READER UNIQUE ID (%d): %s", readerData.reader_id.size(), utils::bufToHexString(readerData.reader_id.data(), readerData.reader_id.size()).c_str());
 
   LOG(I, "HOMEKEY ISSUERS: %d", readerData.issuers.size());
-  for (auto &&issuer : readerData.issuers) {
+  for (auto&& issuer : readerData.issuers) {
     LOG(D, "Issuer ID: %s, Public Key: %s", utils::bufToHexString(issuer.issuer_id.data(), issuer.issuer_id.size()).c_str(), utils::bufToHexString(issuer.issuer_pk.data(), issuer.issuer_pk.size()).c_str());
   }
   homeSpan.enableOTA(OTA_PWD);
   homeSpan.setPortNum(1201);
   homeSpan.begin(Category::Locks, espConfig::miscConfig.deviceName.c_str(), "HK", "HomeKey-ESP32");
+  homeSpan.autoPoll();
 
   new SpanUserCommand('D', "Delete Home Key Data", deleteReaderData);
   new SpanUserCommand('L', "Set Log Level", setLogLevel);
@@ -1074,10 +1110,11 @@ void setup() {
   new Characteristic::Version();
   homeSpan.setControllerCallback(pairCallback);
   homeSpan.setWifiCallback(wifiCallback);
+  xTaskCreateUniversal(gpio_task, "gpio_task", 4096, NULL, 0, NULL, 1);
+  xTaskCreateUniversal(nfc_thread_entry, "nfc_task", 8192, NULL, 1, NULL, 1);
 }
 
 //////////////////////////////////////
 
 void loop() {
-  homeSpan.poll();
 }
