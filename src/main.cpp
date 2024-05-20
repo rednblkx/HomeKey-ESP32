@@ -1196,7 +1196,7 @@ void setup() {
   new Characteristic::Version();
   homeSpan.setControllerCallback(pairCallback);
   homeSpan.setWifiCallback(wifiCallback);
-  xTaskCreateUniversal(gpio_task, "gpio_task", 4096, NULL, 0, NULL, 1);
+  xTaskCreateUniversal(gpio_task, "gpio_task", 4096, NULL, 1, NULL, 1);
   xTaskCreateUniversal(nfc_thread_entry, "nfc_task", 8192, NULL, 2, NULL, 1);
 }
 
