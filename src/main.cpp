@@ -920,6 +920,7 @@ void nfc_thread_entry(void* arg) {
     int min = (versiondata >> 8) & 0xFF;
     ESP_LOGI("NFC_SETUP", "Firmware ver. %d.%d", maj, min);
     nfc.SAMConfig();
+    nfc.setRFField(0x02, 0x01);
     nfc.setPassiveActivationRetries(0);
     ESP_LOGI("NFC_SETUP", "Waiting for an ISO14443A card");
   }
@@ -1019,6 +1020,7 @@ void nfc_thread_entry(void* arg) {
           xQueueSend(gpio_led_handle, &status, 0);
           LOG(W, "We got status FlowFailed, mqtt untouched!");
         }
+        nfc.setRFField(0x02, 0x01);
       }
       else {
         LOG(I, "Invalid Response, probably not Homekey, publishing target's UID");
