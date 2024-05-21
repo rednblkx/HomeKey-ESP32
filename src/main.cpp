@@ -237,9 +237,14 @@ struct NFCAccess : Service::NFCAccess
 };
 
 void deleteReaderData(const char* buf) {
-  memset(&readerData, 0, sizeof(readerData));
   esp_err_t erase_nvs = nvs_erase_key(savedData, "READERDATA");
   esp_err_t commit_nvs = nvs_commit(savedData);
+  readerData.issuers.clear();
+  readerData.reader_gid.clear();
+  readerData.reader_id.clear();
+  readerData.reader_pk.clear();
+  readerData.reader_pk_x.clear();
+  readerData.reader_sk.clear();
   LOG(D, "*** NVS W STATUS");
   LOG(D, "ERASE: %s", esp_err_to_name(erase_nvs));
   LOG(D, "COMMIT: %s", esp_err_to_name(commit_nvs));
@@ -265,7 +270,7 @@ void pairCallback() {
     if (foundIssuer == nullptr) {
       LOG(D, "Adding new issuer - ID: %s", utils::bufToHexString(id.data(), 8).c_str());
       hkIssuer_t newIssuer;
-      newIssuer.issuer_id = id;
+      newIssuer.issuer_id = std::vector<uint8_t>{id.begin(), id.begin() + 8};
       newIssuer.issuer_pk.insert(newIssuer.issuer_pk.begin(), it->getLTPK(), it->getLTPK() + 32);
       readerData.issuers.emplace_back(newIssuer);
     }
@@ -337,9 +342,9 @@ void setLogLevel(const char* buf) {
 
 void print_issuers(const char* buf) {
   for (auto&& issuer : readerData.issuers) {
-    LOG(D, "Issuer ID: %s, Public Key: %s", utils::bufToHexString(issuer.issuer_id.data(), issuer.issuer_id.size()).c_str(), utils::bufToHexString(issuer.issuer_pk.data(), issuer.issuer_pk.size()).c_str());
+    LOG(I, "Issuer ID: %s, Public Key: %s", utils::bufToHexString(issuer.issuer_id.data(), issuer.issuer_id.size()).c_str(), utils::bufToHexString(issuer.issuer_pk.data(), issuer.issuer_pk.size()).c_str());
     for (auto&& endpoint : issuer.endpoints) {
-      LOG(D, "Endpoint ID: %s, Public Key: %s", utils::bufToHexString(endpoint.endpoint_id.data(), endpoint.endpoint_id.size()).c_str(), utils::bufToHexString(endpoint.endpoint_pk.data(), endpoint.endpoint_pk.size()).c_str());
+      LOG(I, "Endpoint ID: %s, Public Key: %s", utils::bufToHexString(endpoint.endpoint_id.data(), endpoint.endpoint_id.size()).c_str(), utils::bufToHexString(endpoint.endpoint_pk.data(), endpoint.endpoint_pk.size()).c_str());
     }
   }
 }
