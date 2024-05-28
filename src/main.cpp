@@ -234,6 +234,7 @@ int nfcAccess_write(hap_write_data_t write_data[], int count,
 }
 
 void nfc_thread_entry(void* arg) {
+  // esp_log_level_set("PN532_SPI", ESP_LOG_VERBOSE);
   nfc.begin();
 
   uint32_t versiondata = nfc.getFirmwareVersion();
@@ -246,23 +247,24 @@ void nfc_thread_entry(void* arg) {
     int maj = (versiondata >> 16) & 0xFF;
     int min = (versiondata >> 8) & 0xFF;
     ESP_LOGI("NFC_SETUP", "Firmware ver. %d.%d", maj, min);
-    nfc.SAMConfig();
     nfc.setPassiveActivationRetries(0);
+    nfc.SAMConfig();
     ESP_LOGI("NFC_SETUP", "Waiting for an ISO14443A card");
   }
   memcpy(ecpData + 8, readerData.reader_group_id, sizeof(readerData.reader_group_id));
   with_crc16(ecpData, 16, ecpData + 16);
   while (1) {
-    uint8_t res[4];
-    uint16_t resLen = 4;
-    nfc.writeRegister(0x633d, 0);
-    nfc.inCommunicateThru(ecpData, sizeof(ecpData), res, &resLen, 100, true);
+    nfc.writeRegister(0x633d, 0, true);
+    uint8_t res[10];
+    uint16_t resLen = 10;
+    nfc.inCommunicateThru(ecpData, sizeof(ecpData), res, &resLen, 100, false);
     uint8_t uid[16];
     uint8_t uidLen = 0;
     uint16_t atqa[1];
     uint8_t sak[1];
-    bool passiveTarget = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, atqa, sak, 1000, true, true);
+    bool passiveTarget = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, atqa, sak, 500, true, false);
     if (passiveTarget) {
+      auto startTime = std::chrono::high_resolution_clock::now();
       LOG(D, "ATQA: %02x", atqa[0]);
       LOG(D, "SAK: %02x", sak[0]);
       ESP_LOG_BUFFER_HEX(TAG, uid, (size_t)uidLen);
@@ -282,25 +284,27 @@ void nfc_thread_entry(void* arg) {
         auto authResult = authCtx.authenticate(hkFlow);
         if (std::get<2>(authResult) != kFlowFailed) {
           LOG(D, "!!!!!!!!!!!!AUTHENTICATED!!!!!!!!!!!!!");
+          auto stopTime = std::chrono::high_resolution_clock::now();
+          LOG(I, "Total Time: %lli ms", std::chrono::duration_cast<std::chrono::milliseconds>(stopTime - startTime).count());
         }
       }
       vTaskDelay(100 / portTICK_PERIOD_MS);
       nfc.inRelease();
       nfc.setPassiveActivationRetries(5);
       int counter = 50;
-      bool deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
+      bool deviceStillInField = nfc.inListPassiveTarget(true);
       LOG(I, "Target still present: %d", deviceStillInField);
       while (deviceStillInField) {
         if (counter == 0) break;
         vTaskDelay(100 / portTICK_PERIOD_MS);
         nfc.inRelease();
-        deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
+        deviceStillInField = nfc.inListPassiveTarget(true);
         --counter;
         LOG(I, "Target still present: %d Counter=%d", deviceStillInField, counter);
       }
-      nfc.inRelease();
       nfc.setPassiveActivationRetries(0);
     }
+    vTaskDelay(100 / portTICK_PERIOD_MS);
   }
 }
 
