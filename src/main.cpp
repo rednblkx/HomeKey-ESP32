@@ -64,7 +64,7 @@ namespace espConfig
     bool lockAlwaysUnlock = HOMEKEY_ALWAYS_UNLOCK;
     bool lockAlwaysLock = HOMEKEY_ALWAYS_LOCK;
     uint8_t controlPin = HS_PIN;
-    uint8_t hsStatusPin = LED_PIN;
+    uint8_t hsStatusPin = HS_STATUS_LED;
     uint8_t nfcSuccessPin = NFC_SUCCESS_PIN;
     uint16_t nfcSuccessTime = NFC_SUCCESS_TIME;
     bool nfcSuccessHL = NFC_SUCCESS_HL;

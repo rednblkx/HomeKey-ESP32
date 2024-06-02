@@ -41,7 +41,7 @@ enum customLockActions
 #define DEVICE_NAME "HK" //Device name
 #define HOMEKEY_ALWAYS_UNLOCK 0 // Flag indicating if a successful Homekey authentication should always set and publish the unlock state
 #define HOMEKEY_ALWAYS_LOCK 0  // Flag indicating if a successful Homekey authentication should always set and publish the lock state
-#define LED_PIN 2 //status led pin, built in is pin 2
+#define HS_STATUS_LED 2 // HomeSpan Status LED GPIO pin
 #define HS_PIN 26 // GPIO Pin for a Configuration Mode button (more info on https://github.com/HomeSpan/HomeSpan/blob/master/docs/UserGuide.md#device-configuration-mode)
 #define NFC_SUCCESS_PIN 0 // GPIO Pin pulled HIGH or LOW (see NFC_SUCCESS_HL) on success HK Auth
 #define NFC_SUCCESS_HL HIGH // Flag to define if NFC_SUCCESS_PIN should be held High or Low
