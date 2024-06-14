@@ -142,7 +142,7 @@ struct LockMechanism : Service::LockMechanism
     lockTargetState = new Characteristic::LockTargetState(1, true);
     memcpy(ecpData + 8, readerData.reader_gid.data(), readerData.reader_gid.size());
     with_crc16(ecpData, 16, ecpData + 16);
-    if (espConfig::miscConfig.gpioActionEnable && espConfig::miscConfig.gpioActionPin != 0) {
+    if (espConfig::miscConfig.gpioActionEnable && espConfig::miscConfig.gpioActionPin != 255) {
       if (lockCurrentState->getVal() == lockStates::LOCKED) {
         digitalWrite(espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionLockState);
       }
@@ -155,7 +155,7 @@ struct LockMechanism : Service::LockMechanism
   boolean update() {
     int targetState = lockTargetState->getNewVal();
     LOG(I, "New LockState=%d, Current LockState=%d", targetState, lockCurrentState->getVal());
-    if (espConfig::miscConfig.gpioActionEnable && espConfig::miscConfig.gpioActionPin != 0) {
+    if (espConfig::miscConfig.gpioActionEnable && espConfig::miscConfig.gpioActionPin != 255) {
       switch (targetState)
       {
         case lockStates::UNLOCKED:
@@ -399,7 +399,7 @@ void set_custom_state_handler(esp_mqtt_client_handle_t client, int state) {
 void set_state_handler(esp_mqtt_client_handle_t client, int state) {
   switch (state) {
   case lockStates::UNLOCKED:
-    if (espConfig::miscConfig.gpioActionEnable && espConfig::miscConfig.gpioActionPin != 0) {
+    if (espConfig::miscConfig.gpioActionEnable && espConfig::miscConfig.gpioActionPin != 255) {
       digitalWrite(espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionUnlockState);
     }
     lockTargetState->setVal(state);
@@ -410,7 +410,7 @@ void set_state_handler(esp_mqtt_client_handle_t client, int state) {
     }
     break;
   case lockStates::LOCKED:
-    if (espConfig::miscConfig.gpioActionEnable && espConfig::miscConfig.gpioActionPin != 0) {
+    if (espConfig::miscConfig.gpioActionEnable && espConfig::miscConfig.gpioActionPin != 255) {
       digitalWrite(espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionLockState);
     }
     lockTargetState->setVal(state);
@@ -968,7 +968,7 @@ void nfc_thread_entry(void* arg) {
           if (espConfig::miscConfig.lockAlwaysUnlock) {
             lockCurrentState->setVal(lockStates::UNLOCKED);
             lockTargetState->setVal(lockStates::UNLOCKED);
-            if (espConfig::miscConfig.gpioActionEnable && espConfig::miscConfig.gpioActionPin != 0) {
+            if (espConfig::miscConfig.gpioActionEnable && espConfig::miscConfig.gpioActionPin != 255) {
               digitalWrite(espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionUnlockState);
             }
             mqtt_publish(espConfig::mqttData.lockStateTopic, std::to_string(lockStates::UNLOCKED), 1, true);
@@ -979,7 +979,7 @@ void nfc_thread_entry(void* arg) {
           else if (espConfig::miscConfig.lockAlwaysLock) {
             lockCurrentState->setVal(lockStates::LOCKED);
             lockTargetState->setVal(lockStates::LOCKED);
-            if (espConfig::miscConfig.gpioActionEnable && espConfig::miscConfig.gpioActionPin != 0) {
+            if (espConfig::miscConfig.gpioActionEnable && espConfig::miscConfig.gpioActionPin != 255) {
               digitalWrite(espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionLockState);
             }
             mqtt_publish(espConfig::mqttData.lockStateTopic, std::to_string(lockStates::LOCKED), 1, true);
@@ -989,7 +989,7 @@ void nfc_thread_entry(void* arg) {
           }
           else {
             int currentState = lockCurrentState->getVal();
-            if (espConfig::miscConfig.gpioActionEnable && espConfig::miscConfig.gpioActionPin != 0) {
+            if (espConfig::miscConfig.gpioActionEnable && espConfig::miscConfig.gpioActionPin != 255) {
               if (currentState == lockStates::UNLOCKED) {
                 digitalWrite(espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionLockState);
                 lockTargetState->setVal(lockStates::LOCKED);
@@ -1068,13 +1068,13 @@ void gpio_task(void* arg) {
         LOG(D, "Got something in queue");
         xQueueReceive(gpio_led_handle, &status, 0);
         if (status) {
-          if (espConfig::miscConfig.nfcSuccessPin && espConfig::miscConfig.nfcSuccessPin != 0) {
+          if (espConfig::miscConfig.nfcSuccessPin && espConfig::miscConfig.nfcSuccessPin != 255) {
             digitalWrite(espConfig::miscConfig.nfcSuccessPin, espConfig::miscConfig.nfcSuccessHL);
             delay(espConfig::miscConfig.nfcSuccessTime);
             digitalWrite(espConfig::miscConfig.nfcSuccessPin, !espConfig::miscConfig.nfcSuccessHL);
           }
         } else {
-          if (espConfig::miscConfig.nfcFailPin && espConfig::miscConfig.nfcFailPin != 0) {
+          if (espConfig::miscConfig.nfcFailPin && espConfig::miscConfig.nfcFailPin != 255) {
             digitalWrite(espConfig::miscConfig.nfcFailPin, espConfig::miscConfig.nfcFailHL);
             delay(espConfig::miscConfig.nfcFailTime);
             digitalWrite(espConfig::miscConfig.nfcFailPin, !espConfig::miscConfig.nfcFailHL);
@@ -1131,13 +1131,13 @@ void setup() {
       LOG(E, "%s", e.what());
     }
   }
-  if (espConfig::miscConfig.nfcSuccessPin && espConfig::miscConfig.nfcSuccessPin != 0) {
+  if (espConfig::miscConfig.nfcSuccessPin && espConfig::miscConfig.nfcSuccessPin != 255) {
     pinMode(espConfig::miscConfig.nfcSuccessPin, OUTPUT);
   }
-  if (espConfig::miscConfig.nfcFailPin && espConfig::miscConfig.nfcFailPin != 0) {
+  if (espConfig::miscConfig.nfcFailPin && espConfig::miscConfig.nfcFailPin != 255) {
     pinMode(espConfig::miscConfig.nfcFailPin, OUTPUT);
   }
-  if (espConfig::miscConfig.gpioActionPin && espConfig::miscConfig.gpioActionPin != 0) {
+  if (espConfig::miscConfig.gpioActionPin && espConfig::miscConfig.gpioActionPin != 255) {
     pinMode(espConfig::miscConfig.gpioActionPin, OUTPUT);
   }
   if (!LittleFS.begin(true)) {
@@ -1145,7 +1145,9 @@ void setup() {
     return;
   }
   listDir(LittleFS, "/", 0);
-  homeSpan.setControlPin(espConfig::miscConfig.controlPin);
+  if (espConfig::miscConfig.controlPin != 255) {
+    homeSpan.setControlPin(espConfig::miscConfig.controlPin);
+  }
   homeSpan.setStatusPin(espConfig::miscConfig.hsStatusPin);
   homeSpan.setStatusAutoOff(15);
   homeSpan.reserveSocketConnections(2);
