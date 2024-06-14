@@ -17,26 +17,30 @@
   <label for="hk-always-lock">Always Lock on HK Auth</label>
   <input type='hidden' name='hk-always-lock' value='0'>
   <input type="checkbox" name="hk-always-lock" id="hk-always-lock" value="1">
+  
+  <p><b>- HomeKey Events</b></p>
 
-  <label for="nfc-s-pin">NFC Success GPIO Pin</label>
+  <label for="nfc-s-pin">Auth Success GPIO Pin</label>
   <input type="number" name="nfc-s-pin" id="nfc-s-pin" placeholder="2" required value="%NFC1PIN%">
 
-  <label for="nfc-s-time">NFC Success GPIO Time</label>
+  <label for="nfc-s-time">Auth Success GPIO Time (ms)</label>
   <input type="number" name="nfc-s-time" id="nfc-s-time" placeholder="26" required value="%NFC1TIME%">
 
-  <label for="nfc-s-hl">NFC Success GPIO State(checked=HIGH, unchecked=LOW)</label>
+  <label for="nfc-s-hl">Auth Success GPIO State(checked=HIGH, unchecked=LOW)</label>
   <input type='hidden' name='nfc-s-hl' value='0'>
   <input type="checkbox" name="nfc-s-hl" id="nfc-s-hl" value="1">
 
-  <label for="nfc-f-pin">NFC Fail GPIO Pin</label>
+  <label for="nfc-f-pin">Auth Fail GPIO Pin</label>
   <input type="number" name="nfc-f-pin" id="nfc-f-pin" placeholder="2" required value="%NFC2PIN%">
 
-  <label for="nfc-f-time">NFC Fail GPIO Time</label>
+  <label for="nfc-f-time">Auth Fail GPIO Time (ms)</label>
   <input type="number" name="nfc-f-time" id="nfc-f-time" placeholder="26" required value="%NFC2TIME%">
 
-  <label for="nfc-f-hl">NFC Fail GPIO State(checked=HIGH, unchecked=LOW)</label>
+  <label for="nfc-f-hl">Auth Fail GPIO State(checked=HIGH, unchecked=LOW)</label>
   <input type='hidden' name='nfc-f-hl' value='0'>
   <input type="checkbox" name="nfc-f-hl" id="nfc-f-hl" value="1">
+
+  <p><b>- Hardware Lock</b></p>
 
   <label for="gpio-a-en">Enable GPIO Actions</label>
   <input type='hidden' name='gpio-a-en' value='0'>
