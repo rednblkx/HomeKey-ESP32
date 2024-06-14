@@ -13,7 +13,7 @@
 #include "config.h"
 #include <mqtt_client.h>
 #include <esp_ota_ops.h>
-#include <esp_task_wdt.h>
+#include <esp_task.h>
 
 const char* TAG = "MAIN";
 
@@ -222,8 +222,8 @@ struct NFCAccess : Service::NFCAccess
       return false;
     LOG(D, "Decoded data: %s", utils::bufToHexString(decB64.data(), decB64.size()).c_str());
     LOG(D, "Decoded data length: %d", decB64.size());
-    HK_HomeKit hkCtx(readerData, savedData, "READERDATA");
-    std::vector<uint8_t> result = hkCtx.processResult(decB64);
+    HK_HomeKit hkCtx(readerData, savedData, "READERDATA", decB64);
+    std::vector<uint8_t> result = hkCtx.processResult();
     if (readerData.reader_gid.size() > 0) {
       memcpy(ecpData + 8, readerData.reader_gid.data(), readerData.reader_gid.size());
       with_crc16(ecpData, 16, ecpData + 16);
@@ -1100,7 +1100,7 @@ void setup() {
     LOG(I, "NVS DATA LENGTH: %d", len);
     ESP_LOG_BUFFER_HEX_LEVEL(TAG, savedBuf.data(), savedBuf.size(), ESP_LOG_DEBUG);
     try {
-      readerData = jsoncons::msgpack::decode_msgpack<readerData_t>(savedBuf);
+      readerData = msgpack::decode_msgpack<readerData_t>(savedBuf);
     }
     catch (const std::exception& e) {
       std::cerr << e.what() << '\n';
