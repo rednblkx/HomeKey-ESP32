@@ -87,7 +87,7 @@ esp_mqtt_client_handle_t client = nullptr;
 
 bool save_to_nvs() {
   std::vector<uint8_t> cborBuf;
-  jsoncons::cbor::encode_cbor(readerData, cborBuf);
+  jsoncons::msgpack::encode_msgpack(readerData, cborBuf);
   esp_err_t set_nvs = nvs_set_blob(savedData, "READERDATA", cborBuf.data(), cborBuf.size());
   esp_err_t commit_nvs = nvs_commit(savedData);
   LOG(D, "NVS SET STATUS: %s", esp_err_to_name(set_nvs));
@@ -1100,7 +1100,7 @@ void setup() {
     LOG(I, "NVS DATA LENGTH: %d", len);
     ESP_LOG_BUFFER_HEX_LEVEL(TAG, savedBuf.data(), savedBuf.size(), ESP_LOG_DEBUG);
     try {
-      readerData = cbor::decode_cbor<readerData_t>(savedBuf);
+      readerData = jsoncons::msgpack::decode_msgpack<readerData_t>(savedBuf);
     }
     catch (const std::exception& e) {
       std::cerr << e.what() << '\n';
@@ -1203,8 +1203,8 @@ void setup() {
   new Characteristic::Version();
   homeSpan.setControllerCallback(pairCallback);
   homeSpan.setWifiCallback(wifiCallback);
-  xTaskCreateUniversal(gpio_task, "gpio_task", 4096, NULL, 1, NULL, 1);
-  xTaskCreateUniversal(nfc_thread_entry, "nfc_task", 8192, NULL, 2, NULL, 1);
+  xTaskCreate(gpio_task, "gpio_task", 4096, NULL, 1, NULL);
+  xTaskCreate(nfc_thread_entry, "nfc_task", 8192, NULL, 2, NULL);
 }
 
 //////////////////////////////////////
