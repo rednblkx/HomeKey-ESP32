@@ -32,7 +32,9 @@ jobs:
       - name: Install PlatformIO Core
         run: pip install --upgrade platformio
 
-      - name: Build PlatformIO Project
+      - name: Install tool-mklittlefs
+        run: pio run -t buildfs 
+      - name: Build Firmware
         run: pio run
       - name: Archive merged firmware
         uses: actions/upload-artifact@v4
