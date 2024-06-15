@@ -15,7 +15,11 @@ def before_upload(source, target, env):
 
 
 def after_build(source, target, env):
-  env.Execute(f'"$PYTHONEXE" "$OBJCOPY" --chip {mcu} merge_bin --fill-flash-size 4MB -o {join(env.subst("$BUILD_DIR"), "firmware_merged.bin")} $FLASH_EXTRA_IMAGES $ESP32_APP_OFFSET {join(env.subst('$BUILD_DIR'), '${PROGNAME}.bin')} $FS_START {join(env.subst('$BUILD_DIR'),'${ESP32_FS_IMAGE_NAME}.bin')}')
+  build_dir = env.subst('$BUILD_DIR')
+  firmware_path = join(build_dir, '${PROGNAME}.bin')
+  fs_path = join(build_dir,'${ESP32_FS_IMAGE_NAME}.bin')
+  merged_path = join(build_dir, "firmware_merged.bin")
+  env.Execute(f'"$PYTHONEXE" "$OBJCOPY" --chip {mcu} merge_bin --fill-flash-size 4MB -o {merged_path} $FLASH_EXTRA_IMAGES $ESP32_APP_OFFSET {firmware_path} $FS_START {fs_path}')
 
 env.Depends(join('$BUILD_DIR', '${PROGNAME}.bin'), target_firm)
 env.Depends("upload", target_firm)
