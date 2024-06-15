@@ -56,11 +56,15 @@ namespace espConfig
     /* Flags */
     bool lockEnableCustomState = MQTT_CUSTOM_STATE_ENABLED;
     bool hassMqttDiscoveryEnabled = MQTT_DISCOVERY;
+    std::map<string, int> customLockStates = {{"C_LOCKED", 1}, {"C_UNLOCKING", 2}, {"C_UNLOCKED", 3}, {"C_LOCKING", 4}, {"C_JAMMED", 254}, {"C_UNKNOWN", 255}};
+    std::map<string, int> customLockActions = {{"UNLOCK", 1}, {"LOCK", 2}};
   } mqttData;
 
   struct misc_config_t
   {
     std::string deviceName = DEVICE_NAME;
+    std::string otaPasswd = OTA_PWD;
+    std::string setupCode = SETUP_CODE;
     bool lockAlwaysUnlock = HOMEKEY_ALWAYS_UNLOCK;
     bool lockAlwaysLock = HOMEKEY_ALWAYS_LOCK;
     uint8_t controlPin = HS_PIN;
@@ -77,8 +81,8 @@ namespace espConfig
     bool gpioActionUnlockState = GPIO_ACTION_UNLOCK_STATE;
   } miscConfig;
 }
-JSONCONS_ALL_MEMBER_TRAITS(espConfig::mqttConfig_t, mqttBroker, mqttPort, mqttUsername, mqttPassword, mqttClientId, hkTopic, lockStateTopic, lockStateCmd, lockCStateCmd, lockTStateCmd, lockCustomStateTopic, lockCustomStateCmd, lockEnableCustomState, hassMqttDiscoveryEnabled)
-JSONCONS_ALL_MEMBER_TRAITS(espConfig::misc_config_t, deviceName, lockAlwaysUnlock, lockAlwaysLock, controlPin, hsStatusPin, nfcSuccessPin, nfcSuccessHL, nfcFailPin, nfcFailHL, gpioActionEnable, gpioActionPin, gpioActionLockState, gpioActionUnlockState)
+JSONCONS_ALL_MEMBER_TRAITS(espConfig::mqttConfig_t, mqttBroker, mqttPort, mqttUsername, mqttPassword, mqttClientId, hkTopic, lockStateTopic, lockStateCmd, lockCStateCmd, lockTStateCmd, lockCustomStateTopic, lockCustomStateCmd, lockEnableCustomState, hassMqttDiscoveryEnabled, customLockStates, customLockActions)
+JSONCONS_ALL_MEMBER_TRAITS(espConfig::misc_config_t, deviceName, lockAlwaysUnlock, lockAlwaysLock, controlPin, hsStatusPin, nfcSuccessPin, nfcSuccessHL, nfcFailPin, nfcFailHL, gpioActionEnable, gpioActionPin, gpioActionLockState, gpioActionUnlockState, otaPasswd, setupCode)
 
 KeyFlow hkFlow = KeyFlow::kFlowFAST;
 SpanCharacteristic* lockCurrentState;
@@ -182,10 +186,10 @@ struct LockMechanism : Service::LockMechanism
       }
       if (espConfig::mqttData.lockEnableCustomState) {
         if (targetState == lockStates::UNLOCKED) {
-          esp_mqtt_client_publish(client, espConfig::mqttData.lockCustomStateTopic.c_str(), std::to_string(customLockActions::UNLOCK).c_str(), 0, 0, false);
+          esp_mqtt_client_publish(client, espConfig::mqttData.lockCustomStateTopic.c_str(), std::to_string(espConfig::mqttData.customLockActions["UNLOCK"]).c_str(), 0, 0, false);
         }
         else if (targetState == lockStates::LOCKED) {
-          esp_mqtt_client_publish(client, espConfig::mqttData.lockCustomStateTopic.c_str(), std::to_string(customLockActions::LOCK).c_str(), 0, 0, false);
+          esp_mqtt_client_publish(client, espConfig::mqttData.lockCustomStateTopic.c_str(), std::to_string(espConfig::mqttData.customLockActions["LOCK"]).c_str(), 0, 0, false);
         }
       }
     }
@@ -360,40 +364,43 @@ void print_issuers(const char* buf) {
  *  received custom state value
  */
 void set_custom_state_handler(esp_mqtt_client_handle_t client, int state) {
-  switch (state) {
-  case customLockStates::C_UNLOCKING:
+  if(espConfig::mqttData.customLockStates["C_UNLOCKING"] == state){
     lockTargetState->setVal(lockStates::UNLOCKED);
     esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockStates::UNLOCKING).c_str(), 0, 1, true);
-    break;
-  case customLockStates::C_LOCKING:
+    return;
+  }
+  else if (espConfig::mqttData.customLockStates["C_LOCKING"] == state) {
     lockTargetState->setVal(lockStates::LOCKED);
     esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockStates::LOCKING).c_str(), 0, 1, true);
-    break;
-  case customLockStates::C_UNLOCKED:
+    return;
+  }
+  else if (espConfig::mqttData.customLockStates["C_UNLOCKED"] == state) {
     if (espConfig::miscConfig.gpioActionEnable && espConfig::miscConfig.gpioActionPin != 0) {
       digitalWrite(espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionUnlockState);
     }
     lockCurrentState->setVal(lockStates::UNLOCKED);
     esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockStates::UNLOCKED).c_str(), 0, 1, true);
-    break;
-  case customLockStates::C_LOCKED:
+    return;
+  }
+  else if (espConfig::mqttData.customLockStates["C_LOCKED"] == state) {
     if (espConfig::miscConfig.gpioActionEnable && espConfig::miscConfig.gpioActionPin != 0) {
       digitalWrite(espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionLockState);
     }
     lockCurrentState->setVal(lockStates::LOCKED);
     esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockStates::LOCKED).c_str(), 0, 1, true);
-    break;
-  case customLockStates::C_JAMMED:
+    return;
+  }
+  else if (espConfig::mqttData.customLockStates["C_JAMMED"] == state) {
     lockCurrentState->setVal(lockStates::JAMMED);
     esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockStates::JAMMED).c_str(), 0, 1, true);
-    break;
-  case customLockStates::C_UNKNOWN:
+    return;
+  }
+  else if (espConfig::mqttData.customLockStates["C_UNKNOWN"] == state) {
     lockCurrentState->setVal(lockStates::UNKNOWN);
     esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockStates::UNKNOWN).c_str(), 0, 1, true);
-  default:
-    LOG(D, "Update state failed! Recv value not valid");
-    break;
+    return;
   }
+  LOG(D, "Update state failed! Recv value not valid");
 }
 
 void set_state_handler(esp_mqtt_client_handle_t client, int state) {
@@ -406,7 +413,7 @@ void set_state_handler(esp_mqtt_client_handle_t client, int state) {
     lockCurrentState->setVal(state);
     esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockStates::UNLOCKED).c_str(), 0, 1, true);
     if (espConfig::mqttData.lockEnableCustomState) {
-      esp_mqtt_client_publish(client, espConfig::mqttData.lockCustomStateTopic.c_str(), std::to_string(customLockActions::UNLOCK).c_str(), 0, 0, false);
+      esp_mqtt_client_publish(client, espConfig::mqttData.lockCustomStateTopic.c_str(), std::to_string(espConfig::mqttData.customLockActions["UNLOCK"]).c_str(), 0, 0, false);
     }
     break;
   case lockStates::LOCKED:
@@ -417,7 +424,7 @@ void set_state_handler(esp_mqtt_client_handle_t client, int state) {
     lockCurrentState->setVal(state);
     esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockStates::LOCKED).c_str(), 0, 1, true);
     if (espConfig::mqttData.lockEnableCustomState) {
-      esp_mqtt_client_publish(client, espConfig::mqttData.lockCustomStateTopic.c_str(), std::to_string(customLockActions::LOCK).c_str(), 0, 0, false);
+      esp_mqtt_client_publish(client, espConfig::mqttData.lockCustomStateTopic.c_str(), std::to_string(espConfig::mqttData.customLockActions["LOCK"]).c_str(), 0, 0, false);
     }
     break;
   case lockStates::JAMMED:
@@ -604,6 +611,12 @@ String miscHtmlProcess(const String& var) {
   if (var == "DEVICENAME") {
     return String(espConfig::miscConfig.deviceName.c_str());
   }
+  else if (var == "OTAPASSWD") {
+    return String(espConfig::miscConfig.otaPasswd.c_str());
+  }
+  else if (var == "HKSETUPCODE") {
+    return String(espConfig::miscConfig.setupCode.c_str());
+  }
   else if (var == "CONTROLPIN") {
     return String(espConfig::miscConfig.controlPin);
   }
@@ -726,6 +739,30 @@ String mqttHtmlProcess(const String& var) {
   else if (var == "DISCOVERY_ENABLED") {
     return String(espConfig::mqttData.hassMqttDiscoveryEnabled);
   }
+  else if (var == "CACTIONUNLOCK") {
+    return String(espConfig::mqttData.customLockActions["UNLOCK"]);
+  }
+  else if (var == "CACTIONLOCK") {
+    return String(espConfig::mqttData.customLockActions["LOCK"]);
+  }
+  else if (var == "CSTATEUNLOCKING") {
+    return String(espConfig::mqttData.customLockStates["C_UNLOCKING"]);
+  }
+  else if (var == "CSTATELOCKING") {
+    return String(espConfig::mqttData.customLockStates["C_LOCKING"]);
+  }
+  else if (var == "CSTATEUNLOCKED") {
+    return String(espConfig::mqttData.customLockStates["C_UNLOCKED"]);
+  }
+  else if (var == "CSTATELOCKED") {
+    return String(espConfig::mqttData.customLockStates["C_LOCKED"]);
+  }
+  else if (var == "CSTATEJAMMED") {
+    return String(espConfig::mqttData.customLockStates["C_JAMMED"]);
+  }
+  else if (var == "CSTATEUNKNOWN") {
+    return String(espConfig::mqttData.customLockStates["C_UNKNOWN"]);
+  }
   return result;
 }
 
@@ -793,6 +830,30 @@ void setupWeb() {
       else if (!strcmp(p->name().c_str(), "mqtt-discovery-enable")) {
         espConfig::mqttData.hassMqttDiscoveryEnabled = p->value().toInt();
       }
+      else if (!strcmp(p->name().c_str(), "caction-unlock")) {
+        espConfig::mqttData.customLockActions["UNLOCK"] = p->value().toInt();
+      }
+      else if (!strcmp(p->name().c_str(), "caction-lock")) {
+        espConfig::mqttData.customLockActions["LOCK"] = p->value().toInt();
+      }
+      else if (!strcmp(p->name().c_str(), "cstate-unlocking")) {
+        espConfig::mqttData.customLockStates["C_UNLOCKING"] = p->value().toInt();
+      }
+      else if (!strcmp(p->name().c_str(), "cstate-locking")) {
+        espConfig::mqttData.customLockStates["C_LOCKING"] = p->value().toInt();
+      }
+      else if (!strcmp(p->name().c_str(), "cstate-locked")) {
+        espConfig::mqttData.customLockStates["C_LOCKED"] = p->value().toInt();
+      }
+      else if (!strcmp(p->name().c_str(), "cstate-unlocked")) {
+        espConfig::mqttData.customLockStates["C_UNLOCKED"] = p->value().toInt();
+      }
+      else if (!strcmp(p->name().c_str(), "cstate-jammed")) {
+        espConfig::mqttData.customLockStates["C_JAMMED"] = p->value().toInt();
+      }
+      else if (!strcmp(p->name().c_str(), "cstate-unknown")) {
+        espConfig::mqttData.customLockStates["C_UNKNOWN"] = p->value().toInt();
+      }
     }
     try {
       std::string strNvs;
@@ -817,6 +878,12 @@ void setupWeb() {
       LOG(V, "POST[%s]: %s\n", p->name().c_str(), p->value().c_str());
       if (!strcmp(p->name().c_str(), "device-name")) {
         espConfig::miscConfig.deviceName = p->value().c_str();
+      }
+      else if (!strcmp(p->name().c_str(), "ota-passwd")) {
+        espConfig::miscConfig.otaPasswd = p->value().c_str();
+      }
+      else if (!strcmp(p->name().c_str(), "hk-setupcode")) {
+        espConfig::miscConfig.setupCode = p->value().c_str();
       }
       else if (!strcmp(p->name().c_str(), "control-pin")) {
         espConfig::miscConfig.controlPin = p->value().toInt();
@@ -964,10 +1031,10 @@ void nfc_thread_entry(void* arg) {
             }
             mqtt_publish(espConfig::mqttData.lockStateTopic, std::to_string(lockStates::UNLOCKED), 1, true);
             if (espConfig::mqttData.lockEnableCustomState) {
-              mqtt_publish(espConfig::mqttData.lockCustomStateTopic, std::to_string(customLockActions::UNLOCK), 0, false);
+              mqtt_publish(espConfig::mqttData.lockCustomStateTopic, std::to_string(espConfig::mqttData.customLockActions["UNLOCK"]), 0, false);
             }
-          }
           else if (espConfig::miscConfig.lockAlwaysLock) {
+          }
             lockCurrentState->setVal(lockStates::LOCKED);
             lockTargetState->setVal(lockStates::LOCKED);
             if (espConfig::miscConfig.gpioActionEnable && espConfig::miscConfig.gpioActionPin != 255) {
@@ -975,7 +1042,7 @@ void nfc_thread_entry(void* arg) {
             }
             mqtt_publish(espConfig::mqttData.lockStateTopic, std::to_string(lockStates::LOCKED), 1, true);
             if (espConfig::mqttData.lockEnableCustomState) {
-              mqtt_publish(espConfig::mqttData.lockCustomStateTopic, std::to_string(customLockActions::LOCK), 0, false);
+              mqtt_publish(espConfig::mqttData.lockCustomStateTopic, std::to_string(espConfig::mqttData.customLockActions["LOCK"]), 0, false);
             }
           }
           else {
@@ -995,10 +1062,10 @@ void nfc_thread_entry(void* arg) {
             }
             if (espConfig::mqttData.lockEnableCustomState) {
               if (currentState == lockStates::UNLOCKED) {
-                mqtt_publish(espConfig::mqttData.lockCustomStateTopic, std::to_string(customLockActions::LOCK), 0, false);
+                mqtt_publish(espConfig::mqttData.lockCustomStateTopic, std::to_string(espConfig::mqttData.customLockActions["LOCK"]), 0, false);
               }
               else if (currentState == lockStates::LOCKED) {
-                mqtt_publish(espConfig::mqttData.lockCustomStateTopic, std::to_string(customLockActions::UNLOCK), 0, false);
+                mqtt_publish(espConfig::mqttData.lockCustomStateTopic, std::to_string(espConfig::mqttData.customLockActions["UNLOCK"]), 0, false);
               }
             }
           }
@@ -1142,8 +1209,8 @@ void setup() {
   homeSpan.setStatusPin(espConfig::miscConfig.hsStatusPin);
   homeSpan.setStatusAutoOff(15);
   homeSpan.reserveSocketConnections(2);
-  if (strcmp(SETUP_CODE, "46637726")) {
-    homeSpan.setPairingCode(SETUP_CODE);
+  if (strcmp(espConfig::miscConfig.setupCode.c_str(), "46637726")) {
+    homeSpan.setPairingCode(espConfig::miscConfig.setupCode.c_str());
   }
   homeSpan.setLogLevel(0);
   homeSpan.setSketchVersion(app_version.c_str());
@@ -1155,7 +1222,7 @@ void setup() {
   for (auto&& issuer : readerData.issuers) {
     LOG(D, "Issuer ID: %s, Public Key: %s", utils::bufToHexString(issuer.issuer_id.data(), issuer.issuer_id.size()).c_str(), utils::bufToHexString(issuer.issuer_pk.data(), issuer.issuer_pk.size()).c_str());
   }
-  homeSpan.enableOTA(OTA_PWD);
+  homeSpan.enableOTA(espConfig::miscConfig.otaPasswd.c_str());
   homeSpan.setPortNum(1201);
   homeSpan.begin(Category::Locks, espConfig::miscConfig.deviceName.c_str(), "HK", "HomeKey-ESP32");
   homeSpan.autoPoll();

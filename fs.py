@@ -7,5 +7,8 @@ target_firm = env.DataToBin(
 env.NoCache(target_firm)
 AlwaysBuild(target_firm)
 
-env.Append(UPLOADERFLAGS=['$FS_START', join('$BUILD_DIR','${ESP32_FS_IMAGE_NAME}.bin')])
+def before_upload(source, target, env):
+    env.Append(UPLOADERFLAGS=['$FS_START', join('$BUILD_DIR','${ESP32_FS_IMAGE_NAME}.bin')])
+
+env.AddPreAction("upload", before_upload)
 env.Depends("upload", target_firm)

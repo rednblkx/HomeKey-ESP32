@@ -1,51 +1,116 @@
-<h2 style="text-align: center;">MQTT Configuration</h2>
-<form id="mqttConfig" action="mqttconfig" method="post"
-  style="display: inline-flex; flex-direction: column;margin-bottom: 1rem;">
-  <label for="mqtt-broker">Address</label>
-  <input type="text" name="mqtt-broker" id="mqtt-broker" placeholder="0.0.0.0" required value="%MQTTBROKER%">
-  <label for="mqtt-port">Port</label>
-  <input type="number" name="mqtt-port" id="mqtt-port" placeholder="1883" required inputmode="numeric"
-    value="%MQTTPORT%">
-  <label for="mqtt-clientid">Client ID</label>
-  <input type="text" name="mqtt-clientid" id="mqtt-clientid" placeholder="homekey_mqtt" required value="%MQTTCLIENTID%">
-  <label for="mqtt-username">Username</label>
-  <input type="text" name="mqtt-username" id="mqtt-username" placeholder="username" required value="%MQTTUSERNAME%">
-  <label for="mqtt-password">Password</label>
-  <input type="password" name="mqtt-password" id="mqtt-password" placeholder="password" required value="%MQTTPASSWORD%">
-  <label for="mqtt-hktopic">HK Auth Topic</label>
-  <input type="text" name="mqtt-hktopic" id="mqtt-hktopic" placeholder="topic/auth" required value="%HKTOPIC%">
-  <label for="mqtt-statetopic">Lock State Topic</label>
-  <input type="text" name="mqtt-statetopic" id="mqtt-statetopic" placeholder="topic/state" required
-    value="%STATETOPIC%">
+<h2 style="text-align: center; margin-bottom: 0;">MQTT Configuration</h2>
+<form id="mqttConfig" action="mqttconfig" method="post" style="display: inline-flex; flex-direction: column;margin-bottom: 1rem; align-items: center; max-width: 450px;">
+  <h3>Broker Settings</h3>
+  <div style="display: grid; gap: 8px; grid-template-columns: auto auto auto;margin-bottom: .5rem;">
+    <div style="display: flex; flex-direction: column; max-width: 120px;">
+      <label for="mqtt-broker">Address</label>
+      <input type="text" name="mqtt-broker" id="mqtt-broker" placeholder="0.0.0.0" required value="%MQTTBROKER%">
+    </div>
+    <div style="display: flex; flex-direction: column; max-width: 70px;">
+      <label for="mqtt-port">Port</label>
+      <input type="number" name="mqtt-port" id="mqtt-port" placeholder="1883" required inputmode="numeric" value="%MQTTPORT%">
+    </div>
+    <div style="display: flex; flex-direction: column;">
+      <label for="mqtt-clientid">Client ID</label>
+      <input type="text" name="mqtt-clientid" id="mqtt-clientid" placeholder="homekey_mqtt" required value="%MQTTCLIENTID%">
+    </div>
+  </div>
+  <div style="display: grid; gap: 8px; grid-template-columns: auto auto;">
+    <div style="display: flex; flex-direction: column;">
+      <label for="mqtt-username">Username</label>
+      <input type="text" name="mqtt-username" id="mqtt-username" placeholder="username" required value="%MQTTUSERNAME%">
+    </div>
+    <div style="display: flex; flex-direction: column;">
+      <label for="mqtt-password">Password</label>
+      <input type="password" name="mqtt-password" id="mqtt-password" placeholder="password" required value="%MQTTPASSWORD%">
+    </div>
+  </div>
+  <div style="margin-top: 1rem;">
+    <label for="mqtt-discovery-enable">Enable HASS MQTT Discovery</label>
+    <input type='hidden' name='mqtt-discovery-enable' value='0'>
+    <input type="checkbox" name="mqtt-discovery-enable" id="mqtt-discovery-enable" value="1">
+  </div>
+  <h3>MQTT Core Topics</h3>
+  <div style="display: grid; gap: 8px; grid-template-columns: auto auto;">
+    <div style="display: flex; flex-direction: column;">
+      <label for="mqtt-hktopic">HK Auth Topic</label>
+      <input type="text" name="mqtt-hktopic" id="mqtt-hktopic" placeholder="topic/auth" required value="%HKTOPIC%">
+    </div>
+    <div style="display: flex; flex-direction: column;">
+      <label for="mqtt-statetopic">Lock State Topic</label>
+      <input type="text" name="mqtt-statetopic" id="mqtt-statetopic" placeholder="topic/state" required value="%STATETOPIC%">
+    </div>
+    <div style="display: flex; flex-direction: column;">
+      <label for="mqtt-statecmd">Lock State Cmd Topic</label>
+      <input type="text" name="mqtt-statecmd" id="mqtt-statecmd" placeholder="topic/set_state" required value="%STATECMD%">
+    </div>
+    <div style="display: flex; flex-direction: column;">
+      <label for="mqtt-cstatecmd">Lock Current State Cmd Topic</label>
+      <input type="text" name="mqtt-cstatecmd" id="mqtt-cstatecmd" placeholder="topic/set_current_state" required value="%CSTATECMD%">
+    </div>
+    <div style="display: flex; flex-direction: column;">
+      <label for="mqtt-tstatecmd">Lock Target State Cmd Topic</label>
+      <input type="text" name="mqtt-tstatecmd" id="mqtt-tstatecmd" placeholder="topic/set_target_state" required value="%TSTATECMD%">
+    </div>
+  </div>
+  <h3 style="text-align: center;">MQTT Custom State Topics</h3>
+  <div style="display: grid; gap: 8px; grid-template-columns: auto auto;">
+    <label for="mqtt-customstate-enable">Enable MQTT Custom State</label>
+    <input type='hidden' name='mqtt-customstate-enable' value='0'>
+    <input type="checkbox" name="mqtt-customstate-enable" id="mqtt-customstate-enable" value="1">
 
-  <label for="mqtt-statecmd">Lock State Cmd Topic</label>
-  <input type="text" name="mqtt-statecmd" id="mqtt-statecmd" placeholder="topic/set_state" required value="%STATECMD%">
+    <label for="mqtt-customstate-topic">MQTT Custom State Topic</label>
+    <input type="text" name="mqtt-customstate-topic" id="mqtt-customstate-topic" placeholder="topic/set_target_state" required value="%CUSTOMSTATETOPIC%">
 
-  <label for="mqtt-cstatecmd">Lock Current State Cmd Topic</label>
-  <input type="text" name="mqtt-cstatecmd" id="mqtt-cstatecmd" placeholder="topic/set_current_state" required
-    value="%CSTATECMD%">
-
-  <label for="mqtt-tstatecmd">Lock Target State Cmd Topic</label>
-  <input type="text" name="mqtt-tstatecmd" id="mqtt-tstatecmd" placeholder="topic/set_target_state" required
-    value="%TSTATECMD%">
-
-  <label for="mqtt-customstate-enable">Enable MQTT Custom State</label>
-  <input type='hidden' name='mqtt-customstate-enable' value='0'>
-  <input type="checkbox" name="mqtt-customstate-enable" id="mqtt-customstate-enable" value="1">
-  
-  <label for="mqtt-customstate-topic">MQTT Custom State Topic</label>
-  <input type="text" name="mqtt-customstate-topic" id="mqtt-customstate-topic" placeholder="topic/set_target_state"
-  required value="%CUSTOMSTATETOPIC%">
-  
-  <label for="mqtt-customstate-cmd">MQTT Custom State Cmd Topic</label>
-  <input type="text" name="mqtt-customstate-cmd" id="mqtt-customstate-cmd" placeholder="topic/set_target_state" required
-  value="%CUSTOMSTATECMD%">
-  
-  <label for="mqtt-discovery-enable">Enable HASS MQTT Discovery</label>
-  <input type='hidden' name='mqtt-discovery-enable' value='0'>
-  <input type="checkbox" name="mqtt-discovery-enable" id="mqtt-discovery-enable" value="1">
-
-  <div style="display: flex;justify-content: space-around;margin-top: 1rem;">
+    <label for="mqtt-customstate-cmd">MQTT Custom State Cmd Topic</label>
+    <input type="text" name="mqtt-customstate-cmd" id="mqtt-customstate-cmd" placeholder="topic/set_target_state" required value="%CUSTOMSTATECMD%">
+  </div>
+  <div style="display: flex; gap: 8px;">
+    <div style="display: flex; flex-direction: column;">
+      <h4 style="flex: 1">Custom Lock Actions </h4>
+      <div style="display: grid; gap: 16px; grid-template-columns: auto; flex: 2; justify-content: center;">
+        <div style="display: flex; flex-direction: column; max-width: 70px;">
+          <label for="caction-unlock">Unlock</label>
+          <input type="number" name="caction-unlock" id="caction-unlock" placeholder="255" required value="%CACTIONUNLOCK%">
+        </div>
+        <div style="display: flex; flex-direction: column; max-width: 70px;">
+          <label for="caction-lock">Lock</label>
+          <input type="number" name="caction-lock" id="caction-lock" placeholder="255" required value="%CACTIONLOCK%">
+        </div>
+      </div>
+    </div>
+    <span style="border: 1px black solid; margin-top: 1rem;"></span>
+    <div>
+      <h4 style="text-align: center;">Custom Lock States </h4>
+      <div style="display: grid; gap: 16px; grid-template-columns: auto auto auto;">
+        <div style="display: flex; flex-direction: column; max-width: 70px;">
+          <label for="cstate-unlocking">Unlocking</label>
+          <input type="number" name="cstate-unlocking" id="cstate-unlocking" placeholder="255" required value="%CSTATEUNLOCKING%">
+        </div>
+        <div style="display: flex; flex-direction: column; max-width: 70px;">
+          <label for="cstate-locking">Locking</label>
+          <input type="number" name="cstate-locking" id="cstate-locking" placeholder="255" required value="%CSTATELOCKING%">
+        </div>
+        <div style="display: flex; flex-direction: column; max-width: 70px;">
+          <label for="cstate-unlocked">Unlocked</label>
+          <input type="number" name="cstate-unlocked" id="cstate-unlocked" placeholder="255" required value="%CSTATEUNLOCKED%">
+        </div>
+        <div style="display: flex; flex-direction: column; max-width: 70px;">
+          <label for="cstate-locked">Locked</label>
+          <input type="number" name="cstate-locked" id="cstate-locked" placeholder="255" required value="%CSTATELOCKED%">
+        </div>
+        <div style="display: flex; flex-direction: column; max-width: 70px;">
+          <label for="cstate-jammed">Jammed</label>
+          <input type="number" name="cstate-jammed" id="cstate-jammed" placeholder="255" required value="%CSTATEJAMMED%">
+        </div>
+        <div style="display: flex; flex-direction: column; max-width: 70px;">
+          <label for="cstate-unknown">Unknown</label>
+          <input type="number" name="cstate-unknown" id="cstate-unknown" placeholder="255" required value="%CSTATEUNKNOWN%">
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="display: flex;justify-content: space-around;margin-top: 2.5rem;gap: 16px;">
     <button type="submit" style="cursor: pointer;padding-inline: 1rem;padding-block: .5rem;">Submit</button>
     <button type="reset" style="cursor: pointer;padding-inline: 1rem;padding-block: .5rem;">Reset</button>
   </div>

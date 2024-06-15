@@ -1,20 +1,3 @@
-// Custom Lock States to be used in MQTT_CUSTOM_STATE_CTRL_TOPIC
-enum customLockStates
-{
-  C_LOCKED = 1,
-  C_UNLOCKING = 2,
-  C_UNLOCKED = 3,
-  C_LOCKING = 4,
-  C_JAMMED = 254,
-  C_UNKNOWN = 255
-};
-// Custom Lock Actions to be used in MQTT_CUSTOM_STATE_TOPIC
-enum customLockActions
-{
-  UNLOCK = 1,
-  LOCK = 2
-};
-
 // MQTT Broker Settings
 #define MQTT_HOST "0.0.0.0" //IP adress of mqtt broker
 #define MQTT_PORT 1883 //Port of mqtt broker

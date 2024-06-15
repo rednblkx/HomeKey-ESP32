@@ -3,6 +3,11 @@
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>HK Configuration</title>
+  <style>
+    label {
+      font-size: 16px;
+    }
+  </style>
   <script>
     async function addComponent(name) {
       let element = document.querySelector("#component");
@@ -10,13 +15,13 @@
         element.remove();
       }
       let main = document.querySelector("#main");
+      let el = document.createElement("div");
+      el.id = "component";
+      el.style = "display: flex;flex-direction: column;";
       switch (name) {
         case "mqtt":
           let data = await fetch("mqtt");
           let string = await data.text();
-          let el = document.createElement("div");
-          el.id = "component";
-          el.style = "display: flex;flex-direction: column;";
           el.innerHTML = string;
           main.appendChild(el);
           eval(document.querySelector("#component").querySelector("script").innerText);
@@ -24,20 +29,14 @@
         case "info":
           let data1 = await fetch("info");
           let string1 = await data1.text();
-          let el1 = document.createElement("div");
-          el1.id = "component";
-          el1.style = "display: flex;flex-direction: column;";
-          el1.innerHTML = string1;
-          main.appendChild(el1);
+          el.innerHTML = string1;
+          main.appendChild(el);
           break;
         case "misc":
           let data2 = await fetch("misc");
           let string2 = await data2.text();
-          let el2 = document.createElement("div");
-          el2.id = "component";
-          el2.style = "display: flex;flex-direction: column;";
-          el2.innerHTML = string2;
-          main.appendChild(el2);
+          el.innerHTML = string2;
+          main.appendChild(el);
           eval(document.querySelector("#component").querySelector("script").innerText);
           break;
       }
