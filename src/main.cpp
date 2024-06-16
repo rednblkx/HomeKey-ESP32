@@ -14,6 +14,7 @@
 #include <mqtt_client.h>
 #include <esp_ota_ops.h>
 #include <esp_task.h>
+#include <pins_arduino.h>
 
 const char* TAG = "MAIN";
 
@@ -27,7 +28,7 @@ enum lockStates
   LOCKING
 };
 AsyncWebServer webServer(80);
-PN532_SPI pn532spi;
+PN532_SPI pn532spi(SS, SCK, MISO, MOSI);
 PN532 nfc(pn532spi);
 QueueHandle_t gpio_led_handle = nullptr;
 
