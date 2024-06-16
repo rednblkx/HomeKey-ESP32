@@ -1,6 +1,6 @@
 <img src="https://github.com/rednblkx/HomeKey-ESP32/assets/29458132/6c2e1ea8-f74e-41ac-a690-461e339525acb" width="250" height="250">
 
-# HomeKey-ESP32
+# HomeKey-ESP32 [![Discord Badge](https://img.shields.io/badge/Discord-5865F2?logo=discord&logoColor=fff&style=for-the-badge)](https://discordapp.com/invite/VWpZ5YyUcm)
 [![CI](https://github.com/rednblkx/HomeKey-ESP32/actions/workflows/esp32.yml/badge.svg?branch=main)](https://github.com/rednblkx/HomeKey-ESP32/actions/workflows/esp32.yml)
 ### ESP32 HomeKit Lock with support for the HomeKey
 
