@@ -34,7 +34,7 @@ jobs:
 
       - name: Install tool-mklittlefs
         run: pio run -t buildfs
-      - name: Build Firmware
+      - name: Build Firmware ESP32
         run: pio run
       - name: Archive merged firmware
         uses: actions/upload-artifact@v4
@@ -51,3 +51,15 @@ jobs:
         with:
           name: spiffs-binary
           path: .pio/build/release/littlefs.bin
+      - name: Build Firmware ESP32-C3
+        run: pio run -e c3
+      - name: Archive merged firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32c3-firmware-merged
+          path: .pio/build/c3/firmware_merged.bin
+      - name: Archive firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32c3-app-firmware
+          path: .pio/build/c3/firmware.bin
