@@ -1,0 +1,65 @@
+# This is a basic workflow to help you get started with Actions
+
+name: CI
+
+# Controls when the action will run. Triggers the workflow on push or pull request
+# events but only for the master branch
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'platformio.ini'
+      - 'sdkconfig.defaults'
+  pull_request:
+    branches: [ main, dev ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+          key: ${{ runner.os }}-pio
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PlatformIO Core
+        run: pip install --upgrade platformio
+
+      - name: Install tool-mklittlefs
+        run: pio run -t buildfs
+      - name: Build Firmware ESP32
+        run: pio run
+      - name: Archive merged firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32-firmware-merged
+          path: .pio/build/release/firmware_merged.bin
+      - name: Archive firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32-app-firmware
+          path: .pio/build/release/firmware.bin
+      - name: Archive spiffs
+        uses: actions/upload-artifact@v4
+        with:
+          name: spiffs-binary
+          path: .pio/build/release/littlefs.bin
+      - name: Build Firmware ESP32-C3
+        run: pio run -e c3
+      - name: Archive merged firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32c3-firmware-merged
+          path: .pio/build/c3/firmware_merged.bin
+      - name: Archive firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32c3-app-firmware
+          path: .pio/build/c3/firmware.bin
