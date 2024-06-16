@@ -19,35 +19,30 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/cache@v3
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.cache/pip
             ~/.platformio/.cache
           key: ${{ runner.os }}-pio
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - name: Install PlatformIO Core
         run: pip install --upgrade platformio
 
       - name: Install tool-mklittlefs
-        run: pio run -t buildfs 
+        run: pio run -t buildfs
       - name: Build Firmware
-        run: pio run
+        run: pio run -e c3
       - name: Archive merged firmware
         uses: actions/upload-artifact@v4
         with:
-          name: firmware-merged-binary
+          name: esp32c3-firmware-merged
           path: .pio/build/release/firmware_merged.bin
       - name: Archive firmware
         uses: actions/upload-artifact@v4
         with:
-          name: firmware-binary
+          name: esp32c3-app-firmware
           path: .pio/build/release/firmware.bin
-      - name: Archive spiffs
-        uses: actions/upload-artifact@v4
-        with:
-          name: spiffs-binary
-          path: .pio/build/release/littlefs.bin
