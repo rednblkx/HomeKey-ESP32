@@ -885,6 +885,9 @@ void setupWeb() {
       }
       else if (!strcmp(p->name().c_str(), "hk-setupcode")) {
         espConfig::miscConfig.setupCode = p->value().c_str();
+        if (strcmp(espConfig::miscConfig.setupCode.c_str(), "46637726")) {
+          homeSpan.setPairingCode(espConfig::miscConfig.setupCode.c_str());
+        }
       }
       else if (!strcmp(p->name().c_str(), "control-pin")) {
         espConfig::miscConfig.controlPin = p->value().toInt();
@@ -1212,9 +1215,6 @@ void setup() {
   homeSpan.setStatusPin(espConfig::miscConfig.hsStatusPin);
   homeSpan.setStatusAutoOff(15);
   homeSpan.reserveSocketConnections(2);
-  if (strcmp(espConfig::miscConfig.setupCode.c_str(), "46637726")) {
-    homeSpan.setPairingCode(espConfig::miscConfig.setupCode.c_str());
-  }
   homeSpan.setLogLevel(0);
   homeSpan.setSketchVersion(app_version.c_str());
 
