@@ -884,9 +884,9 @@ void setupWeb() {
         espConfig::miscConfig.otaPasswd = p->value().c_str();
       }
       else if (!strcmp(p->name().c_str(), "hk-setupcode")) {
-        espConfig::miscConfig.setupCode = p->value().c_str();
-        if (strcmp(espConfig::miscConfig.setupCode.c_str(), "46637726")) {
-          homeSpan.setPairingCode(espConfig::miscConfig.setupCode.c_str());
+        if (strcmp(espConfig::miscConfig.setupCode.c_str(), p->value().c_str()) && p->value().length() == 8) {
+          homeSpan.setPairingCode(p->value().c_str());
+          espConfig::miscConfig.setupCode = p->value().c_str();
         }
       }
       else if (!strcmp(p->name().c_str(), "control-pin")) {
