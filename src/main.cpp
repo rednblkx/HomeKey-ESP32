@@ -945,6 +945,7 @@ void setupWeb() {
     }
 
     request->send(200, "text/plain", "Received Config, Restarting...");
+    delay(1000);
     ESP.restart();
     });
   webServer.onNotFound(notFound);
