@@ -92,7 +92,7 @@ SpanCharacteristic* lockCurrentState;
 SpanCharacteristic* lockTargetState;
 esp_mqtt_client_handle_t client = nullptr;
 
-Adafruit_NeoPixel pixels(1, NFC_NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel pixels(1, espConfig::miscConfig.nfcNeopixelPin, NEO_GRB + NEO_KHZ800);
 
 bool save_to_nvs() {
   std::vector<uint8_t> cborBuf;
@@ -1294,6 +1294,7 @@ void setup() {
   homeSpan.setWifiCallback(wifiCallback);
   
   if (espConfig::miscConfig.nfcNeopixelPin && espConfig::miscConfig.nfcNeopixelPin != 255) {
+    pixels.setPin(espConfig::miscConfig.nfcNeopixelPin);
     pixels.begin();
   }
 
