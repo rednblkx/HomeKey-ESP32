@@ -57,8 +57,8 @@ namespace espConfig
     /* Flags */
     bool lockEnableCustomState = MQTT_CUSTOM_STATE_ENABLED;
     bool hassMqttDiscoveryEnabled = MQTT_DISCOVERY;
-    std::map<string, int> customLockStates = {{"C_LOCKED", 1}, {"C_UNLOCKING", 2}, {"C_UNLOCKED", 3}, {"C_LOCKING", 4}, {"C_JAMMED", 254}, {"C_UNKNOWN", 255}};
-    std::map<string, int> customLockActions = {{"UNLOCK", 1}, {"LOCK", 2}};
+    std::map<const char *, int> customLockStates = {{"C_LOCKED", 1}, {"C_UNLOCKING", 2}, {"C_UNLOCKED", 3}, {"C_LOCKING", 4}, {"C_JAMMED", 254}, {"C_UNKNOWN", 255}};
+    std::map<const char *, int> customLockActions = {{"UNLOCK", 1}, {"LOCK", 2}};
   } mqttData;
 
   struct misc_config_t
