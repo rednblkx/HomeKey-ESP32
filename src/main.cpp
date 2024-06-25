@@ -15,6 +15,7 @@
 #include <esp_ota_ops.h>
 #include <esp_task.h>
 #include <pins_arduino.h>
+#include <Adafruit_NeoPixel.h>
 
 const char* TAG = "MAIN";
 
@@ -70,6 +71,7 @@ namespace espConfig
     bool lockAlwaysLock = HOMEKEY_ALWAYS_LOCK;
     uint8_t controlPin = HS_PIN;
     uint8_t hsStatusPin = HS_STATUS_LED;
+    uint8_t nfcNeopixelPin = NFC_NEOPIXEL_PIN;
     uint8_t nfcSuccessPin = NFC_SUCCESS_PIN;
     uint16_t nfcSuccessTime = NFC_SUCCESS_TIME;
     bool nfcSuccessHL = NFC_SUCCESS_HL;
@@ -83,12 +85,14 @@ namespace espConfig
   } miscConfig;
 }
 JSONCONS_ALL_MEMBER_TRAITS(espConfig::mqttConfig_t, mqttBroker, mqttPort, mqttUsername, mqttPassword, mqttClientId, hkTopic, lockStateTopic, lockStateCmd, lockCStateCmd, lockTStateCmd, lockCustomStateTopic, lockCustomStateCmd, lockEnableCustomState, hassMqttDiscoveryEnabled, customLockStates, customLockActions)
-JSONCONS_ALL_MEMBER_TRAITS(espConfig::misc_config_t, deviceName, lockAlwaysUnlock, lockAlwaysLock, controlPin, hsStatusPin, nfcSuccessPin, nfcSuccessHL, nfcFailPin, nfcFailHL, gpioActionEnable, gpioActionPin, gpioActionLockState, gpioActionUnlockState, otaPasswd, setupCode)
+JSONCONS_ALL_MEMBER_TRAITS(espConfig::misc_config_t, deviceName, lockAlwaysUnlock, lockAlwaysLock, controlPin, hsStatusPin, nfcSuccessPin, nfcNeopixelPin, nfcSuccessHL, nfcFailPin, nfcFailHL, gpioActionEnable, gpioActionPin, gpioActionLockState, gpioActionUnlockState, otaPasswd, setupCode)
 
 KeyFlow hkFlow = KeyFlow::kFlowFAST;
 SpanCharacteristic* lockCurrentState;
 SpanCharacteristic* lockTargetState;
 esp_mqtt_client_handle_t client = nullptr;
+
+Adafruit_NeoPixel pixels(1, espConfig::miscConfig.nfcNeopixelPin, NEO_GRB + NEO_KHZ800);
 
 bool save_to_nvs() {
   std::vector<uint8_t> cborBuf;
@@ -624,6 +628,9 @@ String miscHtmlProcess(const String& var) {
   else if (var == "LEDPIN") {
     return String(espConfig::miscConfig.hsStatusPin);
   }
+  else if (var == "NFCNEOPIXELPIN") {
+    return String(espConfig::miscConfig.nfcNeopixelPin);
+  }
   else if (var == "NFC1PIN") {
     return String(espConfig::miscConfig.nfcSuccessPin);
   }
@@ -895,6 +902,9 @@ void setupWeb() {
       else if (!strcmp(p->name().c_str(), "led-pin")) {
         espConfig::miscConfig.hsStatusPin = p->value().toInt();
       }
+      else if (!strcmp(p->name().c_str(), "nfc-neopixel-pin")) {
+        espConfig::miscConfig.nfcNeopixelPin = p->value().toInt();
+      }
       else if (!strcmp(p->name().c_str(), "nfc-s-pin")) {
         espConfig::miscConfig.nfcSuccessPin = p->value().toInt();
       }
@@ -1136,11 +1146,25 @@ void gpio_task(void* arg) {
             delay(espConfig::miscConfig.nfcSuccessTime);
             digitalWrite(espConfig::miscConfig.nfcSuccessPin, !espConfig::miscConfig.nfcSuccessHL);
           }
+          if (espConfig::miscConfig.nfcNeopixelPin && espConfig::miscConfig.nfcNeopixelPin != 255) {
+            pixels.setPixelColor(0, pixels.Color(0, 255, 0));
+            pixels.show();
+            delay(espConfig::miscConfig.nfcSuccessTime);
+            pixels.clear();
+            pixels.show();
+          }
         } else {
           if (espConfig::miscConfig.nfcFailPin && espConfig::miscConfig.nfcFailPin != 255) {
             digitalWrite(espConfig::miscConfig.nfcFailPin, espConfig::miscConfig.nfcFailHL);
             delay(espConfig::miscConfig.nfcFailTime);
             digitalWrite(espConfig::miscConfig.nfcFailPin, !espConfig::miscConfig.nfcFailHL);
+          }
+          if (espConfig::miscConfig.nfcNeopixelPin && espConfig::miscConfig.nfcNeopixelPin != 255) {
+            pixels.setPixelColor(0, pixels.Color(255, 0, 0));
+            pixels.show();
+            delay(espConfig::miscConfig.nfcFailTime);
+            pixels.clear();
+            pixels.show();
           }
         }
       }
@@ -1268,6 +1292,12 @@ void setup() {
   new Characteristic::Version();
   homeSpan.setControllerCallback(pairCallback);
   homeSpan.setWifiCallback(wifiCallback);
+  
+  if (espConfig::miscConfig.nfcNeopixelPin && espConfig::miscConfig.nfcNeopixelPin != 255) {
+    pixels.setPin(espConfig::miscConfig.nfcNeopixelPin);
+    pixels.begin();
+  }
+
   xTaskCreate(gpio_task, "gpio_task", 4096, NULL, 1, NULL);
   xTaskCreate(nfc_thread_entry, "nfc_task", 8192, NULL, 2, NULL);
 }
