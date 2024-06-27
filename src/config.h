@@ -1,3 +1,11 @@
+enum HK_COLOR
+{
+  TAN,
+  GOLD,
+  SILVER,
+  BLACK
+};
+
 // MQTT Broker Settings
 #define MQTT_HOST "0.0.0.0" //IP adress of mqtt broker
 #define MQTT_PORT 1883 //Port of mqtt broker
@@ -19,7 +27,8 @@
 #define MQTT_STATE_TOPIC "topic/homekey/state" // MQTT Topic for publishing the HomeKit lock target state
 
 //Miscellaneous
-#define SETUP_CODE ""  //code used for homekit setup
+#define HOMEKEY_COLOR TAN
+#define SETUP_CODE "46637726"  //code used for homekit setup
 #define OTA_PWD "homespan-ota" //custom password for ota
 #define DEVICE_NAME "HK" //Device name
 #define HOMEKEY_ALWAYS_UNLOCK 0 // Flag indicating if a successful Homekey authentication should always set and publish the unlock state

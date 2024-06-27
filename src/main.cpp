@@ -36,6 +36,7 @@ QueueHandle_t gpio_led_handle = nullptr;
 nvs_handle savedData;
 readerData_t readerData;
 uint8_t ecpData[18] = { 0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0 };
+std::map<HK_COLOR, const char*> hk_color_vals = {{TAN, "AQTO1doA"}, {GOLD, "AQSq1uwA"}, {SILVER, "AQTj4+MA"}, {BLACK, "AQQAAAAA"}};
 namespace espConfig
 {
   struct mqttConfig_t
@@ -66,6 +67,7 @@ namespace espConfig
   {
     std::string deviceName = DEVICE_NAME;
     std::string otaPasswd = OTA_PWD;
+    std::string hk_key_color = hk_color_vals[HOMEKEY_COLOR];
     std::string setupCode = SETUP_CODE;
     bool lockAlwaysUnlock = HOMEKEY_ALWAYS_UNLOCK;
     bool lockAlwaysLock = HOMEKEY_ALWAYS_LOCK;
@@ -85,7 +87,7 @@ namespace espConfig
   } miscConfig;
 }
 JSONCONS_ALL_MEMBER_TRAITS(espConfig::mqttConfig_t, mqttBroker, mqttPort, mqttUsername, mqttPassword, mqttClientId, hkTopic, lockStateTopic, lockStateCmd, lockCStateCmd, lockTStateCmd, lockCustomStateTopic, lockCustomStateCmd, lockEnableCustomState, hassMqttDiscoveryEnabled, customLockStates, customLockActions)
-JSONCONS_ALL_MEMBER_TRAITS(espConfig::misc_config_t, deviceName, lockAlwaysUnlock, lockAlwaysLock, controlPin, hsStatusPin, nfcSuccessPin, nfcNeopixelPin, nfcSuccessHL, nfcFailPin, nfcFailHL, gpioActionEnable, gpioActionPin, gpioActionLockState, gpioActionUnlockState, otaPasswd, setupCode)
+JSONCONS_ALL_MEMBER_TRAITS(espConfig::misc_config_t, deviceName, hk_key_color, lockAlwaysUnlock, lockAlwaysLock, controlPin, hsStatusPin, nfcSuccessPin, nfcNeopixelPin, nfcSuccessHL, nfcFailPin, nfcFailHL, gpioActionEnable, gpioActionPin, gpioActionLockState, gpioActionUnlockState, otaPasswd, setupCode)
 
 KeyFlow hkFlow = KeyFlow::kFlowFAST;
 SpanCharacteristic* lockCurrentState;
@@ -1283,7 +1285,7 @@ void setup() {
   serialNumber.append(macStr);
   new Characteristic::SerialNumber(serialNumber.c_str());
   new Characteristic::FirmwareRevision(app_version.c_str());
-  new Characteristic::HardwareFinish();
+  new Characteristic::HardwareFinish(espConfig::miscConfig.hk_key_color.c_str());
 
   new LockManagement();
   new LockMechanism();
