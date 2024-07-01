@@ -1053,8 +1053,8 @@ void nfc_thread_entry(void* arg) {
             if (espConfig::mqttData.lockEnableCustomState) {
               mqtt_publish(espConfig::mqttData.lockCustomStateTopic, std::to_string(espConfig::mqttData.customLockActions["UNLOCK"]), 0, false);
             }
-          else if (espConfig::miscConfig.lockAlwaysLock) {
           }
+          else if (espConfig::miscConfig.lockAlwaysLock) {
             lockCurrentState->setVal(lockStates::LOCKED);
             lockTargetState->setVal(lockStates::LOCKED);
             if (espConfig::miscConfig.gpioActionEnable && espConfig::miscConfig.gpioActionPin != 255) {
