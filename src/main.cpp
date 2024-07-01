@@ -974,7 +974,9 @@ void mqttConfigReset(const char* buf) {
 }
 
 void wifiCallback() {
-  mqtt_app_start();
+  if (strcmp(espConfig::mqttData.mqttBroker.c_str(), "0.0.0.0")) {
+    mqtt_app_start();
+  }
   setupWeb();
 }
 
