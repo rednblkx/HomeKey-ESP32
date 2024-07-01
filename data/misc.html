@@ -23,8 +23,31 @@
   <label for="hk-always-lock">Always Lock on HK Auth</label>
   <input type='hidden' name='hk-always-lock' value='0'>
   <input type="checkbox" name="hk-always-lock" id="hk-always-lock" value="1">
-  
+
+  <fieldset>
+    <legend>HomeKey Card Finish:</legend>
+    <div>
+      <label for="hk-tan">Tan</label>
+      <input type="radio" id="hk-finish-0" name="hk-hwfinish" value="0" />
+    </div>
+    <div>
+      <label for="hk-gold">Gold</label>
+      <input type="radio" id="hk-finish-1" name="hk-hwfinish" value="1" />
+    </div>
+    <div>
+      <label for="hk-silver">Silver</label>
+      <input type="radio" id="hk-finish-2" name="hk-hwfinish" value="2" />
+    </div>
+    <div>
+      <label for="hk-black">Black</label>
+      <input type="radio" id="hk-finish-3" name="hk-hwfinish" value="3" />
+    </div>
+  </fieldset>
+
   <p><b>- HomeKey Events</b></p>
+
+  <label for="nfc-s-pin">Auth Success/Failure GPIO Pin (NeoPixel)</label>
+  <input type="number" name="nfc-neopixel-pin" id="nfc-neopixel-pin" placeholder="2" required value="%NFCNEOPIXELPIN%">
 
   <label for="nfc-s-pin">Auth Success GPIO Pin</label>
   <input type="number" name="nfc-s-pin" id="nfc-s-pin" placeholder="2" required value="%NFC1PIN%">
@@ -76,6 +99,8 @@
   let gpioActionEn = "%GPIOAEN%" == true;
   let gpioActionLock = "%GPIOALOCK%" == true;
   let gpioActionUnlock = "%GPIOAUNLOCK%" == true;
+  let hwfinish = "%HWFINISH%";
+  document.getElementById(`hk-finish-${hwfinish}`).setAttribute("checked", "");
   if (nfcSuccessHL) {
     document.getElementById("nfc-s-hl").setAttribute("checked", "");
   }

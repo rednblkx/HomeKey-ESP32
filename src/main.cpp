@@ -15,6 +15,7 @@
 #include <esp_ota_ops.h>
 #include <esp_task.h>
 #include <pins_arduino.h>
+#include <Adafruit_NeoPixel.h>
 
 const char* TAG = "MAIN";
 
@@ -35,6 +36,7 @@ QueueHandle_t gpio_led_handle = nullptr;
 nvs_handle savedData;
 readerData_t readerData;
 uint8_t ecpData[18] = { 0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0 };
+std::map<HK_COLOR, const char*> hk_color_vals = {{TAN, "AQTO1doA"}, {GOLD, "AQSq1uwA"}, {SILVER, "AQTj4+MA"}, {BLACK, "AQQAAAAA"}};
 namespace espConfig
 {
   struct mqttConfig_t
@@ -57,19 +59,21 @@ namespace espConfig
     /* Flags */
     bool lockEnableCustomState = MQTT_CUSTOM_STATE_ENABLED;
     bool hassMqttDiscoveryEnabled = MQTT_DISCOVERY;
-    std::map<string, int> customLockStates = {{"C_LOCKED", 1}, {"C_UNLOCKING", 2}, {"C_UNLOCKED", 3}, {"C_LOCKING", 4}, {"C_JAMMED", 254}, {"C_UNKNOWN", 255}};
-    std::map<string, int> customLockActions = {{"UNLOCK", 1}, {"LOCK", 2}};
+    std::map<const char *, int> customLockStates = {{"C_LOCKED", C_LOCKED}, {"C_UNLOCKING", C_UNLOCKING}, {"C_UNLOCKED", C_UNLOCKED}, {"C_LOCKING", C_LOCKING}, {"C_JAMMED", C_JAMMED}, {"C_UNKNOWN", C_UNKNOWN}};
+    std::map<const char *, int> customLockActions = {{"UNLOCK", UNLOCK}, {"LOCK", LOCK}};
   } mqttData;
 
   struct misc_config_t
   {
     std::string deviceName = DEVICE_NAME;
     std::string otaPasswd = OTA_PWD;
+    uint8_t hk_key_color = HOMEKEY_COLOR;
     std::string setupCode = SETUP_CODE;
     bool lockAlwaysUnlock = HOMEKEY_ALWAYS_UNLOCK;
     bool lockAlwaysLock = HOMEKEY_ALWAYS_LOCK;
     uint8_t controlPin = HS_PIN;
     uint8_t hsStatusPin = HS_STATUS_LED;
+    uint8_t nfcNeopixelPin = NFC_NEOPIXEL_PIN;
     uint8_t nfcSuccessPin = NFC_SUCCESS_PIN;
     uint16_t nfcSuccessTime = NFC_SUCCESS_TIME;
     bool nfcSuccessHL = NFC_SUCCESS_HL;
@@ -83,12 +87,14 @@ namespace espConfig
   } miscConfig;
 }
 JSONCONS_ALL_MEMBER_TRAITS(espConfig::mqttConfig_t, mqttBroker, mqttPort, mqttUsername, mqttPassword, mqttClientId, hkTopic, lockStateTopic, lockStateCmd, lockCStateCmd, lockTStateCmd, lockCustomStateTopic, lockCustomStateCmd, lockEnableCustomState, hassMqttDiscoveryEnabled, customLockStates, customLockActions)
-JSONCONS_ALL_MEMBER_TRAITS(espConfig::misc_config_t, deviceName, lockAlwaysUnlock, lockAlwaysLock, controlPin, hsStatusPin, nfcSuccessPin, nfcSuccessHL, nfcFailPin, nfcFailHL, gpioActionEnable, gpioActionPin, gpioActionLockState, gpioActionUnlockState, otaPasswd, setupCode)
+JSONCONS_ALL_MEMBER_TRAITS(espConfig::misc_config_t, deviceName, hk_key_color, lockAlwaysUnlock, lockAlwaysLock, controlPin, hsStatusPin, nfcSuccessPin, nfcNeopixelPin, nfcSuccessHL, nfcFailPin, nfcFailHL, gpioActionEnable, gpioActionPin, gpioActionLockState, gpioActionUnlockState, otaPasswd, setupCode)
 
 KeyFlow hkFlow = KeyFlow::kFlowFAST;
 SpanCharacteristic* lockCurrentState;
 SpanCharacteristic* lockTargetState;
 esp_mqtt_client_handle_t client = nullptr;
+
+Adafruit_NeoPixel pixels(1, espConfig::miscConfig.nfcNeopixelPin, NEO_GRB + NEO_KHZ800);
 
 bool save_to_nvs() {
   std::vector<uint8_t> cborBuf;
@@ -211,7 +217,10 @@ struct NFCAccess : Service::NFCAccess
     LOG(I, "Configuring NFCAccess"); // initialization message
     configurationState = new Characteristic::ConfigurationState();
     nfcControlPoint = new Characteristic::NFCAccessControlPoint();
-    nfcSupportedConfiguration = new Characteristic::NFCAccessSupportedConfiguration();
+    TLV8 conf(NULL, 0);
+    conf.add(0x01, 0x10);
+    conf.add(0x02, 0x10);
+    nfcSupportedConfiguration = new Characteristic::NFCAccessSupportedConfiguration(conf);
   }
 
   boolean update() {
@@ -219,15 +228,15 @@ struct NFCAccess : Service::NFCAccess
     LOG(D, "READER GROUP IDENTIFIER: %s", utils::bufToHexString(readerData.reader_gid.data(), readerData.reader_gid.size()).c_str());
     LOG(D, "READER UNIQUE IDENTIFIER: %s", utils::bufToHexString(readerData.reader_id.data(), readerData.reader_id.size()).c_str());
 
-    // char* dataConfState = configurationState->getNewString(); // Underlying functionality currently unknown
-    char* dataNfcControlPoint = nfcControlPoint->getNewString();
-    LOG(D, "NfcControlPoint Length: %d", strlen(dataNfcControlPoint));
-    std::vector<uint8_t> decB64 = utils::decodeB64(dataNfcControlPoint);
-    if (decB64.size() == 0)
+    TLV8 ctrlData(NULL, 0);
+    nfcControlPoint->getNewTLV(ctrlData);
+    std::vector<uint8_t> tlvData(ctrlData.pack_size());
+    ctrlData.pack(tlvData.data());
+    if (tlvData.size() == 0)
       return false;
-    LOG(D, "Decoded data: %s", utils::bufToHexString(decB64.data(), decB64.size()).c_str());
-    LOG(D, "Decoded data length: %d", decB64.size());
-    HK_HomeKit hkCtx(readerData, savedData, "READERDATA", decB64);
+    LOG(D, "Decoded data: %s", utils::bufToHexString(tlvData.data(), tlvData.size()).c_str());
+    LOG(D, "Decoded data length: %d", tlvData.size());
+    HK_HomeKit hkCtx(readerData, savedData, "READERDATA", tlvData);
     std::vector<uint8_t> result = hkCtx.processResult();
     if (readerData.reader_gid.size() > 0) {
       memcpy(ecpData + 8, readerData.reader_gid.data(), readerData.reader_gid.size());
@@ -624,6 +633,9 @@ String miscHtmlProcess(const String& var) {
   else if (var == "LEDPIN") {
     return String(espConfig::miscConfig.hsStatusPin);
   }
+  else if (var == "NFCNEOPIXELPIN") {
+    return String(espConfig::miscConfig.nfcNeopixelPin);
+  }
   else if (var == "NFC1PIN") {
     return String(espConfig::miscConfig.nfcSuccessPin);
   }
@@ -659,6 +671,9 @@ String miscHtmlProcess(const String& var) {
   }
   else if (var == "GPIOAUNLOCK") {
     return String(espConfig::miscConfig.gpioActionUnlockState);
+  }
+  else if (var == "HWFINISH") {
+    return String(espConfig::miscConfig.hk_key_color);
   }
   return String();
 }
@@ -884,13 +899,21 @@ void setupWeb() {
         espConfig::miscConfig.otaPasswd = p->value().c_str();
       }
       else if (!strcmp(p->name().c_str(), "hk-setupcode")) {
-        espConfig::miscConfig.setupCode = p->value().c_str();
+        if (strcmp(espConfig::miscConfig.setupCode.c_str(), p->value().c_str()) && p->value().length() == 8) {
+          if (homeSpan.controllerListBegin() == homeSpan.controllerListEnd()) {
+            homeSpan.setPairingCode(p->value().c_str());
+            espConfig::miscConfig.setupCode = p->value().c_str();
+          }
+        }
       }
       else if (!strcmp(p->name().c_str(), "control-pin")) {
         espConfig::miscConfig.controlPin = p->value().toInt();
       }
       else if (!strcmp(p->name().c_str(), "led-pin")) {
         espConfig::miscConfig.hsStatusPin = p->value().toInt();
+      }
+      else if (!strcmp(p->name().c_str(), "nfc-neopixel-pin")) {
+        espConfig::miscConfig.nfcNeopixelPin = p->value().toInt();
       }
       else if (!strcmp(p->name().c_str(), "nfc-s-pin")) {
         espConfig::miscConfig.nfcSuccessPin = p->value().toInt();
@@ -928,6 +951,9 @@ void setupWeb() {
       else if (!strcmp(p->name().c_str(), "gpio-a-unlock")) {
         espConfig::miscConfig.gpioActionUnlockState = p->value().toInt();
       }
+      else if (!strcmp(p->name().c_str(), "hk-hwfinish")) {
+        espConfig::miscConfig.hk_key_color = p->value().toInt();
+      }
     }
     try {
       std::string strNvs;
@@ -942,6 +968,7 @@ void setupWeb() {
     }
 
     request->send(200, "text/plain", "Received Config, Restarting...");
+    delay(1000);
     ESP.restart();
     });
   webServer.onNotFound(notFound);
@@ -955,7 +982,9 @@ void mqttConfigReset(const char* buf) {
 }
 
 void wifiCallback() {
-  mqtt_app_start();
+  if (strcmp(espConfig::mqttData.mqttBroker.c_str(), "0.0.0.0")) {
+    mqtt_app_start();
+  }
   setupWeb();
 }
 
@@ -1034,8 +1063,8 @@ void nfc_thread_entry(void* arg) {
             if (espConfig::mqttData.lockEnableCustomState) {
               mqtt_publish(espConfig::mqttData.lockCustomStateTopic, std::to_string(espConfig::mqttData.customLockActions["UNLOCK"]), 0, false);
             }
-          else if (espConfig::miscConfig.lockAlwaysLock) {
           }
+          else if (espConfig::miscConfig.lockAlwaysLock) {
             lockCurrentState->setVal(lockStates::LOCKED);
             lockTargetState->setVal(lockStates::LOCKED);
             if (espConfig::miscConfig.gpioActionEnable && espConfig::miscConfig.gpioActionPin != 255) {
@@ -1132,11 +1161,25 @@ void gpio_task(void* arg) {
             delay(espConfig::miscConfig.nfcSuccessTime);
             digitalWrite(espConfig::miscConfig.nfcSuccessPin, !espConfig::miscConfig.nfcSuccessHL);
           }
+          if (espConfig::miscConfig.nfcNeopixelPin && espConfig::miscConfig.nfcNeopixelPin != 255) {
+            pixels.setPixelColor(0, pixels.Color(0, 255, 0));
+            pixels.show();
+            delay(espConfig::miscConfig.nfcSuccessTime);
+            pixels.clear();
+            pixels.show();
+          }
         } else {
           if (espConfig::miscConfig.nfcFailPin && espConfig::miscConfig.nfcFailPin != 255) {
             digitalWrite(espConfig::miscConfig.nfcFailPin, espConfig::miscConfig.nfcFailHL);
             delay(espConfig::miscConfig.nfcFailTime);
             digitalWrite(espConfig::miscConfig.nfcFailPin, !espConfig::miscConfig.nfcFailHL);
+          }
+          if (espConfig::miscConfig.nfcNeopixelPin && espConfig::miscConfig.nfcNeopixelPin != 255) {
+            pixels.setPixelColor(0, pixels.Color(255, 0, 0));
+            pixels.show();
+            delay(espConfig::miscConfig.nfcFailTime);
+            pixels.clear();
+            pixels.show();
           }
         }
       }
@@ -1192,9 +1235,11 @@ void setup() {
   }
   if (espConfig::miscConfig.nfcSuccessPin && espConfig::miscConfig.nfcSuccessPin != 255) {
     pinMode(espConfig::miscConfig.nfcSuccessPin, OUTPUT);
+    digitalWrite(espConfig::miscConfig.nfcSuccessPin, !espConfig::miscConfig.nfcSuccessHL);
   }
   if (espConfig::miscConfig.nfcFailPin && espConfig::miscConfig.nfcFailPin != 255) {
     pinMode(espConfig::miscConfig.nfcFailPin, OUTPUT);
+    digitalWrite(espConfig::miscConfig.nfcFailPin, !espConfig::miscConfig.nfcFailHL);
   }
   if (espConfig::miscConfig.gpioActionPin && espConfig::miscConfig.gpioActionPin != 255) {
     pinMode(espConfig::miscConfig.gpioActionPin, OUTPUT);
@@ -1207,12 +1252,11 @@ void setup() {
   if (espConfig::miscConfig.controlPin != 255) {
     homeSpan.setControlPin(espConfig::miscConfig.controlPin);
   }
-  homeSpan.setStatusPin(espConfig::miscConfig.hsStatusPin);
+  if (espConfig::miscConfig.hsStatusPin != 255) {
+   homeSpan.setStatusPin(espConfig::miscConfig.hsStatusPin);
+  }
   homeSpan.setStatusAutoOff(15);
   homeSpan.reserveSocketConnections(2);
-  if (strcmp(espConfig::miscConfig.setupCode.c_str(), "46637726")) {
-    homeSpan.setPairingCode(espConfig::miscConfig.setupCode.c_str());
-  }
   homeSpan.setLogLevel(0);
   homeSpan.setSketchVersion(app_version.c_str());
 
@@ -1256,7 +1300,10 @@ void setup() {
   serialNumber.append(macStr);
   new Characteristic::SerialNumber(serialNumber.c_str());
   new Characteristic::FirmwareRevision(app_version.c_str());
-  new Characteristic::HardwareFinish();
+  std::vector<uint8_t> decB64 = utils::decodeB64(hk_color_vals[HK_COLOR(espConfig::miscConfig.hk_key_color)]);
+  TLV8 hwfinish(NULL, 0);
+  hwfinish.unpack(decB64.data(), decB64.size());
+  new Characteristic::HardwareFinish(hwfinish);
 
   new LockManagement();
   new LockMechanism();
@@ -1265,6 +1312,12 @@ void setup() {
   new Characteristic::Version();
   homeSpan.setControllerCallback(pairCallback);
   homeSpan.setWifiCallback(wifiCallback);
+
+  if (espConfig::miscConfig.nfcNeopixelPin && espConfig::miscConfig.nfcNeopixelPin != 255) {
+    pixels.setPin(espConfig::miscConfig.nfcNeopixelPin);
+    pixels.begin();
+  }
+
   xTaskCreate(gpio_task, "gpio_task", 4096, NULL, 1, NULL);
   xTaskCreate(nfc_thread_entry, "nfc_task", 8192, NULL, 2, NULL);
 }

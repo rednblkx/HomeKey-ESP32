@@ -1,3 +1,27 @@
+enum HK_COLOR
+{
+  TAN,
+  GOLD,
+  SILVER,
+  BLACK
+};
+
+enum customLockStates
+{
+  C_LOCKED = 1,
+  C_UNLOCKING = 2,
+  C_UNLOCKED = 3,
+  C_LOCKING = 4,
+  C_JAMMED = 254,
+  C_UNKNOWN = 255
+};
+// Custom Lock Actions to be used in MQTT_CUSTOM_STATE_TOPIC
+enum customLockActions
+{
+  UNLOCK = 1,
+  LOCK = 2
+};
+
 // MQTT Broker Settings
 #define MQTT_HOST "0.0.0.0" //IP adress of mqtt broker
 #define MQTT_PORT 1883 //Port of mqtt broker
@@ -19,13 +43,15 @@
 #define MQTT_STATE_TOPIC "topic/homekey/state" // MQTT Topic for publishing the HomeKit lock target state
 
 //Miscellaneous
-#define SETUP_CODE "46637726"  //code used for homekit setup
+#define HOMEKEY_COLOR TAN
+#define SETUP_CODE "46637726"  // HomeKit Setup Code (only for reference, has to be changed during WiFi Configuration or from WebUI)
 #define OTA_PWD "homespan-ota" //custom password for ota
 #define DEVICE_NAME "HK" //Device name
 #define HOMEKEY_ALWAYS_UNLOCK 0 // Flag indicating if a successful Homekey authentication should always set and publish the unlock state
 #define HOMEKEY_ALWAYS_LOCK 0  // Flag indicating if a successful Homekey authentication should always set and publish the lock state
-#define HS_STATUS_LED 2 // HomeSpan Status LED GPIO pin
+#define HS_STATUS_LED 255 // HomeSpan Status LED GPIO pin
 #define HS_PIN 255 // GPIO Pin for a Configuration Mode button (more info on https://github.com/HomeSpan/HomeSpan/blob/master/docs/UserGuide.md#device-configuration-mode)
+#define NFC_NEOPIXEL_PIN 255 // GPIO Pin used for NeoPixel
 #define NFC_SUCCESS_PIN 255 // GPIO Pin pulled HIGH or LOW (see NFC_SUCCESS_HL) on success HK Auth
 #define NFC_SUCCESS_HL HIGH // Flag to define if NFC_SUCCESS_PIN should be held High or Low
 #define NFC_SUCCESS_TIME 1000 // How long should NFC_SUCCESS_PIN be held High or Low
