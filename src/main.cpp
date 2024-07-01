@@ -900,8 +900,10 @@ void setupWeb() {
       }
       else if (!strcmp(p->name().c_str(), "hk-setupcode")) {
         if (strcmp(espConfig::miscConfig.setupCode.c_str(), p->value().c_str()) && p->value().length() == 8) {
-          homeSpan.setPairingCode(p->value().c_str());
-          espConfig::miscConfig.setupCode = p->value().c_str();
+          if (homeSpan.controllerListBegin() == homeSpan.controllerListEnd()) {
+            homeSpan.setPairingCode(p->value().c_str());
+            espConfig::miscConfig.setupCode = p->value().c_str();
+          }
         }
       }
       else if (!strcmp(p->name().c_str(), "control-pin")) {
