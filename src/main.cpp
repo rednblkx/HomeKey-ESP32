@@ -217,7 +217,10 @@ struct NFCAccess : Service::NFCAccess
     LOG(I, "Configuring NFCAccess"); // initialization message
     configurationState = new Characteristic::ConfigurationState();
     nfcControlPoint = new Characteristic::NFCAccessControlPoint();
-    nfcSupportedConfiguration = new Characteristic::NFCAccessSupportedConfiguration();
+    TLV8 conf(NULL, 0);
+    conf.add(0x01, 0x10);
+    conf.add(0x02, 0x10);
+    nfcSupportedConfiguration = new Characteristic::NFCAccessSupportedConfiguration(conf);
   }
 
   boolean update() {
@@ -225,15 +228,15 @@ struct NFCAccess : Service::NFCAccess
     LOG(D, "READER GROUP IDENTIFIER: %s", utils::bufToHexString(readerData.reader_gid.data(), readerData.reader_gid.size()).c_str());
     LOG(D, "READER UNIQUE IDENTIFIER: %s", utils::bufToHexString(readerData.reader_id.data(), readerData.reader_id.size()).c_str());
 
-    // char* dataConfState = configurationState->getNewString(); // Underlying functionality currently unknown
-    char* dataNfcControlPoint = nfcControlPoint->getNewString();
-    LOG(D, "NfcControlPoint Length: %d", strlen(dataNfcControlPoint));
-    std::vector<uint8_t> decB64 = utils::decodeB64(dataNfcControlPoint);
-    if (decB64.size() == 0)
+    TLV8 ctrlData(NULL, 0);
+    nfcControlPoint->getNewTLV(ctrlData);
+    std::vector<uint8_t> tlvData(ctrlData.pack_size());
+    ctrlData.pack(tlvData.data());
+    if (tlvData.size() == 0)
       return false;
-    LOG(D, "Decoded data: %s", utils::bufToHexString(decB64.data(), decB64.size()).c_str());
-    LOG(D, "Decoded data length: %d", decB64.size());
-    HK_HomeKit hkCtx(readerData, savedData, "READERDATA", decB64);
+    LOG(D, "Decoded data: %s", utils::bufToHexString(tlvData.data(), tlvData.size()).c_str());
+    LOG(D, "Decoded data length: %d", tlvData.size());
+    HK_HomeKit hkCtx(readerData, savedData, "READERDATA", tlvData);
     std::vector<uint8_t> result = hkCtx.processResult();
     if (readerData.reader_gid.size() > 0) {
       memcpy(ecpData + 8, readerData.reader_gid.data(), readerData.reader_gid.size());
@@ -1287,7 +1290,10 @@ void setup() {
   serialNumber.append(macStr);
   new Characteristic::SerialNumber(serialNumber.c_str());
   new Characteristic::FirmwareRevision(app_version.c_str());
-  new Characteristic::HardwareFinish(espConfig::miscConfig.hk_key_color.c_str());
+  std::vector<uint8_t> decB64 = utils::decodeB64(espConfig::miscConfig.hk_key_color.c_str());
+  TLV8 hwfinish(NULL, 0);
+  hwfinish.unpack(decB64.data(), decB64.size());
+  new Characteristic::HardwareFinish(hwfinish);
 
   new LockManagement();
   new LockMechanism();
