@@ -1239,7 +1239,9 @@ void setup() {
   if (espConfig::miscConfig.controlPin != 255) {
     homeSpan.setControlPin(espConfig::miscConfig.controlPin);
   }
-  homeSpan.setStatusPin(espConfig::miscConfig.hsStatusPin);
+  if (espConfig::miscConfig.hsStatusPin != 255) {
+   homeSpan.setStatusPin(espConfig::miscConfig.hsStatusPin);
+  }
   homeSpan.setStatusAutoOff(15);
   homeSpan.reserveSocketConnections(2);
   homeSpan.setLogLevel(0);
