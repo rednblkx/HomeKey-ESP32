@@ -67,7 +67,7 @@ namespace espConfig
   {
     std::string deviceName = DEVICE_NAME;
     std::string otaPasswd = OTA_PWD;
-    std::string hk_key_color = hk_color_vals[HOMEKEY_COLOR];
+    uint8_t hk_key_color = HOMEKEY_COLOR;
     std::string setupCode = SETUP_CODE;
     bool lockAlwaysUnlock = HOMEKEY_ALWAYS_UNLOCK;
     bool lockAlwaysLock = HOMEKEY_ALWAYS_LOCK;
@@ -672,6 +672,9 @@ String miscHtmlProcess(const String& var) {
   else if (var == "GPIOAUNLOCK") {
     return String(espConfig::miscConfig.gpioActionUnlockState);
   }
+  else if (var == "HWFINISH") {
+    return String(espConfig::miscConfig.hk_key_color);
+  }
   return String();
 }
 
@@ -945,6 +948,9 @@ void setupWeb() {
       }
       else if (!strcmp(p->name().c_str(), "gpio-a-unlock")) {
         espConfig::miscConfig.gpioActionUnlockState = p->value().toInt();
+      }
+      else if (!strcmp(p->name().c_str(), "hk-hwfinish")) {
+        espConfig::miscConfig.hk_key_color = p->value().toInt();
       }
     }
     try {
@@ -1292,7 +1298,7 @@ void setup() {
   serialNumber.append(macStr);
   new Characteristic::SerialNumber(serialNumber.c_str());
   new Characteristic::FirmwareRevision(app_version.c_str());
-  std::vector<uint8_t> decB64 = utils::decodeB64(espConfig::miscConfig.hk_key_color.c_str());
+  std::vector<uint8_t> decB64 = utils::decodeB64(hk_color_vals[HK_COLOR(espConfig::miscConfig.hk_key_color)]);
   TLV8 hwfinish(NULL, 0);
   hwfinish.unpack(decB64.data(), decB64.size());
   new Characteristic::HardwareFinish(hwfinish);
@@ -1304,7 +1310,7 @@ void setup() {
   new Characteristic::Version();
   homeSpan.setControllerCallback(pairCallback);
   homeSpan.setWifiCallback(wifiCallback);
-  
+
   if (espConfig::miscConfig.nfcNeopixelPin && espConfig::miscConfig.nfcNeopixelPin != 255) {
     pixels.setPin(espConfig::miscConfig.nfcNeopixelPin);
     pixels.begin();
