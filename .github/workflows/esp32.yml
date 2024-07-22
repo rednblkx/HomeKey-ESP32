@@ -6,7 +6,7 @@ name: CI
 # events but only for the master branch
 on:
   push:
-    branches: [ main ]
+    branches: [ main, dev ]
     paths:
       - 'src/**'
       - 'platformio.ini'
@@ -67,3 +67,15 @@ jobs:
         with:
           name: esp32c3-app-firmware
           path: .pio/build/c3/firmware.bin
+      - name: Build Firmware ESP32-S3
+        run: pio run -e s3
+      - name: Archive merged firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32s3-firmware-merged
+          path: .pio/build/s3/firmware_merged.bin
+      - name: Archive firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32s3-app-firmware
+          path: .pio/build/s3/firmware.bin
