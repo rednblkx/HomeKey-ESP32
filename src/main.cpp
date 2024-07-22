@@ -1271,7 +1271,6 @@ void setup() {
   homeSpan.enableOTA(espConfig::miscConfig.otaPasswd.c_str());
   homeSpan.setPortNum(1201);
   homeSpan.begin(Category::Locks, espConfig::miscConfig.deviceName.c_str(), "HK", "HomeKey-ESP32");
-  homeSpan.autoPoll();
 
   new SpanUserCommand('D', "Delete Home Key Data", deleteReaderData);
   new SpanUserCommand('L', "Set Log Level", setLogLevel);
@@ -1325,4 +1324,6 @@ void setup() {
 //////////////////////////////////////
 
 void loop() {
+  homeSpan.poll();
+  vTaskDelay(5);
 }
