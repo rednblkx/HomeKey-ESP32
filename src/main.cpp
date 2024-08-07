@@ -1,8 +1,5 @@
 #include <hkAuthContext.h>
 #include <HomeKey.h>
-#include "pb_encode.h"
-#include "pb_decode.h"
-#include "HomeKeyData.pb.h"
 #include <utils.h>
 #include <chrono>
 #include <HK_HomeKit.h>
@@ -23,7 +20,6 @@
 #include <app_hap_setup_payload.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
-#include <pb_common.h>
 #include "console.h"
 
 const char* TAG = "MAIN";
@@ -38,13 +34,6 @@ enum lockStates
   LOCKING
 };
 
-#define BLINK_GPIO CONFIG_BLINK_GPIO
-
-#define PN532_SCK CONFIG_PN532_SCK
-#define PN532_MOSI CONFIG_PN532_MOSI
-#define PN532_SS CONFIG_PN532_SS
-#define PN532_MISO CONFIG_PN532_MISO
-
 #define LOCK_TASK_PRIORITY  1
 #define LOCK_TASK_STACKSIZE 4 * 1024
 #define LOCK_TASK_NAME      "hap_lock"
@@ -53,22 +42,17 @@ PN532_SPI pn532spi;
 PN532 nfc(pn532spi);
 
 nvs_handle savedData;
-HomeKeyData_ReaderData readerData = HomeKeyData_ReaderData_init_zero;
+readerData_t readerData;
 KeyFlow hkFlow = KeyFlow::kFlowFAST;
 esp_mqtt_client_handle_t client = nullptr;
 uint8_t ecpData[18] = { 0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0 };
 
 bool save_to_nvs() {
-  uint8_t *buffer = (uint8_t *)malloc(HomeKeyData_ReaderData_size);
-  pb_ostream_t ostream = pb_ostream_from_buffer(buffer, HomeKeyData_ReaderData_size);
-  bool encodeStatus = pb_encode(&ostream, &HomeKeyData_ReaderData_msg, &readerData);
-  LOG(I, "PB ENCODE STATUS: %d", encodeStatus);
-  LOG(I, "PB BYTES WRITTEN: %d", ostream.bytes_written);
-  esp_err_t set_nvs = nvs_set_blob(savedData, "READERDATA", buffer, ostream.bytes_written);
+  std::vector<uint8_t> cborBuf = nlohmann::json::to_msgpack(readerData);
+  esp_err_t set_nvs = nvs_set_blob(savedData, "READERDATA", cborBuf.data(), cborBuf.size());
   esp_err_t commit_nvs = nvs_commit(savedData);
   LOG(D, "NVS SET STATUS: %s", esp_err_to_name(set_nvs));
   LOG(D, "NVS COMMIT STATUS: %s", esp_err_to_name(commit_nvs));
-  free(buffer);
   return !set_nvs && !commit_nvs;
 }
 
@@ -103,7 +87,7 @@ void with_crc16(unsigned char* data, unsigned int size, unsigned char* result) {
 }
 
 void deleteReaderData() {
-  memset(&readerData, 0, sizeof(readerData));
+  readerData = {};
   esp_err_t erase_nvs = nvs_erase_key(savedData, "READERDATA");
   esp_err_t commit_nvs = nvs_commit(savedData);
   LOG(D,"*** NVS W STATUS");
@@ -120,20 +104,25 @@ void hap_event_handler(hap_event_t event, void* data) {
       std::vector<uint8_t> id = utils::getHashIdentifier(ctrl->info.ltpk, 32, true);
       ESP_LOG_BUFFER_HEX(TAG, ctrl->info.ltpk, 32);
       LOG(D, "Found allocated controller - Hash: %s", utils::bufToHexString(id.data(), 8).c_str());
-      HomeKeyData_KeyIssuer* foundIssuer = nullptr;
+      hkIssuer_t* foundIssuer = nullptr;
       for (auto& issuer : readerData.issuers) {
-        if (!memcmp(issuer.issuer_id, id.data(), 8)) {
-          LOG(D, "Issuer %s already added, skipping", utils::bufToHexString(issuer.issuer_id, 8).c_str());
+        if (!memcmp(issuer.issuer_id.data(), id.data(), 8)) {
+          LOG(D, "Issuer %s already added, skipping", utils::bufToHexString(issuer.issuer_id.data(), 8).c_str());
           foundIssuer = &issuer;
           break;
         }
       }
       if (foundIssuer == nullptr) {
         LOG(D, "Adding new issuer - ID: %s", utils::bufToHexString(id.data(), 8).c_str());
-        memcpy(readerData.issuers[readerData.issuers_count].issuer_id, id.data(), 8);
-        memcpy(readerData.issuers[readerData.issuers_count].issuer_pk, ctrl->info.ltpk, 32);
-        readerData.issuers_count++;
-        save_to_nvs();
+        hkIssuer_t issuer;
+        issuer.issuer_id = id;
+        issuer.issuer_pk.insert(issuer.issuer_pk.begin(), ctrl->info.ltpk, ctrl->info.ltpk + 32);
+        readerData.issuers.emplace_back(issuer);
+        std::vector<uint8_t> data = nlohmann::json::to_msgpack(readerData);
+        esp_err_t set_nvs = nvs_set_blob(savedData, "READERDATA", data.data(), data.size());
+        esp_err_t commit_nvs = nvs_commit(savedData);
+        LOG(I, "NVS SET STATUS: %s", esp_err_to_name(set_nvs));
+        LOG(I, "NVS COMMIT STATUS: %s", esp_err_to_name(commit_nvs));
       }
     }
   }
@@ -142,10 +131,10 @@ void hap_event_handler(hap_event_t event, void* data) {
     if (ctrl_count == 0) {
       deleteReaderData();
     }
-    else {
-      char* ctrl_id = (char*)data;
-      hap_ctrl_data_t* ctrl = hap_get_controller_data(ctrl_id);
-      if (ctrl->valid) {
+    // else {
+    //   char* ctrl_id = (char*)data;
+    //   hap_ctrl_data_t* ctrl = hap_get_controller_data(ctrl_id);
+    //   if (ctrl->valid) {
       // readerData.issuers.erase(std::remove_if(readerData.issuers.begin(), readerData.issuers.end(),
       //   [ctrl](HomeKeyData_KeyIssuer x) {
       //     std::vector<uint8_t> id = utils::getHashIdentifier(ctrl->info.ltpk, 32, true);
@@ -157,8 +146,8 @@ void hap_event_handler(hap_event_t event, void* data) {
       //     return true;
       //   }),
       //   readerData.issuers.end());
-      }
-    }
+      // }
+    // }
   }
 }
 
@@ -201,10 +190,10 @@ uint8_t tlv8_data[128];
 int nfcAccess_write(hap_write_data_t write_data[], int count,
         void *serv_priv, void *write_priv)
 {
-  LOG(D, "PROVISIONED READER KEY: %s", utils::bufToHexString(readerData.reader_sk, sizeof(readerData.reader_sk)).c_str());
-  LOG(D, "READER PUBLIC KEY: %s", utils::bufToHexString(readerData.reader_pk, sizeof(readerData.reader_pk)).c_str());
-  LOG(D, "READER GROUP IDENTIFIER: %s", utils::bufToHexString(readerData.reader_group_id, sizeof(readerData.reader_group_id)).c_str());
-  LOG(D, "READER UNIQUE IDENTIFIER: %s", utils::bufToHexString(readerData.reader_id, sizeof(readerData.reader_id)).c_str());
+  LOG(I, "PROVISIONED READER KEY: %s", utils::bufToHexString(readerData.reader_sk.data(), readerData.reader_sk.size(), true).c_str());
+  LOG(I, "READER PUBLIC KEY: %s", utils::bufToHexString(readerData.reader_pk.data(), readerData.reader_pk.size(), true).c_str());
+  LOG(I, "READER GROUP IDENTIFIER: %s", utils::bufToHexString(readerData.reader_gid.data(), readerData.reader_gid.size(), true).c_str());
+  LOG(I, "READER UNIQUE IDENTIFIER: %s", utils::bufToHexString(readerData.reader_id.data(), readerData.reader_id.size(), true).c_str());
   int i, ret = HAP_SUCCESS;
     hap_write_data_t *write;
     for (i = 0; i < count; i++) {
@@ -213,12 +202,14 @@ int nfcAccess_write(hap_write_data_t write_data[], int count,
         *(write->status) = HAP_STATUS_VAL_INVALID;
         if (!strcmp(hap_char_get_type_uuid(write->hc), HAP_CHAR_UUID_NFC_ACCESS_CONTROL_POINT)) {
           hap_tlv8_val_t buf = write->val.t;
-          esp_log_buffer_hex_internal(TAG, buf.buf, buf.buflen, ESP_LOG_INFO);
-          HK_HomeKit ctx(readerData, savedData, "READERDATA");
-          auto result = ctx.processResult(std::vector<uint8_t>(buf.buf, buf.buf + buf.buflen));
+          auto tlv_rx_data = std::vector<uint8_t>(buf.buf, buf.buf + buf.buflen);
+          // esp_log_buffer_hex_internal(TAG, tlv_rx_data.data(), tlv_rx_data.size(), ESP_LOG_INFO);
+          ESP_LOGD(TAG, "TLV RX DATA: %s SIZE: %d", utils::bufToHexString(tlv_rx_data.data(), tlv_rx_data.size(), true).c_str(), tlv_rx_data.size());
+          HK_HomeKit ctx(readerData, savedData, "READERDATA", tlv_rx_data);
+          auto result = ctx.processResult();
           memcpy(tlv8_data, result.data(), result.size());
-          if (strlen((const char*)readerData.reader_group_id) > 0) {
-            memcpy(ecpData + 8, readerData.reader_group_id, sizeof(readerData.reader_group_id));
+          if (readerData.reader_gid.size() > 0) {
+            memcpy(ecpData + 8, readerData.reader_gid.data(), readerData.reader_gid.size());
             with_crc16(ecpData, 16, ecpData + 16);
           }
           hap_val_t new_val;
@@ -251,7 +242,7 @@ void nfc_thread_entry(void* arg) {
     nfc.SAMConfig();
     ESP_LOGI("NFC_SETUP", "Waiting for an ISO14443A card");
   }
-  memcpy(ecpData + 8, readerData.reader_group_id, sizeof(readerData.reader_group_id));
+  memcpy(ecpData + 8, readerData.reader_gid.data(), readerData.reader_gid.size());
   with_crc16(ecpData, 16, ecpData + 16);
   while (1) {
     nfc.writeRegister(0x633d, 0, true);
@@ -260,7 +251,7 @@ void nfc_thread_entry(void* arg) {
     nfc.inCommunicateThru(ecpData, sizeof(ecpData), res, &resLen, 100, false);
     uint8_t uid[16];
     uint8_t uidLen = 0;
-    uint16_t atqa[1];
+    uint8_t atqa[2];
     uint8_t sak[1];
     bool passiveTarget = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, atqa, sak, 500, true, false);
     if (passiveTarget) {
@@ -279,8 +270,11 @@ void nfc_thread_entry(void* arg) {
       esp_log_buffer_hex_internal(TAG, selectCmdRes, selectCmdResLength, ESP_LOG_INFO);
       if (status && selectCmdRes[selectCmdResLength - 2] == 0x90 && selectCmdRes[selectCmdResLength - 1] == 0x00) {
         LOG(D, "*** SELECT HOMEKEY APPLET SUCCESSFUL ***");
-        LOG(D, "Reader Private Key: %s", utils::bufToHexString((const uint8_t*)readerData.reader_pk, sizeof(readerData.reader_pk)).c_str());
-        HKAuthenticationContext authCtx(nfc, readerData, savedData);
+        LOG(D, "Reader Private Key: %s", utils::bufToHexString(readerData.reader_pk.data(), readerData.reader_pk.size()).c_str());
+        std::function<bool(uint8_t*, uint8_t, uint8_t*, uint16_t*, bool)> lambda = [=](uint8_t* send, uint8_t sendLen, uint8_t* res, uint16_t* resLen, bool ignoreLog) -> bool {
+          return nfc.inDataExchange(send, sendLen, res, resLen);
+        };
+        HKAuthenticationContext authCtx(lambda, readerData, savedData);
         auto authResult = authCtx.authenticate(hkFlow);
         if (std::get<2>(authResult) != kFlowFailed) {
           LOG(D, "!!!!!!!!!!!!AUTHENTICATED!!!!!!!!!!!!!");
@@ -292,13 +286,13 @@ void nfc_thread_entry(void* arg) {
       nfc.inRelease();
       nfc.setPassiveActivationRetries(5);
       int counter = 50;
-      bool deviceStillInField = nfc.inListPassiveTarget(true);
+      bool deviceStillInField = nfc.inListPassiveTarget();
       LOG(I, "Target still present: %d", deviceStillInField);
       while (deviceStillInField) {
         if (counter == 0) break;
         vTaskDelay(100 / portTICK_PERIOD_MS);
         nfc.inRelease();
-        deviceStillInField = nfc.inListPassiveTarget(true);
+        deviceStillInField = nfc.inListPassiveTarget();
         --counter;
         LOG(I, "Target still present: %d Counter=%d", deviceStillInField, counter);
       }
@@ -408,9 +402,10 @@ void lock_thread_entry(void *arg)
 
     /* After all the initializations are done, start the HAP core */
     /* Start Wi-Fi */
-    app_wifi_start(portMAX_DELAY);
-    // hap_http_debug_enable();
-    hap_start();
+    if (app_wifi_start(portMAX_DELAY) == ESP_OK) {
+      // hap_http_debug_enable();
+      hap_start();
+    }
 
     console_init();
     /* The task ends here. The read/write callbacks will be invoked by the HAP Framework */
@@ -430,31 +425,33 @@ void app_main(void){
     NULL, LOCK_TASK_PRIORITY, NULL);
   const esp_app_desc_t* app_desc = esp_app_get_description();
   std::string app_version = app_desc->version;
-  size_t len;
   const char* TAG = "SETUP";
   esp_log_level_set(TAG, ESP_LOG_DEBUG);
   nvs_open("SAVED_DATA", NVS_READWRITE, &savedData);
+  size_t len = 0;
   if (!nvs_get_blob(savedData, "READERDATA", NULL, &len)) {
-    uint8_t savedBuf[len];
-    pb_istream_t istream;
-    nvs_get_blob(savedData, "READERDATA", savedBuf, &len);
+    std::vector<uint8_t> savedBuf(len);
+    nvs_get_blob(savedData, "READERDATA", savedBuf.data(), &len);
     LOG(I, "NVS DATA LENGTH: %d", len);
-    ESP_LOG_BUFFER_HEX_LEVEL(TAG, savedBuf, len, ESP_LOG_DEBUG);
-    istream = pb_istream_from_buffer(savedBuf, len);
-    bool decodeStatus = pb_decode(&istream, &HomeKeyData_ReaderData_msg, &readerData);
-    LOG(I, "PB DECODE STATUS: %d", decodeStatus);
-    if (!decodeStatus) {
-      LOG(I, "PB ERROR: %s", PB_GET_ERROR(&istream));
+    ESP_LOG_BUFFER_HEX_LEVEL(TAG, savedBuf.data(), savedBuf.size(), ESP_LOG_DEBUG);
+    try {
+      // delete readerData;
+      // deserializeData(savedBuf, readerData);
+      nlohmann::json data = nlohmann::json::from_msgpack(savedBuf);
+      data.get_to<readerData_t>(readerData);
+    }
+    catch (const std::exception& e) {
+      std::cerr << e.what() << '\n';
     }
   }
 
-  LOG(D, "READER GROUP ID (%d): %s", strlen((const char*)readerData.reader_group_id), utils::bufToHexString(readerData.reader_group_id, sizeof(readerData.reader_group_id)).c_str());
-  LOG(D, "READER UNIQUE ID (%d): %s", strlen((const char*)readerData.reader_id), utils::bufToHexString(readerData.reader_id, sizeof(readerData.reader_id)).c_str());
+  LOG(D, "READER GROUP ID (%d): %s", readerData.reader_gid.size(), utils::bufToHexString(readerData.reader_gid.data(), readerData.reader_gid.size()).c_str());
+  LOG(D, "READER UNIQUE ID (%d): %s", readerData.reader_id.size(), utils::bufToHexString(readerData.reader_id.data(), readerData.reader_id.size()).c_str());
 
-  LOG(I, "HOMEKEY ISSUERS: %d", readerData.issuers_count);
-  for (auto* issuer = readerData.issuers; issuer != (readerData.issuers + readerData.issuers_count); ++issuer) {
-    LOG(D, "Issuer ID: %s, Public Key: %s", utils::bufToHexString(issuer->issuer_id, sizeof(issuer->issuer_id)).c_str(), utils::bufToHexString(issuer->issuer_pk, sizeof(issuer->issuer_pk)).c_str());
+  LOG(I, "HOMEKEY ISSUERS: %d", readerData.issuers.size());
+  for (auto &&issuer : readerData.issuers) {
+    LOG(D, "Issuer ID: %s, Public Key: %s", utils::bufToHexString(issuer.issuer_id.data(), issuer.issuer_id.size()).c_str(), utils::bufToHexString(issuer.issuer_pk.data(), issuer.issuer_pk.size()).c_str());
   }
 
-  xTaskCreate(nfc_thread_entry, "nfc_task", 8192, NULL, 2, NULL);
+  xTaskCreate(nfc_thread_entry, "nfc_task", 8192, NULL, 1, NULL);
  }
