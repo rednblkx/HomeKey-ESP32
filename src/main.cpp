@@ -1,6 +1,6 @@
 #include <hkAuthContext.h>
 #include <HomeKey.h>
-#include <utils.h>
+#include <hk-utils.h>
 #include <chrono>
 #include <HK_HomeKit.h>
 #include <config.h>
@@ -101,19 +101,19 @@ void hap_event_handler(hap_event_t event, void* data) {
     char* ctrl_id = (char*)data;
     hap_ctrl_data_t* ctrl = hap_get_controller_data(ctrl_id);
     if (ctrl->valid) {
-      std::vector<uint8_t> id = utils::getHashIdentifier(ctrl->info.ltpk, 32, true);
+      std::vector<uint8_t> id = hk_utils::getHashIdentifier(ctrl->info.ltpk, 32, true);
       ESP_LOG_BUFFER_HEX(TAG, ctrl->info.ltpk, 32);
-      LOG(D, "Found allocated controller - Hash: %s", utils::bufToHexString(id.data(), 8).c_str());
+      LOG(D, "Found allocated controller - Hash: %s", hk_utils::bufToHexString(id.data(), 8).c_str());
       hkIssuer_t* foundIssuer = nullptr;
       for (auto& issuer : readerData.issuers) {
         if (!memcmp(issuer.issuer_id.data(), id.data(), 8)) {
-          LOG(D, "Issuer %s already added, skipping", utils::bufToHexString(issuer.issuer_id.data(), 8).c_str());
+          LOG(D, "Issuer %s already added, skipping", hk_utils::bufToHexString(issuer.issuer_id.data(), 8).c_str());
           foundIssuer = &issuer;
           break;
         }
       }
       if (foundIssuer == nullptr) {
-        LOG(D, "Adding new issuer - ID: %s", utils::bufToHexString(id.data(), 8).c_str());
+        LOG(D, "Adding new issuer - ID: %s", hk_utils::bufToHexString(id.data(), 8).c_str());
         hkIssuer_t issuer;
         issuer.issuer_id = id;
         issuer.issuer_pk.insert(issuer.issuer_pk.begin(), ctrl->info.ltpk, ctrl->info.ltpk + 32);
@@ -137,12 +137,12 @@ void hap_event_handler(hap_event_t event, void* data) {
     //   if (ctrl->valid) {
       // readerData.issuers.erase(std::remove_if(readerData.issuers.begin(), readerData.issuers.end(),
       //   [ctrl](HomeKeyData_KeyIssuer x) {
-      //     std::vector<uint8_t> id = utils::getHashIdentifier(ctrl->info.ltpk, 32, true);
-      //     LOG(D, "Found allocated controller - Hash: %s", utils::bufToHexString(id.data(), 8).c_str());
+      //     std::vector<uint8_t> id = hk_utils::getHashIdentifier(ctrl->info.ltpk, 32, true);
+      //     LOG(D, "Found allocated controller - Hash: %s", hk_utils::bufToHexString(id.data(), 8).c_str());
       //     if (!memcmp(x.publicKey, id.data(), 8)) {
       //       return false;
       //     }
-      //     LOG(D, "Issuer ID: %s - Associated controller was removed from Home, erasing from reader data.", utils::bufToHexString(x.issuerId, 8).c_str());
+      //     LOG(D, "Issuer ID: %s - Associated controller was removed from Home, erasing from reader data.", hk_utils::bufToHexString(x.issuerId, 8).c_str());
       //     return true;
       //   }),
       //   readerData.issuers.end());
@@ -190,10 +190,10 @@ uint8_t tlv8_data[128];
 int nfcAccess_write(hap_write_data_t write_data[], int count,
         void *serv_priv, void *write_priv)
 {
-  LOG(I, "PROVISIONED READER KEY: %s", utils::bufToHexString(readerData.reader_sk.data(), readerData.reader_sk.size(), true).c_str());
-  LOG(I, "READER PUBLIC KEY: %s", utils::bufToHexString(readerData.reader_pk.data(), readerData.reader_pk.size(), true).c_str());
-  LOG(I, "READER GROUP IDENTIFIER: %s", utils::bufToHexString(readerData.reader_gid.data(), readerData.reader_gid.size(), true).c_str());
-  LOG(I, "READER UNIQUE IDENTIFIER: %s", utils::bufToHexString(readerData.reader_id.data(), readerData.reader_id.size(), true).c_str());
+  LOG(I, "PROVISIONED READER KEY: %s", hk_utils::bufToHexString(readerData.reader_sk.data(), readerData.reader_sk.size(), true).c_str());
+  LOG(I, "READER PUBLIC KEY: %s", hk_utils::bufToHexString(readerData.reader_pk.data(), readerData.reader_pk.size(), true).c_str());
+  LOG(I, "READER GROUP IDENTIFIER: %s", hk_utils::bufToHexString(readerData.reader_gid.data(), readerData.reader_gid.size(), true).c_str());
+  LOG(I, "READER UNIQUE IDENTIFIER: %s", hk_utils::bufToHexString(readerData.reader_id.data(), readerData.reader_id.size(), true).c_str());
   int i, ret = HAP_SUCCESS;
     hap_write_data_t *write;
     for (i = 0; i < count; i++) {
@@ -204,7 +204,7 @@ int nfcAccess_write(hap_write_data_t write_data[], int count,
           hap_tlv8_val_t buf = write->val.t;
           auto tlv_rx_data = std::vector<uint8_t>(buf.buf, buf.buf + buf.buflen);
           // esp_log_buffer_hex_internal(TAG, tlv_rx_data.data(), tlv_rx_data.size(), ESP_LOG_INFO);
-          ESP_LOGD(TAG, "TLV RX DATA: %s SIZE: %d", utils::bufToHexString(tlv_rx_data.data(), tlv_rx_data.size(), true).c_str(), tlv_rx_data.size());
+          ESP_LOGD(TAG, "TLV RX DATA: %s SIZE: %d", hk_utils::bufToHexString(tlv_rx_data.data(), tlv_rx_data.size(), true).c_str(), tlv_rx_data.size());
           HK_HomeKit ctx(readerData, savedData, "READERDATA", tlv_rx_data);
           auto result = ctx.processResult();
           memcpy(tlv8_data, result.data(), result.size());
@@ -270,7 +270,7 @@ void nfc_thread_entry(void* arg) {
       esp_log_buffer_hex_internal(TAG, selectCmdRes, selectCmdResLength, ESP_LOG_INFO);
       if (status && selectCmdRes[selectCmdResLength - 2] == 0x90 && selectCmdRes[selectCmdResLength - 1] == 0x00) {
         LOG(D, "*** SELECT HOMEKEY APPLET SUCCESSFUL ***");
-        LOG(D, "Reader Private Key: %s", utils::bufToHexString(readerData.reader_pk.data(), readerData.reader_pk.size()).c_str());
+        LOG(D, "Reader Private Key: %s", hk_utils::bufToHexString(readerData.reader_pk.data(), readerData.reader_pk.size()).c_str());
         std::function<bool(uint8_t*, uint8_t, uint8_t*, uint16_t*, bool)> lambda = [=](uint8_t* send, uint8_t sendLen, uint8_t* res, uint16_t* resLen, bool ignoreLog) -> bool {
           return nfc.inDataExchange(send, sendLen, res, resLen);
         };
@@ -445,12 +445,12 @@ void app_main(void){
     }
   }
 
-  LOG(D, "READER GROUP ID (%d): %s", readerData.reader_gid.size(), utils::bufToHexString(readerData.reader_gid.data(), readerData.reader_gid.size()).c_str());
-  LOG(D, "READER UNIQUE ID (%d): %s", readerData.reader_id.size(), utils::bufToHexString(readerData.reader_id.data(), readerData.reader_id.size()).c_str());
+  LOG(D, "READER GROUP ID (%d): %s", readerData.reader_gid.size(), hk_utils::bufToHexString(readerData.reader_gid.data(), readerData.reader_gid.size()).c_str());
+  LOG(D, "READER UNIQUE ID (%d): %s", readerData.reader_id.size(), hk_utils::bufToHexString(readerData.reader_id.data(), readerData.reader_id.size()).c_str());
 
   LOG(I, "HOMEKEY ISSUERS: %d", readerData.issuers.size());
   for (auto &&issuer : readerData.issuers) {
-    LOG(D, "Issuer ID: %s, Public Key: %s", utils::bufToHexString(issuer.issuer_id.data(), issuer.issuer_id.size()).c_str(), utils::bufToHexString(issuer.issuer_pk.data(), issuer.issuer_pk.size()).c_str());
+    LOG(D, "Issuer ID: %s, Public Key: %s", hk_utils::bufToHexString(issuer.issuer_id.data(), issuer.issuer_id.size()).c_str(), hk_utils::bufToHexString(issuer.issuer_pk.data(), issuer.issuer_pk.size()).c_str());
   }
 
   xTaskCreate(nfc_thread_entry, "nfc_task", 8192, NULL, 1, NULL);
