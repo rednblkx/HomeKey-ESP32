@@ -34,6 +34,7 @@ enum customLockActions
 #define MQTT_DISCOVERY true //Enable or disable discovery for home assistant tags functionality, set to true to enable.
 
 // MQTT Topics
+#define MQTT_LWT_TOPIC MQTT_CLIENTID"/status"
 #define MQTT_CUSTOM_STATE_TOPIC "topic/homekey/custom_state" // MQTT Topic for publishing custom lock state
 #define MQTT_CUSTOM_STATE_CTRL_TOPIC "topic/homekey/set_custom_state" // MQTT Control Topic with custom lock state
 #define MQTT_AUTH_TOPIC "topic/homekey/auth" // MQTT Topic for publishing HomeKey authentication data or RFID UID

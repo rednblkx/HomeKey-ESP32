@@ -48,6 +48,7 @@ namespace espConfig
     std::string mqttPassword = MQTT_PASSWORD;
     std::string mqttClientId = MQTT_CLIENTID;
     /* MQTT Topics */
+    std::string lwtTopic = MQTT_LWT_TOPIC;
     std::string hkTopic = MQTT_AUTH_TOPIC;
     std::string lockStateTopic = MQTT_STATE_TOPIC;
     std::string lockStateCmd = MQTT_SET_STATE_TOPIC;
@@ -61,7 +62,7 @@ namespace espConfig
     bool hassMqttDiscoveryEnabled = MQTT_DISCOVERY;
     std::map<std::string, int> customLockStates = { {"C_LOCKED", C_LOCKED}, {"C_UNLOCKING", C_UNLOCKING}, {"C_UNLOCKED", C_UNLOCKED}, {"C_LOCKING", C_LOCKING}, {"C_JAMMED", C_JAMMED}, {"C_UNKNOWN", C_UNKNOWN} };
     std::map<std::string, int> customLockActions = { {"UNLOCK", UNLOCK}, {"LOCK", LOCK} };
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(espConfig::mqttConfig_t, mqttBroker, mqttPort, mqttUsername, mqttPassword, mqttClientId, hkTopic, lockStateTopic, lockStateCmd, lockCStateCmd, lockTStateCmd, lockCustomStateTopic, lockCustomStateCmd, lockEnableCustomState, hassMqttDiscoveryEnabled, customLockStates, customLockActions)
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(espConfig::mqttConfig_t, mqttBroker, mqttPort, mqttUsername, mqttPassword, mqttClientId, lwtTopic, hkTopic, lockStateTopic, lockStateCmd, lockCStateCmd, lockTStateCmd, lockCustomStateTopic, lockCustomStateCmd, lockEnableCustomState, hassMqttDiscoveryEnabled, customLockStates, customLockActions)
   } mqttData;
 
   struct misc_config_t
@@ -459,8 +460,6 @@ void mqtt_connected_event(void* event_handler_arg, esp_event_base_t event_base, 
   std::string serialNumber = "HK-";
   serialNumber.append(macStr);
   LOG(I, "MQTT connected");
-  std::string statusTopic;
-  statusTopic.append(espConfig::mqttData.mqttClientId).append("/status");
   if (espConfig::mqttData.hassMqttDiscoveryEnabled) {
     json payload;
     payload["topic"] = espConfig::mqttData.hkTopic.c_str();
@@ -508,7 +507,7 @@ void mqtt_connected_event(void* event_handler_arg, esp_event_base_t event_base, 
     payload["state_unlocking"] = "4";
     payload["state_locking"] = "5";
     payload["state_jammed"] = "2";
-    payload["availability_topic"] = statusTopic.c_str();
+    payload["availability_topic"] = espConfig::mqttData.lwtTopic.c_str();
     payload["unique_id"] = id;
     payload["device"] = device;
     payload["retain"] = "false";
@@ -518,7 +517,7 @@ void mqtt_connected_event(void* event_handler_arg, esp_event_base_t event_base, 
     esp_mqtt_client_publish(client, lockConfigTopic.c_str(), bufferpub.c_str(), bufferpub.length(), 1, true);
     LOG(D, "MQTT PUBLISHED DISCOVERY");
   }
-  esp_mqtt_client_publish(client, statusTopic.c_str(), "online", 6, 1, true);
+  esp_mqtt_client_publish(client, espConfig::mqttData.lwtTopic.c_str(), "online", 6, 1, true);
   if (espConfig::mqttData.lockEnableCustomState) {
     esp_mqtt_client_subscribe(client, espConfig::mqttData.lockCustomStateCmd.c_str(), 0);
   }
@@ -560,15 +559,13 @@ void mqtt_data_handler(void* event_handler_arg, esp_event_base_t event_base, int
  * parameters.
  */
 static void mqtt_app_start(void) {
-  std::string statusTopic;
-  statusTopic.append(espConfig::mqttData.mqttClientId).append("/status");
   esp_mqtt_client_config_t mqtt_cfg = { };
   mqtt_cfg.host = espConfig::mqttData.mqttBroker.c_str();
   mqtt_cfg.port = espConfig::mqttData.mqttPort;
   mqtt_cfg.client_id = espConfig::mqttData.mqttClientId.c_str();
   mqtt_cfg.username = espConfig::mqttData.mqttUsername.c_str();
   mqtt_cfg.password = espConfig::mqttData.mqttPassword.c_str();
-  mqtt_cfg.lwt_topic = statusTopic.c_str();
+  mqtt_cfg.lwt_topic = espConfig::mqttData.lwtTopic.c_str();
   mqtt_cfg.lwt_msg = "offline";
   mqtt_cfg.lwt_qos = 1;
   mqtt_cfg.lwt_retain = 1;
@@ -726,6 +723,9 @@ String mqttHtmlProcess(const String& var) {
   else if (var == "MQTTPASSWORD") {
     return String(espConfig::mqttData.mqttPassword.c_str());
   }
+  else if (var == "MQTTLWTTOPIC") {
+    return String(espConfig::mqttData.lwtTopic.c_str());
+  }
   else if (var == "HKTOPIC") {
     return String(espConfig::mqttData.hkTopic.c_str());
   }
@@ -816,6 +816,9 @@ void setupWeb() {
       }
       else if (!strcmp(p->name().c_str(), "mqtt-password")) {
         espConfig::mqttData.mqttPassword = p->value().c_str();
+      }
+      else if (!strcmp(p->name().c_str(), "mqtt-lwt-topic")) {
+        espConfig::mqttData.lwtTopic = p->value().c_str();
       }
       else if (!strcmp(p->name().c_str(), "mqtt-hktopic")) {
         espConfig::mqttData.hkTopic = p->value().c_str();
@@ -1222,6 +1225,11 @@ void setup() {
     LOG(D, "MQTTDATA - JSON(%d): %s", len, str.c_str());
     try {
       nlohmann::json data = nlohmann::json::parse(str);
+      if (!data.contains("lwtTopic") && data.contains("mqttClientId")) {
+        std::string lwt = data["mqttClientId"];
+        lwt.append("/status");
+        data["lwtTopic"] = lwt;
+      }
       data.get_to<espConfig::mqttConfig_t>(espConfig::mqttData);
     }
     catch (const std::exception& e) {
