@@ -59,8 +59,9 @@ namespace espConfig
     /* Flags */
     bool lockEnableCustomState = MQTT_CUSTOM_STATE_ENABLED;
     bool hassMqttDiscoveryEnabled = MQTT_DISCOVERY;
-    std::map<std::string, int> customLockStates = {{"C_LOCKED", C_LOCKED}, {"C_UNLOCKING", C_UNLOCKING}, {"C_UNLOCKED", C_UNLOCKED}, {"C_LOCKING", C_LOCKING}, {"C_JAMMED", C_JAMMED}, {"C_UNKNOWN", C_UNKNOWN}};
-    std::map<std::string, int> customLockActions = {{"UNLOCK", UNLOCK}, {"LOCK", LOCK}};
+    std::map<std::string, int> customLockStates = { {"C_LOCKED", C_LOCKED}, {"C_UNLOCKING", C_UNLOCKING}, {"C_UNLOCKED", C_UNLOCKED}, {"C_LOCKING", C_LOCKING}, {"C_JAMMED", C_JAMMED}, {"C_UNKNOWN", C_UNKNOWN} };
+    std::map<std::string, int> customLockActions = { {"UNLOCK", UNLOCK}, {"LOCK", LOCK} };
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(espConfig::mqttConfig_t, mqttBroker, mqttPort, mqttUsername, mqttPassword, mqttClientId, hkTopic, lockStateTopic, lockStateCmd, lockCStateCmd, lockTStateCmd, lockCustomStateTopic, lockCustomStateCmd, lockEnableCustomState, hassMqttDiscoveryEnabled, customLockStates, customLockActions)
   } mqttData;
 
   struct misc_config_t
@@ -84,10 +85,9 @@ namespace espConfig
     uint8_t gpioActionPin = GPIO_ACTION_PIN;
     bool gpioActionLockState = GPIO_ACTION_LOCK_STATE;
     bool gpioActionUnlockState = GPIO_ACTION_UNLOCK_STATE;
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(misc_config_t, deviceName, otaPasswd, hk_key_color, setupCode, lockAlwaysUnlock, lockAlwaysLock, controlPin, hsStatusPin, nfcSuccessPin, nfcSuccessTime, nfcNeopixelPin, nfcSuccessHL, nfcFailPin, nfcFailTime, nfcFailHL, gpioActionEnable, gpioActionPin, gpioActionLockState, gpioActionUnlockState)
   } miscConfig;
-}
-JSONCONS_ALL_MEMBER_TRAITS(espConfig::mqttConfig_t, mqttBroker, mqttPort, mqttUsername, mqttPassword, mqttClientId, hkTopic, lockStateTopic, lockStateCmd, lockCStateCmd, lockTStateCmd, lockCustomStateTopic, lockCustomStateCmd, lockEnableCustomState, hassMqttDiscoveryEnabled, customLockStates, customLockActions)
-JSONCONS_ALL_MEMBER_TRAITS(espConfig::misc_config_t, deviceName, hk_key_color, lockAlwaysUnlock, lockAlwaysLock, controlPin, hsStatusPin, nfcSuccessPin, nfcNeopixelPin, nfcSuccessHL, nfcFailPin, nfcFailHL, gpioActionEnable, gpioActionPin, gpioActionLockState, gpioActionUnlockState, otaPasswd, setupCode)
+};
 
 KeyFlow hkFlow = KeyFlow::kFlowFAST;
 SpanCharacteristic* lockCurrentState;
@@ -97,9 +97,8 @@ esp_mqtt_client_handle_t client = nullptr;
 Adafruit_NeoPixel pixels(1, espConfig::miscConfig.nfcNeopixelPin, NEO_GRB + NEO_KHZ800);
 
 bool save_to_nvs() {
-  std::vector<uint8_t> cborBuf;
-  jsoncons::msgpack::encode_msgpack(readerData, cborBuf);
-  esp_err_t set_nvs = nvs_set_blob(savedData, "READERDATA", cborBuf.data(), cborBuf.size());
+  std::vector<uint8_t> serialized = nlohmann::json::to_msgpack(readerData);
+  esp_err_t set_nvs = nvs_set_blob(savedData, "READERDATA", serialized.data(), serialized.size());
   esp_err_t commit_nvs = nvs_commit(savedData);
   LOG(D, "NVS SET STATUS: %s", esp_err_to_name(set_nvs));
   LOG(D, "NVS COMMIT STATUS: %s", esp_err_to_name(commit_nvs));
@@ -471,7 +470,6 @@ void mqtt_connected_event(void* event_handler_arg, esp_event_base_t event_base, 
     char identifier[18];
     sprintf(identifier, "%.2s%.2s%.2s%.2s%.2s%.2s", HAPClient::accessory.ID, HAPClient::accessory.ID + 3, HAPClient::accessory.ID + 6, HAPClient::accessory.ID + 9, HAPClient::accessory.ID + 12, HAPClient::accessory.ID + 15);
     std::string id = identifier;
-    device["identifiers"] = json_array_arg;
     device["identifiers"].push_back(id);
     device["identifiers"].push_back(serialNumber);
     device["manufacturer"] = "rednblkx";
@@ -479,7 +477,7 @@ void mqtt_connected_event(void* event_handler_arg, esp_event_base_t event_base, 
     device["sw_version"] = app_version.c_str();
     device["serial_number"] = serialNumber;
     payload["device"] = device;
-    std::string bufferpub = payload.as<std::string>();
+    std::string bufferpub = payload.dump();
     std::string rfidTopic;
     rfidTopic.append("homeassistant/tag/").append(espConfig::mqttData.mqttClientId).append("/rfid/config");
     esp_mqtt_client_publish(client, rfidTopic.c_str(), bufferpub.c_str(), bufferpub.length(), 1, true);
@@ -487,7 +485,7 @@ void mqtt_connected_event(void* event_handler_arg, esp_event_base_t event_base, 
     payload["topic"] = espConfig::mqttData.hkTopic;
     payload["value_template"] = "{{ value_json.issuerId }}";
     payload["device"] = device;
-    bufferpub = payload.as<std::string>();
+    bufferpub = payload.dump();
     std::string issuerTopic;
     issuerTopic.append("homeassistant/tag/").append(espConfig::mqttData.mqttClientId).append("/hkIssuer/config");
     esp_mqtt_client_publish(client, issuerTopic.c_str(), bufferpub.c_str(), bufferpub.length(), 1, true);
@@ -495,7 +493,7 @@ void mqtt_connected_event(void* event_handler_arg, esp_event_base_t event_base, 
     payload["topic"] = espConfig::mqttData.hkTopic;
     payload["value_template"] = "{{ value_json.endpointId }}";
     payload["device"] = device;
-    bufferpub = payload.as<std::string>();
+    bufferpub = payload.dump();
     std::string endpointTopic;
     endpointTopic.append("homeassistant/tag/").append(espConfig::mqttData.mqttClientId).append("/hkEndpoint/config");
     esp_mqtt_client_publish(client, endpointTopic.c_str(), bufferpub.c_str(), bufferpub.length(), 1, true);
@@ -514,7 +512,7 @@ void mqtt_connected_event(void* event_handler_arg, esp_event_base_t event_base, 
     payload["unique_id"] = id;
     payload["device"] = device;
     payload["retain"] = "false";
-    bufferpub = payload.as<std::string>();
+    bufferpub = payload.dump();
     std::string lockConfigTopic;
     lockConfigTopic.append("homeassistant/lock/").append(espConfig::mqttData.mqttClientId.c_str()).append("/lock/config");
     esp_mqtt_client_publish(client, lockConfigTopic.c_str(), bufferpub.c_str(), bufferpub.length(), 1, true);
@@ -872,9 +870,9 @@ void setupWeb() {
       }
     }
     try {
-      std::string strNvs;
-      encode_json(espConfig::mqttData, strNvs, indenting::indent);
-      esp_err_t set_nvs = nvs_set_blob(savedData, "MQTTDATA", strNvs.data(), strNvs.size());
+      json json_mqtt_config = espConfig::mqttData;
+      std::string string_mqtt = json_mqtt_config.dump();
+      esp_err_t set_nvs = nvs_set_blob(savedData, "MQTTDATA", string_mqtt.c_str(), string_mqtt.size());
       esp_err_t commit_nvs = nvs_commit(savedData);
       LOG(V, "SET_STATUS: %s", esp_err_to_name(set_nvs));
       LOG(V, "COMMIT_STATUS: %s", esp_err_to_name(commit_nvs));
@@ -956,9 +954,9 @@ void setupWeb() {
       }
     }
     try {
-      std::string strNvs;
-      encode_json(espConfig::miscConfig, strNvs, indenting::indent);
-      esp_err_t set_nvs = nvs_set_blob(savedData, "MISCDATA", strNvs.data(), strNvs.size());
+      json json_misc_config = espConfig::miscConfig;
+      std::string string_misc = json_misc_config.dump();
+      esp_err_t set_nvs = nvs_set_blob(savedData, "MISCDATA", string_misc.c_str(), string_misc.size());
       esp_err_t commit_nvs = nvs_commit(savedData);
       LOG(V, "SET_STATUS: %s", esp_err_to_name(set_nvs));
       LOG(V, "COMMIT_STATUS: %s", esp_err_to_name(commit_nvs));
@@ -992,6 +990,16 @@ void mqtt_publish(std::string topic, std::string payload, uint8_t qos, bool reta
   if (client != nullptr) {
     esp_mqtt_client_publish(client, topic.c_str(), payload.c_str(), payload.length(), 0, retain);
   } else LOG(W, "MQTT Client not initialized, cannot publish message");
+}
+
+std::string hex_representation(const std::vector<uint8_t>& v) {
+  std::string hex_tmp;
+  for (auto x : v) {
+      std::ostringstream oss;
+      oss << std::hex << std::uppercase << std::setw(2) << std::setfill('0') << (unsigned)x;
+      hex_tmp += oss.str();
+  }
+  return hex_tmp;
 }
 
 void nfc_thread_entry(void* arg) {
@@ -1048,10 +1056,10 @@ void nfc_thread_entry(void* arg) {
           bool status = true;
           xQueueSend(gpio_led_handle, &status, 0);
           json payload;
-          payload["issuerId"] = json(byte_string_arg, std::get<0>(authResult), semantic_tag::base16);
-          payload["endpointId"] = json(byte_string_arg, std::get<1>(authResult), semantic_tag::base16);
+          payload["issuerId"] = hex_representation(std::get<0>(authResult));
+          payload["endpointId"] = hex_representation(std::get<1>(authResult));
           payload["homekey"] = true;
-          std::string payloadStr = payload.as<std::string>();
+          std::string payloadStr = payload.dump();
           mqtt_publish(espConfig::mqttData.hkTopic, payloadStr, 0, false);
           if (espConfig::miscConfig.lockAlwaysUnlock) {
             lockCurrentState->setVal(lockStates::UNLOCKED);
@@ -1114,15 +1122,12 @@ void nfc_thread_entry(void* arg) {
         LOG(I, "Invalid Response, probably not Homekey, publishing target's UID");
         bool status = true;
         xQueueSend(gpio_led_handle, &status, 0);
-        json_options options;
-        options.byte_string_format(byte_string_chars_format::base16);
         json payload;
-        payload["atqa"] = byte_string(atqa, 2);
-        payload["sak"] = byte_string(sak, 1);
-        payload["uid"] = byte_string(uid, uidLen);
+        payload["atqa"] = hex_representation(std::vector<uint8_t>(atqa, atqa + 2));
+        payload["sak"] = hex_representation(std::vector<uint8_t>(sak, sak + 1));
+        payload["uid"] = hex_representation(std::vector<uint8_t>(uid, uid + uidLen));
         payload["homekey"] = false;
-        std::string payload_dump;
-        payload.dump(payload_dump, options);
+        std::string payload_dump = payload.dump();
         if (client != nullptr) {
           esp_mqtt_client_publish(client, espConfig::mqttData.hkTopic.c_str(), payload_dump.c_str(), 0, 0, false);
         }
@@ -1202,7 +1207,8 @@ void setup() {
     LOG(I, "NVS DATA LENGTH: %d", len);
     ESP_LOG_BUFFER_HEX_LEVEL(TAG, savedBuf.data(), savedBuf.size(), ESP_LOG_DEBUG);
     try {
-      readerData = msgpack::decode_msgpack<readerData_t>(savedBuf);
+      nlohmann::json data = nlohmann::json::from_msgpack(savedBuf);
+      data.get_to<readerData_t>(readerData);
     }
     catch (const std::exception& e) {
       std::cerr << e.what() << '\n';
@@ -1215,7 +1221,8 @@ void setup() {
     std::string str(msgpack, msgpack + len);
     LOG(D, "MQTTDATA - JSON(%d): %s", len, str.c_str());
     try {
-      espConfig::mqttData = decode_json<espConfig::mqttConfig_t>(str);
+      nlohmann::json data = nlohmann::json::parse(str);
+      data.get_to<espConfig::mqttConfig_t>(espConfig::mqttData);
     }
     catch (const std::exception& e) {
       LOG(E, "%s", e.what());
@@ -1227,7 +1234,8 @@ void setup() {
     std::string str(msgpack, msgpack + len);
     LOG(D, "MISCDATA - JSON(%d): %s", len, str.c_str());
     try {
-      espConfig::miscConfig = decode_json<espConfig::misc_config_t>(str);
+      nlohmann::json data = nlohmann::json::parse(str);
+      data.get_to<espConfig::misc_config_t>(espConfig::miscConfig);
     }
     catch (const std::exception& e) {
       LOG(E, "%s", e.what());
