@@ -15,7 +15,7 @@
       <input type="text" name="mqtt-clientid" id="mqtt-clientid" placeholder="homekey_mqtt" required value="%MQTTCLIENTID%">
     </div>
   </div>
-  <div style="display: grid; gap: 8px; grid-template-columns: auto auto;">
+  <div style="display: grid; gap: 8px; grid-template-columns: auto auto;margin-bottom: .5rem;">
     <div style="display: flex; flex-direction: column;">
       <label for="mqtt-username">Username</label>
       <input type="text" name="mqtt-username" id="mqtt-username" placeholder="username" required value="%MQTTUSERNAME%">
@@ -25,10 +25,16 @@
       <input type="password" name="mqtt-password" id="mqtt-password" placeholder="password" required value="%MQTTPASSWORD%">
     </div>
   </div>
-  <div style="margin-top: 1rem;">
-    <label for="mqtt-discovery-enable">Enable HASS MQTT Discovery</label>
-    <input type='hidden' name='mqtt-discovery-enable' value='0'>
-    <input type="checkbox" name="mqtt-discovery-enable" id="mqtt-discovery-enable" value="1">
+  <div style="display: grid; gap: 8px; grid-template-columns: auto;">
+    <div style="display: grid; gap: 8px; grid-template-columns: auto auto;">
+      <label for="mqtt-lwt-topic">MQTT LWT Topic</label>
+      <input type="text" name="mqtt-lwt-topic" id="mqtt-lwt-topic" placeholder="homekey_mqtt/status" required="" value="%MQTTLWTTOPIC%">
+    </div>
+    <div style="display: grid; gap: 8px; grid-template-columns: auto auto;">
+      <label for="mqtt-discovery-enable">Enable HASS MQTT Discovery</label>
+      <input type="hidden" name="mqtt-discovery-enable" value="0">
+      <input type="checkbox" name="mqtt-discovery-enable" id="mqtt-discovery-enable" value="1">
+    </div>
   </div>
   <h3>MQTT Core Topics</h3>
   <div style="display: grid; gap: 8px; grid-template-columns: auto auto;">
