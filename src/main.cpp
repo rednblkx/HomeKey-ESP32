@@ -839,6 +839,18 @@ void setupWeb() {
   webServer.on("/misc.css", HTTP_GET, [](AsyncWebServerRequest* request) {
     request->send(LittleFS, "/misc.css", "text/css", false, nullptr);
     });
+  webServer.on("/hk-finish-0.webp", HTTP_GET, [](AsyncWebServerRequest* request) {
+    request->send(LittleFS, "/hk-finish-0.webp", "image/webp", false);
+    });
+    webServer.on("/hk-finish-1.webp", HTTP_GET, [](AsyncWebServerRequest* request) {
+    request->send(LittleFS, "/hk-finish-1.webp", "image/webp", false);
+    });
+    webServer.on("/hk-finish-2.webp", HTTP_GET, [](AsyncWebServerRequest* request) {
+    request->send(LittleFS, "/hk-finish-2.webp", "image/webp", false);
+    });
+    webServer.on("/hk-finish-3.webp", HTTP_GET, [](AsyncWebServerRequest* request) {
+    request->send(LittleFS, "/hk-finish-3.webp", "image/webp", false);
+    });
   webServer.on("/info", HTTP_GET, [](AsyncWebServerRequest* request) {
     request->send(LittleFS, "/info.html", "text/html", false, hkInfoHtmlProcess);
     });
