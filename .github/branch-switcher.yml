@@ -1,0 +1,5 @@
+exclude:
+- label: no-base-switch
+switchComment: >
+  Hey @{{author}}, the base branch of your pull request has been changed
+  to the preferred {{preferredBranch}} branch. Have a nice day! :wave:
