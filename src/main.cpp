@@ -831,38 +831,14 @@ String actionsProcess(const String& var) {
   }
   return "";
 }
-
+bool headersFix(AsyncWebServerRequest* request) { request->addInterestingHeader("ANY"); return true; };
 void setupWeb() {
-  webServer.on("/", HTTP_GET, [](AsyncWebServerRequest* request) {
-    request->send(LittleFS, "/index.html", "text/html", false, indexProcess);
-    });
-  webServer.on("/misc.css", HTTP_GET, [](AsyncWebServerRequest* request) {
-    request->send(LittleFS, "/misc.css", "text/css", false, nullptr);
-    });
-  webServer.on("/hk-finish-0.webp", HTTP_GET, [](AsyncWebServerRequest* request) {
-    request->send(LittleFS, "/hk-finish-0.webp", "image/webp", false);
-    });
-    webServer.on("/hk-finish-1.webp", HTTP_GET, [](AsyncWebServerRequest* request) {
-    request->send(LittleFS, "/hk-finish-1.webp", "image/webp", false);
-    });
-    webServer.on("/hk-finish-2.webp", HTTP_GET, [](AsyncWebServerRequest* request) {
-    request->send(LittleFS, "/hk-finish-2.webp", "image/webp", false);
-    });
-    webServer.on("/hk-finish-3.webp", HTTP_GET, [](AsyncWebServerRequest* request) {
-    request->send(LittleFS, "/hk-finish-3.webp", "image/webp", false);
-    });
-  webServer.on("/info", HTTP_GET, [](AsyncWebServerRequest* request) {
-    request->send(LittleFS, "/info.html", "text/html", false, hkInfoHtmlProcess);
-    });
-  webServer.on("/mqtt", HTTP_GET, [](AsyncWebServerRequest* request) {
-    request->send(LittleFS, "/mqtt.html", "text/html", false, mqttHtmlProcess);
-    });
-  webServer.on("/misc", HTTP_GET, [](AsyncWebServerRequest* request) {
-    request->send(LittleFS, "/misc.html", "text/html", false, miscHtmlProcess);
-    });
-  webServer.on("/actions", HTTP_GET, [](AsyncWebServerRequest* request) {
-    request->send(LittleFS, "/actions.html", "text/html", false, actionsProcess);
-    });
+  webServer.serveStatic("/info", LittleFS, "/info.html").setTemplateProcessor(hkInfoHtmlProcess).setFilter(headersFix);
+  webServer.serveStatic("/mqtt", LittleFS, "/mqtt.html").setTemplateProcessor(mqttHtmlProcess).setFilter(headersFix);
+  webServer.serveStatic("/misc", LittleFS, "/misc.html").setTemplateProcessor(miscHtmlProcess).setFilter(headersFix);
+  webServer.serveStatic("/actions", LittleFS, "/actions.html").setTemplateProcessor(actionsProcess).setFilter(headersFix);
+  webServer.serveStatic("/assets", LittleFS, "/assets/").setFilter(headersFix);
+  webServer.serveStatic("/", LittleFS, "/").setDefaultFile("index.html").setTemplateProcessor(indexProcess).setFilter(headersFix);
   webServer.on("/mqttconfig", HTTP_POST, [](AsyncWebServerRequest* request) {
     const char* TAG = "mqttconfig";
     int params = request->params();
