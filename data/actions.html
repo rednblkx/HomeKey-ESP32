@@ -123,6 +123,17 @@
         <input type="number" name="gpio-a-pin" id="gpio-a-pin" placeholder="2" required value="%GPIOAPIN%" style="width: 4rem;" min="0" max="255">
       </div>
       <div style="display: flex;margin-top: .7rem;gap: 8px;">
+        <label for="gpio-a-momentary">Momentary State</label>
+        <select name="gpio-a-momentary" id="gpio-a-momentary">
+          <option value="0">Disabled</option>
+          <option value="1">Enabled</option>
+        </select>
+      </div>
+      <div style="display: flex;margin-top: .7rem;gap: 8px;">
+        <label for="gpio-a-mo-timeout">Momentary Timeout</label>
+        <input type="number" name="gpio-a-mo-timeout" id="gpio-a-mo-timeout" placeholder="2" required value="%GPIOAMOTIME%" style="width: 4rem;">
+      </div>
+      <div style="display: flex;margin-top: .7rem;gap: 8px;">
         <label for="gpio-a-lock">GPIO State - Locked</label>
         <select name="gpio-a-lock" id="gpio-a-lock">
           <option value="0">LOW</option>
@@ -148,10 +159,12 @@
   let nfcfhl = document.querySelector("#nfc-f-hl");
   let actionunlock = document.querySelector("#gpio-a-unlock");
   let actionlock = document.querySelector("#gpio-a-lock");
+  let actionMomentary = document.querySelector("#gpio-a-momentary");
   nfcshl.selectedIndex = "%NFC1HL%";
   nfcfhl.selectedIndex = "%NFC2HL%";
   actionlock.selectedIndex = "%GPIOALOCK%";
   actionunlock.selectedIndex = "%GPIOALOCK%";
+  actionMomentary.selectedIndex = "%GPIOAMOEN%";
   let form = document.getElementById("actions-config");
   async function handleForm(event) {
       event.preventDefault();
