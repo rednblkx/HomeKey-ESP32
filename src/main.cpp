@@ -930,7 +930,8 @@ void setupWeb() {
       LOG(E, "%s", e.what());
     }
 
-    request->send(200, "text/plain", "Received Config, Restarting...");
+    request->send(200, "text/plain", "Config Saved, Restarting...");
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
     ESP.restart();
     });
   webServer.on("/misc-config", HTTP_POST, [](AsyncWebServerRequest* request) {
@@ -981,7 +982,7 @@ void setupWeb() {
       LOG(E, "%s", e.what());
     }
 
-    request->send(200, "text/plain", "Received Config, Restarting...");
+    request->send(200, "text/plain", "Config Saved, Restarting...");
     delay(1000);
     ESP.restart();
     });
@@ -1064,7 +1065,7 @@ void setupWeb() {
       LOG(E, "%s", e.what());
     }
 
-    request->send(200, "text/plain", "Received Config!");
+    request->send(200, "text/plain", "Config Saved!");
     });
   webServer.onNotFound(notFound);
   webServer.begin();

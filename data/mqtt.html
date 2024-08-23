@@ -138,7 +138,7 @@
       </div>
     </div>
   </div>
-  <div style="display: flex;justify-content: space-around;margin-top: 2rem;gap: 16px;">
+  <div id="buttons-group" style="display: flex;justify-content: space-around;margin-top: 2rem;gap: 16px;">
     <button type="submit" style="cursor: pointer;padding-inline: 1rem;padding-block: .5rem;">Submit</button>
     <button type="reset" style="cursor: pointer;padding-inline: 1rem;padding-block: .5rem;"
       class="destructive-btn">Reset</button>
@@ -155,12 +155,12 @@
       method: "post",
     });
     let string = await response.text();
-    let component = document.getElementById("component");
-    let elStatus = document.createElement("p");
+    let component = document.getElementById("buttons-group");
+    let elStatus = document.createElement("h4");
     elStatus.id = "status-text";
-    elStatus.style = "color: red;"
+    elStatus.style = "color: red;text-align: center;margin-bottom: 0;";
     elStatus.innerText = string;
-    document.querySelector("#component > h2").insertAdjacentElement("afterend", elStatus);
+    component.insertAdjacentElement("beforebegin", elStatus);
     setTimeout(() => { document.querySelector("#status-text").remove() }, 5000);
   }
   form.addEventListener('submit', handleForm);
