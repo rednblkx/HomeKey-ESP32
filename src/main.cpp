@@ -95,7 +95,9 @@ namespace espConfig
     uint8_t gpioActionPin = GPIO_ACTION_PIN;
     bool gpioActionLockState = GPIO_ACTION_LOCK_STATE;
     bool gpioActionUnlockState = GPIO_ACTION_UNLOCK_STATE;
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(misc_config_t, deviceName, otaPasswd, hk_key_color, setupCode, lockAlwaysUnlock, lockAlwaysLock, controlPin, hsStatusPin, nfcSuccessPin, nfcSuccessTime, nfcNeopixelPin, neopixelSuccessColor, neopixelFailureColor, neopixelSuccessTime, neopixelFailTime, nfcSuccessHL, nfcFailPin, nfcFailTime, nfcFailHL, gpioActionPin, gpioActionLockState, gpioActionUnlockState)
+    bool gpioActionMomentaryEnabled = GPIO_ACTION_MOMENTARY_STATE;
+    uint16_t gpioActionMomentaryTimeout = GPIO_ACTION_MOMENTARY_TIMEOUT;
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(misc_config_t, deviceName, otaPasswd, hk_key_color, setupCode, lockAlwaysUnlock, lockAlwaysLock, controlPin, hsStatusPin, nfcSuccessPin, nfcSuccessTime, nfcNeopixelPin, neopixelSuccessColor, neopixelFailureColor, neopixelSuccessTime, neopixelFailTime, nfcSuccessHL, nfcFailPin, nfcFailTime, nfcFailHL, gpioActionPin, gpioActionLockState, gpioActionUnlockState, gpioActionMomentaryEnabled, gpioActionMomentaryTimeout)
   } miscConfig;
 };
 
@@ -795,6 +797,12 @@ String actionsProcess(const String& var) {
   else if (var == "GPIOAUNLOCK") {
     return String(espConfig::miscConfig.gpioActionUnlockState);
   }
+  else if (var == "GPIOAMOEN") {
+    return String(espConfig::miscConfig.gpioActionMomentaryEnabled);
+  }
+  else if (var == "GPIOAMOTIME") {
+    return String(espConfig::miscConfig.gpioActionMomentaryTimeout);
+  }
   else if (var == "NEOSTIME") {
     return String(espConfig::miscConfig.neopixelSuccessTime);
   }
@@ -1046,6 +1054,12 @@ void setupWeb() {
       }
       else if (!strcmp(p->name().c_str(), "gpio-a-unlock")) {
         espConfig::miscConfig.gpioActionUnlockState = p->value().toInt();
+      }
+      else if (!strcmp(p->name().c_str(), "gpio-a-momentary")) {
+        espConfig::miscConfig.gpioActionMomentaryEnabled = p->value().toInt();
+      }
+      else if (!strcmp(p->name().c_str(), "gpio-a-mo-timeout")) {
+        espConfig::miscConfig.gpioActionMomentaryTimeout = p->value().toInt();
       }
     }
     try {
