@@ -1,0 +1,63 @@
+:root {
+  background-color: #353030;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.2) 0.05rem, transparent 8%);
+  background-size: 2vh 2.2vh;
+}
+
+fieldset {
+    border-color: black;
+}
+
+h2 {
+    background: repeating-linear-gradient( 135deg, transparent, transparent 9px, #8e8271 10px, #8e8271 10px );
+    margin: 0!important;
+    padding: 1rem!important;
+    margin-bottom: 1rem!important;
+    margin-top: 1rem!important;
+}
+
+p,
+h3,
+h4,
+h2,
+h1,
+label,
+li,
+ul,
+legend {
+    color: white;
+}
+
+* {
+    border-color: #8e8271;
+}
+
+.destructive-btn {
+  background-color: hsl(0 62.8% 30.6%/1);
+  color: white;
+}
+
+.selected-btn {
+    opacity: .5;
+}
+
+button {
+    padding: .5rem .8rem .5rem .8rem;
+    box-sizing: border-box;
+    border: 0 solid #e5e7eb;
+    color: hsl(240 5.9% 10%);
+    background-color: hsl(0 0% 98%);
+    border-radius: calc(0.5rem - 2px);
+    white-space: nowrap;
+    font-weight: 500;
+    font-size: .875rem;
+    line-height: 1.25rem;
+    display: inline-flex;
+    background-image: none;
+    text-transform: none;
+    border-color: hsl(240 3.7% 15.9%) !important;
+}
+
+button:hover {
+    opacity: .9;
+}
