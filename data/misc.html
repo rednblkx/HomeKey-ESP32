@@ -8,12 +8,14 @@
             style="display:flex;flex-direction: column;border: 2px #8e8271 dashed;padding: 1rem;margin-bottom: 1rem;gap: 8px;">
             <div style="display: flex;flex-direction: column;">
                 <label for="device-name">Device Name</label>
-                <input type="text" name="device-name" id="device-name" placeholder="HK" required value="%DEVICENAME%" style="width: fit-content;" />
+                <input type="text" name="device-name" id="device-name" placeholder="HK" required value="%DEVICENAME%"
+                    style="width: fit-content;" />
             </div>
 
             <div style="display: flex;flex-direction: column;">
                 <label for="hk-setupcode">Setup Code</label>
-                <input type="number" name="hk-setupcode" id="hk-setupcode" placeholder="46637726" required value="%HKSETUPCODE%" style="width: fit-content;" />
+                <input type="number" name="hk-setupcode" id="hk-setupcode" placeholder="46637726" required
+                    value="%HKSETUPCODE%" style="width: fit-content;" />
             </div>
 
             <div>
@@ -28,21 +30,36 @@
             </div>
             <fieldset>
                 <legend>HomeKey Card Finish:</legend>
-                <div>
-                    <label for="hk-tan">Tan</label>
-                    <input type="radio" id="hk-finish-0" name="hk-hwfinish" value="0" />
-                </div>
-                <div>
-                    <label for="hk-gold">Gold</label>
-                    <input type="radio" id="hk-finish-1" name="hk-hwfinish" value="1" />
-                </div>
-                <div>
-                    <label for="hk-silver">Silver</label>
-                    <input type="radio" id="hk-finish-2" name="hk-hwfinish" value="2" />
-                </div>
-                <div>
-                    <label for="hk-black">Black</label>
-                    <input type="radio" id="hk-finish-3" name="hk-hwfinish" value="3" />
+                <div style="display: flex;justify-content: space-evenly;margin-bottom: 0;padding-bottom: 0;">
+                    <div id="hkfinish"
+                        style="background-image: url(assets/hk-finish-0.webp);background-size: contain;background-repeat: no-repeat;width: 9rem;">
+                    </div>
+                    <div style="display: flex;flex-direction: column;align-items: flex-end;">
+                        <div>
+                            <label id="tan" for="hk-tan">Tan</label>
+                            <input type="radio" id="hk-finish-0"
+                                onClick="document.getElementById('hkfinish').style.backgroundImage=`url(assets/hk-finish-0.webp)`"
+                                name="hk-hwfinish" value="0" />
+                        </div>
+                        <div>
+                            <label id="gold" for="hk-gold">Gold</label>
+                            <input type="radio" id="hk-finish-1"
+                                onClick="document.getElementById('hkfinish').style.backgroundImage=`url(assets/hk-finish-1.webp)`"
+                                name="hk-hwfinish" value="1" />
+                        </div>
+                        <div>
+                            <label id="silver" for="hk-silver">Silver</label>
+                            <input type="radio" id="hk-finish-2"
+                                onClick="document.getElementById('hkfinish').style.backgroundImage=`url(assets/hk-finish-2.webp)`"
+                                name="hk-hwfinish" value="2" />
+                        </div>
+                        <div>
+                            <label id="black" for="hk-black">Black</label>
+                            <input type="radio" id="hk-finish-3"
+                                onClick="document.getElementById('hkfinish').style.backgroundImage=`url(assets/hk-finish-3.webp)`"
+                                name="hk-hwfinish" value="3" />
+                        </div>
+                    </div>
                 </div>
             </fieldset>
         </div>
@@ -91,6 +108,7 @@
     document
         .getElementById(`hk-finish-${hwfinish}`)
         .setAttribute("checked", "");
+    document.getElementById('hkfinish').style.backgroundImage = `url(assets/hk-finish-${hwfinish}.webp)`;
     if (nfcSuccessHL) {
         document.getElementById("nfc-s-hl").setAttribute("checked", "");
     }
