@@ -1,0 +1,180 @@
+<form id="actions-config" action="actions-config" method="post"
+  style="display: inline-flex; flex-direction: column;margin-bottom: 0rem;">
+
+  <h2 style="text-align: center;">Hardware Actions</h2>
+
+  <div
+    style="display: flex;flex-direction: column;border: 1px #8e8271 solid;border-radius: 8px;padding: 1rem;box-shadow: 0px 1px 1px 0px;margin-bottom: 1rem;background-color: #2d1d1d;">
+    <h3 style="margin-top: 0;text-align: center;">HomeKey/NFC Triggers</h3>
+    <h4 style="margin-top: 0;">Executed on successful/failed HomeKey Authentication or NFC Tag detection(marked as successful event)</h4>
+    <h4 style="margin-top: 0;">Intended only to provide a feedback hence both the Neopixel and Simple GPIO have a momentary state</h4>
+      <div style="display:flex;flex-direction: column;border: 2px #8e8271 dashed;padding: 1rem;margin-bottom: 1rem;">
+        <h3 style="margin: 0 0 1rem;">Neopixel</h3>
+        <div style="display: flex; flex-direction: column;">
+          <label for="nfc-s-pin">Auth Success/Failure GPIO Pin</label>
+          <input type="number" name="nfc-neopixel-pin" id="nfc-neopixel-pin" placeholder="8" required value="%NFCNEOPIXELPIN%" min="0" max="255">
+        </div>
+        <div style="display: flex;flex-direction: column;margin-top: .7rem;">
+          <label for="neopixel-s-time">Timeout(ms) - Auth Success</label>
+          <input type="number" name="neopixel-s-time" id="neopixel-s-time" placeholder="1000" required value="%NEOSTIME%">
+        </div>
+        <div style="display: flex;flex-direction: column;margin-top: .7rem;">
+          <label for="neopixel-f-time">Timeout(ms) - Auth Failed</label>
+          <input type="number" name="neopixel-f-time" id="neopixel-f-time" placeholder="1000" required value="%NEOFTIME%">
+        </div>
+        <div
+          style="display: flex;gap: 8px;border: 1px #8e8271 solid;padding: .5rem;margin-top: 1rem;justify-content: space-around;">
+          <div id="nfc-s-color" style="display: flex;flex-direction: column;">
+            <div style="display: flex;">
+              <h4 style="margin: .1rem 0 0;text-align: center;">Auth Success Color</h4>
+            </div>
+            <div id="nfc-s-vals" style="display: flex;gap:8px;flex-wrap: wrap;justify-content: center;">
+              <div style="display: flex; flex-direction: column;">
+                <label for="nfc-s-red-pixel">R</label>
+                <input type="number" style="max-width: 3.5rem" name="nfc-s-red-pixel" id="nfc-s-red-pixel" min="0" max="255" placeholder="255" required value="%SREDPIXELVAL%">
+              </div>
+              <div style="display: flex; flex-direction: column;">
+                <label for="nfc-s-green-pixel">G</label>
+                <input type="number" style="max-width: 3.5rem" name="nfc-s-green-pixel" id="nfc-s-green-pixel" min="0" max="255" placeholder="255" required value="%SGREENPIXELVAL%">
+              </div>
+              <div style="display: flex; flex-direction: column;">
+                <label for="nfc-s-blue-pixel">B</label>
+                <input type="number" style="max-width: 3.5rem" name="nfc-s-blue-pixel" id="nfc-s-blue-pixel" min="0" max="255" placeholder="255" required value="%SBLUEPIXELVAL%">
+              </div>
+            </div>
+          </div>
+          <span style="border: 1px #8e8271 solid; margin: 1rem;"></span>
+          <div id="nfc-f-color" style="display: flex;flex-direction: column;">
+            <div style="display: flex;">
+              <h4 style="margin: .1rem 0 0;text-align: center;">Auth Failure Color</h4>
+            </div>
+            <div id="nfc-f-vals" style="display: flex;gap:8px;flex-wrap: wrap;justify-content: center;">
+              <div style="display: flex; flex-direction: column;">
+                <label for="nfc-f-red-pixel">R</label>
+                <input type="number" style="max-width: 3.5rem" name="nfc-f-red-pixel" id="nfc-f-red-pixel" min="0" max="255" placeholder="255" required value="%FREDPIXELVAL%">
+              </div>
+              <div style="display: flex; flex-direction: column;">
+                <label for="nfc-f-green-pixel">G</label>
+                <input type="number" style="max-width: 3.5rem" name="nfc-f-green-pixel" id="nfc-f-green-pixel" min="0" max="255" placeholder="255" required value="%FGREENPIXELVAL%">
+              </div>
+              <div style="display: flex; flex-direction: column;">
+                <label for="nfc-f-blue-pixel">B</label>
+                <input type="number" style="max-width: 3.5rem" name="nfc-f-blue-pixel" id="nfc-f-blue-pixel" min="0" max="255" placeholder="255" required value="%FBLUEPIXELVAL%">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction: column;border: 2px #8e8271 dashed;padding: 1rem;align-items: center;">
+        <h3 style="margin: 0 0 1rem;align-self: flex-start;">Simple GPIO</h3>
+        <div style="display: flex;gap: 8px;flex-wrap: wrap;justify-content: center;">
+          <div style="display: flex;">
+            <fieldset>
+              <legend>Auth Success</legend>
+              <div style="display: flex;flex-direction: column;">
+                <label for="nfc-s-pin">GPIO Pin</label>
+                <input type="number" name="nfc-s-pin" id="nfc-s-pin" placeholder="2" required value="%NFC1PIN%" min="0" max="255">
+              </div>
+              <div style="display: flex;flex-direction: column;margin-top: .7rem;">
+                <label for="nfc-s-time">GPIO Time (ms)</label>
+                <input type="number" name="nfc-s-time" id="nfc-s-time" placeholder="1000" required value="%NFC1TIME%">
+              </div>
+              <div style="display: flex;margin-top: .7rem;gap: 8px;">
+                <label for="nfc-s-hl">GPIO State</label>
+                <select name="nfc-s-hl" id="nfc-s-hl">
+                  <option value="1">HIGH</option>
+                  <option value="0">LOW</option>
+                </select>
+              </div>
+            </fieldset>
+          </div>
+          <div style="display: flex;">
+            <fieldset>
+              <legend>Auth Failure</legend>
+              <div style="display: flex;flex-direction: column;">
+                <label for="nfc-f-pin">GPIO Pin</label>
+                <input type="number" name="nfc-f-pin" id="nfc-f-pin" placeholder="2" required value="%NFC2PIN%" min="0" max="255">
+              </div>
+              <div style="display: flex;flex-direction: column;margin-top: .7rem;">
+                <label for="nfc-f-time">GPIO Time (ms)</label>
+                <input type="number" name="nfc-f-time" id="nfc-f-time" placeholder="1000" required value="%NFC2TIME%">
+              </div>
+              <div style="display: flex;margin-top: .7rem;gap: 8px;">
+                <label for="nfc-f-hl">GPIO State</label>
+                <select name="nfc-f-hl" id="nfc-f-hl">
+                  <option value="1">HIGH</option>
+                  <option value="0">LOW</option>
+                </select>
+              </div>
+            </fieldset>
+          </div>
+        </div>
+      </div>
+  </div>
+  <div style="display: flex;flex-direction: column;border: 1px #8e8271 solid;border-radius: 8px;padding: 1rem;box-shadow: 0px 1px 1px 0px;background-color: #2d1d1d;">
+    <h3 style="margin-top: 0;text-align: center;">HomeKit/HomeKey Triggers</h3>
+    <h4 style="margin-top: 0;margin-bottom: .5rem;">Executed upon interaction in the Home app or on successful HomeKey Authentication</h4>
+    <h4 style="margin-top: 0;">Follows "Always Lock/Unlock on HomeKey" option</h4>
+    <div style="display:flex;flex-direction: column;border: 2px #8e8271 dashed;padding: 1rem;">
+      <h3 style="margin: 0 0 1rem;align-self: flex-start;">Simple GPIO</h3>
+      <div style="display: flex;gap: 8px;">
+        <label for="gpio-a-pin">GPIO Pin</label>
+        <input type="number" name="gpio-a-pin" id="gpio-a-pin" placeholder="2" required value="%GPIOAPIN%" style="width: 4rem;" min="0" max="255">
+      </div>
+      <div style="display: flex;margin-top: .7rem;gap: 8px;">
+        <label for="gpio-a-lock">GPIO State - Locked</label>
+        <select name="gpio-a-lock" id="gpio-a-lock">
+          <option value="0">LOW</option>
+          <option value="1">HIGH</option>
+        </select>
+      </div>
+      <div style="display: flex;margin-top: .7rem;gap: 8px;">
+        <label for="gpio-a-unlock">GPIO State - Unlocked</label>
+        <select name="gpio-a-unlock" id="gpio-a-unlock" value="0">
+          <option value="1">HIGH</option>
+          <option value="0">LOW</option>
+        </select>
+      </div>
+    </div>
+  </div>
+  <div style="display: flex;justify-content: space-around;margin-top: 2rem;">
+    <button type="submit" style="cursor: pointer;">Submit</button>
+    <button type="reset" style="cursor: pointer;" class="destructive-btn">Reset</button>
+  </div>
+</form>
+<script>
+  let nfcshl = document.querySelector("#nfc-s-hl");
+  let nfcfhl = document.querySelector("#nfc-f-hl");
+  let actionunlock = document.querySelector("#gpio-a-unlock");
+  let actionlock = document.querySelector("#gpio-a-lock");
+  nfcshl.selectedIndex = "%NFC1HL%";
+  nfcfhl.selectedIndex = "%NFC2HL%";
+  actionlock.selectedIndex = "%GPIOALOCK%";
+  actionunlock.selectedIndex = "%GPIOALOCK%";
+  let form = document.getElementById("actions-config");
+  async function handleForm(event) {
+      event.preventDefault();
+      let response = await fetch("actions-config", {
+          body: new FormData(form),
+          method: "post",
+      });
+      let string = await response.text();
+      let element = document.querySelector("#status-text");
+      if (element) {
+          element.remove();
+      }
+      let component = document.getElementById("component");
+      let elStatus = document.createElement("p");
+      elStatus.id = "status-text";
+      elStatus.style = "color: red;";
+      elStatus.innerText = string;
+      document
+          .querySelector("#component > h2")
+          .insertAdjacentElement("afterend", elStatus);
+      setTimeout(() => {
+          document.querySelector("#status-text").remove();
+      }, 5000);
+  }
+  form.addEventListener("submit", handleForm);
+</script>

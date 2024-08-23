@@ -1,146 +1,140 @@
-<h2 style="text-align: center;">Device Configuration</h2>
-<form id="misc-config" action="misc-config" method="post" style="display: inline-flex; flex-direction: column;margin-bottom: 1rem;">
+<h2 style="text-align: center;">Miscellaneous</h2>
+<form id="misc-config" action="misc-config" method="post"
+    style="display: inline-flex; flex-direction: column; margin-bottom: 0">
+    <div
+        style="display: flex;flex-direction: column;border: 1px #8e8271 solid;border-radius: 8px;padding: 1rem;box-shadow: 0px 1px 1px 0px;margin-bottom: 1rem;background-color: #2d1d1d;">
+        <h3 style="margin-top: 0;text-align: center;">HomeKit</h3>
+        <div
+            style="display:flex;flex-direction: column;border: 2px #8e8271 dashed;padding: 1rem;margin-bottom: 1rem;gap: 8px;">
+            <div style="display: flex;flex-direction: column;">
+                <label for="device-name">Device Name</label>
+                <input type="text" name="device-name" id="device-name" placeholder="HK" required value="%DEVICENAME%" style="width: fit-content;" />
+            </div>
 
-  <label for="device-name">Device Name</label>
-  <input type="text" name="device-name" id="device-name" placeholder="HK" required value="%DEVICENAME%">
+            <div style="display: flex;flex-direction: column;">
+                <label for="hk-setupcode">Setup Code</label>
+                <input type="number" name="hk-setupcode" id="hk-setupcode" placeholder="46637726" required value="%HKSETUPCODE%" style="width: fit-content;" />
+            </div>
 
-  <label for="ota-passwd">OTA Password</label>
-  <input type="text" name="ota-passwd" id="ota-passwd" placeholder="homespan-ota" required value="%OTAPASSWD%">
-
-  <label for="hk-setupcode">HomeKit Setup Code</label>
-  <input type="number" name="hk-setupcode" id="hk-setupcode" placeholder="46637726" required value="%HKSETUPCODE%">
-
-  <label for="control-pin">HomeSpan Control GPIO Pin</label>
-  <input type="number" name="control-pin" id="control-pin" placeholder="26" required value="%CONTROLPIN%">
-
-  <label for="led-pin">HomeSpan Status LED GPIO Pin</label>
-  <input type="number" name="led-pin" id="led-pin" placeholder="2" required value="%LEDPIN%">
-
-  <label for="hk-always-unlock">Always Unlock on HK Auth</label>
-  <input type='hidden' name='hk-always-unlock' value='0'>
-  <input type="checkbox" name="hk-always-unlock" id="hk-always-unlock" value="1">
-
-  <label for="hk-always-lock">Always Lock on HK Auth</label>
-  <input type='hidden' name='hk-always-lock' value='0'>
-  <input type="checkbox" name="hk-always-lock" id="hk-always-lock" value="1">
-
-  <fieldset>
-    <legend>HomeKey Card Finish:</legend>
-    <div>
-      <label for="hk-tan">Tan</label>
-      <input type="radio" id="hk-finish-0" name="hk-hwfinish" value="0" />
+            <div>
+                <label for="hk-always-lock">Always Lock on HomeKey</label>
+                <input type="hidden" name="hk-always-lock" value="0" />
+                <input type="checkbox" name="hk-always-lock" id="hk-always-lock" value="1" />
+            </div>
+            <div>
+                <label for="hk-always-unlock">Always Unlock on HomeKey</label>
+                <input type="hidden" name="hk-always-unlock" value="0" />
+                <input type="checkbox" name="hk-always-unlock" id="hk-always-unlock" value="1" />
+            </div>
+            <fieldset>
+                <legend>HomeKey Card Finish:</legend>
+                <div>
+                    <label for="hk-tan">Tan</label>
+                    <input type="radio" id="hk-finish-0" name="hk-hwfinish" value="0" />
+                </div>
+                <div>
+                    <label for="hk-gold">Gold</label>
+                    <input type="radio" id="hk-finish-1" name="hk-hwfinish" value="1" />
+                </div>
+                <div>
+                    <label for="hk-silver">Silver</label>
+                    <input type="radio" id="hk-finish-2" name="hk-hwfinish" value="2" />
+                </div>
+                <div>
+                    <label for="hk-black">Black</label>
+                    <input type="radio" id="hk-finish-3" name="hk-hwfinish" value="3" />
+                </div>
+            </fieldset>
+        </div>
     </div>
-    <div>
-      <label for="hk-gold">Gold</label>
-      <input type="radio" id="hk-finish-1" name="hk-hwfinish" value="1" />
+    <div
+        style="display: flex;flex-direction: column;border: 1px #8e8271 solid;border-radius: 8px;padding: 1rem;box-shadow: 0px 1px 1px 0px;background-color: #2d1d1d;">
+        <h3 style="margin-top: 0;text-align: center;">HomeSpan</h3>
+        <div style="display:flex;flex-direction: column;border: 2px #8e8271 dashed;padding: 1rem;margin-bottom: 1rem;">
+            <div>
+                <label for="ota-passwd">OTA Password</label>
+                <input type="text" name="ota-passwd" id="ota-passwd" placeholder="homespan-ota" required
+                    value="%OTAPASSWD%" />
+            </div>
+            <div>
+                <label for="control-pin">HomeSpan Control GPIO Pin</label>
+                <input type="number" name="control-pin" id="control-pin" placeholder="26" required
+                    value="%CONTROLPIN%" />
+            </div>
+
+            <div>
+                <label for="led-pin">HomeSpan Status LED GPIO Pin</label>
+                <input type="number" name="led-pin" id="led-pin" placeholder="2" required value="%LEDPIN%" />
+            </div>
+        </div>
     </div>
-    <div>
-      <label for="hk-silver">Silver</label>
-      <input type="radio" id="hk-finish-2" name="hk-hwfinish" value="2" />
+
+    <div style="display: flex; justify-content: space-around; margin-top: 2rem">
+        <button type="submit" style="cursor: pointer; padding-inline: 1rem; padding-block: 0.5rem">
+            Submit
+        </button>
+        <button type="reset" style="cursor: pointer; padding-inline: 1rem; padding-block: 0.5rem"
+            class="destructive-btn">
+            Reset
+        </button>
     </div>
-    <div>
-      <label for="hk-black">Black</label>
-      <input type="radio" id="hk-finish-3" name="hk-hwfinish" value="3" />
-    </div>
-  </fieldset>
-
-  <p><b>- HomeKey Events</b></p>
-
-  <label for="nfc-s-pin">Auth Success/Failure GPIO Pin (NeoPixel)</label>
-  <input type="number" name="nfc-neopixel-pin" id="nfc-neopixel-pin" placeholder="2" required value="%NFCNEOPIXELPIN%">
-
-  <label for="nfc-s-pin">Auth Success GPIO Pin</label>
-  <input type="number" name="nfc-s-pin" id="nfc-s-pin" placeholder="2" required value="%NFC1PIN%">
-
-  <label for="nfc-s-time">Auth Success GPIO Time (ms)</label>
-  <input type="number" name="nfc-s-time" id="nfc-s-time" placeholder="1000" required value="%NFC1TIME%">
-
-  <label for="nfc-s-hl">Auth Success GPIO State(checked=HIGH, unchecked=LOW)</label>
-  <input type='hidden' name='nfc-s-hl' value='0'>
-  <input type="checkbox" name="nfc-s-hl" id="nfc-s-hl" value="1">
-
-  <label for="nfc-f-pin">Auth Fail GPIO Pin</label>
-  <input type="number" name="nfc-f-pin" id="nfc-f-pin" placeholder="2" required value="%NFC2PIN%">
-
-  <label for="nfc-f-time">Auth Fail GPIO Time (ms)</label>
-  <input type="number" name="nfc-f-time" id="nfc-f-time" placeholder="1000" required value="%NFC2TIME%">
-
-  <label for="nfc-f-hl">Auth Fail GPIO State(checked=HIGH, unchecked=LOW)</label>
-  <input type='hidden' name='nfc-f-hl' value='0'>
-  <input type="checkbox" name="nfc-f-hl" id="nfc-f-hl" value="1">
-
-  <p><b>- Hardware Lock</b></p>
-
-  <label for="gpio-a-en">Enable GPIO Actions</label>
-  <input type='hidden' name='gpio-a-en' value='0'>
-  <input type="checkbox" name="gpio-a-en" id="gpio-a-en" value="1">
-
-  <label for="gpio-a-pin">GPIO Action Pin</label>
-  <input type="number" name="gpio-a-pin" id="gpio-a-pin" placeholder="2" required value="%GPIOAPIN%">
-
-  <label for="gpio-a-lock">GPIO Lock State(checked=HIGH, unchecked=LOW)</label>
-  <input type='hidden' name='gpio-a-lock' value='0'>
-  <input type="checkbox" name="gpio-a-lock" id="gpio-a-lock" value="1">
-
-  <label for="gpio-a-unlock">GPIO Unlock State(checked=HIGH, unchecked=LOW)</label>
-  <input type='hidden' name='gpio-a-unlock' value='0'>
-  <input type="checkbox" name="gpio-a-unlock" id="gpio-a-unlock" value="1">
-
-  <div style="display: flex;justify-content: space-around;margin-top: 1rem;">
-    <button type="submit" style="cursor: pointer;padding-inline: 1rem;padding-block: .5rem;">Submit</button>
-    <button type="reset" style="cursor: pointer;padding-inline: 1rem;padding-block: .5rem;">Reset</button>
-  </div>
 </form>
 <script>
-  let nfcSuccessHL = "%NFC1HL%" == true;
-  let nfcFailHL = "%NFC2HL%" == true;
-  let alwaysUnlock = "%ALWAYSUNLOCK%" == true;
-  let alwaysLock = "%ALWAYSLOCK%" == true;
-  let gpioActionEn = "%GPIOAEN%" == true;
-  let gpioActionLock = "%GPIOALOCK%" == true;
-  let gpioActionUnlock = "%GPIOAUNLOCK%" == true;
-  let hwfinish = "%HWFINISH%";
-  document.getElementById(`hk-finish-${hwfinish}`).setAttribute("checked", "");
-  if (nfcSuccessHL) {
-    document.getElementById("nfc-s-hl").setAttribute("checked", "");
-  }
-  if (nfcFailHL) {
-    document.getElementById("nfc-f-hl").setAttribute("checked", "");
-  }
-  if(alwaysUnlock){
-    document.getElementById("hk-always-unlock").setAttribute("checked", "");
-  }
-  if(alwaysLock){
-    document.getElementById("hk-always-lock").setAttribute("checked", "");
-  }
-  if(gpioActionEn){
-    document.getElementById("gpio-a-en").setAttribute("checked", "");
-  }
-  if(gpioActionLock){
-    document.getElementById("gpio-a-lock").setAttribute("checked", "");
-  }
-  if(gpioActionUnlock){
-    document.getElementById("gpio-a-unlock").setAttribute("checked", "");
-  }
-  let form = document.getElementById("misc-config");
-  async function handleForm(event) {
-    event.preventDefault();
-    let response = await fetch("misc-config", {
-      body: new FormData(form),
-      method: "post",
-    });
-    let string = await response.text();
-    let element = document.querySelector("#status-text");
-    if (element) {
-      element.remove();
+    let nfcSuccessHL = "%NFC1HL%" == true;
+    let nfcFailHL = "%NFC2HL%" == true;
+    let alwaysUnlock = "%ALWAYSUNLOCK%" == true;
+    let alwaysLock = "%ALWAYSLOCK%" == true;
+    let gpioActionEn = "%GPIOAEN%" == true;
+    let gpioActionLock = "%GPIOALOCK%" == true;
+    let gpioActionUnlock = "%GPIOAUNLOCK%" == true;
+    let hwfinish = "%HWFINISH%";
+    document
+        .getElementById(`hk-finish-${hwfinish}`)
+        .setAttribute("checked", "");
+    if (nfcSuccessHL) {
+        document.getElementById("nfc-s-hl").setAttribute("checked", "");
     }
-    let component = document.getElementById("component");
-    let elStatus = document.createElement("p");
-    elStatus.id = "status-text";
-    elStatus.style = "color: red;";
-    elStatus.innerText = string;
-    document.querySelector("#component > h2").insertAdjacentElement("afterend", elStatus);
-    setTimeout(() => { document.querySelector("#status-text").remove() }, 5000);
-  }
-  form.addEventListener('submit', handleForm);
+    if (nfcFailHL) {
+        document.getElementById("nfc-f-hl").setAttribute("checked", "");
+    }
+    if (alwaysUnlock) {
+        document.getElementById("hk-always-unlock").setAttribute("checked", "");
+    }
+    if (alwaysLock) {
+        document.getElementById("hk-always-lock").setAttribute("checked", "");
+    }
+    if (gpioActionEn) {
+        document.getElementById("gpio-a-en").setAttribute("checked", "");
+    }
+    if (gpioActionLock) {
+        document.getElementById("gpio-a-lock").setAttribute("checked", "");
+    }
+    if (gpioActionUnlock) {
+        document.getElementById("gpio-a-unlock").setAttribute("checked", "");
+    }
+    let form = document.getElementById("misc-config");
+    async function handleForm(event) {
+        event.preventDefault();
+        let response = await fetch("misc-config", {
+            body: new FormData(form),
+            method: "post",
+        });
+        let string = await response.text();
+        let element = document.querySelector("#status-text");
+        if (element) {
+            element.remove();
+        }
+        let component = document.getElementById("component");
+        let elStatus = document.createElement("p");
+        elStatus.id = "status-text";
+        elStatus.style = "color: red;";
+        elStatus.innerText = string;
+        document
+            .querySelector("#component > h2")
+            .insertAdjacentElement("afterend", elStatus);
+        setTimeout(() => {
+            document.querySelector("#status-text").remove();
+        }, 5000);
+    }
+    form.addEventListener("submit", handleForm);
 </script>
