@@ -833,12 +833,12 @@ String actionsProcess(const String& var) {
 }
 bool headersFix(AsyncWebServerRequest* request) { request->addInterestingHeader("ANY"); return true; };
 void setupWeb() {
-  webServer.serveStatic("/info", LittleFS, "/info.html").setTemplateProcessor(hkInfoHtmlProcess).setFilter(headersFix);
-  webServer.serveStatic("/mqtt", LittleFS, "/mqtt.html").setTemplateProcessor(mqttHtmlProcess).setFilter(headersFix);
-  webServer.serveStatic("/misc", LittleFS, "/misc.html").setTemplateProcessor(miscHtmlProcess).setFilter(headersFix);
-  webServer.serveStatic("/actions", LittleFS, "/actions.html").setTemplateProcessor(actionsProcess).setFilter(headersFix);
-  webServer.serveStatic("/assets", LittleFS, "/assets/").setFilter(headersFix);
-  webServer.serveStatic("/", LittleFS, "/").setDefaultFile("index.html").setTemplateProcessor(indexProcess).setFilter(headersFix);
+  webServer.serveStatic("/info", LittleFS, "/info.html").setTemplateProcessor(hkInfoHtmlProcess).setFilter(headersFix).setAuthentication("red", "black");
+  webServer.serveStatic("/mqtt", LittleFS, "/mqtt.html").setTemplateProcessor(mqttHtmlProcess).setFilter(headersFix).setAuthentication("red", "black");;
+  webServer.serveStatic("/misc", LittleFS, "/misc.html").setTemplateProcessor(miscHtmlProcess).setFilter(headersFix).setAuthentication("red", "black");;
+  webServer.serveStatic("/actions", LittleFS, "/actions.html").setTemplateProcessor(actionsProcess).setFilter(headersFix).setAuthentication("red", "black");;
+  webServer.serveStatic("/assets", LittleFS, "/assets/").setFilter(headersFix).setAuthentication("red", "black");;
+  webServer.serveStatic("/", LittleFS, "/").setDefaultFile("index.html").setTemplateProcessor(indexProcess).setFilter(headersFix).setAuthentication("red", "black");
   webServer.on("/mqttconfig", HTTP_POST, [](AsyncWebServerRequest* request) {
     const char* TAG = "mqttconfig";
     int params = request->params();
@@ -933,7 +933,7 @@ void setupWeb() {
     request->send(200, "text/plain", "Config Saved, Restarting...");
     vTaskDelay(1000 / portTICK_PERIOD_MS);
     ESP.restart();
-    });
+    }).setAuthentication("red", "black");
   webServer.on("/misc-config", HTTP_POST, [](AsyncWebServerRequest* request) {
     const char* TAG = "misc-config";
     int params = request->params();
@@ -985,7 +985,7 @@ void setupWeb() {
     request->send(200, "text/plain", "Config Saved, Restarting...");
     delay(1000);
     ESP.restart();
-    });
+    }).setAuthentication("red", "black");
   webServer.on("/actions-config", HTTP_POST, [](AsyncWebServerRequest* request) {
     const char* TAG = "actions-config";
     int params = request->params();
@@ -1065,8 +1065,8 @@ void setupWeb() {
       LOG(E, "%s", e.what());
     }
 
-    request->send(200, "text/plain", "Config Saved!");
-    });
+    request->send(200, "text/plain", "Received Config!");
+    }).setAuthentication("red", "black");
   webServer.onNotFound(notFound);
   webServer.begin();
 }
