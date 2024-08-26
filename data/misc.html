@@ -65,6 +65,30 @@
         </div>
     </div>
     <div
+        style="display: flex;flex-direction: column;border: 1px #8e8271 solid;border-radius: 8px;padding: 1rem;box-shadow: 0px 1px 1px 0px;margin-bottom: 1rem;background-color: #2d1d1d;">
+        <h3 style="margin-top: 0;text-align: center;">WebUI</h3>
+        <div
+            style="display:flex;flex-direction: column;border: 2px #8e8271 dashed;padding: 1rem;margin-bottom: 1rem;gap: 8px;">
+            <div style="display: flex;flex-direction: column;">
+                <label for="web-auth-enable">Authentication</label>
+                <select name="web-auth-enable" id="web-auth-enable" style="width: fit-content;">
+                  <option value="0">Disabled</option>
+                  <option value="1">Enabled</option>
+                </select>
+              </div>
+            <div style="display: flex;flex-direction: column;">
+                <label for="web-auth-username">Username</label>
+                <input type="text" name="web-auth-username" id="web-auth-username" placeholder="admin" required
+                    value="%WEBUSERNAME%" style="width: fit-content;" />
+            </div>
+            <div style="display: flex;flex-direction: column;">
+                <label for="web-auth-password">Password</label>
+                <input type="password" name="web-auth-password" id="web-auth-password" placeholder="password" required
+                    value="%WEBPASSWORD%" style="width: fit-content;" />
+            </div>
+        </div>
+    </div>
+    <div
         style="display: flex;flex-direction: column;border: 1px #8e8271 solid;border-radius: 8px;padding: 1rem;box-shadow: 0px 1px 1px 0px;background-color: #2d1d1d;">
         <h3 style="margin-top: 0;text-align: center;">HomeSpan</h3>
         <div style="display:flex;flex-direction: column;border: 2px #8e8271 dashed;padding: 1rem;margin-bottom: 1rem;">
@@ -97,39 +121,20 @@
     </div>
 </form>
 <script>
-    let nfcSuccessHL = "%NFC1HL%" == true;
-    let nfcFailHL = "%NFC2HL%" == true;
     let alwaysUnlock = "%ALWAYSUNLOCK%" == true;
     let alwaysLock = "%ALWAYSLOCK%" == true;
-    let gpioActionEn = "%GPIOAEN%" == true;
-    let gpioActionLock = "%GPIOALOCK%" == true;
-    let gpioActionUnlock = "%GPIOAUNLOCK%" == true;
     let hwfinish = "%HWFINISH%";
     document
         .getElementById(`hk-finish-${hwfinish}`)
         .setAttribute("checked", "");
     document.getElementById('hkfinish').style.backgroundImage = `url(assets/hk-finish-${hwfinish}.webp)`;
-    if (nfcSuccessHL) {
-        document.getElementById("nfc-s-hl").setAttribute("checked", "");
-    }
-    if (nfcFailHL) {
-        document.getElementById("nfc-f-hl").setAttribute("checked", "");
-    }
     if (alwaysUnlock) {
         document.getElementById("hk-always-unlock").setAttribute("checked", "");
     }
     if (alwaysLock) {
         document.getElementById("hk-always-lock").setAttribute("checked", "");
     }
-    if (gpioActionEn) {
-        document.getElementById("gpio-a-en").setAttribute("checked", "");
-    }
-    if (gpioActionLock) {
-        document.getElementById("gpio-a-lock").setAttribute("checked", "");
-    }
-    if (gpioActionUnlock) {
-        document.getElementById("gpio-a-unlock").setAttribute("checked", "");
-    }
+    document.getElementById("web-auth-enable").selectedIndex = "%WEBENABLE%";
     let form = document.getElementById("misc-config");
     async function handleForm(event) {
       event.preventDefault();
