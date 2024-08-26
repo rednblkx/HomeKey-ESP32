@@ -99,7 +99,10 @@ namespace espConfig
     bool gpioActionUnlockState = GPIO_ACTION_UNLOCK_STATE;
     bool gpioActionMomentaryEnabled = GPIO_ACTION_MOMENTARY_STATE;
     uint16_t gpioActionMomentaryTimeout = GPIO_ACTION_MOMENTARY_TIMEOUT;
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(misc_config_t, deviceName, otaPasswd, hk_key_color, setupCode, lockAlwaysUnlock, lockAlwaysLock, controlPin, hsStatusPin, nfcSuccessPin, nfcSuccessTime, nfcNeopixelPin, neopixelSuccessColor, neopixelFailureColor, neopixelSuccessTime, neopixelFailTime, nfcSuccessHL, nfcFailPin, nfcFailTime, nfcFailHL, gpioActionPin, gpioActionLockState, gpioActionUnlockState, gpioActionMomentaryEnabled, gpioActionMomentaryTimeout)
+    bool webAuthEnabled = WEB_AUTH_ENABLED;
+    std::string webUsername = WEB_AUTH_USERNAME;
+    std::string webPassword = WEB_AUTH_PASSWORD;
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(misc_config_t, deviceName, otaPasswd, hk_key_color, setupCode, lockAlwaysUnlock, lockAlwaysLock, controlPin, hsStatusPin, nfcSuccessPin, nfcSuccessTime, nfcNeopixelPin, neopixelSuccessColor, neopixelFailureColor, neopixelSuccessTime, neopixelFailTime, nfcSuccessHL, nfcFailPin, nfcFailTime, nfcFailHL, gpioActionPin, gpioActionLockState, gpioActionUnlockState, gpioActionMomentaryEnabled, gpioActionMomentaryTimeout, webAuthEnabled, webUsername, webPassword)
   } miscConfig;
 };
 
@@ -650,6 +653,15 @@ String miscHtmlProcess(const String& var) {
   else if (var == "HWFINISH") {
     return String(espConfig::miscConfig.hk_key_color);
   }
+  else if (var == "WEBENABLE") {
+    return String(espConfig::miscConfig.webAuthEnabled);
+  }
+  else if (var == "WEBUSERNAME") {
+    return String(espConfig::miscConfig.webUsername.c_str());
+  }
+  else if (var == "WEBPASSWORD") {
+    return String(espConfig::miscConfig.webPassword.c_str());
+  }
   return String();
 }
 
@@ -833,13 +845,29 @@ String actionsProcess(const String& var) {
 }
 bool headersFix(AsyncWebServerRequest* request) { request->addInterestingHeader("ANY"); return true; };
 void setupWeb() {
-  webServer.serveStatic("/info", LittleFS, "/info.html").setTemplateProcessor(hkInfoHtmlProcess).setFilter(headersFix).setAuthentication("red", "black");
-  webServer.serveStatic("/mqtt", LittleFS, "/mqtt.html").setTemplateProcessor(mqttHtmlProcess).setFilter(headersFix).setAuthentication("red", "black");;
-  webServer.serveStatic("/misc", LittleFS, "/misc.html").setTemplateProcessor(miscHtmlProcess).setFilter(headersFix).setAuthentication("red", "black");;
-  webServer.serveStatic("/actions", LittleFS, "/actions.html").setTemplateProcessor(actionsProcess).setFilter(headersFix).setAuthentication("red", "black");;
-  webServer.serveStatic("/assets", LittleFS, "/assets/").setFilter(headersFix).setAuthentication("red", "black");;
-  webServer.serveStatic("/", LittleFS, "/").setDefaultFile("index.html").setTemplateProcessor(indexProcess).setFilter(headersFix).setAuthentication("red", "black");
-  webServer.on("/mqttconfig", HTTP_POST, [](AsyncWebServerRequest* request) {
+  auto infoHandle = new AsyncStaticWebHandler("/info", LittleFS, "/info.html", NULL);
+  webServer.addHandler(infoHandle);
+  infoHandle->setTemplateProcessor(hkInfoHtmlProcess).setFilter(headersFix);
+  auto mqttHandle = new AsyncStaticWebHandler("/mqtt", LittleFS, "/mqtt.html", NULL);
+  webServer.addHandler(mqttHandle);
+  mqttHandle->setTemplateProcessor(mqttHtmlProcess).setFilter(headersFix);
+  auto miscHandle = new AsyncStaticWebHandler("/misc", LittleFS, "/misc.html", NULL);
+  webServer.addHandler(miscHandle);
+  miscHandle->setTemplateProcessor(miscHtmlProcess).setFilter(headersFix);
+  auto actionsHandle = new AsyncStaticWebHandler("/actions", LittleFS, "/actions.html", NULL);
+  webServer.addHandler(actionsHandle);
+  actionsHandle->setTemplateProcessor(actionsProcess).setFilter(headersFix);
+  auto assetsHandle = new AsyncStaticWebHandler("/assets", LittleFS, "/assets/", NULL);
+  webServer.addHandler(assetsHandle);
+  actionsHandle->setFilter(headersFix);
+  // auto rootHandle = webServer.serveStatic("/", LittleFS, "/");
+  AsyncStaticWebHandler* rootHandle = new AsyncStaticWebHandler("/", LittleFS, "/", NULL);
+  webServer.addHandler(rootHandle);
+  rootHandle->setDefaultFile("index.html").setTemplateProcessor(indexProcess).setFilter(headersFix);
+  auto mqttConfigHandle = new AsyncCallbackWebHandler();
+  mqttConfigHandle->setUri("/mqttconfig");
+  mqttConfigHandle->setMethod(HTTP_POST);
+  mqttConfigHandle->onRequest([](AsyncWebServerRequest* request) {
     const char* TAG = "mqttconfig";
     int params = request->params();
     for (int i = 0; i < params; i++) {
@@ -933,8 +961,12 @@ void setupWeb() {
     request->send(200, "text/plain", "Config Saved, Restarting...");
     vTaskDelay(1000 / portTICK_PERIOD_MS);
     ESP.restart();
-    }).setAuthentication("red", "black");
-  webServer.on("/misc-config", HTTP_POST, [](AsyncWebServerRequest* request) {
+    });
+  webServer.addHandler(mqttConfigHandle);
+  auto miscConfigHandle = new AsyncCallbackWebHandler();
+  miscConfigHandle->setUri("/misc-config");
+  miscConfigHandle->setMethod(HTTP_POST);
+  miscConfigHandle->onRequest([](AsyncWebServerRequest* request) {
     const char* TAG = "misc-config";
     int params = request->params();
     for (int i = 0; i < params; i++) {
@@ -969,6 +1001,15 @@ void setupWeb() {
       else if (!strcmp(p->name().c_str(), "hk-hwfinish")) {
         espConfig::miscConfig.hk_key_color = p->value().toInt();
       }
+      else if (!strcmp(p->name().c_str(), "web-auth-enable")) {
+        espConfig::miscConfig.webAuthEnabled = p->value().toInt();
+      }
+      else if (!strcmp(p->name().c_str(), "web-auth-username")) {
+        espConfig::miscConfig.webUsername = p->value().c_str();
+      }
+      else if (!strcmp(p->name().c_str(), "web-auth-password")) {
+        espConfig::miscConfig.webPassword = p->value().c_str();
+      }
     }
     try {
       json json_misc_config = espConfig::miscConfig;
@@ -985,8 +1026,12 @@ void setupWeb() {
     request->send(200, "text/plain", "Config Saved, Restarting...");
     delay(1000);
     ESP.restart();
-    }).setAuthentication("red", "black");
-  webServer.on("/actions-config", HTTP_POST, [](AsyncWebServerRequest* request) {
+    });
+  webServer.addHandler(miscConfigHandle);
+  auto actionsConfigHandle = new AsyncCallbackWebHandler();
+  actionsConfigHandle->setUri("/actions-config");
+  actionsConfigHandle->setMethod(HTTP_POST);
+  actionsConfigHandle->onRequest([](AsyncWebServerRequest* request) {
     const char* TAG = "actions-config";
     int params = request->params();
     for (int i = 0; i < params; i++) {
@@ -1066,7 +1111,20 @@ void setupWeb() {
     }
 
     request->send(200, "text/plain", "Received Config!");
-    }).setAuthentication("red", "black");
+    });
+  webServer.addHandler(actionsConfigHandle);
+  if (espConfig::miscConfig.webAuthEnabled) {
+    LOG(I, "Web Authentication Enabled");
+    infoHandle->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
+    mqttHandle->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
+    miscHandle->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
+    actionsHandle->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
+    assetsHandle->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
+    rootHandle->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
+    mqttConfigHandle->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
+    miscConfigHandle->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
+    actionsConfigHandle->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
+  }
   webServer.onNotFound(notFound);
   webServer.begin();
 }
