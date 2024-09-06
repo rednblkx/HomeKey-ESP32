@@ -192,13 +192,13 @@ void gpio_task(void* arg) {
               lockCurrentState->setVal(lockStates::UNLOCKED);
             } else {
               int currentState = lockCurrentState->getVal();
-              lockTargetState->setVal(lockStates::UNLOCKED);
+              lockTargetState->setVal(!currentState);
               digitalWrite(espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionUnlockState);
-              lockCurrentState->setVal(lockStates::UNLOCKED);
+              lockCurrentState->setVal(!currentState);
               delay(espConfig::miscConfig.gpioActionMomentaryTimeout);
-              lockTargetState->setVal(lockStates::LOCKED);
+              lockTargetState->setVal(currentState);
               digitalWrite(espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionLockState);
-              lockCurrentState->setVal(lockStates::LOCKED);
+              lockCurrentState->setVal(currentState);
             }
           }
         }
