@@ -15,7 +15,7 @@
 #include <esp_ota_ops.h>
 #include <esp_task.h>
 #include <pins_arduino.h>
-#include <Adafruit_NeoPixel.h>
+#include <src/extras/Pixel.h>
 
 const char* TAG = "MAIN";
 
@@ -111,7 +111,7 @@ SpanCharacteristic* lockCurrentState;
 SpanCharacteristic* lockTargetState;
 esp_mqtt_client_handle_t client = nullptr;
 
-Adafruit_NeoPixel pixels(1, espConfig::miscConfig.nfcNeopixelPin, NEO_GRB + NEO_KHZ800);
+Pixel *pixel;
 
 bool save_to_nvs() {
   std::vector<uint8_t> serialized = nlohmann::json::to_msgpack(readerData);
@@ -1383,20 +1383,16 @@ void neopixel_task(void* arg) {
         LOG(D, "Got something in queue %d", status);
         if (status) {
           if (espConfig::miscConfig.nfcNeopixelPin && espConfig::miscConfig.nfcNeopixelPin != 255) {
-            pixels.setPixelColor(0, pixels.Color(espConfig::miscConfig.neopixelSuccessColor[espConfig::misc_config_t::colorMap::R], espConfig::miscConfig.neopixelSuccessColor[espConfig::misc_config_t::colorMap::G], espConfig::miscConfig.neopixelSuccessColor[espConfig::misc_config_t::colorMap::B]));
-            pixels.show();
+            pixel->set(pixel->RGB(espConfig::miscConfig.neopixelSuccessColor[espConfig::misc_config_t::colorMap::R], espConfig::miscConfig.neopixelSuccessColor[espConfig::misc_config_t::colorMap::G], espConfig::miscConfig.neopixelSuccessColor[espConfig::misc_config_t::colorMap::B]));
             delay(espConfig::miscConfig.neopixelSuccessTime);
-            pixels.clear();
-            pixels.show();
+            pixel->off();
           }
         }
         else {
           if (espConfig::miscConfig.nfcNeopixelPin && espConfig::miscConfig.nfcNeopixelPin != 255) {
-            pixels.setPixelColor(0, pixels.Color(espConfig::miscConfig.neopixelFailureColor[espConfig::misc_config_t::colorMap::R], espConfig::miscConfig.neopixelFailureColor[espConfig::misc_config_t::colorMap::G], espConfig::miscConfig.neopixelFailureColor[espConfig::misc_config_t::colorMap::B]));
-            pixels.show();
+            pixel->set(pixel->RGB(espConfig::miscConfig.neopixelFailureColor[espConfig::misc_config_t::colorMap::R], espConfig::miscConfig.neopixelFailureColor[espConfig::misc_config_t::colorMap::G], espConfig::miscConfig.neopixelFailureColor[espConfig::misc_config_t::colorMap::B]));
             delay(espConfig::miscConfig.neopixelFailTime);
-            pixels.clear();
-            pixels.show();
+            pixel->off();
           }
         }
       }
@@ -1566,8 +1562,7 @@ void setup() {
   homeSpan.setWifiCallback(wifiCallback);
 
   if (espConfig::miscConfig.nfcNeopixelPin != 255) {
-    pixels.setPin(espConfig::miscConfig.nfcNeopixelPin);
-    pixels.begin();
+    pixel = new Pixel(espConfig::miscConfig.nfcNeopixelPin, PixelType::GRB);
     xTaskCreate(neopixel_task, "neopixel_task", 4096, NULL, 2, NULL);
   }
   if (espConfig::miscConfig.nfcSuccessPin != 255) {
