@@ -68,7 +68,10 @@
     "mutex": "cpp",
     "thread": "cpp",
     "valarray": "cpp",
-    "*.ipp": "cpp"
+    "*.ipp": "cpp",
+    "charconv": "cpp",
+    "scoped_allocator": "cpp",
+    "variant": "cpp"
   },
   "python.terminal.activateEnvInCurrentTerminal": true,
   "python.terminal.activateEnvironment": false
