@@ -977,7 +977,6 @@ void setupWeb() {
   auto assetsHandle = new AsyncStaticWebHandler("/assets", LittleFS, "/assets/", NULL);
   webServer.addHandler(assetsHandle);
   actionsHandle->setFilter(headersFix);
-  // auto rootHandle = webServer.serveStatic("/", LittleFS, "/");
   AsyncStaticWebHandler* rootHandle = new AsyncStaticWebHandler("/", LittleFS, "/", NULL);
   webServer.addHandler(rootHandle);
   rootHandle->setDefaultFile("index.html").setTemplateProcessor(indexProcess).setFilter(headersFix);
@@ -1065,8 +1064,8 @@ void setupWeb() {
     }
     try {
       json json_mqtt_config = espConfig::mqttData;
-      std::string string_mqtt = json_mqtt_config.dump();
-      esp_err_t set_nvs = nvs_set_blob(savedData, "MQTTDATA", string_mqtt.c_str(), string_mqtt.size());
+      std::vector<uint8_t> string_mqtt = json::to_msgpack(json_mqtt_config);
+      esp_err_t set_nvs = nvs_set_blob(savedData, "MQTTDATA", string_mqtt.data(), string_mqtt.size());
       esp_err_t commit_nvs = nvs_commit(savedData);
       LOG(V, "SET_STATUS: %s", esp_err_to_name(set_nvs));
       LOG(V, "COMMIT_STATUS: %s", esp_err_to_name(commit_nvs));
@@ -1130,8 +1129,8 @@ void setupWeb() {
     }
     try {
       json json_misc_config = espConfig::miscConfig;
-      std::string string_misc = json_misc_config.dump();
-      esp_err_t set_nvs = nvs_set_blob(savedData, "MISCDATA", string_misc.c_str(), string_misc.size());
+      std::vector<uint8_t> misc_buf = nlohmann::json::to_msgpack(json_misc_config);
+      esp_err_t set_nvs = nvs_set_blob(savedData, "MISCDATA", misc_buf.data(), misc_buf.size());
       esp_err_t commit_nvs = nvs_commit(savedData);
       LOG(V, "SET_STATUS: %s", esp_err_to_name(set_nvs));
       LOG(V, "COMMIT_STATUS: %s", esp_err_to_name(commit_nvs));
@@ -1249,8 +1248,8 @@ void setupWeb() {
     }
     try {
       json json_misc_config = espConfig::miscConfig;
-      std::string string_misc = json_misc_config.dump();
-      esp_err_t set_nvs = nvs_set_blob(savedData, "MISCDATA", string_misc.c_str(), string_misc.size());
+      std::vector<uint8_t> misc_buf = nlohmann::json::to_msgpack(json_misc_config);
+      esp_err_t set_nvs = nvs_set_blob(savedData, "MISCDATA", misc_buf.data(), misc_buf.size());
       esp_err_t commit_nvs = nvs_commit(savedData);
       LOG(V, "SET_STATUS: %s", esp_err_to_name(set_nvs));
       LOG(V, "COMMIT_STATUS: %s", esp_err_to_name(commit_nvs));
@@ -1489,11 +1488,13 @@ void setup() {
   if (!nvs_get_blob(savedData, "READERDATA", NULL, &len)) {
     std::vector<uint8_t> savedBuf(len);
     nvs_get_blob(savedData, "READERDATA", savedBuf.data(), &len);
-    LOG(I, "NVS DATA LENGTH: %d", len);
-    ESP_LOG_BUFFER_HEX_LEVEL(TAG, savedBuf.data(), savedBuf.size(), ESP_LOG_DEBUG);
+    LOG(D, "NVS READERDATA LENGTH: %d", len);
+    ESP_LOG_BUFFER_HEX_LEVEL(TAG, savedBuf.data(), savedBuf.size(), ESP_LOG_VERBOSE);
     try {
       nlohmann::json data = nlohmann::json::from_msgpack(savedBuf);
-      data.get_to<readerData_t>(readerData);
+      if (!data.is_discarded()) {
+        data.get_to<readerData_t>(readerData);
+      }
     }
     catch (const std::exception& e) {
       std::cerr << e.what() << '\n';
@@ -1501,31 +1502,49 @@ void setup() {
 
   }
   if (!nvs_get_blob(savedData, "MQTTDATA", NULL, &len)) {
-    uint8_t msgpack[len];
-    nvs_get_blob(savedData, "MQTTDATA", msgpack, &len);
-    std::string str(msgpack, msgpack + len);
-    LOG(D, "MQTTDATA - JSON(%d): %s", len, str.c_str());
+    std::vector<uint8_t> dataBuf(len);
+    nvs_get_blob(savedData, "MQTTDATA", dataBuf.data(), &len);
+    LOG(D, "NVS MQTTDATA LENGTH: %d", len);
+    ESP_LOG_BUFFER_HEX_LEVEL(TAG, dataBuf.data(), dataBuf.size(), ESP_LOG_VERBOSE);
     try {
-      nlohmann::json data = nlohmann::json::parse(str);
-      if (!data.contains("lwtTopic") && data.contains("mqttClientId")) {
-        std::string lwt = data["mqttClientId"];
-        lwt.append("/status");
-        data["lwtTopic"] = lwt;
+      auto isValidJson = nlohmann::json::accept(dataBuf);
+      if (isValidJson) {
+        nlohmann::json data = nlohmann::json::parse(dataBuf);
+        if (!data.contains("lwtTopic") && data.contains("mqttClientId")) {
+          std::string lwt = data["mqttClientId"];
+          lwt.append("/status");
+          data["lwtTopic"] = lwt;
+        }
+        data.get_to<espConfig::mqttConfig_t>(espConfig::mqttData);
       }
-      data.get_to<espConfig::mqttConfig_t>(espConfig::mqttData);
+      else {
+        nlohmann::json data = nlohmann::json::from_msgpack(dataBuf);
+        if (!data.is_discarded()) {
+          data.get_to<espConfig::mqttConfig_t>(espConfig::mqttData);
+        }
+      }
     }
     catch (const std::exception& e) {
       LOG(E, "%s", e.what());
     }
   }
   if (!nvs_get_blob(savedData, "MISCDATA", NULL, &len)) {
-    uint8_t msgpack[len];
-    nvs_get_blob(savedData, "MISCDATA", msgpack, &len);
-    std::string str(msgpack, msgpack + len);
-    LOG(D, "MISCDATA - JSON(%d): %s", len, str.c_str());
+    std::vector<uint8_t> dataBuf(len);
+    nvs_get_blob(savedData, "MISCDATA", dataBuf.data(), &len);
+    std::string str(dataBuf.begin(), dataBuf.end());
+    LOG(D, "NVS MQTTDATA LENGTH: %d", len);
+    ESP_LOG_BUFFER_HEX_LEVEL(TAG, dataBuf.data(), dataBuf.size(), ESP_LOG_VERBOSE);
     try {
-      nlohmann::json data = nlohmann::json::parse(str);
-      data.get_to<espConfig::misc_config_t>(espConfig::miscConfig);
+      auto isValidJson = nlohmann::json::accept(dataBuf);
+      if (isValidJson) {
+        nlohmann::json data = nlohmann::json::parse(str);
+        data.get_to<espConfig::misc_config_t>(espConfig::miscConfig);
+      } else {
+        nlohmann::json data = nlohmann::json::from_msgpack(dataBuf);
+        if (!data.is_discarded()) {
+         data.get_to<espConfig::misc_config_t>(espConfig::miscConfig);
+        }
+      }
     }
     catch (const std::exception& e) {
       LOG(E, "%s", e.what());
