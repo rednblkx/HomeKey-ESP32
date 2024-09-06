@@ -69,5 +69,7 @@
     "thread": "cpp",
     "valarray": "cpp",
     "*.ipp": "cpp"
-  }
+  },
+  "python.terminal.activateEnvInCurrentTerminal": true,
+  "python.terminal.activateEnvironment": false
 }
