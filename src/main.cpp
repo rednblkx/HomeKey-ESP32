@@ -114,7 +114,7 @@ SpanCharacteristic* lockCurrentState;
 SpanCharacteristic* lockTargetState;
 esp_mqtt_client_handle_t client = nullptr;
 
-Pixel *pixel;
+std::shared_ptr<Pixel> pixel;
 
 bool save_to_nvs() {
   std::vector<uint8_t> serialized = nlohmann::json::to_msgpack(readerData);
@@ -173,7 +173,7 @@ void gpio_task(void* arg) {
         LOG(D, "Got something in queue %d", status);
         if (status == 1) {
           if (espConfig::miscConfig.gpioActionMomentaryEnabled) {
-            LOG(I, "Momentary Enabled");
+            LOG(D, "%d - %d - %d -%d", espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionMomentaryEnabled, espConfig::miscConfig.lockAlwaysUnlock, espConfig::miscConfig.lockAlwaysLock);
             if (espConfig::miscConfig.lockAlwaysUnlock) {
               lockTargetState->setVal(lockStates::UNLOCKED);
               digitalWrite(espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionUnlockState);
@@ -207,7 +207,7 @@ void gpio_task(void* arg) {
         }
       }
     }
-    vTaskDelay(50 / portTICK_PERIOD_MS);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
   }
 }
 
@@ -222,6 +222,7 @@ void neopixel_task(void* arg) {
         switch (status) {
         case 0:
           if (espConfig::miscConfig.nfcNeopixelPin && espConfig::miscConfig.nfcNeopixelPin != 255) {
+            LOG(D, "SUCCESS PIXEL %d:%d,%d,%d", espConfig::miscConfig.nfcNeopixelPin, espConfig::miscConfig.neopixelFailureColor[espConfig::misc_config_t::colorMap::R], espConfig::miscConfig.neopixelFailureColor[espConfig::misc_config_t::colorMap::G], espConfig::miscConfig.neopixelFailureColor[espConfig::misc_config_t::colorMap::B]);
             pixel->set(pixel->RGB(espConfig::miscConfig.neopixelFailureColor[espConfig::misc_config_t::colorMap::R], espConfig::miscConfig.neopixelFailureColor[espConfig::misc_config_t::colorMap::G], espConfig::miscConfig.neopixelFailureColor[espConfig::misc_config_t::colorMap::B]));
             delay(espConfig::miscConfig.neopixelFailTime);
             pixel->off();
@@ -229,6 +230,7 @@ void neopixel_task(void* arg) {
           break;
         case 1:
           if (espConfig::miscConfig.nfcNeopixelPin && espConfig::miscConfig.nfcNeopixelPin != 255) {
+            LOG(D, "FAIL PIXEL %d:%d,%d,%d", espConfig::miscConfig.nfcNeopixelPin, espConfig::miscConfig.neopixelSuccessColor[espConfig::misc_config_t::colorMap::R], espConfig::miscConfig.neopixelSuccessColor[espConfig::misc_config_t::colorMap::G], espConfig::miscConfig.neopixelSuccessColor[espConfig::misc_config_t::colorMap::B]);
             pixel->set(pixel->RGB(espConfig::miscConfig.neopixelSuccessColor[espConfig::misc_config_t::colorMap::R], espConfig::miscConfig.neopixelSuccessColor[espConfig::misc_config_t::colorMap::G], espConfig::miscConfig.neopixelSuccessColor[espConfig::misc_config_t::colorMap::B]));
             delay(espConfig::miscConfig.neopixelSuccessTime);
             pixel->off();
@@ -240,20 +242,21 @@ void neopixel_task(void* arg) {
         }
       }
     }
-    vTaskDelay(50 / portTICK_PERIOD_MS);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
   }
 }
 void nfc_gpio_task(void* arg) {
-  bool status = false;
+  uint8_t status = 0;
   while (1) {
     if (gpio_led_handle != nullptr) {
-      status = false;
+      status = 0;
       if (uxQueueMessagesWaiting(gpio_led_handle) > 0) {
         xQueueReceive(gpio_led_handle, &status, 0);
         LOG(D, "Got something in queue %d", status);
         switch (status) {
         case 0:
           if (espConfig::miscConfig.nfcFailPin && espConfig::miscConfig.nfcFailPin != 255) {
+            LOG(D, "FAIL LED %d:%d", espConfig::miscConfig.nfcFailPin, espConfig::miscConfig.nfcFailHL);
             digitalWrite(espConfig::miscConfig.nfcFailPin, espConfig::miscConfig.nfcFailHL);
             delay(espConfig::miscConfig.nfcFailTime);
             digitalWrite(espConfig::miscConfig.nfcFailPin, !espConfig::miscConfig.nfcFailHL);
@@ -261,18 +264,20 @@ void nfc_gpio_task(void* arg) {
           break;
         case 1:
           if (espConfig::miscConfig.nfcSuccessPin && espConfig::miscConfig.nfcSuccessPin != 255) {
+            LOG(D, "SUCCESS LED %d:%d", espConfig::miscConfig.nfcSuccessPin, espConfig::miscConfig.nfcSuccessHL);
             digitalWrite(espConfig::miscConfig.nfcSuccessPin, espConfig::miscConfig.nfcSuccessHL);
             delay(espConfig::miscConfig.nfcSuccessTime);
             digitalWrite(espConfig::miscConfig.nfcSuccessPin, !espConfig::miscConfig.nfcSuccessHL);
           }
           break;
         default:
+          LOG(I, "STOP");
           return;
           break;
         }
       }
     }
-    vTaskDelay(50 / portTICK_PERIOD_MS);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
   }
 }
 
@@ -1156,6 +1161,7 @@ void setupWeb() {
       if (!strcmp(p->name().c_str(), "nfc-neopixel-pin")) {
         if (espConfig::miscConfig.nfcNeopixelPin == 255 && p->value().toInt() != 255) {
           xTaskCreate(neopixel_task, "neopixel_task", 4096, NULL, 2, neopixel_task_handle);
+          pixel = std::make_shared<Pixel>(p->value().toInt(), PixelType::GRB);
         }
         else if (espConfig::miscConfig.nfcNeopixelPin != 255 && p->value().toInt() == 255 && neopixel_task_handle != nullptr) {
           uint8_t status = 2;
@@ -1189,7 +1195,8 @@ void setupWeb() {
         espConfig::miscConfig.neopixelFailureColor[espConfig::misc_config_t::colorMap::B] = p->value().toInt();
       }
       else if (!strcmp(p->name().c_str(), "nfc-s-pin")) {
-        if (espConfig::miscConfig.nfcSuccessPin == 255 && p->value().toInt() != 255  && gpio_led_task_handle == nullptr) {
+        if (espConfig::miscConfig.nfcSuccessPin == 255 && p->value().toInt() != 255 && gpio_led_task_handle == nullptr) {
+          pinMode(p->value().toInt(), OUTPUT);
           xTaskCreate(nfc_gpio_task, "nfc_gpio_task", 4096, NULL, 2, gpio_led_task_handle);
         }
         else if (espConfig::miscConfig.nfcSuccessPin != 255 && p->value().toInt() == 255 && gpio_led_task_handle != nullptr) {
@@ -1200,10 +1207,11 @@ void setupWeb() {
         espConfig::miscConfig.nfcSuccessPin = p->value().toInt();
       }
       else if (!strcmp(p->name().c_str(), "nfc-f-pin")) {
-        if (espConfig::miscConfig.nfcSuccessPin == 255 && p->value().toInt() != 255 && gpio_led_task_handle == nullptr) {
+        if (espConfig::miscConfig.nfcFailPin == 255 && p->value().toInt() != 255 && gpio_led_task_handle == nullptr) {
+          pinMode(p->value().toInt(), OUTPUT);
           xTaskCreate(nfc_gpio_task, "nfc_gpio_task", 4096, NULL, 2, gpio_led_task_handle);
         }
-        else if (espConfig::miscConfig.nfcSuccessPin != 255 && p->value().toInt() == 255 && gpio_led_task_handle != nullptr) {
+        else if (espConfig::miscConfig.nfcFailPin != 255 && p->value().toInt() == 255 && gpio_led_task_handle != nullptr) {
           uint8_t status = 2;
           xQueueSend(gpio_led_handle, &status, 0);
           vTaskDelete(gpio_led_task_handle);
@@ -1224,6 +1232,7 @@ void setupWeb() {
       }
       else if (!strcmp(p->name().c_str(), "gpio-a-pin")) {
         if (espConfig::miscConfig.gpioActionPin == 255 && p->value().toInt() != 255) {
+          pinMode(p->value().toInt(), OUTPUT);
           xTaskCreate(gpio_task, "gpio_task", 4096, NULL, 2, gpio_lock_task_handle);
         }
         else if (espConfig::miscConfig.gpioActionPin != 255 && p->value().toInt() == 255 && gpio_lock_task_handle != nullptr) {
@@ -1627,11 +1636,16 @@ void setup() {
   new Characteristic::Version();
   homeSpan.setControllerCallback(pairCallback);
   homeSpan.setWifiCallback(wifiCallback);
-
-  pixel = new Pixel(espConfig::miscConfig.nfcNeopixelPin, PixelType::GRB);
-  xTaskCreate(neopixel_task, "neopixel_task", 4096, NULL, 2, neopixel_task_handle);
-  xTaskCreate(nfc_gpio_task, "nfc_gpio_task", 4096, NULL, 2, gpio_led_task_handle);
-  xTaskCreate(gpio_task, "gpio_task", 4096, NULL, 2, gpio_lock_task_handle);
+  if (espConfig::miscConfig.nfcNeopixelPin != 255) {
+    pixel = std::make_shared<Pixel>(espConfig::miscConfig.nfcNeopixelPin, PixelType::GRB);
+    xTaskCreate(neopixel_task, "neopixel_task", 4096, NULL, 2, neopixel_task_handle);
+  }
+  if (espConfig::miscConfig.nfcSuccessPin != 255 || espConfig::miscConfig.nfcFailPin != 255) {
+    xTaskCreate(nfc_gpio_task, "nfc_gpio_task", 4096, NULL, 2, gpio_led_task_handle);
+  }
+  if (espConfig::miscConfig.gpioActionPin != 255) {
+    xTaskCreate(gpio_task, "gpio_task", 4096, NULL, 2, gpio_lock_task_handle);
+  }
   xTaskCreate(nfc_thread_entry, "nfc_task", 8192, NULL, 1, NULL);
 }
 
