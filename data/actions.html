@@ -84,8 +84,8 @@
               <div style="display: flex;margin-top: .7rem;gap: 8px;">
                 <label for="nfc-s-hl">GPIO State</label>
                 <select name="nfc-s-hl" id="nfc-s-hl">
-                  <option value="1">HIGH</option>
                   <option value="0">LOW</option>
+                  <option value="1">HIGH</option>
                 </select>
               </div>
             </fieldset>
@@ -104,8 +104,8 @@
               <div style="display: flex;margin-top: .7rem;gap: 8px;">
                 <label for="nfc-f-hl">GPIO State</label>
                 <select name="nfc-f-hl" id="nfc-f-hl">
-                  <option value="1">HIGH</option>
                   <option value="0">LOW</option>
+                  <option value="1">HIGH</option>
                 </select>
               </div>
             </fieldset>
@@ -144,8 +144,8 @@
       <div style="display: flex;margin-top: .7rem;gap: 8px;">
         <label for="gpio-a-unlock">GPIO State - Unlocked</label>
         <select name="gpio-a-unlock" id="gpio-a-unlock" value="0">
-          <option value="1">HIGH</option>
           <option value="0">LOW</option>
+          <option value="1">HIGH</option>
         </select>
       </div>
     </div>
@@ -164,7 +164,7 @@
   nfcshl.selectedIndex = "%NFC1HL%";
   nfcfhl.selectedIndex = "%NFC2HL%";
   actionlock.selectedIndex = "%GPIOALOCK%";
-  actionunlock.selectedIndex = "%GPIOALOCK%";
+  actionunlock.selectedIndex = "%GPIOAUNLOCK%";
   actionMomentary.selectedIndex = "%GPIOAMOEN%";
   let form = document.getElementById("actions-config");
   async function handleForm(event) {
