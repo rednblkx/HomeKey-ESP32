@@ -1364,6 +1364,7 @@ void nfc_thread_entry(void* arg) {
           json payload;
           payload["issuerId"] = hex_representation(std::get<0>(authResult));
           payload["endpointId"] = hex_representation(std::get<1>(authResult));
+          payload["readerId"] = hex_representation(readerData.reader_id);
           payload["homekey"] = true;
           std::string payloadStr = payload.dump();
           mqtt_publish(espConfig::mqttData.hkTopic, payloadStr, 0, false);
