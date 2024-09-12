@@ -1,3 +1,4 @@
+#define JSON_NOEXCEPTION 1
 #include <hkAuthContext.h>
 #include <HomeKey.h>
 #include <utils.h>
@@ -1066,17 +1067,12 @@ void setupWeb() {
         espConfig::mqttData.customLockStates["C_UNKNOWN"] = p->value().toInt();
       }
     }
-    try {
-      json json_mqtt_config = espConfig::mqttData;
-      std::vector<uint8_t> string_mqtt = json::to_msgpack(json_mqtt_config);
-      esp_err_t set_nvs = nvs_set_blob(savedData, "MQTTDATA", string_mqtt.data(), string_mqtt.size());
-      esp_err_t commit_nvs = nvs_commit(savedData);
-      LOG(V, "SET_STATUS: %s", esp_err_to_name(set_nvs));
-      LOG(V, "COMMIT_STATUS: %s", esp_err_to_name(commit_nvs));
-    }
-    catch (const std::exception& e) {
-      LOG(E, "%s", e.what());
-    }
+    json json_mqtt_config = espConfig::mqttData;
+    std::vector<uint8_t> string_mqtt = json::to_msgpack(json_mqtt_config);
+    esp_err_t set_nvs = nvs_set_blob(savedData, "MQTTDATA", string_mqtt.data(), string_mqtt.size());
+    esp_err_t commit_nvs = nvs_commit(savedData);
+    LOG(V, "SET_STATUS: %s", esp_err_to_name(set_nvs));
+    LOG(V, "COMMIT_STATUS: %s", esp_err_to_name(commit_nvs));
 
     request->send(200, "text/plain", "Config Saved, Restarting...");
     vTaskDelay(1000 / portTICK_PERIOD_MS);
@@ -1131,17 +1127,12 @@ void setupWeb() {
         espConfig::miscConfig.webPassword = p->value().c_str();
       }
     }
-    try {
-      json json_misc_config = espConfig::miscConfig;
-      std::vector<uint8_t> misc_buf = nlohmann::json::to_msgpack(json_misc_config);
-      esp_err_t set_nvs = nvs_set_blob(savedData, "MISCDATA", misc_buf.data(), misc_buf.size());
-      esp_err_t commit_nvs = nvs_commit(savedData);
-      LOG(V, "SET_STATUS: %s", esp_err_to_name(set_nvs));
-      LOG(V, "COMMIT_STATUS: %s", esp_err_to_name(commit_nvs));
-    }
-    catch (const std::exception& e) {
-      LOG(E, "%s", e.what());
-    }
+    json json_misc_config = espConfig::miscConfig;
+    std::vector<uint8_t> misc_buf = nlohmann::json::to_msgpack(json_misc_config);
+    esp_err_t set_nvs = nvs_set_blob(savedData, "MISCDATA", misc_buf.data(), misc_buf.size());
+    esp_err_t commit_nvs = nvs_commit(savedData);
+    LOG(V, "SET_STATUS: %s", esp_err_to_name(set_nvs));
+    LOG(V, "COMMIT_STATUS: %s", esp_err_to_name(commit_nvs));
 
     request->send(200, "text/plain", "Config Saved, Restarting...");
     delay(1000);
@@ -1254,17 +1245,12 @@ void setupWeb() {
         espConfig::miscConfig.gpioActionMomentaryTimeout = p->value().toInt();
       }
     }
-    try {
-      json json_misc_config = espConfig::miscConfig;
-      std::vector<uint8_t> misc_buf = nlohmann::json::to_msgpack(json_misc_config);
-      esp_err_t set_nvs = nvs_set_blob(savedData, "MISCDATA", misc_buf.data(), misc_buf.size());
-      esp_err_t commit_nvs = nvs_commit(savedData);
-      LOG(V, "SET_STATUS: %s", esp_err_to_name(set_nvs));
-      LOG(V, "COMMIT_STATUS: %s", esp_err_to_name(commit_nvs));
-    }
-    catch (const std::exception& e) {
-      LOG(E, "%s", e.what());
-    }
+    json json_misc_config = espConfig::miscConfig;
+    std::vector<uint8_t> misc_buf = nlohmann::json::to_msgpack(json_misc_config);
+    esp_err_t set_nvs = nvs_set_blob(savedData, "MISCDATA", misc_buf.data(), misc_buf.size());
+    esp_err_t commit_nvs = nvs_commit(savedData);
+    LOG(V, "SET_STATUS: %s", esp_err_to_name(set_nvs));
+    LOG(V, "COMMIT_STATUS: %s", esp_err_to_name(commit_nvs));
 
     request->send(200, "text/plain", "Received Config!");
     });
@@ -1498,42 +1484,32 @@ void setup() {
     nvs_get_blob(savedData, "READERDATA", savedBuf.data(), &len);
     LOG(D, "NVS READERDATA LENGTH: %d", len);
     ESP_LOG_BUFFER_HEX_LEVEL(TAG, savedBuf.data(), savedBuf.size(), ESP_LOG_VERBOSE);
-    try {
-      nlohmann::json data = nlohmann::json::from_msgpack(savedBuf);
-      if (!data.is_discarded()) {
-        data.get_to<readerData_t>(readerData);
-      }
+    nlohmann::json data = nlohmann::json::from_msgpack(savedBuf);
+    if (!data.is_discarded()) {
+      data.get_to<readerData_t>(readerData);
     }
-    catch (const std::exception& e) {
-      std::cerr << e.what() << '\n';
-    }
-
   }
   if (!nvs_get_blob(savedData, "MQTTDATA", NULL, &len)) {
     std::vector<uint8_t> dataBuf(len);
     nvs_get_blob(savedData, "MQTTDATA", dataBuf.data(), &len);
     LOG(D, "NVS MQTTDATA LENGTH: %d", len);
     ESP_LOG_BUFFER_HEX_LEVEL(TAG, dataBuf.data(), dataBuf.size(), ESP_LOG_VERBOSE);
-    try {
-      auto isValidJson = nlohmann::json::accept(dataBuf);
-      if (isValidJson) {
-        nlohmann::json data = nlohmann::json::parse(dataBuf);
-        if (!data.contains("lwtTopic") && data.contains("mqttClientId")) {
-          std::string lwt = data["mqttClientId"];
-          lwt.append("/status");
-          data["lwtTopic"] = lwt;
-        }
+    auto isValidJson = nlohmann::json::accept(dataBuf);
+    if (isValidJson) {
+      nlohmann::json data = nlohmann::json::parse(dataBuf);
+      if (!data.contains("lwtTopic") && data.contains("mqttClientId")) {
+        std::string lwt = data["mqttClientId"];
+        lwt.append("/status");
+        data["lwtTopic"] = lwt;
+      }
+      if (!data.is_discarded()) {
         data.get_to<espConfig::mqttConfig_t>(espConfig::mqttData);
       }
-      else {
-        nlohmann::json data = nlohmann::json::from_msgpack(dataBuf);
-        if (!data.is_discarded()) {
-          data.get_to<espConfig::mqttConfig_t>(espConfig::mqttData);
-        }
+    } else {
+      nlohmann::json data = nlohmann::json::from_msgpack(dataBuf);
+      if (!data.is_discarded()) {
+        data.get_to<espConfig::mqttConfig_t>(espConfig::mqttData);
       }
-    }
-    catch (const std::exception& e) {
-      LOG(E, "%s", e.what());
     }
   }
   if (!nvs_get_blob(savedData, "MISCDATA", NULL, &len)) {
@@ -1542,20 +1518,17 @@ void setup() {
     std::string str(dataBuf.begin(), dataBuf.end());
     LOG(D, "NVS MQTTDATA LENGTH: %d", len);
     ESP_LOG_BUFFER_HEX_LEVEL(TAG, dataBuf.data(), dataBuf.size(), ESP_LOG_VERBOSE);
-    try {
-      auto isValidJson = nlohmann::json::accept(dataBuf);
-      if (isValidJson) {
-        nlohmann::json data = nlohmann::json::parse(str);
+    auto isValidJson = nlohmann::json::accept(dataBuf);
+    if (isValidJson) {
+      nlohmann::json data = nlohmann::json::parse(str);
+      if (!data.is_discarded()) {
         data.get_to<espConfig::misc_config_t>(espConfig::miscConfig);
-      } else {
-        nlohmann::json data = nlohmann::json::from_msgpack(dataBuf);
-        if (!data.is_discarded()) {
-         data.get_to<espConfig::misc_config_t>(espConfig::miscConfig);
-        }
       }
-    }
-    catch (const std::exception& e) {
-      LOG(E, "%s", e.what());
+    } else {
+      nlohmann::json data = nlohmann::json::from_msgpack(dataBuf);
+      if (!data.is_discarded()) {
+        data.get_to<espConfig::misc_config_t>(espConfig::miscConfig);
+      }
     }
   }
   if (espConfig::miscConfig.nfcSuccessPin && espConfig::miscConfig.nfcSuccessPin != 255) {
