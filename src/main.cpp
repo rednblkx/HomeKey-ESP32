@@ -41,7 +41,7 @@ TaskHandle_t *gpio_lock_task_handle = nullptr;
 nvs_handle savedData;
 readerData_t readerData;
 uint8_t ecpData[18] = { 0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0 };
-std::map<HK_COLOR, const char*> hk_color_vals = {{TAN, "AQTO1doA"}, {GOLD, "AQSq1uwA"}, {SILVER, "AQTj4+MA"}, {BLACK, "AQQAAAAA"}};
+std::map<HK_COLOR, const char*> hk_color_vals = { {TAN, "AQTO1doA"}, {GOLD, "AQSq1uwA"}, {SILVER, "AQTj4+MA"}, {BLACK, "AQQAAAAA"} };
 namespace espConfig
 {
   struct mqttConfig_t
@@ -87,8 +87,8 @@ namespace espConfig
     uint8_t controlPin = HS_PIN;
     uint8_t hsStatusPin = HS_STATUS_LED;
     uint8_t nfcNeopixelPin = NFC_NEOPIXEL_PIN;
-    std::map<colorMap, int> neopixelSuccessColor = {{R, NEOPIXEL_SUCCESS_R}, {G, NEOPIXEL_SUCCESS_G}, {B, NEOPIXEL_SUCCESS_B}};
-    std::map<colorMap, int> neopixelFailureColor = {{R, NEOPIXEL_FAIL_R}, {G, NEOPIXEL_FAIL_G}, {B, NEOPIXEL_FAIL_B}};
+    std::map<colorMap, int> neopixelSuccessColor = { {R, NEOPIXEL_SUCCESS_R}, {G, NEOPIXEL_SUCCESS_G}, {B, NEOPIXEL_SUCCESS_B} };
+    std::map<colorMap, int> neopixelFailureColor = { {R, NEOPIXEL_FAIL_R}, {G, NEOPIXEL_FAIL_G}, {B, NEOPIXEL_FAIL_B} };
     uint16_t neopixelSuccessTime = NEOPIXEL_SUCCESS_TIME;
     uint16_t neopixelFailTime = NEOPIXEL_FAIL_TIME;
     uint8_t nfcSuccessPin = NFC_SUCCESS_PIN;
@@ -305,20 +305,19 @@ struct LockMechanism : Service::LockMechanism
     int targetState = lockTargetState->getNewVal();
     LOG(I, "New LockState=%d, Current LockState=%d", targetState, lockCurrentState->getVal());
     if (espConfig::miscConfig.gpioActionPin != 255) {
-      switch (targetState)
-      {
-        case lockStates::UNLOCKED:
-          digitalWrite(espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionUnlockState);
-          lockCurrentState->setVal(lockStates::UNLOCKED);
-          break;
+      switch (targetState) {
+      case lockStates::UNLOCKED:
+        digitalWrite(espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionUnlockState);
+        lockCurrentState->setVal(lockStates::UNLOCKED);
+        break;
 
-        case lockStates::LOCKED:
-          digitalWrite(espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionLockState);
-          lockCurrentState->setVal(lockStates::LOCKED);
-          break;
+      case lockStates::LOCKED:
+        digitalWrite(espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionLockState);
+        lockCurrentState->setVal(lockStates::LOCKED);
+        break;
 
-        default:
-          break;
+      default:
+        break;
       }
     }
     int currentState = lockCurrentState->getNewVal();
@@ -422,7 +421,7 @@ void pairCallback() {
     if (foundIssuer == nullptr) {
       LOG(D, "Adding new issuer - ID: %s", utils::bufToHexString(id.data(), 8).c_str());
       hkIssuer_t newIssuer;
-      newIssuer.issuer_id = std::vector<uint8_t>{id.begin(), id.begin() + 8};
+      newIssuer.issuer_id = std::vector<uint8_t>{ id.begin(), id.begin() + 8 };
       newIssuer.issuer_pk.insert(newIssuer.issuer_pk.begin(), it->getLTPK(), it->getLTPK() + 32);
       readerData.issuers.emplace_back(newIssuer);
     }
@@ -512,7 +511,7 @@ void print_issuers(const char* buf) {
  *  received custom state value
  */
 void set_custom_state_handler(esp_mqtt_client_handle_t client, int state) {
-  if(espConfig::mqttData.customLockStates["C_UNLOCKING"] == state){
+  if (espConfig::mqttData.customLockStates["C_UNLOCKING"] == state) {
     lockTargetState->setVal(lockStates::UNLOCKED);
     esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockStates::UNLOCKING).c_str(), 0, 1, true);
     return;
@@ -587,8 +586,8 @@ void set_state_handler(esp_mqtt_client_handle_t client, int state) {
 }
 
 void mqtt_connected_event(void* event_handler_arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
-	esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
-	esp_mqtt_client_handle_t client = event->client;
+  esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
+  esp_mqtt_client_handle_t client = event->client;
   const esp_app_desc_t* app_desc = esp_ota_get_app_description();
   std::string app_version = app_desc->version;
   uint8_t mac[6];
@@ -666,8 +665,8 @@ void mqtt_connected_event(void* event_handler_arg, esp_event_base_t event_base, 
 
 void mqtt_data_handler(void* event_handler_arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
   ESP_LOGD(TAG, "Event dispatched from callback type=%d", event_id);
-	esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
-	esp_mqtt_client_handle_t client = event->client;
+  esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
+  esp_mqtt_client_handle_t client = event->client;
   std::string topic(event->topic, event->topic + event->topic_len);
   std::string data(event->data, event->data + event->data_len);
   LOG(D, "Received message in topic \"%s\": %s", topic.c_str(), data.c_str());
@@ -1308,9 +1307,9 @@ void mqtt_publish(std::string topic, std::string payload, uint8_t qos, bool reta
 std::string hex_representation(const std::vector<uint8_t>& v) {
   std::string hex_tmp;
   for (auto x : v) {
-      std::ostringstream oss;
-      oss << std::hex << std::uppercase << std::setw(2) << std::setfill('0') << (unsigned)x;
-      hex_tmp += oss.str();
+    std::ostringstream oss;
+    oss << std::hex << std::uppercase << std::setw(2) << std::setfill('0') << (unsigned)x;
+    hex_tmp += oss.str();
   }
   return hex_tmp;
 }
@@ -1434,12 +1433,12 @@ void nfc_thread_entry(void* arg) {
         }
         else {
           bool status = false;
-        if (espConfig::miscConfig.nfcFailPin != 255) {
-          xQueueSend(gpio_led_handle, &status, 0);
-        }
-        if (espConfig::miscConfig.nfcNeopixelPin != 255) {
-          xQueueSend(neopixel_handle, &status, 0);
-        }
+          if (espConfig::miscConfig.nfcFailPin != 255) {
+            xQueueSend(gpio_led_handle, &status, 0);
+          }
+          if (espConfig::miscConfig.nfcNeopixelPin != 255) {
+            xQueueSend(neopixel_handle, &status, 0);
+          }
           LOG(W, "We got status FlowFailed, mqtt untouched!");
         }
         nfc.setRFField(0x02, 0x01);
@@ -1579,7 +1578,7 @@ void setup() {
     homeSpan.setControlPin(espConfig::miscConfig.controlPin);
   }
   if (espConfig::miscConfig.hsStatusPin != 255) {
-   homeSpan.setStatusPin(espConfig::miscConfig.hsStatusPin);
+    homeSpan.setStatusPin(espConfig::miscConfig.hsStatusPin);
   }
   homeSpan.setStatusAutoOff(15);
   homeSpan.setLogLevel(0);
