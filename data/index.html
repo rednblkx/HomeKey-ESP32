@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html style="height: 100dvh;">
 
 <head>
@@ -5,16 +6,15 @@
   <link rel="stylesheet" href="assets/misc.css"/>
   <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
   <title>HK Configuration</title>
-  <style>
-    label {
-      font-size: 16px;
-    }
-  </style>
   <script>
     async function addComponent(name, button) {
+      let loaderEl = document.createElement("span")
+      loaderEl.className = "loader";
+      loaderEl.style="margin-top: .5rem;";
+      document.querySelector("#main > span").insertAdjacentElement("afterend",loaderEl);
       let element = document.querySelector("#component");
       if(element){
-        element.remove();
+        element.remove(); 
       }
       let sel = document.querySelector(".selected-btn");
       if(sel){
@@ -29,6 +29,7 @@
       el.innerHTML = string;
       main.appendChild(el);
       button.classList.add("selected-btn");
+      loaderEl.remove();
       let sc = document.querySelector("#component").querySelector("script");
       if(sc){
         eval(sc.innerText);
