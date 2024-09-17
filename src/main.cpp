@@ -982,9 +982,13 @@ void setupWeb() {
   auto assetsHandle = new AsyncStaticWebHandler("/assets", LittleFS, "/assets/", NULL);
   webServer.addHandler(assetsHandle);
   actionsHandle->setFilter(headersFix);
-  AsyncStaticWebHandler* rootHandle = new AsyncStaticWebHandler("/", LittleFS, "/", NULL);
+  AsyncCallbackWebHandler* rootHandle = new AsyncCallbackWebHandler();
   webServer.addHandler(rootHandle);
-  rootHandle->setDefaultFile("index.html").setTemplateProcessor(indexProcess).setFilter(headersFix);
+  rootHandle->setUri("/");
+  rootHandle->setMethod(HTTP_GET);
+  rootHandle->onRequest([](AsyncWebServerRequest* req) {
+    req->send(LittleFS, "/index.html", "text/html", false, indexProcess);
+  });
   auto mqttConfigHandle = new AsyncCallbackWebHandler();
   mqttConfigHandle->setUri("/mqttconfig");
   mqttConfigHandle->setMethod(HTTP_POST);
