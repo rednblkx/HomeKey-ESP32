@@ -1492,6 +1492,7 @@ void setup() {
     nlohmann::json data = nlohmann::json::from_msgpack(savedBuf);
     if (!data.is_discarded()) {
       data.get_to<readerData_t>(readerData);
+      LOG(I, "Reader Data loaded from NVS");
     }
   }
   if (!nvs_get_blob(savedData, "MQTTDATA", NULL, &len)) {
@@ -1509,11 +1510,13 @@ void setup() {
       }
       if (!data.is_discarded()) {
         data.get_to<espConfig::mqttConfig_t>(espConfig::mqttData);
+        LOG(I, "MQTT Config loaded from NVS");
       }
     } else {
       nlohmann::json data = nlohmann::json::from_msgpack(dataBuf);
       if (!data.is_discarded()) {
         data.get_to<espConfig::mqttConfig_t>(espConfig::mqttData);
+        LOG(I, "MQTT Config loaded from NVS");
       }
     }
   }
@@ -1528,11 +1531,13 @@ void setup() {
       nlohmann::json data = nlohmann::json::parse(str);
       if (!data.is_discarded()) {
         data.get_to<espConfig::misc_config_t>(espConfig::miscConfig);
+        LOG(I, "Misc Config loaded from NVS");
       }
     } else {
       nlohmann::json data = nlohmann::json::from_msgpack(dataBuf);
       if (!data.is_discarded()) {
         data.get_to<espConfig::misc_config_t>(espConfig::miscConfig);
+        LOG(I, "Misc Config loaded from NVS");
       }
     }
   }
