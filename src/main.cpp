@@ -43,26 +43,46 @@ nvs_handle savedData;
 readerData_t readerData;
 uint8_t ecpData[18] = { 0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0 };
 std::map<HK_COLOR, const char*> hk_color_vals = { {TAN, "AQTO1doA"}, {GOLD, "AQSq1uwA"}, {SILVER, "AQTj4+MA"}, {BLACK, "AQQAAAAA"} };
+char *platform_create_id_string(void)
+{
+    uint8_t mac[6];
+    char *id_string = (char *)calloc(1 ,32);
+    esp_read_mac(mac, ESP_MAC_WIFI_STA);
+    sprintf(id_string, "ESP32_%02x%02X%02X", mac[3], mac[4], mac[5]);
+    return id_string;
+}
 namespace espConfig
 {
   struct mqttConfig_t
   {
+    mqttConfig_t() {
+      char* id = platform_create_id_string();
+      mqttClientId = id;
+      lwtTopic.append(id).append("/" MQTT_LWT_TOPIC);
+      hkTopic.append(id).append("/" MQTT_AUTH_TOPIC);
+      lockStateTopic.append(id).append("/" MQTT_STATE_TOPIC);
+      lockStateCmd.append(id).append("/" MQTT_SET_STATE_TOPIC);
+      lockCStateCmd.append(id).append("/" MQTT_SET_CURRENT_STATE_TOPIC);
+      lockTStateCmd.append(id).append("/" MQTT_SET_TARGET_STATE_TOPIC);
+      lockCustomStateTopic.append(id).append("/" MQTT_CUSTOM_STATE_TOPIC);
+      lockCustomStateCmd.append(id).append("/" MQTT_CUSTOM_STATE_TOPIC);
+    }
     /* MQTT Broker */
     std::string mqttBroker = MQTT_HOST;
     uint16_t mqttPort = MQTT_PORT;
     std::string mqttUsername = MQTT_USERNAME;
     std::string mqttPassword = MQTT_PASSWORD;
-    std::string mqttClientId = MQTT_CLIENTID;
+    std::string mqttClientId;
     /* MQTT Topics */
-    std::string lwtTopic = MQTT_LWT_TOPIC;
-    std::string hkTopic = MQTT_AUTH_TOPIC;
-    std::string lockStateTopic = MQTT_STATE_TOPIC;
-    std::string lockStateCmd = MQTT_SET_STATE_TOPIC;
-    std::string lockCStateCmd = MQTT_SET_CURRENT_STATE_TOPIC;
-    std::string lockTStateCmd = MQTT_SET_TARGET_STATE_TOPIC;
+    std::string lwtTopic;
+    std::string hkTopic;
+    std::string lockStateTopic;
+    std::string lockStateCmd;
+    std::string lockCStateCmd;
+    std::string lockTStateCmd;
     /* MQTT Custom State */
-    std::string lockCustomStateTopic = MQTT_CUSTOM_STATE_TOPIC;
-    std::string lockCustomStateCmd = MQTT_CUSTOM_STATE_CTRL_TOPIC;
+    std::string lockCustomStateTopic;
+    std::string lockCustomStateCmd;
     /* Flags */
     bool lockEnableCustomState = MQTT_CUSTOM_STATE_ENABLED;
     bool hassMqttDiscoveryEnabled = MQTT_DISCOVERY;
@@ -1282,7 +1302,7 @@ void mqttConfigReset(const char* buf) {
 }
 
 void wifiCallback() {
-  if (strcmp(espConfig::mqttData.mqttBroker.c_str(), "0.0.0.0")) {
+  if (espConfig::mqttData.mqttBroker.size() > 0 || !std::equal(espConfig::mqttData.mqttBroker.begin(), espConfig::mqttData.mqttBroker.end(), "0.0.0.0")) {
     mqtt_app_start();
   }
   setupWeb();
