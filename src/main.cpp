@@ -42,7 +42,7 @@ TaskHandle_t *gpio_lock_task_handle = nullptr;
 nvs_handle savedData;
 readerData_t readerData;
 uint8_t ecpData[18] = { 0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0 };
-std::map<HK_COLOR, const char*> hk_color_vals = { {TAN, "AQTO1doA"}, {GOLD, "AQSq1uwA"}, {SILVER, "AQTj4+MA"}, {BLACK, "AQQAAAAA"} };
+std::map<HK_COLOR, std::vector<uint8_t>> hk_color_vals = {{TAN, {0x01,0x04,0xce,0xd5,0xda,0x00}}, {GOLD, {0x01,0x04,0xaa,0xd6,0xec,0x00}}, {SILVER, {0x01,0x04,0xe3,0xe3,0xe3,0x00}}, {BLACK, {0x01,0x04,0x00,0x00,0x00,0x00}}};
 char *platform_create_id_string(void)
 {
     uint8_t mac[6];
@@ -1626,7 +1626,7 @@ void setup() {
   serialNumber.append(macStr);
   new Characteristic::SerialNumber(serialNumber.c_str());
   new Characteristic::FirmwareRevision(app_version.c_str());
-  std::vector<uint8_t> decB64 = utils::decodeB64(hk_color_vals[HK_COLOR(espConfig::miscConfig.hk_key_color)]);
+  std::vector<uint8_t> decB64 = hk_color_vals[HK_COLOR(espConfig::miscConfig.hk_key_color)];
   TLV8 hwfinish(NULL, 0);
   hwfinish.unpack(decB64.data(), decB64.size());
   new Characteristic::HardwareFinish(hwfinish);
