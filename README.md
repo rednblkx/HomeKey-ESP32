@@ -1,30 +1,45 @@
-<img src="https://github.com/rednblkx/HomeKey-ESP32/assets/29458132/6c2e1ea8-f74e-41ac-a690-461e339525acb" width="250" height="250">
+![homekey-logo-white](https://github.com/user-attachments/assets/fc93a70a-ef1e-4390-9067-6fafb255e5ac)
 
-# HomeKey-ESP32 [![Discord Badge](https://img.shields.io/badge/Discord-5865F2?logo=discord&logoColor=fff&style=for-the-badge)](https://discordapp.com/invite/VWpZ5YyUcm)
-[![CI](https://github.com/rednblkx/HomeKey-ESP32/actions/workflows/esp32.yml/badge.svg?branch=main)](https://github.com/rednblkx/HomeKey-ESP32/actions/workflows/esp32.yml)
-### ESP32 HomeKit Lock with support for the HomeKey
+# HomeKey-ESP32 [![Discord](https://badgen.net/discord/members/VWpZ5YyUcm?icon=discord)](https://discord.com/invite/VWpZ5YyUcm) [![CI](https://github.com/rednblkx/HomeKey-ESP32/actions/workflows/esp32.yml/badge.svg?branch=main)](https://github.com/rednblkx/HomeKey-ESP32/actions/workflows/esp32.yml)
 
-Credit to [@kormax](https://github.com/kormax) for reverse-engineering the Homekey [NFC Protocol](https://github.com/kormax/apple-home-key) and publishing a [POC](https://github.com/kormax/apple-home-key-reader) and credit to [@kupa22](https://github.com/kupa22) for the [research](https://github.com/kupa22/apple-homekey) on the HAP side of things, this project was possible thanks to their work.
-Additionaly, thanks to the Arduino library [HomeSpan](https://github.com/HomeSpan/HomeSpan) for being a great library that eased my work on HAP and other things and allowed me to just focus on the homekey functionality.
+### HomeKey functionality for the rest of us.
+
+## Overview
+
+This project aims to provide the Apple HomeKey functionality with just an ESP32 and PN532 NFC Module. Sole purpose of the project is to provide the HomeKey functionality and other NFC functionalities such as MIfare Authentication or others are out of scope.
+
+- It integrates with HomeAssistant's Tags which makes it easier to create automations based on a person(issuer) or device(endpoint).
+- The internal state is published and controlled via MQTT through user-defined topics
+- Any NFC Target that's not identified as homekey will skip the flow and publish the UID, ATQA and SAK on the same MQTT topic as HomeKey with the `"homekey"` field set to `false` 
+- Code is not ready for battery-powered applications
+- Designed for a board with an ESP32 chip and 4MB Flash size
+
+Goal of the project is to make it possible to add the homekey functionality to locks that don't support it or to anything for that matter :) .
+
+## Usage
+
+Visit the [wiki](https://github.com/rednblkx/HomeKey-ESP32/wiki) for documentation on the project
 
 ## Disclaimer
 
 Use this at your own risk, i'm not a cryptographic expert, just a hobbyist. Keep in mind that the HomeKey was implemented through reverse-engineering as indicated above so it might be lacking stuff from Apple's specification to which us private individuals do not have access.
 
-While functional, **the project is still a work in progress so expect breaking changes** as i'm figuring out how everything should fit together and the overrall structure of the code.
+While functional as it is now, the project should still be considered as a **work in progress** so expect breaking changes.
 
-## Overview
+## Contributing
 
-Right now only the PN532 is supported as the NFC module, however, beware of cheap clones espcially clones of Elechouse's as it will cause issues, i recommend the Elechouse PN532 NFC Module V3 just make sure to buy from a trusted vendor.
+All contributions to the repository are welcomed, if you think you can bring an improvement into the project, feel free to fork the repository and submit your pull requests.
 
-- It integrates with HomeAssistant's Tags and can be used to create automations based on a person(issuer) or device(endpoint).
-- The lock's state is published and controlled via MQTT through user-defined topics
-- Any NFC Target that's not identified as homekey will skip the flow and publishes the UID, ATQA and SAK on the same Authentication MQTT topic 
-- It is not made for battery-powered applications due to the power hungry WiFi and the code not being optimized for this
-- Designed for a board with an ESP32 chip and 4MB Flash size
+If you have a suggestion or are in need of assistance, you can open an issue. Additionally, you can join the Discord server at https://discord.com/invite/VWpZ5YyUcm
 
-Goal of the project is to make it easy to add the homekey functionality to locks that don't support it or to anything for that matter :) .
+## Support
 
-## Usage
+If you like the project, please consider giving it a start to show the appreciation and for others to know this repository is worth something.
 
-Visit the [wiki](https://github.com/rednblkx/HomeKey-ESP32/wiki) for documentation on the project
+Additionally, if you have the means and are willing to, you can donate using the [Sponsor](https://github.com/sponsors/rednblkx) button.
+
+## Credits
+
+- [@kormax](https://github.com/kormax) for reverse-engineering the Homekey [NFC Protocol](https://github.com/kormax/apple-home-key) and publishing a [PoC](https://github.com/kormax/apple-home-key-reader)
+- [@kupa22](https://github.com/kupa22) for the [research](https://github.com/kupa22/apple-homekey) on the HAP side of things for Homekey
+- [HomeSpan](https://github.com/HomeSpan/HomeSpan) which is being used as the framework implementing the HomeKit accessory
