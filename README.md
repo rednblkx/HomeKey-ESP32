@@ -14,7 +14,9 @@ This project aims to provide the Apple HomeKey functionality with just an ESP32 
 - Code is not ready for battery-powered applications
 - Designed for a board with an ESP32 chip and 4MB Flash size
 
-Goal of the project is to make it possible to add the homekey functionality to locks that don't support it or to anything for that matter :) .
+Goal of the project is to make it possible to add the homekey functionality to locks that don't support it or to anything for that matter :)
+
+For more advanced functionality, you might also be interested in [HAP-ESPHome](https://github.com/rednblkx/HAP-ESPHome) which attempts to integrate HomeKit (and HomeKey) into ESPHome for ultimate automations.
 
 ## Usage
 
