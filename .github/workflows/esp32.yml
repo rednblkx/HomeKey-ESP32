@@ -11,8 +11,17 @@ on:
       - 'src/**'
       - 'platformio.ini'
       - 'sdkconfig.defaults'
+      - 'data/**'
+      - 'with_ota.csv'
+      - 'fs.py'
   pull_request:
     branches: [ main, dev ]
+    paths:
+      - 'src/**'
+      - 'platformio.ini'
+      - 'sdkconfig.defaults'
+      - 'with_ota.csv'
+      - 'fs.py'
 
 jobs:
   build:
