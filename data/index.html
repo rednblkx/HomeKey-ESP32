@@ -2,8 +2,9 @@
 <html style="height: 100dvh;">
 
 <head>
+  <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="assets/misc.css"/>
+  <link rel="stylesheet" href="assets/misc.css">
   <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
   <title>HK Configuration</title>
   <script>
@@ -35,13 +36,64 @@
         eval(sc.innerText);
       }
     }
+    async function reboot() {
+      if(confirm("Are you sure you want to reboot the device?")){
+        let data = await fetch("/reboot_device");
+        let string = await data.text();
+        alert(string);
+      }
+    }
+    async function f_reset_hk() {
+      if(confirm("Are you sure you want to reset HomeKit pairings?")){
+        let data = await fetch("/reset_hk_pair");
+        let string = await data.text();
+        alert(string);
+      }
+    }
+    async function reset_wifi() {
+      if(confirm("Are you sure you want to reset WiFi credentials?")){
+        let data = await fetch("/reset_wifi_cred");
+        let string = await data.text();
+        alert(string);
+      }
+    }
   </script>
 </head>
 
-<body style="display: flex; flex-direction: column;align-items: center;">
-  <h1 style="text-align: center;margin-bottom: 0;">HomeKey-ESP32</h1>
-  <h4 style="text-align: center;margin-top: 0;">version: %VERSION%</h4>
-  <div id="main" style="border: 2px groove #8e8271;padding: 1rem;background-color: #003232;margin-bottom: 1rem;">
+<body style="display: flex; flex-direction: column;">
+  <div id="top-bar" style="display: flex;justify-content: space-between;margin-bottom: 1rem;">
+    <div style="display: inline-flex;align-items: center;gap: 8px;">
+      <img src="assets/logo-white.webp" width="64pxv">
+      <div>
+        <h2 style="text-align: center;margin-bottom: 0;margin-top: 0;background: none;padding: 0!important;margin: 0!important;">HomeKey-ESP32</h1>
+        <p style="text-align: center;margin-top: 0;margin-bottom: 0;">version: %VERSION%</p>
+      </div>
+    </div>
+    <div id="top-btns" style="display: flex;gap: 8px;align-items: center;">
+      <button title="Reboot" type="button" id="restart-btn"
+        style="background-color: #ffffff2e;border: 1px solid white;padding: 0.5rem;cursor: pointer;gap: 8px;"
+        onclick="reboot()" ontouchstart="this.style['background-color']='#4040402e'"
+        ontouchend="this.style['background-color']='#ffffff2e'">
+        <img src="assets/restart-R.webp" width="25px" style="object-fit: contain;">
+        <p style="margin: 0;">Reboot</p>
+      </button>
+      <button title="Reset HomeKit pairings" type="button" id="f-reset-btn"
+        style="background-color: #ffffff2e;border: 1px solid white;padding: 0.5rem;cursor: pointer;gap: 8px;"
+        onclick="f_reset_hk()" ontouchstart="this.style['background-color']='#4040402e'"
+        ontouchend="this.style['background-color']='#ffffff2e'">
+        <img src="assets/trashcan.webp" width="25px" style="object-fit: contain;">
+        <p style="margin: 0;">Reset HomeKit</p>
+      </button>
+      <button title="Reset HomeKit pairings" type="button" id="f-reset-btn"
+        style="background-color: #ffffff2e;border: 1px solid white;padding: 0.5rem;cursor: pointer;gap: 8px;"
+        onclick="reset_wifi()" ontouchstart="this.style['background-color']='#4040402e'"
+        ontouchend="this.style['background-color']='#ffffff2e'">
+        <img src="assets/trashcan.webp" width="25px" style="object-fit: contain;">
+        <p style="margin: 0;">Reset WiFi</p>
+      </button>
+    </div>
+  </div>
+  <div id="main" style="border: 2px groove #8e8271;padding: 1rem;background-color: #003232;margin-bottom: 1rem;align-self: center;">
     <div style="gap: 1rem; display: flex;justify-content: center;">
       <button onclick='addComponent("info", this)' style="padding: .6rem;cursor: pointer;" rel="noopener noreferrer">HK Info</a>
       <button onclick='addComponent("mqtt", this)' style="padding: .6rem;cursor: pointer;" rel="noopener noreferrer">MQTT</a>

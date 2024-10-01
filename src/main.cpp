@@ -408,7 +408,7 @@ struct NFCAccess : Service::NFCAccess
 
 };
 
-void deleteReaderData(const char* buf) {
+void deleteReaderData(const char* buf = "") {
   esp_err_t erase_nvs = nvs_erase_key(savedData, "READERDATA");
   esp_err_t commit_nvs = nvs_commit(savedData);
   readerData.issuers.clear();
@@ -1279,6 +1279,34 @@ void setupWeb() {
     request->send(200, "text/plain", "Received Config!");
     });
   webServer.addHandler(actionsConfigHandle);
+  auto rebootDeviceHandle = new AsyncCallbackWebHandler();
+  rebootDeviceHandle->setUri("/reboot_device");
+  rebootDeviceHandle->setMethod(HTTP_GET);
+  rebootDeviceHandle->onRequest([](AsyncWebServerRequest *request) {
+    request->send(200, "text/plain", "Rebooting the device...");
+    delay(1000);
+    ESP.restart();
+  });
+  webServer.addHandler(rebootDeviceHandle);
+  auto resetHkHandle = new AsyncCallbackWebHandler();
+  resetHkHandle->setUri("/reset_hk_pair");
+  resetHkHandle->setMethod(HTTP_GET);
+  resetHkHandle->onRequest([](AsyncWebServerRequest *request) {
+    request->send(200, "text/plain", "Erasing HomeKit pairings and restarting...");
+    delay(1000);
+    deleteReaderData();
+    homeSpan.processSerialCommand("H");
+  });
+  webServer.addHandler(resetHkHandle);
+  auto resetWifiHandle = new AsyncCallbackWebHandler();
+  resetWifiHandle->setUri("/reset_wifi_cred");
+  resetWifiHandle->setMethod(HTTP_GET);
+  resetWifiHandle->onRequest([](AsyncWebServerRequest *request) {
+    request->send(200, "text/plain", "Erasing WiFi credentials and restarting, AP will start on boot...");
+    delay(1000);
+    homeSpan.processSerialCommand("X");
+  });
+  webServer.addHandler(resetWifiHandle);
   if (espConfig::miscConfig.webAuthEnabled) {
     LOG(I, "Web Authentication Enabled");
     infoHandle->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
@@ -1290,6 +1318,8 @@ void setupWeb() {
     mqttConfigHandle->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
     miscConfigHandle->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
     actionsConfigHandle->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
+    resetHkHandle->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
+    resetWifiHandle->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
   }
   webServer.onNotFound(notFound);
   webServer.begin();
