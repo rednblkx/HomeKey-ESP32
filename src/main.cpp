@@ -1,6 +1,7 @@
 #define JSON_NOEXCEPTION 1
 #include <hkAuthContext.h>
 #include <HomeKey.h>
+#include <array>
 #include <utils.h>
 #include <HomeSpan.h>
 #include <PN532_SPI.h>
@@ -42,7 +43,8 @@ TaskHandle_t *gpio_lock_task_handle = nullptr;
 nvs_handle savedData;
 readerData_t readerData;
 uint8_t ecpData[18] = { 0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0 };
-std::map<HK_COLOR, std::vector<uint8_t>> hk_color_vals = {{TAN, {0x01,0x04,0xce,0xd5,0xda,0x00}}, {GOLD, {0x01,0x04,0xaa,0xd6,0xec,0x00}}, {SILVER, {0x01,0x04,0xe3,0xe3,0xe3,0x00}}, {BLACK, {0x01,0x04,0x00,0x00,0x00,0x00}}};
+const std::array<std::array<uint8_t, 6>, 4> hk_color_vals = {{{0x01,0x04,0xce,0xd5,0xda,0x00}, {0x01,0x04,0xaa,0xd6,0xec,0x00}, {0x01,0x04,0xe3,0xe3,0xe3,0x00}, {0x01,0x04,0x00,0x00,0x00,0x00}}};
+const std::array<const uint8_t*, 6> pixelTypeMap = { PixelType::RGB, PixelType::RBG, PixelType::BRG, PixelType::BGR, PixelType::GBR, PixelType::GRB };
 char *platform_create_id_string(void)
 {
     uint8_t mac[6];
@@ -108,6 +110,7 @@ namespace espConfig
     uint8_t controlPin = HS_PIN;
     uint8_t hsStatusPin = HS_STATUS_LED;
     uint8_t nfcNeopixelPin = NFC_NEOPIXEL_PIN;
+    uint8_t neoPixelType = 5;
     std::map<colorMap, int> neopixelSuccessColor = { {R, NEOPIXEL_SUCCESS_R}, {G, NEOPIXEL_SUCCESS_G}, {B, NEOPIXEL_SUCCESS_B} };
     std::map<colorMap, int> neopixelFailureColor = { {R, NEOPIXEL_FAIL_R}, {G, NEOPIXEL_FAIL_G}, {B, NEOPIXEL_FAIL_B} };
     uint16_t neopixelSuccessTime = NEOPIXEL_SUCCESS_TIME;
@@ -965,6 +968,9 @@ String actionsProcess(const String& var) {
   else if (var == "NEOFTIME") {
     return String(espConfig::miscConfig.neopixelFailTime);
   }
+  else if (var == "NEOPIXELTYPE") {
+    return String(espConfig::miscConfig.neoPixelType);
+  }
   else if (var == "SREDPIXELVAL") {
     return String(espConfig::miscConfig.neopixelSuccessColor[espConfig::misc_config_t::colorMap::R]);
   }
@@ -1189,6 +1195,10 @@ void setupWeb() {
       }
       else if (!strcmp(p->name().c_str(), "neopixel-f-time")) {
         espConfig::miscConfig.neopixelFailTime = p->value().toInt();
+      }
+      else if (!strcmp(p->name().c_str(), "neo-pixel-type")) {
+        espConfig::miscConfig.neoPixelType = p->value().toInt();
+        pixel->setPixelType(pixelTypeMap[espConfig::miscConfig.neoPixelType]);
       }
       else if (!strcmp(p->name().c_str(), "nfc-s-red-pixel")) {
         espConfig::miscConfig.neopixelSuccessColor[espConfig::misc_config_t::colorMap::R] = p->value().toInt();
@@ -1656,7 +1666,7 @@ void setup() {
   serialNumber.append(macStr);
   new Characteristic::SerialNumber(serialNumber.c_str());
   new Characteristic::FirmwareRevision(app_version.c_str());
-  std::vector<uint8_t> decB64 = hk_color_vals[HK_COLOR(espConfig::miscConfig.hk_key_color)];
+  std::array<uint8_t, 6> decB64 = hk_color_vals[HK_COLOR(espConfig::miscConfig.hk_key_color)];
   TLV8 hwfinish(NULL, 0);
   hwfinish.unpack(decB64.data(), decB64.size());
   new Characteristic::HardwareFinish(hwfinish);
@@ -1669,7 +1679,7 @@ void setup() {
   homeSpan.setControllerCallback(pairCallback);
   homeSpan.setWifiCallback(wifiCallback);
   if (espConfig::miscConfig.nfcNeopixelPin != 255) {
-    pixel = std::make_shared<Pixel>(espConfig::miscConfig.nfcNeopixelPin, PixelType::GRB);
+    pixel = std::make_shared<Pixel>(espConfig::miscConfig.nfcNeopixelPin, pixelTypeMap[espConfig::miscConfig.neoPixelType]);
     xTaskCreate(neopixel_task, "neopixel_task", 4096, NULL, 2, neopixel_task_handle);
   }
   if (espConfig::miscConfig.nfcSuccessPin != 255 || espConfig::miscConfig.nfcFailPin != 255) {

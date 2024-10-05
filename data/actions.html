@@ -23,6 +23,17 @@
           <label for="neopixel-f-time">Timeout(ms) - Auth Failed</label>
           <input type="number" name="neopixel-f-time" id="neopixel-f-time" placeholder="1000" required value="%NEOFTIME%">
         </div>
+        <div style="display: flex;flex-direction: column;margin-top: .7rem;">
+          <label for="neo-pixel-type">Pixel Type</label>
+          <select name="neo-pixel-type" id="neo-pixel-type">
+            <option value="0">RGB</option>
+            <option value="1">RBG</option>
+            <option value="2">BRG</option>
+            <option value="3">BGR</option>
+            <option value="4">GBR</option>
+            <option value="5">GRB</option>
+          </select>
+        </div>
         <div
           style="display: flex;gap: 8px;border: 1px #8e8271 solid;padding: .5rem;margin-top: 1rem;justify-content: space-around;">
           <div id="nfc-s-color" style="display: flex;flex-direction: column;">
@@ -161,6 +172,8 @@
   let actionunlock = document.querySelector("#gpio-a-unlock");
   let actionlock = document.querySelector("#gpio-a-lock");
   let actionMomentary = document.querySelector("#gpio-a-momentary");
+  let pixelType = document.querySelector("#neo-pixel-type")
+  pixelType.selectedIndex = "%NEOPIXELTYPE%"
   nfcshl.selectedIndex = "%NFC1HL%";
   nfcfhl.selectedIndex = "%NFC2HL%";
   actionlock.selectedIndex = "%GPIOALOCK%";
