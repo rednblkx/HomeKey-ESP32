@@ -1496,7 +1496,7 @@ void nfc_thread_entry(void* arg) {
       }
       else {
         LOG(W, "Invalid Response, probably not Homekey, publishing target's UID");
-        bool status = true;
+        bool status = false;
         if (espConfig::miscConfig.nfcSuccessPin != 255) {
           xQueueSend(gpio_led_handle, &status, 0);
         }
