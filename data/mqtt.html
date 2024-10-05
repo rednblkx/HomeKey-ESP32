@@ -3,6 +3,7 @@
 <form id="mqttConfig" action="mqttconfig" method="post"
   style="display: inline-flex; flex-direction: column;margin-bottom: 0; align-items: center; max-width: 450px;">
   <div
+    id="mqtt-broker-conn"
     style="display: flex;flex-direction: column;border: 1px #8e8271 solid;border-radius: 8px;padding: 1rem;box-shadow: 0px 1px 1px 0px;background-color: #2d1d1d;margin-bottom: 1rem;">
     <h3 style="margin-top: 0;text-align: center;">Broker Connection</h3>
     <div style="display:flex;flex-direction: column;border: 2px #8e8271 dashed;padding: 1rem;margin-bottom: 1rem;gap: 8px;">
@@ -35,7 +36,7 @@
     </div>
     <div style="display:flex;flex-direction: column;border: 2px #8e8271 dashed;padding: 1rem;gap: 8px;">
       <div style="display:flex;flex-direction: column;">
-        <label for="mqtt-discovery-enable">Enable HASS MQTT Discovery</label>
+        <label for="mqtt-discovery-enable">HASS MQTT Discovery</label>
         <select name="mqtt-discovery-enable" id="mqtt-discovery-enable">
           <option value="0">Disabled</option>
           <option value="1">Enabled</option>

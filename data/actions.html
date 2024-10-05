@@ -7,7 +7,7 @@
   <div
     style="display: flex;flex-direction: column;border: 1px #8e8271 solid;border-radius: 8px;padding: 1rem;box-shadow: 0px 1px 1px 0px;margin-bottom: 1rem;background-color: #2d1d1d;">
     <h3 style="margin-top: 0;text-align: center;">HomeKey/NFC Triggers</h3>
-    <h4 style="margin-top: 0;">Executed on successful/failed HomeKey Authentication or NFC Tag detection(marked as successful event)</h4>
+    <h4 style="margin-top: 0;">Executed on successful/failed HomeKey Authentication and on NFC Tag detection(marked as a failed event)</h4>
     <h4 style="margin-top: 0;">Both Neopixel and Simple GPIO have a momentary state</h4>
       <div style="display:flex;flex-direction: column;border: 2px #8e8271 dashed;padding: 1rem;margin-bottom: 1rem;">
         <h3 style="margin: 0 0 1rem;">Neopixel</h3>
@@ -115,7 +115,7 @@
   </div>
   <div style="display: flex;flex-direction: column;border: 1px #8e8271 solid;border-radius: 8px;padding: 1rem;box-shadow: 0px 1px 1px 0px;background-color: #2d1d1d;">
     <h3 style="margin-top: 0;text-align: center;">HomeKit/HomeKey Triggers</h3>
-    <h4 style="margin-top: 0;margin-bottom: .5rem;">Executed upon interaction in the Home app or on successful HomeKey Authentication</h4>
+    <h4 style="margin-top: 0;margin-bottom: .5rem;">Executed upon interaction in the Home app and on successful HomeKey Authentication</h4>
     <h4 style="margin-top: 0;">Follows "Always Lock/Unlock on HomeKey" option</h4>
     <div style="display:flex;flex-direction: column;border: 2px #8e8271 dashed;padding: 1rem;">
       <h3 style="margin: 0 0 1rem;align-self: flex-start;">Simple GPIO</h3>
@@ -124,14 +124,14 @@
         <input type="number" name="gpio-a-pin" id="gpio-a-pin" placeholder="2" required value="%GPIOAPIN%" style="width: 4rem;" min="0" max="255">
       </div>
       <div style="display: flex;margin-top: .7rem;gap: 8px;">
-        <label for="gpio-a-momentary">Momentary State</label>
+        <label for="gpio-a-momentary">HK Momentary State</label>
         <select name="gpio-a-momentary" id="gpio-a-momentary">
           <option value="0">Disabled</option>
           <option value="1">Enabled</option>
         </select>
       </div>
       <div style="display: flex;margin-top: .7rem;gap: 8px;">
-        <label for="gpio-a-mo-timeout">Momentary Timeout</label>
+        <label for="gpio-a-mo-timeout">HK Momentary Timeout</label>
         <input type="number" name="gpio-a-mo-timeout" id="gpio-a-mo-timeout" placeholder="2" required value="%GPIOAMOTIME%" style="width: 4rem;">
       </div>
       <div style="display: flex;margin-top: .7rem;gap: 8px;">
