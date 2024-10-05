@@ -85,6 +85,13 @@ button {
     }
 }
 
+#mqtt-broker-conn {
+    width: 100%;
+    width: -moz-available;
+    width: -webkit-fill-available;
+    width: fill-available;
+}
+
 
 .loader {
     width: 100%;
