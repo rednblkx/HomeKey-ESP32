@@ -1317,6 +1317,14 @@ void setupWeb() {
     homeSpan.processSerialCommand("X");
   });
   webServer.addHandler(resetWifiHandle);
+  auto getWifiRssi = new AsyncCallbackWebHandler();
+  getWifiRssi->setUri("/get_wifi_rssi");
+  getWifiRssi->setMethod(HTTP_GET);
+  getWifiRssi->onRequest([](AsyncWebServerRequest* request) {
+    std::string rssi_val = std::to_string(WiFi.RSSI());
+    request->send(200, "text/plain", rssi_val.c_str());
+  });
+  webServer.addHandler(getWifiRssi);
   if (espConfig::miscConfig.webAuthEnabled) {
     LOG(I, "Web Authentication Enabled");
     infoHandle->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());

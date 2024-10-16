@@ -8,6 +8,22 @@
   <link rel="icon" type="image/x-icon" href="assets/favicon.ico">
   <title>HK Configuration</title>
   <script>
+    async function wifiSignalStrength(){
+      const data = await fetch("get_wifi_rssi");
+      const string = await data.text();
+      const el = document.querySelector("#wifi-rssi-signal");
+      if(string <= -30 && string >= -70){
+        el.innerHTML= `${string} (Excellent)`;
+      } else if(string <= -71 && string >= -80){
+        el.innerHTML= `${string} (Good)`;
+      } else if(string <= -81 && string >= -90){
+        el.innerHTML= `${string} (Fair)`;
+      } else if(string <= -90){
+        el.innerHTML= `${string} (Weak)`;
+      }
+    }
+    wifiSignalStrength();
+    setInterval(wifiSignalStrength, 5000)
     async function addComponent(name, button) {
       let loaderEl = document.createElement("span")
       loaderEl.className = "loader";
@@ -66,6 +82,7 @@
       <img src="assets/logo-white.webp" width="64pxv">
       <div>
         <h2 style="text-align: center;margin-bottom: 0;margin-top: 0;background: none;padding: 0!important;margin: 0!important;">HomeKey-ESP32</h1>
+        <p style="text-align: center;margin-top: 0;margin-bottom: 0;">WiFi RSSI: <span id="wifi-rssi-signal"></span></p>
         <p style="text-align: center;margin-top: 0;margin-bottom: 0;">version: %VERSION%</p>
       </div>
     </div>
