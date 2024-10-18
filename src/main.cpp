@@ -138,7 +138,7 @@ SpanCharacteristic* lockCurrentState;
 SpanCharacteristic* lockTargetState;
 esp_mqtt_client_handle_t client = nullptr;
 
-std::shared_ptr<Pixel> pixel;
+std::unique_ptr<Pixel> pixel;
 
 bool save_to_nvs() {
   std::vector<uint8_t> serialized = nlohmann::json::to_msgpack(readerData);
@@ -1184,7 +1184,9 @@ void setupWeb() {
       if (!strcmp(p->name().c_str(), "nfc-neopixel-pin")) {
         if (espConfig::miscConfig.nfcNeopixelPin == 255 && p->value().toInt() != 255) {
           xTaskCreate(neopixel_task, "neopixel_task", 4096, NULL, 2, neopixel_task_handle);
-          pixel = std::make_shared<Pixel>(p->value().toInt(), PixelType::GRB);
+          if (!pixel) {
+            pixel = std::make_unique<Pixel>(p->value().toInt(), PixelType::GRB);
+          }
         }
         else if (espConfig::miscConfig.nfcNeopixelPin != 255 && p->value().toInt() == 255 && neopixel_task_handle != nullptr) {
           uint8_t status = 2;
@@ -1201,7 +1203,9 @@ void setupWeb() {
       }
       else if (!strcmp(p->name().c_str(), "neo-pixel-type")) {
         espConfig::miscConfig.neoPixelType = p->value().toInt();
-        pixel->setPixelType(pixelTypeMap[espConfig::miscConfig.neoPixelType]);
+        if (pixel) {
+          pixel->setPixelType(pixelTypeMap[espConfig::miscConfig.neoPixelType]);
+        }
       }
       else if (!strcmp(p->name().c_str(), "nfc-s-red-pixel")) {
         espConfig::miscConfig.neopixelSuccessColor[espConfig::misc_config_t::colorMap::R] = p->value().toInt();
@@ -1690,7 +1694,7 @@ void setup() {
   homeSpan.setControllerCallback(pairCallback);
   homeSpan.setWifiCallback(wifiCallback);
   if (espConfig::miscConfig.nfcNeopixelPin != 255) {
-    pixel = std::make_shared<Pixel>(espConfig::miscConfig.nfcNeopixelPin, pixelTypeMap[espConfig::miscConfig.neoPixelType]);
+    pixel = std::make_unique<Pixel>(espConfig::miscConfig.nfcNeopixelPin, pixelTypeMap[espConfig::miscConfig.neoPixelType]);
     xTaskCreate(neopixel_task, "neopixel_task", 4096, NULL, 2, neopixel_task_handle);
   }
   if (espConfig::miscConfig.nfcSuccessPin != 255 || espConfig::miscConfig.nfcFailPin != 255) {
