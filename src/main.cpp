@@ -513,6 +513,9 @@ void setLogLevel(const char* buf) {
   esp_log_level_set("ISO18013_SC", level);
   esp_log_level_set("LockMechanism", level);
   esp_log_level_set("NFCAccess", level);
+  esp_log_level_set("actions-config", level);
+  esp_log_level_set("misc-config", level);
+  esp_log_level_set("mqttconfig", level);
 }
 
 void print_issuers(const char* buf) {
