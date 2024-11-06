@@ -38,7 +38,7 @@ const std::array<std::array<uint8_t, 6>, 4> hk_color_vals = { {{0x01,0x04,0xce,0
 const std::array<const uint8_t*, 6> pixelTypeMap = { PixelType::RGB, PixelType::RBG, PixelType::BRG, PixelType::BGR, PixelType::GBR, PixelType::GRB };
 struct gpioLockAction
 {
-  enum source
+  enum
   {
     HOMEKIT = 1,
     HOMEKEY = 2,
