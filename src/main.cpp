@@ -91,6 +91,7 @@ namespace espConfig
     /* Flags */
     bool lockEnableCustomState = MQTT_CUSTOM_STATE_ENABLED;
     bool hassMqttDiscoveryEnabled = MQTT_DISCOVERY;
+    bool nfcTagNoPublish = false;
     std::map<std::string, int> customLockStates = { {"C_LOCKED", C_LOCKED}, {"C_UNLOCKING", C_UNLOCKING}, {"C_UNLOCKED", C_UNLOCKED}, {"C_LOCKING", C_LOCKING}, {"C_JAMMED", C_JAMMED}, {"C_UNKNOWN", C_UNKNOWN} };
     std::map<std::string, int> customLockActions = { {"UNLOCK", UNLOCK}, {"LOCK", LOCK} };
     NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(espConfig::mqttConfig_t, mqttBroker, mqttPort, mqttUsername, mqttPassword, mqttClientId, lwtTopic, hkTopic, lockStateTopic, lockStateCmd, lockCStateCmd, lockTStateCmd, lockCustomStateTopic, lockCustomStateCmd, lockEnableCustomState, hassMqttDiscoveryEnabled, customLockStates, customLockActions)
@@ -871,6 +872,8 @@ String mqttHtmlProcess(const String& var) {
     return String(espConfig::mqttData.customLockStates["C_JAMMED"]);
   } else if (var == "CSTATEUNKNOWN") {
     return String(espConfig::mqttData.customLockStates["C_UNKNOWN"]);
+  } else if (var == "NFCTAGSNOPUBLISH") {
+    return String(espConfig::mqttData.nfcTagNoPublish);
   }
   return "";
 }
@@ -1014,6 +1017,8 @@ void setupWeb() {
         espConfig::mqttData.customLockStates["C_JAMMED"] = p->value().toInt();
       } else if (!strcmp(p->name().c_str(), "cstate-unknown")) {
         espConfig::mqttData.customLockStates["C_UNKNOWN"] = p->value().toInt();
+      } else if (!strcmp(p->name().c_str(), "nfc-tags-ignore-mqtt")) {
+        espConfig::mqttData.nfcTagNoPublish = p->value().toInt();
       }
     }
     json json_mqtt_config = espConfig::mqttData;
