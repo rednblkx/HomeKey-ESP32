@@ -125,25 +125,15 @@
       </div>
   </div>
   <div style="display: flex;flex-direction: column;border: 1px #8e8271 solid;border-radius: 8px;padding: 1rem;box-shadow: 0px 1px 1px 0px;background-color: #2d1d1d;">
-    <h3 style="margin-top: 0;text-align: center;">HomeKit/HomeKey Triggers</h3>
-    <h4 style="margin-top: 0;margin-bottom: .5rem;">Executed upon interaction in the Home app and on successful HomeKey Authentication</h4>
+    <h3 style="margin-top: 0;text-align: center;">HomeKit Triggers</h3>
+    <h4 style="margin-top: 0;margin-bottom: .5rem;">Executed upon interaction in the Home app and in addition also on successful HomeKey Authentication</h4>
     <h4 style="margin-top: 0;">Follows "Always Lock/Unlock on HomeKey" option</h4>
+    <h4 style="margin-top: 0;">Momentary state is only available with LOCKED as initial state</h4>
     <div style="display:flex;flex-direction: column;border: 2px #8e8271 dashed;padding: 1rem;">
       <h3 style="margin: 0 0 1rem;align-self: flex-start;">Simple GPIO</h3>
       <div style="display: flex;gap: 8px;">
         <label for="gpio-a-pin">GPIO Pin</label>
         <input type="number" name="gpio-a-pin" id="gpio-a-pin" placeholder="2" required value="%GPIOAPIN%" style="width: 4rem;" min="0" max="255">
-      </div>
-      <div style="display: flex;margin-top: .7rem;gap: 8px;">
-        <label for="gpio-a-momentary">HK Momentary State</label>
-        <select name="gpio-a-momentary" id="gpio-a-momentary">
-          <option value="0">Disabled</option>
-          <option value="1">Enabled</option>
-        </select>
-      </div>
-      <div style="display: flex;margin-top: .7rem;gap: 8px;">
-        <label for="gpio-a-mo-timeout">HK Momentary Timeout</label>
-        <input type="number" name="gpio-a-mo-timeout" id="gpio-a-mo-timeout" placeholder="2" required value="%GPIOAMOTIME%" style="width: 4rem;">
       </div>
       <div style="display: flex;margin-top: .7rem;gap: 8px;">
         <label for="gpio-a-lock">GPIO State - Locked</label>
@@ -154,10 +144,30 @@
       </div>
       <div style="display: flex;margin-top: .7rem;gap: 8px;">
         <label for="gpio-a-unlock">GPIO State - Unlocked</label>
-        <select name="gpio-a-unlock" id="gpio-a-unlock" value="0">
+        <select name="gpio-a-unlock" id="gpio-a-unlock">
           <option value="0">LOW</option>
           <option value="1">HIGH</option>
         </select>
+      </div>
+      <div style="display: flex;margin-top: .7rem;gap: 8px;">
+        <label for="homekey-gpio-state">Home Key controlled state</label>
+        <select name="homekey-gpio-state" id="homekey-gpio-state">
+          <option value="0">Disabled</option>
+          <option value="1">Enabled</option>
+        </select>
+      </div>
+      <div style="display: flex;margin-top: .7rem;gap: 8px;">
+        <label for="gpio-a-momentary">Momentary state status</label>
+        <select name="gpio-a-momentary" id="gpio-a-momentary">
+          <option value="0">Disabled</option>
+          <option value="1">Home App Only</option>
+          <option value="2">Home Key Only</option>
+          <option value="3">Home App + Home Key</option>
+        </select>
+      </div>
+      <div style="display: flex;margin-top: .7rem;gap: 8px;">
+        <label for="gpio-a-mo-timeout">Momentary Timeout (ms)</label>
+        <input type="number" name="gpio-a-mo-timeout" id="gpio-a-mo-timeout" placeholder="2" required value="%GPIOAMOTIME%" style="width: 4rem;">
       </div>
     </div>
   </div>
@@ -173,6 +183,8 @@
   let actionlock = document.querySelector("#gpio-a-lock");
   let actionMomentary = document.querySelector("#gpio-a-momentary");
   let pixelType = document.querySelector("#neo-pixel-type")
+  let hkGpioState = document.querySelector("#homekey-gpio-state")
+  hkGpioState.selectedIndex = "%HKGPIOCONTROLSTATE%"
   pixelType.selectedIndex = "%NEOPIXELTYPE%"
   nfcshl.selectedIndex = "%NFC1HL%";
   nfcfhl.selectedIndex = "%NFC2HL%";
