@@ -47,19 +47,21 @@ struct gpioLockAction
   uint8_t source;
   uint8_t action;
 };
-char* platform_create_id_string(void) {
+
+std::string platform_create_id_string(void) {
   uint8_t mac[6];
-  char* id_string = (char*)calloc(1, 32);
+  char id_string[32];
   esp_read_mac(mac, ESP_MAC_WIFI_STA);
   sprintf(id_string, "ESP32_%02x%02X%02X", mac[3], mac[4], mac[5]);
-  return id_string;
+  return std::string(id_string);
 }
+
 namespace espConfig
 {
   struct mqttConfig_t
   {
     mqttConfig_t() {
-      char* id = platform_create_id_string();
+      std::string id = platform_create_id_string();
       mqttClientId = id;
       lwtTopic.append(id).append("/" MQTT_LWT_TOPIC);
       hkTopic.append(id).append("/" MQTT_AUTH_TOPIC);
