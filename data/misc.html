@@ -4,9 +4,10 @@
     style="display: inline-flex; flex-direction: column; margin-bottom: 0">
     <div
         style="display: flex;flex-direction: column;border: 1px #8e8271 solid;border-radius: 8px;padding: 1rem;box-shadow: 0px 1px 1px 0px;margin-bottom: 1rem;background-color: #2d1d1d;">
-        <h3 style="margin-top: 0;text-align: center;">HomeKit</h3>
+        <h3 style="margin-top: 0;text-align: center;">Personalization</h3>
         <div
             style="display:flex;flex-direction: column;border: 2px #8e8271 dashed;padding: 1rem;margin-bottom: 1rem;gap: 8px;">
+            <h3 style="margin: 0 0 .5rem;width: fit-content;padding: 0.5rem;border-bottom: 1px #8e8271 solid;">HomeKit</h3>
             <div style="display: flex;flex-direction: column;">
                 <label for="device-name">Device Name</label>
                 <input type="text" name="device-name" id="device-name" placeholder="HK" required value="%DEVICENAME%"
@@ -19,15 +20,19 @@
                     value="%HKSETUPCODE%" style="width: fit-content;" />
             </div>
 
-            <div>
+            <div style="display: flex;gap: 8px;">
                 <label for="hk-always-lock">Always Lock on HomeKey</label>
-                <input type="hidden" name="hk-always-lock" value="0" />
-                <input type="checkbox" name="hk-always-lock" id="hk-always-lock" value="1" />
+                <select name="hk-always-lock" id="hk-always-lock">
+                    <option value="0">Disabled</option>
+                    <option value="1">Enabled</option>
+                </select>
             </div>
-            <div>
+            <div style="display: flex;gap: 8px;">
                 <label for="hk-always-unlock">Always Unlock on HomeKey</label>
-                <input type="hidden" name="hk-always-unlock" value="0" />
-                <input type="checkbox" name="hk-always-unlock" id="hk-always-unlock" value="1" />
+                <select name="hk-always-unlock" id="hk-always-unlock">
+                    <option value="0">Disabled</option>
+                    <option value="1">Enabled</option>
+                </select>
             </div>
             <fieldset>
                 <legend>HomeKey Card Finish:</legend>
@@ -63,6 +68,32 @@
                     </div>
                 </div>
             </fieldset>
+        </div>
+        <div
+            style="display:flex;flex-direction: column;border: 2px #8e8271 dashed;padding: 1rem;margin-bottom: 1rem;gap: 8px;">
+            <h3 style="margin: 0 0 .5rem;width: fit-content;padding: 0.5rem;border-bottom: 1px #8e8271 solid;">PN532</h3>
+            <div style="display: flex;flex-wrap: wrap;justify-content: center;gap: 16px;">
+                <div style="display: flex;flex-direction: column;">
+                    <label for="nfc-ss-gpio-pin">SS Pin</label>
+                    <input type="number" name="nfc-ss-gpio-pin" id="nfc-ss-gpio-pin" placeholder="5" required
+                        value="%NFCSSGPIOPIN%" style="width: fit-content;" />
+                </div>
+                <div style="display: flex;flex-direction: column;">
+                    <label for="nfc-sck-gpio-pin">SCK Pin</label>
+                    <input type="number" name="nfc-sck-gpio-pin" id="nfc-sck-gpio-pin" placeholder="18" required
+                        value="%NFCSCKGPIOPIN%" style="width: fit-content;" />
+                </div>
+                <div style="display: flex;flex-direction: column;">
+                    <label for="nfc-miso-gpio-pin">MISO Pin</label>
+                    <input type="number" name="nfc-miso-gpio-pin" id="nfc-miso-gpio-pin" placeholder="19" required
+                        value="%NFCMISOGPIOPIN%" style="width: fit-content;" />
+                </div>
+                <div style="display: flex;flex-direction: column;">
+                    <label for="nfc-mosi-gpio-pin">MOSI Pin</label>
+                    <input type="number" name="nfc-mosi-gpio-pin" id="nfc-mosi-gpio-pin" placeholder="23" required
+                        value="%NFCMOSIGPIOPIN%" style="width: fit-content;" />
+                </div>
+            </div>
         </div>
     </div>
     <div
