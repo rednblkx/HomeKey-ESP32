@@ -126,7 +126,7 @@
   </div>
   <div style="display: flex;flex-direction: column;border: 1px #8e8271 solid;border-radius: 8px;padding: 1rem;box-shadow: 0px 1px 1px 0px;background-color: #2d1d1d;">
     <h3 style="margin-top: 0;text-align: center;">HomeKit Triggers</h3>
-    <h4 style="margin-top: 0;margin-bottom: .5rem;">Executed upon interaction in the Home app and in addition also on successful HomeKey Authentication</h4>
+    <h4 style="margin-top: 0;margin-bottom: .5rem;">Executed upon interaction in the Home app and optionally on successful HomeKey Authentication(enabled by default)</h4>
     <h4 style="margin-top: 0;">Follows "Always Lock/Unlock on HomeKey" option</h4>
     <h4 style="margin-top: 0;">Momentary state is only available with LOCKED as initial state</h4>
     <div style="display:flex;flex-direction: column;border: 2px #8e8271 dashed;padding: 1rem;">
@@ -150,7 +150,7 @@
         </select>
       </div>
       <div style="display: flex;margin-top: .7rem;gap: 8px;">
-        <label for="homekey-gpio-state">Home Key controlled state</label>
+        <label for="homekey-gpio-state">Actionable by HomeKey</label>
         <select name="homekey-gpio-state" id="homekey-gpio-state">
           <option value="0">Disabled</option>
           <option value="1">Enabled</option>
@@ -167,7 +167,7 @@
       </div>
       <div style="display: flex;margin-top: .7rem;gap: 8px;">
         <label for="gpio-a-mo-timeout">Momentary Timeout (ms)</label>
-        <input type="number" name="gpio-a-mo-timeout" id="gpio-a-mo-timeout" placeholder="2" required value="%GPIOAMOTIME%" style="width: 4rem;">
+        <input type="number" name="gpio-a-mo-timeout" id="gpio-a-mo-timeout" placeholder="5000" required value="%GPIOAMOTIME%" style="width: 4rem;">
       </div>
     </div>
   </div>
