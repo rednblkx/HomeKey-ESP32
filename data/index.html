@@ -24,6 +24,16 @@
     }
     wifiSignalStrength();
     setInterval(wifiSignalStrength, 5000)
+    function switchTab(el) {
+      var parentId = el.parentElement.id;
+      document.querySelector(`.${parentId}-selected-body`).style.display = "none"; document.querySelector(`.${parentId}-selected-body`).className = "";
+      document.querySelector(`div[data-${parentId}-body="${el.dataset.tabIndex}"]`).style.display = "flex";
+      document.querySelector(`div[data-${parentId}-body="${el.dataset.tabIndex}"]`).classList.add(`${parentId}-selected-body`);
+      document.querySelector(`.${parentId}-selected`).style.borderBottom = "";
+      document.querySelector(`.${parentId}-selected`).className = "";
+      el.classList.add(`${parentId}-selected`);
+      el.style.borderBottom = "2px #8e8271 solid";
+    }
     async function addComponent(name, button) {
       let loaderEl = document.createElement("span")
       loaderEl.className = "loader";
