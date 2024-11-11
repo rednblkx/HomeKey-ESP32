@@ -3,17 +3,19 @@
 <form id="mqttConfig" action="mqttconfig" method="post"
   style="display: inline-flex; flex-direction: column;margin-bottom: 0;align-items: center;">
   <div style="display: flex;flex-direction: column;gap: 16px;">
-    <div
-      style="display: flex;flex-direction: column;border: 1px #8e8271 solid;border-radius: 8px;padding: 1rem;box-shadow: 0px 1px 1px 0px;background-color: #2d1d1d;flex: 1;max-width: 25rem;">
-      <h3 style="margin-top: 0;text-align: center;">Broker Connection</h3>
+    <div id="mqtt-broker-con" style="display: flex;flex-direction: column;border: 1px #8e8271 solid;border-radius: 8px;padding: 1rem;box-shadow: 0px 1px 1px 0px;background-color: #2d1d1d;">
+      <h3 style="margin-top: 0;text-align: center;margin-bottom: .5rem;">Broker Connection</h3>
+      <h5 style="text-align: center;margin-top: 0;margin-bottom: .5rem;">TCP - Without TLS</h5>
       <div style="display:flex;flex-direction: column;padding: .5rem;margin-bottom: .5rem;gap: 8px;">
-        <div style="display: flex; flex-direction: column;">
-          <label for="mqtt-broker">Address</label>
-          <input type="text" name="mqtt-broker" id="mqtt-broker" placeholder="0.0.0.0" required value="%MQTTBROKER%">
-        </div>
-        <div style="display: flex; flex-direction: column;">
-          <label for="mqtt-port">Port</label>
-          <input type="number" name="mqtt-port" id="mqtt-port" placeholder="1883" required inputmode="numeric" value="%MQTTPORT%" min="0" max="65535">
+        <div style="display: flex;gap: 8px;">
+          <div style="display: flex; flex-direction: column;flex: 2;">
+            <label for="mqtt-broker">Address</label>
+            <input type="text" name="mqtt-broker" id="mqtt-broker" placeholder="0.0.0.0" required value="%MQTTBROKER%">
+          </div>
+          <div style="display: flex; flex-direction: column;flex: .5;">
+            <label for="mqtt-port">Port</label>
+            <input type="number" name="mqtt-port" id="mqtt-port" placeholder="1883" required inputmode="numeric" value="%MQTTPORT%" min="0" max="65535">
+          </div>
         </div>
         <div style="display: flex; flex-direction: column;">
           <label for="mqtt-clientid">Client ID</label>
@@ -44,8 +46,7 @@
         </div>
       </div>
     </div>
-    <div
-      style="display: flex;flex-direction: column;border: 1px #8e8271 solid;border-radius: 8px;padding: 1rem;box-shadow: 0px 1px 1px 0px;background-color: #2d1d1d;flex: 2;max-width: 25rem;">
+    <div id="mqtt-topics" style="display: flex;flex-direction: column;border: 1px #8e8271 solid;border-radius: 8px;padding: 1rem;box-shadow: 0px 1px 1px 0px;background-color: #2d1d1d;">
       <h3 style="text-align: center;margin-top: 0;">MQTT Topics</h3>
       <div style="margin-bottom: 1rem;">
         <div id="mqtt-topics" style="display: flex;justify-content: space-around;">

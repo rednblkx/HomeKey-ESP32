@@ -1323,7 +1323,7 @@ void mqttConfigReset(const char* buf) {
 }
 
 void wifiCallback() {
-  if (espConfig::mqttData.mqttBroker.size() > 0 || !std::equal(espConfig::mqttData.mqttBroker.begin(), espConfig::mqttData.mqttBroker.end(), "0.0.0.0")) {
+  if (espConfig::mqttData.mqttBroker.size() >= 7 && espConfig::mqttData.mqttBroker.size() <= 16 && !std::equal(espConfig::mqttData.mqttBroker.begin(), espConfig::mqttData.mqttBroker.end(), "0.0.0.0")) {
     mqtt_app_start();
   }
   setupWeb();

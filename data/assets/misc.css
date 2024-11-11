@@ -71,6 +71,10 @@ button {
     #restart-btn:active {
         background-color: #4040402e!important;
     }
+
+    #mqtt-broker-con, #mqtt-topics {
+        width: 23rem;
+    }
 }
 
 @media only screen and (max-width: 600px) {
@@ -83,9 +87,12 @@ button {
         flex-wrap: wrap;
         justify-content: center;
     }
+    #mqtt-broker, #mqtt-topics {
+        width: auto;
+    }
 }
 
-#mqtt-broker-conn {
+.fill-container {
     width: 100%;
     width: -moz-available;
     width: -webkit-fill-available;
