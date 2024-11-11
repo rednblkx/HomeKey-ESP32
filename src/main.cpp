@@ -1063,8 +1063,20 @@ void setupWeb() {
           }
         }
       } else if (!strcmp(p->name().c_str(), "control-pin")) {
+        if (!GPIO_IS_VALID_GPIO(p->value().toInt()) && !GPIO_IS_VALID_OUTPUT_GPIO(p->value().toInt()) && p->value().toInt() != 255) {
+          std::string msg = p->value().c_str();
+          msg.append(" is not a valid GPIO Pin");
+          request->send(200, "text/plain", msg.c_str());
+          return;
+        }
         espConfig::miscConfig.controlPin = p->value().toInt();
       } else if (!strcmp(p->name().c_str(), "led-pin")) {
+        if (!GPIO_IS_VALID_GPIO(p->value().toInt()) && !GPIO_IS_VALID_OUTPUT_GPIO(p->value().toInt()) && p->value().toInt() != 255) {
+          std::string msg = p->value().c_str();
+          msg.append(" is not a valid GPIO Pin");
+          request->send(200, "text/plain", msg.c_str());
+          return;
+        }
         espConfig::miscConfig.hsStatusPin = p->value().toInt();
       } else if (!strcmp(p->name().c_str(), "hk-always-unlock")) {
         espConfig::miscConfig.lockAlwaysUnlock = p->value().toInt();
@@ -1079,12 +1091,36 @@ void setupWeb() {
       } else if (!strcmp(p->name().c_str(), "web-auth-password")) {
         espConfig::miscConfig.webPassword = p->value().c_str();
       } else if (!strcmp(p->name().c_str(), "nfc-ss-gpio-pin")) {
+        if (!GPIO_IS_VALID_GPIO(p->value().toInt()) && !GPIO_IS_VALID_OUTPUT_GPIO(p->value().toInt()) && p->value().toInt() != 255) {
+          std::string msg = p->value().c_str();
+          msg.append(" is not a valid GPIO Pin");
+          request->send(200, "text/plain", msg.c_str());
+          return;
+        }
         espConfig::miscConfig.nfcGpioPins[0] = p->value().toInt();
       } else if (!strcmp(p->name().c_str(), "nfc-sck-gpio-pin")) {
+        if (!GPIO_IS_VALID_GPIO(p->value().toInt()) && !GPIO_IS_VALID_OUTPUT_GPIO(p->value().toInt()) && p->value().toInt() != 255) {
+          std::string msg = p->value().c_str();
+          msg.append(" is not a valid GPIO Pin");
+          request->send(200, "text/plain", msg.c_str());
+          return;
+        }
         espConfig::miscConfig.nfcGpioPins[1] = p->value().toInt();
       } else if (!strcmp(p->name().c_str(), "nfc-miso-gpio-pin")) {
+        if (!GPIO_IS_VALID_GPIO(p->value().toInt()) && !GPIO_IS_VALID_OUTPUT_GPIO(p->value().toInt()) && p->value().toInt() != 255) {
+          std::string msg = p->value().c_str();
+          msg.append(" is not a valid GPIO Pin");
+          request->send(200, "text/plain", msg.c_str());
+          return;
+        }
         espConfig::miscConfig.nfcGpioPins[2] = p->value().toInt();
       } else if (!strcmp(p->name().c_str(), "nfc-mosi-gpio-pin")) {
+        if (!GPIO_IS_VALID_GPIO(p->value().toInt()) && !GPIO_IS_VALID_OUTPUT_GPIO(p->value().toInt()) && p->value().toInt() != 255) {
+          std::string msg = p->value().c_str();
+          msg.append(" is not a valid GPIO Pin");
+          request->send(200, "text/plain", msg.c_str());
+          return;
+        }
         espConfig::miscConfig.nfcGpioPins[3] = p->value().toInt();
       }
     }
@@ -1110,6 +1146,12 @@ void setupWeb() {
       AsyncWebParameter* p = request->getParam(i);
       LOG(V, "POST[%s]: %s\n", p->name().c_str(), p->value().c_str());
       if (!strcmp(p->name().c_str(), "nfc-neopixel-pin")) {
+        if (!GPIO_IS_VALID_GPIO(p->value().toInt()) && !GPIO_IS_VALID_OUTPUT_GPIO(p->value().toInt()) && p->value().toInt() != 255) {
+          std::string msg = p->value().c_str();
+          msg.append(" is not a valid GPIO Pin");
+          request->send(200, "text/plain", msg.c_str());
+          return;
+        }
         if (espConfig::miscConfig.nfcNeopixelPin == 255 && p->value().toInt() != 255) {
           xTaskCreate(neopixel_task, "neopixel_task", 4096, NULL, 2, &neopixel_task_handle);
           if (!pixel) {
@@ -1143,6 +1185,12 @@ void setupWeb() {
       } else if (!strcmp(p->name().c_str(), "nfc-f-blue-pixel")) {
         espConfig::miscConfig.neopixelFailureColor[espConfig::misc_config_t::colorMap::B] = p->value().toInt();
       } else if (!strcmp(p->name().c_str(), "nfc-s-pin")) {
+        if (!GPIO_IS_VALID_GPIO(p->value().toInt()) && !GPIO_IS_VALID_OUTPUT_GPIO(p->value().toInt()) && p->value().toInt() != 255) {
+          std::string msg = p->value().c_str();
+          msg.append(" is not a valid GPIO Pin");
+          request->send(200, "text/plain", msg.c_str());
+          return;
+        }
         if (espConfig::miscConfig.nfcSuccessPin == 255 && p->value().toInt() != 255 && gpio_led_task_handle == nullptr) {
           pinMode(p->value().toInt(), OUTPUT);
           xTaskCreate(nfc_gpio_task, "nfc_gpio_task", 4096, NULL, 2, &gpio_led_task_handle);
@@ -1153,6 +1201,12 @@ void setupWeb() {
         }
         espConfig::miscConfig.nfcSuccessPin = p->value().toInt();
       } else if (!strcmp(p->name().c_str(), "nfc-f-pin")) {
+        if (!GPIO_IS_VALID_GPIO(p->value().toInt()) && !GPIO_IS_VALID_OUTPUT_GPIO(p->value().toInt()) && p->value().toInt() != 255) {
+          std::string msg = p->value().c_str();
+          msg.append(" is not a valid GPIO Pin");
+          request->send(200, "text/plain", msg.c_str());
+          return;
+        }
         if (espConfig::miscConfig.nfcFailPin == 255 && p->value().toInt() != 255 && gpio_led_task_handle == nullptr) {
           pinMode(p->value().toInt(), OUTPUT);
           xTaskCreate(nfc_gpio_task, "nfc_gpio_task", 4096, NULL, 2, &gpio_led_task_handle);
@@ -1171,6 +1225,12 @@ void setupWeb() {
       } else if (!strcmp(p->name().c_str(), "nfc-f-time")) {
         espConfig::miscConfig.nfcFailTime = p->value().toInt();
       } else if (!strcmp(p->name().c_str(), "gpio-a-pin")) {
+        if (!GPIO_IS_VALID_GPIO(p->value().toInt()) && !GPIO_IS_VALID_OUTPUT_GPIO(p->value().toInt()) && p->value().toInt() != 255) {
+          std::string msg = p->value().c_str();
+          msg.append(" is not a valid GPIO Pin");
+          request->send(200, "text/plain", msg.c_str());
+          return;
+        }
         if (espConfig::miscConfig.gpioActionPin == 255 && p->value().toInt() != 255) {
           pinMode(p->value().toInt(), OUTPUT);
           xTaskCreate(gpio_task, "gpio_task", 4096, NULL, 2, &gpio_lock_task_handle);
@@ -1199,7 +1259,7 @@ void setupWeb() {
     LOG(V, "SET_STATUS: %s", esp_err_to_name(set_nvs));
     LOG(V, "COMMIT_STATUS: %s", esp_err_to_name(commit_nvs));
 
-    request->send(200, "text/plain", "Received Config!");
+    request->send(200, "text/plain", "Configuration applied!");
     });
   webServer.addHandler(actionsConfigHandle);
   auto rebootDeviceHandle = new AsyncCallbackWebHandler();
