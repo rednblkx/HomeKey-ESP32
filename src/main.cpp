@@ -946,16 +946,16 @@ String actionsProcess(const String& var) {
 }
 bool headersFix(AsyncWebServerRequest* request) { request->addInterestingHeader("ANY"); return true; };
 void setupWeb() {
-  auto infoHandle = new AsyncStaticWebHandler("/info", LittleFS, "/info.html", NULL);
+  auto infoHandle = new AsyncStaticWebHandler("/info", LittleFS, "/routes/info.html", NULL);
   webServer.addHandler(infoHandle);
   infoHandle->setTemplateProcessor(hkInfoHtmlProcess).setFilter(headersFix);
-  auto mqttHandle = new AsyncStaticWebHandler("/mqtt", LittleFS, "/mqtt.html", NULL);
+  auto mqttHandle = new AsyncStaticWebHandler("/mqtt", LittleFS, "/routes/mqtt.html", NULL);
   webServer.addHandler(mqttHandle);
   mqttHandle->setTemplateProcessor(mqttHtmlProcess).setFilter(headersFix);
-  auto miscHandle = new AsyncStaticWebHandler("/misc", LittleFS, "/misc.html", NULL);
+  auto miscHandle = new AsyncStaticWebHandler("/misc", LittleFS, "/routes/misc.html", NULL);
   webServer.addHandler(miscHandle);
   miscHandle->setTemplateProcessor(miscHtmlProcess).setFilter(headersFix);
-  auto actionsHandle = new AsyncStaticWebHandler("/actions", LittleFS, "/actions.html", NULL);
+  auto actionsHandle = new AsyncStaticWebHandler("/actions", LittleFS, "/routes/actions.html", NULL);
   webServer.addHandler(actionsHandle);
   actionsHandle->setTemplateProcessor(actionsProcess).setFilter(headersFix);
   auto assetsHandle = new AsyncStaticWebHandler("/assets", LittleFS, "/assets/", NULL);

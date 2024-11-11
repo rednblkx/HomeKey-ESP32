@@ -41,7 +41,7 @@
       document.querySelector("#main > span").insertAdjacentElement("afterend",loaderEl);
       let element = document.querySelector("#component");
       if(element){
-        element.remove(); 
+        element.remove();
       }
       let sel = document.querySelector(".selected-btn");
       if(sel){
@@ -51,7 +51,7 @@
       let el = document.createElement("div");
       el.id = "component";
       el.style = "display: flex;flex-direction: column;max-width: 32rem;margin-bottom: 1rem;";
-      let data = await fetch(name);
+      let data = await fetch(`${name}`);
       let string = await data.text();
       el.innerHTML = string;
       main.appendChild(el);
