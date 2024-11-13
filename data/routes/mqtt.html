@@ -2,7 +2,7 @@
 <h5 style="text-align:center;margin-top: 0;">Changes in this section will reboot the device</h5>
 <form id="mqttConfig" action="mqttconfig" method="post"
   style="display: inline-flex; flex-direction: column;margin-bottom: 0;align-items: center;">
-  <div style="display: flex;flex-direction: column;gap: 16px;">
+  <div class="cards-container" style="display: flex;gap: 16px;">
     <div id="mqtt-broker-con" style="display: flex;flex-direction: column;border: 1px #8e8271 solid;border-radius: 8px;padding: 1rem;box-shadow: 0px 1px 1px 0px;background-color: #2d1d1d;">
       <h3 style="margin-top: 0;text-align: center;margin-bottom: .5rem;">Broker Connection</h3>
       <h5 style="text-align: center;margin-top: 0;margin-bottom: .5rem;">TCP - Without TLS</h5>
@@ -46,12 +46,12 @@
         </div>
       </div>
     </div>
-    <div id="mqtt-topics" style="display: flex;flex-direction: column;border: 1px #8e8271 solid;border-radius: 8px;padding: 1rem;box-shadow: 0px 1px 1px 0px;background-color: #2d1d1d;">
+    <div id="mqtt-topics-container" style="display: flex;flex-direction: column;border: 1px #8e8271 solid;border-radius: 8px;padding: 1rem;box-shadow: 0px 1px 1px 0px;background-color: #2d1d1d;">
       <h3 style="text-align: center;margin-top: 0;">MQTT Topics</h3>
       <div style="margin-bottom: 1rem;">
         <div id="mqtt-topics" style="display: flex;justify-content: space-around;">
-          <h3 class="mqtt-topics-selected"
-          style="margin: 0;width: fit-content;padding: 0.5rem;cursor: pointer;border-bottom: 2px #8e8271 solid;"
+          <h3 class="mqtt-topics-selected-tab"
+          style="margin: 0;width: fit-content;padding: 0.5rem;cursor: pointer;"
           onclick="switchTab(this)" data-tab-index="0">Core Topics</h3>
           <h3
           style="margin: 0;width: fit-content;padding: 0.5rem;cursor: pointer;"
@@ -59,7 +59,7 @@
         </div>
         <span style="height: 1px;border-top: 1px #424242 solid;display: block;margin: 0;padding: 0;"></span>
       </div>
-      <div class="mqtt-topics-selected-body" data-mqtt-topics-body="0" style="display:flex;flex-direction: column;padding-inline: 1rem;margin-bottom: 1rem;">
+      <div class="mqtt-topics-selected-body" data-mqtt-topics-body="0">
         <div style="display: flex;flex-direction: column;gap: 8px;">
           <div style="display: flex; flex-direction: column;">
             <label for="mqtt-hktopic">NFC/HK Topic</label>
@@ -90,7 +90,7 @@
           </div>
         </div>
       </div>
-      <div data-mqtt-topics-body="1" style="display:none;flex-direction: column;padding-inline: 1rem;">
+      <div class="mqtt-topics-hidden-body" data-mqtt-topics-body="1">
         <div style="display: flex;flex-direction: column;gap: 8px;">
           <div style="display: flex;flex-direction: column;">
             <label for="mqtt-customstate-enable">MQTT Custom State Topics</label>
@@ -108,48 +108,48 @@
             <input type="text" name="mqtt-customstate-cmd" id="mqtt-customstate-cmd" placeholder="topic/set_target_state" required value="%CUSTOMSTATECMD%">
           </div>
         </div>
-        <div>
-          <fieldset style="margin-top: 1rem;">
+        <div style="display: flex;flex-direction: column;gap: 16px;">
+          <fieldset>
             <legend>Custom Lock Actions </legend>
             <div
-              style="display: flex; gap: 16px; /*! grid-template-columns: auto; */ /*! flex: 2; */ justify-content: center;flex-wrap: wrap;flex: 1;">
+              style="display: flex; gap: 16px;justify-content: center;flex-wrap: wrap;padding: .5rem;">
               <div style="display: flex; flex-direction: column; max-width: 70px;">
                 <label for="caction-unlock">Unlock</label>
-                <input type="number" name="caction-unlock" id="caction-unlock" placeholder="255" required value="%CACTIONUNLOCK%" min="0" max="255">
+                <input type="number" name="caction-unlock" id="caction-unlock" placeholder="255" value="%CACTIONUNLOCK%" min="0" max="255">
               </div>
               <div style="display: flex; flex-direction: column; max-width: 70px;">
                 <label for="caction-lock">Lock</label>
-                <input type="number" name="caction-lock" id="caction-lock" placeholder="255" required value="%CACTIONLOCK%" min="0" max="255">
+                <input type="number" name="caction-lock" id="caction-lock" placeholder="255" value="%CACTIONLOCK%" min="0" max="255">
               </div>
             </div>
           </fieldset>
-          <fieldset style="margin-top: 1rem;">
+          <fieldset>
             <legend>Custom Lock States </legend>
             <div
-              style="display: flex; gap: 16px; /*! grid-template-columns: auto auto; */flex-wrap: wrap;justify-content: center;flex: 2;">
+              style="display: flex; gap: 16px;flex-wrap: wrap;justify-content: center;padding: .5rem;">
               <div style="display: flex; flex-direction: column; max-width: 70px;">
                 <label for="cstate-unlocking">Unlocking</label>
-                <input type="number" name="cstate-unlocking" id="cstate-unlocking" placeholder="255" required value="%CSTATEUNLOCKING%" min="0" max="255">
+                <input type="number" name="cstate-unlocking" id="cstate-unlocking" placeholder="255" value="%CSTATEUNLOCKING%" min="0" max="255">
               </div>
               <div style="display: flex; flex-direction: column; max-width: 70px;">
                 <label for="cstate-locking">Locking</label>
-                <input type="number" name="cstate-locking" id="cstate-locking" placeholder="255" required value="%CSTATELOCKING%" min="0" max="255">
+                <input type="number" name="cstate-locking" id="cstate-locking" placeholder="255" value="%CSTATELOCKING%" min="0" max="255">
               </div>
               <div style="display: flex; flex-direction: column; max-width: 70px;">
                 <label for="cstate-unlocked">Unlocked</label>
-                <input type="number" name="cstate-unlocked" id="cstate-unlocked" placeholder="255" required value="%CSTATEUNLOCKED%" min="0" max="255">
+                <input type="number" name="cstate-unlocked" id="cstate-unlocked" placeholder="255" value="%CSTATEUNLOCKED%" min="0" max="255">
               </div>
               <div style="display: flex; flex-direction: column; max-width: 70px;">
                 <label for="cstate-locked">Locked</label>
-                <input type="number" name="cstate-locked" id="cstate-locked" placeholder="255" required value="%CSTATELOCKED%" min="0" max="255">
+                <input type="number" name="cstate-locked" id="cstate-locked" placeholder="255" value="%CSTATELOCKED%" min="0" max="255">
               </div>
               <div style="display: flex; flex-direction: column; max-width: 70px;">
                 <label for="cstate-jammed">Jammed</label>
-                <input type="number" name="cstate-jammed" id="cstate-jammed" placeholder="255" required value="%CSTATEJAMMED%" min="0" max="255">
+                <input type="number" name="cstate-jammed" id="cstate-jammed" placeholder="255" value="%CSTATEJAMMED%" min="0" max="255">
               </div>
               <div style="display: flex; flex-direction: column; max-width: 70px;">
                 <label for="cstate-unknown">Unknown</label>
-                <input type="number" name="cstate-unknown" id="cstate-unknown" placeholder="255" required value="%CSTATEUNKNOWN%" min="0" max="255">
+                <input type="number" name="cstate-unknown" id="cstate-unknown" placeholder="255" value="%CSTATEUNKNOWN%" min="0" max="255">
               </div>
             </div>
           </fieldset>
@@ -157,7 +157,7 @@
       </div>
     </div>
   </div>
-  <div id="buttons-group" style="display: flex;justify-content: space-around;margin-top: 2rem;gap: 16px;">
+  <div id="buttons-group">
     <button type="submit" style="cursor: pointer;padding-inline: 1rem;padding-block: .5rem;">Submit</button>
     <button type="reset" style="cursor: pointer;padding-inline: 1rem;padding-block: .5rem;"
       class="destructive-btn">Reset</button>

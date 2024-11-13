@@ -26,13 +26,10 @@
     setInterval(wifiSignalStrength, 5000)
     function switchTab(el) {
       var parentId = el.parentElement.id;
-      document.querySelector(`.${parentId}-selected-body`).style.display = "none"; document.querySelector(`.${parentId}-selected-body`).className = "";
-      document.querySelector(`div[data-${parentId}-body="${el.dataset.tabIndex}"]`).style.display = "flex";
-      document.querySelector(`div[data-${parentId}-body="${el.dataset.tabIndex}"]`).classList.add(`${parentId}-selected-body`);
-      document.querySelector(`.${parentId}-selected`).style.borderBottom = "";
-      document.querySelector(`.${parentId}-selected`).className = "";
-      el.classList.add(`${parentId}-selected`);
-      el.style.borderBottom = "2px #8e8271 solid";
+      document.querySelector(`.${parentId}-selected-body`).classList.replace(`${parentId}-selected-body`,`${parentId}-hidden-body`);
+      document.querySelector(`div[data-${parentId}-body="${el.dataset.tabIndex}"]`).classList.replace(`${parentId}-hidden-body`, `${parentId}-selected-body`);
+      document.querySelector(`.${parentId}-selected-tab`).className = "";
+      el.classList.add(`${parentId}-selected-tab`);
     }
     async function addComponent(name, button) {
       let loaderEl = document.createElement("span")
@@ -50,7 +47,7 @@
       let main = document.querySelector("#main");
       let el = document.createElement("div");
       el.id = "component";
-      el.style = "display: flex;flex-direction: column;max-width: 32rem;margin-bottom: 1rem;";
+      el.style = "display: flex;flex-direction: column;margin-bottom: 1rem;";
       let data = await fetch(`${name}`);
       let string = await data.text();
       el.innerHTML = string;
