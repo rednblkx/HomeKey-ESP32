@@ -70,7 +70,7 @@ namespace espConfig
       lockCStateCmd.append(id).append("/" MQTT_SET_CURRENT_STATE_TOPIC);
       lockTStateCmd.append(id).append("/" MQTT_SET_TARGET_STATE_TOPIC);
       lockCustomStateTopic.append(id).append("/" MQTT_CUSTOM_STATE_TOPIC);
-      lockCustomStateCmd.append(id).append("/" MQTT_CUSTOM_STATE_TOPIC);
+      lockCustomStateCmd.append(id).append("/" MQTT_CUSTOM_STATE_CTRL_TOPIC);
     }
     /* MQTT Broker */
     std::string mqttBroker = MQTT_HOST;
