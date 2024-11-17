@@ -88,6 +88,10 @@
             <label for="mqtt-tstatecmd">Lock Target State Cmd Topic</label>
             <input type="text" name="mqtt-tstatecmd" id="mqtt-tstatecmd" placeholder="topic/set_target_state" required value="%TSTATECMD%">
           </div>
+          <div style="display: flex; flex-direction: column;">
+            <label for="mqtt-btrprox-cmd-topic">SmartLock battery level Cmd Topic</label>
+            <input type="text" name="mqtt-btrprox-cmd-topic" id="mqtt-btrprox-cmd-topic" placeholder="topic/set_battery_level" required value="%BTRLEVELCMD%">
+          </div>
         </div>
       </div>
       <div class="mqtt-topics-hidden-body" data-mqtt-topics-body="1">

@@ -14,18 +14,16 @@
                     <span style="height: 1px;border-top: 1px #424242 solid;display: block;margin: 0;padding: 0;"></span>
                 </div>
                 <div class="custom-tabs-selected-body" data-custom-tabs-body="0">
-                    <div style="display: flex;flex-direction: column;">
+                    <div style="display: flex;gap: 8px;">
                         <label for="device-name">Device Name</label>
                         <input type="text" name="device-name" id="device-name" placeholder="HK" required value="%DEVICENAME%"
                             style="width: fit-content;" />
                     </div>
-    
-                    <div style="display: flex;flex-direction: column;">
+                    <div style="display: flex;gap: 8px;">
                         <label for="hk-setupcode">Setup Code</label>
                         <input type="number" name="hk-setupcode" id="hk-setupcode" placeholder="46637726" required
                             value="%HKSETUPCODE%" style="width: fit-content;" />
                     </div>
-    
                     <div style="display: flex;gap: 8px;">
                         <label for="hk-always-lock">Always Lock on HomeKey</label>
                         <select name="hk-always-lock" id="hk-always-lock">
@@ -39,6 +37,17 @@
                             <option value="0">Disabled</option>
                             <option value="1">Enabled</option>
                         </select>
+                    </div>
+                    <div style="display: flex;gap: 8px;">
+                        <label for="prox-bat-enable">SmartLock battery reporting</label>
+                        <select name="prox-bat-enable" id="prox-bat-enable">
+                            <option value="0">Disabled</option>
+                            <option value="1">Enabled</option>
+                        </select>
+                    </div>
+                    <div style="display: flex;gap: 8px;">
+                        <label for="btr-low-threshold">Battery low status Threshold</label>
+                        <input type="number" name="btr-low-threshold" id="btr-low-threshold" placeholder="10" min="0" max="100" value="%BTRLOWTHRESHOLD%" style="width: 4rem;" />
                     </div>
                     <fieldset>
                         <legend>HomeKey Card Finish:</legend>
@@ -170,6 +179,7 @@
     document.getElementById("hk-always-unlock").selectedIndex = "%ALWAYSUNLOCK%";
     document.getElementById("hk-always-lock").selectedIndex = "%ALWAYSLOCK%";
     document.getElementById("web-auth-enable").selectedIndex = "%WEBENABLE%";
+    document.getElementById("prox-bat-enable").selectedIndex = "%PROXBATENABLE%";
     let form = document.getElementById("misc-config");
     async function handleForm(event) {
       event.preventDefault();
