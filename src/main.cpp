@@ -139,7 +139,8 @@ namespace espConfig
     std::array<uint8_t, 4> nfcGpioPins{SS, SCK, MISO, MOSI};
     uint8_t btrLowStatusThreshold = 10;
     bool proxBatEnabled = false;
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(misc_config_t, deviceName, otaPasswd, hk_key_color, setupCode, lockAlwaysUnlock, lockAlwaysLock, controlPin, hsStatusPin, nfcSuccessPin, nfcSuccessTime, nfcNeopixelPin, neopixelSuccessColor, neopixelFailureColor, neopixelSuccessTime, neopixelFailTime, nfcSuccessHL, nfcFailPin, nfcFailTime, nfcFailHL, gpioActionPin, gpioActionLockState, gpioActionUnlockState, gpioActionMomentaryEnabled, gpioActionMomentaryTimeout, webAuthEnabled, webUsername, webPassword, nfcGpioPins, btrLowStatusThreshold, proxBatEnabled)
+    bool hkDumbSwitchMode = false;
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(misc_config_t, deviceName, otaPasswd, hk_key_color, setupCode, lockAlwaysUnlock, lockAlwaysLock, controlPin, hsStatusPin, nfcSuccessPin, nfcSuccessTime, nfcNeopixelPin, neopixelSuccessColor, neopixelFailureColor, neopixelSuccessTime, neopixelFailTime, nfcSuccessHL, nfcFailPin, nfcFailTime, nfcFailHL, gpioActionPin, gpioActionLockState, gpioActionUnlockState, gpioActionMomentaryEnabled, gpioActionMomentaryTimeout, webAuthEnabled, webUsername, webPassword, nfcGpioPins, btrLowStatusThreshold, proxBatEnabled, hkDumbSwitchMode)
   } miscConfig;
 };
 
@@ -366,6 +367,8 @@ struct LockMechanism : Service::LockMechanism
     if (espConfig::miscConfig.gpioActionPin != 255) {
       const gpioLockAction gpioAction{ .source = gpioLockAction::HOMEKIT, .action = 0 };
       xQueueSend(gpio_lock_handle, &gpioAction, 0);
+    } else if (espConfig::miscConfig.hkDumbSwitchMode) {
+      lockCurrentState->setVal(targetState);
     }
     int currentState = lockCurrentState->getNewVal();
     if (client != nullptr) {
@@ -829,6 +832,8 @@ String miscHtmlProcess(const String& var) {
     return String(espConfig::miscConfig.btrLowStatusThreshold);
   } else if (var == "PROXBATENABLE") {
     return String(espConfig::miscConfig.proxBatEnabled);
+  } else if (var == "DUMBSWITCHMODE") {
+    return String(espConfig::miscConfig.hkDumbSwitchMode);
   }
   return String();
 }
@@ -1164,6 +1169,8 @@ void setupWeb() {
             statusLowBtr->setVal(0);
           }
         }
+      } else if (!strcmp(p->name().c_str(), "homekit-dumb-switch-mode")) {
+        espConfig::miscConfig.hkDumbSwitchMode = p->value().toInt();
       }
     }
     json json_misc_config = espConfig::miscConfig;

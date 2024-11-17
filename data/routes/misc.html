@@ -39,6 +39,13 @@
                         </select>
                     </div>
                     <div style="display: flex;gap: 8px;">
+                        <label for="homekit-dumb-switch-mode">Dumb Switch Mode</label>
+                        <select name="homekit-dumb-switch-mode" id="homekit-dumb-switch-mode">
+                            <option value="0">Disabled</option>
+                            <option value="1">Enabled</option>
+                        </select>
+                    </div>
+                    <div style="display: flex;gap: 8px;">
                         <label for="prox-bat-enable">SmartLock battery reporting</label>
                         <select name="prox-bat-enable" id="prox-bat-enable">
                             <option value="0">Disabled</option>
@@ -180,6 +187,7 @@
     document.getElementById("hk-always-lock").selectedIndex = "%ALWAYSLOCK%";
     document.getElementById("web-auth-enable").selectedIndex = "%WEBENABLE%";
     document.getElementById("prox-bat-enable").selectedIndex = "%PROXBATENABLE%";
+    document.getElementById("homekit-dumb-switch-mode").selectedIndex = "%DUMBSWITCHMODE%";
     let form = document.getElementById("misc-config");
     async function handleForm(event) {
       event.preventDefault();
