@@ -71,6 +71,7 @@ namespace espConfig
       lockTStateCmd.append(id).append("/" MQTT_SET_TARGET_STATE_TOPIC);
       lockCustomStateTopic.append(id).append("/" MQTT_CUSTOM_STATE_TOPIC);
       lockCustomStateCmd.append(id).append("/" MQTT_CUSTOM_STATE_CTRL_TOPIC);
+      btrLvlCmdTopic.append(id).append("/" MQTT_PROX_BAT_TOPIC);
     }
     /* MQTT Broker */
     std::string mqttBroker = MQTT_HOST;
@@ -85,6 +86,7 @@ namespace espConfig
     std::string lockStateCmd;
     std::string lockCStateCmd;
     std::string lockTStateCmd;
+    std::string btrLvlCmdTopic;
     /* MQTT Custom State */
     std::string lockCustomStateTopic;
     std::string lockCustomStateCmd;
@@ -94,7 +96,7 @@ namespace espConfig
     bool nfcTagNoPublish = false;
     std::map<std::string, int> customLockStates = { {"C_LOCKED", C_LOCKED}, {"C_UNLOCKING", C_UNLOCKING}, {"C_UNLOCKED", C_UNLOCKED}, {"C_LOCKING", C_LOCKING}, {"C_JAMMED", C_JAMMED}, {"C_UNKNOWN", C_UNKNOWN} };
     std::map<std::string, int> customLockActions = { {"UNLOCK", UNLOCK}, {"LOCK", LOCK} };
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(espConfig::mqttConfig_t, mqttBroker, mqttPort, mqttUsername, mqttPassword, mqttClientId, lwtTopic, hkTopic, lockStateTopic, lockStateCmd, lockCStateCmd, lockTStateCmd, lockCustomStateTopic, lockCustomStateCmd, lockEnableCustomState, hassMqttDiscoveryEnabled, customLockStates, customLockActions, nfcTagNoPublish)
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(espConfig::mqttConfig_t, mqttBroker, mqttPort, mqttUsername, mqttPassword, mqttClientId, lwtTopic, hkTopic, lockStateTopic, lockStateCmd, lockCStateCmd, lockTStateCmd, lockCustomStateTopic, lockCustomStateCmd, lockEnableCustomState, hassMqttDiscoveryEnabled, customLockStates, customLockActions, nfcTagNoPublish, btrLvlCmdTopic)
   } mqttData;
 
   struct misc_config_t
@@ -135,13 +137,17 @@ namespace espConfig
     std::string webUsername = WEB_AUTH_USERNAME;
     std::string webPassword = WEB_AUTH_PASSWORD;
     std::array<uint8_t, 4> nfcGpioPins{SS, SCK, MISO, MOSI};
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(misc_config_t, deviceName, otaPasswd, hk_key_color, setupCode, lockAlwaysUnlock, lockAlwaysLock, controlPin, hsStatusPin, nfcSuccessPin, nfcSuccessTime, nfcNeopixelPin, neopixelSuccessColor, neopixelFailureColor, neopixelSuccessTime, neopixelFailTime, nfcSuccessHL, nfcFailPin, nfcFailTime, nfcFailHL, gpioActionPin, gpioActionLockState, gpioActionUnlockState, gpioActionMomentaryEnabled, gpioActionMomentaryTimeout, webAuthEnabled, webUsername, webPassword, nfcGpioPins)
+    uint8_t btrLowStatusThreshold = 10;
+    bool proxBatEnabled = false;
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(misc_config_t, deviceName, otaPasswd, hk_key_color, setupCode, lockAlwaysUnlock, lockAlwaysLock, controlPin, hsStatusPin, nfcSuccessPin, nfcSuccessTime, nfcNeopixelPin, neopixelSuccessColor, neopixelFailureColor, neopixelSuccessTime, neopixelFailTime, nfcSuccessHL, nfcFailPin, nfcFailTime, nfcFailHL, gpioActionPin, gpioActionLockState, gpioActionUnlockState, gpioActionMomentaryEnabled, gpioActionMomentaryTimeout, webAuthEnabled, webUsername, webPassword, nfcGpioPins, btrLowStatusThreshold, proxBatEnabled)
   } miscConfig;
 };
 
 KeyFlow hkFlow = KeyFlow::kFlowFAST;
 SpanCharacteristic* lockCurrentState;
 SpanCharacteristic* lockTargetState;
+SpanCharacteristic* statusLowBtr;
+SpanCharacteristic* btrLevel;
 esp_mqtt_client_handle_t client = nullptr;
 
 std::unique_ptr<Pixel> pixel;
@@ -154,6 +160,15 @@ bool save_to_nvs() {
   LOG(D, "NVS COMMIT STATUS: %s", esp_err_to_name(commit_nvs));
   return !set_nvs && !commit_nvs;
 }
+
+struct PhysicalLockBattery : Service::BatteryService
+{
+  PhysicalLockBattery() {
+    LOG(D, "Configuring PhysicalLockBattery");
+    statusLowBtr = new Characteristic::StatusLowBattery(0, true);
+    btrLevel = new Characteristic::BatteryLevel(100, true);
+  }
+};
 
 struct LockManagement : Service::LockManagement
 {
@@ -682,6 +697,9 @@ void mqtt_connected_event(void* event_handler_arg, esp_event_base_t event_base, 
   if (espConfig::mqttData.lockEnableCustomState) {
     esp_mqtt_client_subscribe(client, espConfig::mqttData.lockCustomStateCmd.c_str(), 0);
   }
+  if (espConfig::miscConfig.proxBatEnabled) {
+    esp_mqtt_client_subscribe(client, espConfig::mqttData.btrLvlCmdTopic.c_str(), 0);
+  }
   esp_mqtt_client_subscribe(client, espConfig::mqttData.lockStateCmd.c_str(), 0);
   esp_mqtt_client_subscribe(client, espConfig::mqttData.lockCStateCmd.c_str(), 0);
   esp_mqtt_client_subscribe(client, espConfig::mqttData.lockTStateCmd.c_str(), 0);
@@ -708,6 +726,13 @@ void mqtt_data_handler(void* event_handler_arg, esp_event_base_t event_base, int
     if (state == lockStates::UNLOCKED || state == lockStates::LOCKED || state == lockStates::JAMMED || state == lockStates::UNKNOWN) {
       lockCurrentState->setVal(state);
       esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockCurrentState->getVal()).c_str(), 0, 1, true);
+    }
+  } else if (!strcmp(espConfig::mqttData.btrLvlCmdTopic.c_str(), topic.c_str())) {
+    btrLevel->setVal(state);
+    if (state <= espConfig::miscConfig.btrLowStatusThreshold) {
+      statusLowBtr->setVal(1);
+    } else {
+      statusLowBtr->setVal(0);
     }
   }
 }
@@ -800,6 +825,10 @@ String miscHtmlProcess(const String& var) {
     return String(espConfig::miscConfig.nfcGpioPins[2]);
   } else if (var == "NFCMOSIGPIOPIN") {
     return String(espConfig::miscConfig.nfcGpioPins[3]);
+  } else if (var == "BTRLOWTHRESHOLD") {
+    return String(espConfig::miscConfig.btrLowStatusThreshold);
+  } else if (var == "PROXBATENABLE") {
+    return String(espConfig::miscConfig.proxBatEnabled);
   }
   return String();
 }
@@ -883,6 +912,8 @@ String mqttHtmlProcess(const String& var) {
     return String(espConfig::mqttData.customLockStates["C_UNKNOWN"]);
   } else if (var == "NFCTAGSNOPUBLISH") {
     return String(espConfig::mqttData.nfcTagNoPublish);
+  } else if (var == "BTRLEVELCMD") {
+    return String(espConfig::mqttData.btrLvlCmdTopic.c_str());
   }
   return "";
 }
@@ -1122,6 +1153,17 @@ void setupWeb() {
           return;
         }
         espConfig::miscConfig.nfcGpioPins[3] = p->value().toInt();
+      } else if (!strcmp(p->name().c_str(), "prox-bat-enable")) {
+        espConfig::miscConfig.proxBatEnabled = p->value().toInt();
+      } else if (!strcmp(p->name().c_str(), "btr-low-threshold")) {
+        espConfig::miscConfig.btrLowStatusThreshold = p->value().toInt();
+        if (statusLowBtr && btrLevel) {
+          if (btrLevel->getVal() <= espConfig::miscConfig.btrLowStatusThreshold) {
+            statusLowBtr->setVal(1);
+          } else {
+            statusLowBtr->setVal(0);
+          }
+        }
       }
     }
     json json_misc_config = espConfig::miscConfig;
@@ -1614,7 +1656,20 @@ void setup() {
     }
     save_to_nvs();
     });
-
+  new SpanUserCommand('N', "Btr status low", [](const char* arg) {
+    const char* TAG = "BTR_LOW";
+    if (strncmp(arg + 1, "0", 1) == 0) {
+      statusLowBtr->setVal(0);
+      LOG(I, "Low status set to NORMAL");
+    } else if (strncmp(arg + 1, "1", 1) == 0) {
+      statusLowBtr->setVal(1);
+      LOG(I, "Low status set to LOW");
+    }
+  });
+  new SpanUserCommand('B', "Btr level", [](const char* arg) {
+    uint8_t level = atoi(static_cast<const char *>(arg + 1));
+    btrLevel->setVal(level);
+  });
 
   new SpanAccessory();
   new Service::AccessoryInformation();
@@ -1640,6 +1695,9 @@ void setup() {
   new NFCAccess();
   new Service::HAPProtocolInformation();
   new Characteristic::Version();
+  if (espConfig::miscConfig.proxBatEnabled) {
+    new PhysicalLockBattery();
+  }
   homeSpan.setControllerCallback(pairCallback);
   homeSpan.setWifiCallback(wifiCallback);
   if (espConfig::miscConfig.nfcNeopixelPin != 255) {
