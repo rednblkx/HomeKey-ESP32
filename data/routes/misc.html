@@ -162,19 +162,13 @@
     </div>
 </form>
 <script>
-    let alwaysUnlock = "%ALWAYSUNLOCK%" == true;
-    let alwaysLock = "%ALWAYSLOCK%" == true;
     let hwfinish = "%HWFINISH%";
     document
         .getElementById(`hk-finish-${hwfinish}`)
         .setAttribute("checked", "");
     document.getElementById('hkfinish').style.backgroundImage = `url(assets/hk-finish-${hwfinish}.webp)`;
-    if (alwaysUnlock) {
-        document.getElementById("hk-always-unlock").setAttribute("checked", "");
-    }
-    if (alwaysLock) {
-        document.getElementById("hk-always-lock").setAttribute("checked", "");
-    }
+    document.getElementById("hk-always-unlock").selectedIndex = "%ALWAYSUNLOCK%";
+    document.getElementById("hk-always-lock").selectedIndex = "%ALWAYSLOCK%";
     document.getElementById("web-auth-enable").selectedIndex = "%WEBENABLE%";
     let form = document.getElementById("misc-config");
     async function handleForm(event) {
