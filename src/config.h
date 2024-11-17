@@ -6,6 +6,16 @@ enum HK_COLOR
   BLACK
 };
 
+enum lockStates
+{
+  UNLOCKED,
+  LOCKED,
+  JAMMED,
+  UNKNOWN,
+  UNLOCKING,
+  LOCKING
+};
+
 enum customLockStates
 {
   C_LOCKED = 1,
@@ -20,6 +30,14 @@ enum customLockActions
 {
   UNLOCK = 1,
   LOCK = 2
+};
+
+enum class gpioMomentaryStateStatus : uint8_t
+{
+  M_DISABLED = 0,
+  M_HOME = 1 << 0,
+  M_HK = 1 << 1,
+  M_HOME_HK = (uint8_t)(M_HOME | M_HK)
 };
 
 // MQTT Broker Settings
@@ -72,7 +90,7 @@ enum customLockActions
 #define GPIO_ACTION_PIN 255
 #define GPIO_ACTION_LOCK_STATE LOW
 #define GPIO_ACTION_UNLOCK_STATE HIGH
-#define GPIO_ACTION_MOMENTARY_STATE false
+#define GPIO_ACTION_MOMENTARY_STATE static_cast<uint8_t>(gpioMomentaryStateStatus::M_DISABLED)
 #define GPIO_ACTION_MOMENTARY_TIMEOUT 5000
 
 // WebUI
