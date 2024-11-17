@@ -22,8 +22,8 @@
 const char* TAG = "MAIN";
 
 AsyncWebServer webServer(80);
-PN532_SPI pn532spi(SS, SCK, MISO, MOSI);
-PN532 nfc(pn532spi);
+PN532_SPI *pn532spi;
+PN532 *nfc;
 QueueHandle_t gpio_led_handle = nullptr;
 QueueHandle_t neopixel_handle = nullptr;
 QueueHandle_t gpio_lock_handle = nullptr;
@@ -134,7 +134,8 @@ namespace espConfig
     bool webAuthEnabled = WEB_AUTH_ENABLED;
     std::string webUsername = WEB_AUTH_USERNAME;
     std::string webPassword = WEB_AUTH_PASSWORD;
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(misc_config_t, deviceName, otaPasswd, hk_key_color, setupCode, lockAlwaysUnlock, lockAlwaysLock, controlPin, hsStatusPin, nfcSuccessPin, nfcSuccessTime, nfcNeopixelPin, neopixelSuccessColor, neopixelFailureColor, neopixelSuccessTime, neopixelFailTime, nfcSuccessHL, nfcFailPin, nfcFailTime, nfcFailHL, gpioActionPin, gpioActionLockState, gpioActionUnlockState, gpioActionMomentaryEnabled, gpioActionMomentaryTimeout, webAuthEnabled, webUsername, webPassword)
+    std::array<uint8_t, 4> nfcGpioPins{SS, SCK, MISO, MOSI};
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(misc_config_t, deviceName, otaPasswd, hk_key_color, setupCode, lockAlwaysUnlock, lockAlwaysLock, controlPin, hsStatusPin, nfcSuccessPin, nfcSuccessTime, nfcNeopixelPin, neopixelSuccessColor, neopixelFailureColor, neopixelSuccessTime, neopixelFailTime, nfcSuccessHL, nfcFailPin, nfcFailTime, nfcFailHL, gpioActionPin, gpioActionLockState, gpioActionUnlockState, gpioActionMomentaryEnabled, gpioActionMomentaryTimeout, webAuthEnabled, webUsername, webPassword, nfcGpioPins)
   } miscConfig;
 };
 
@@ -791,6 +792,14 @@ String miscHtmlProcess(const String& var) {
     return String(espConfig::miscConfig.webUsername.c_str());
   } else if (var == "WEBPASSWORD") {
     return String(espConfig::miscConfig.webPassword.c_str());
+  } else if (var == "NFCSSGPIOPIN") {
+    return String(espConfig::miscConfig.nfcGpioPins[0]);
+  } else if (var == "NFCSCKGPIOPIN") {
+    return String(espConfig::miscConfig.nfcGpioPins[1]);
+  } else if (var == "NFCMISOGPIOPIN") {
+    return String(espConfig::miscConfig.nfcGpioPins[2]);
+  } else if (var == "NFCMOSIGPIOPIN") {
+    return String(espConfig::miscConfig.nfcGpioPins[3]);
   }
   return String();
 }
@@ -1069,6 +1078,14 @@ void setupWeb() {
         espConfig::miscConfig.webUsername = p->value().c_str();
       } else if (!strcmp(p->name().c_str(), "web-auth-password")) {
         espConfig::miscConfig.webPassword = p->value().c_str();
+      } else if (!strcmp(p->name().c_str(), "nfc-ss-gpio-pin")) {
+        espConfig::miscConfig.nfcGpioPins[0] = p->value().toInt();
+      } else if (!strcmp(p->name().c_str(), "nfc-sck-gpio-pin")) {
+        espConfig::miscConfig.nfcGpioPins[1] = p->value().toInt();
+      } else if (!strcmp(p->name().c_str(), "nfc-miso-gpio-pin")) {
+        espConfig::miscConfig.nfcGpioPins[2] = p->value().toInt();
+      } else if (!strcmp(p->name().c_str(), "nfc-mosi-gpio-pin")) {
+        espConfig::miscConfig.nfcGpioPins[3] = p->value().toInt();
       }
     }
     json json_misc_config = espConfig::miscConfig;
@@ -1269,9 +1286,9 @@ std::string hex_representation(const std::vector<uint8_t>& v) {
 }
 
 void nfc_thread_entry(void* arg) {
-  nfc.begin();
+  nfc->begin();
 
-  uint32_t versiondata = nfc.getFirmwareVersion();
+  uint32_t versiondata = nfc->getFirmwareVersion();
   if (!versiondata) {
     ESP_LOGE("NFC_SETUP", "Didn't find PN53x board");
   } else {
@@ -1280,9 +1297,9 @@ void nfc_thread_entry(void* arg) {
     int maj = (versiondata >> 16) & 0xFF;
     int min = (versiondata >> 8) & 0xFF;
     ESP_LOGI("NFC_SETUP", "Firmware ver. %d.%d", maj, min);
-    nfc.SAMConfig();
-    nfc.setRFField(0x02, 0x01);
-    nfc.setPassiveActivationRetries(0);
+    nfc->SAMConfig();
+    nfc->setRFField(0x02, 0x01);
+    nfc->setPassiveActivationRetries(0);
     ESP_LOGI("NFC_SETUP", "Waiting for an ISO14443A card");
   }
   memcpy(ecpData + 8, readerData.reader_gid.data(), readerData.reader_gid.size());
@@ -1290,15 +1307,15 @@ void nfc_thread_entry(void* arg) {
   while (1) {
     uint8_t res[4];
     uint16_t resLen = 4;
-    nfc.writeRegister(0x633d, 0, true);
-    nfc.inCommunicateThru(ecpData, sizeof(ecpData), res, &resLen, 100, true);
+    nfc->writeRegister(0x633d, 0, true);
+    nfc->inCommunicateThru(ecpData, sizeof(ecpData), res, &resLen, 100, true);
     uint8_t uid[16];
     uint8_t uidLen = 0;
     uint8_t atqa[2];
     uint8_t sak[1];
-    bool passiveTarget = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, atqa, sak, 500, true, true);
+    bool passiveTarget = nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, atqa, sak, 500, true, true);
     if (passiveTarget) {
-      nfc.setPassiveActivationRetries(5);
+      nfc->setPassiveActivationRetries(5);
       LOG(D, "ATQA: %02x", atqa[0]);
       LOG(D, "SAK: %02x", sak[0]);
       ESP_LOG_BUFFER_HEX_LEVEL(TAG, uid, (size_t)uidLen, ESP_LOG_VERBOSE);
@@ -1310,13 +1327,13 @@ void nfc_thread_entry(void* arg) {
       LOG(I, "Requesting supported HomeKey versions");
       LOG(D, "SELECT HomeKey Applet, APDU: ");
       ESP_LOG_BUFFER_HEX_LEVEL(TAG, data, sizeof(data), ESP_LOG_VERBOSE);
-      bool status = nfc.inDataExchange(data, sizeof(data), selectCmdRes, &selectCmdResLength);
+      bool status = nfc->inDataExchange(data, sizeof(data), selectCmdRes, &selectCmdResLength);
       LOG(D, "SELECT HomeKey Applet, Response");
       ESP_LOG_BUFFER_HEX_LEVEL(TAG, selectCmdRes, selectCmdResLength, ESP_LOG_VERBOSE);
       if (status && selectCmdRes[selectCmdResLength - 2] == 0x90 && selectCmdRes[selectCmdResLength - 1] == 0x00) {
         LOG(D, "*** SELECT HOMEKEY APPLET SUCCESSFUL ***");
         LOG(D, "Reader Private Key: %s", utils::bufToHexString(readerData.reader_pk.data(), readerData.reader_pk.size()).c_str());
-        HKAuthenticationContext authCtx(nfc, readerData, savedData);
+        HKAuthenticationContext authCtx(*nfc, readerData, savedData);
         auto authResult = authCtx.authenticate(hkFlow);
         if (std::get<2>(authResult) != kFlowFailed) {
           bool status = true;
@@ -1378,7 +1395,7 @@ void nfc_thread_entry(void* arg) {
           }
           LOG(W, "We got status FlowFailed, mqtt untouched!");
         }
-        nfc.setRFField(0x02, 0x01);
+        nfc->setRFField(0x02, 0x01);
       } else if(!espConfig::mqttData.nfcTagNoPublish) {
         LOG(W, "Invalid Response, probably not Homekey, publishing target's UID");
         bool status = false;
@@ -1399,23 +1416,24 @@ void nfc_thread_entry(void* arg) {
         } else LOG(W, "MQTT Client not initialized, cannot publish message");
       }
       vTaskDelay(50 / portTICK_PERIOD_MS);
-      nfc.inRelease();
+      nfc->inRelease();
       int counter = 50;
-      bool deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
+      bool deviceStillInField = nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
       LOG(D, "Target still present: %d", deviceStillInField);
       while (deviceStillInField) {
         if (counter == 0) break;
         vTaskDelay(50 / portTICK_PERIOD_MS);
-        nfc.inRelease();
-        deviceStillInField = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
+        nfc->inRelease();
+        deviceStillInField = nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
         --counter;
         LOG(D, "Target still present: %d Counter=%d", deviceStillInField, counter);
       }
-      nfc.inRelease();
-      nfc.setPassiveActivationRetries(0);
+      nfc->inRelease();
+      nfc->setPassiveActivationRetries(0);
     }
     vTaskDelay(50 / portTICK_PERIOD_MS);
   }
+  vTaskDelete(NULL);
 }
 
 void setup() {
@@ -1485,6 +1503,8 @@ void setup() {
       }
     }
   }
+  pn532spi = new PN532_SPI(espConfig::miscConfig.nfcGpioPins[0], espConfig::miscConfig.nfcGpioPins[1], espConfig::miscConfig.nfcGpioPins[2], espConfig::miscConfig.nfcGpioPins[3]);
+  nfc = new PN532(*pn532spi);
   if (espConfig::miscConfig.nfcSuccessPin && espConfig::miscConfig.nfcSuccessPin != 255) {
     pinMode(espConfig::miscConfig.nfcSuccessPin, OUTPUT);
     digitalWrite(espConfig::miscConfig.nfcSuccessPin, !espConfig::miscConfig.nfcSuccessHL);
