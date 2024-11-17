@@ -59,7 +59,23 @@ button {
     border-color: hsl(240 3.7% 15.9%) !important;
 }
 
-@media only screen and (min-width: 1200px) {
+div[class$="-selected-body"] {
+    display: flex;
+    flex-direction: column;
+    padding-inline: 1rem;
+    padding-bottom: .5rem;
+    gap: 16px;
+}
+
+h3[class$="-selected-tab"] {
+    border-bottom: 2px #8e8271 solid;
+}
+
+div[class$="-hidden-body"] {
+    display: none;
+}
+
+@media only screen and (min-width: 800px) {
     button:hover {
         opacity: .9;
     }
@@ -70,6 +86,17 @@ button {
 
     #restart-btn:active {
         background-color: #4040402e!important;
+    }
+
+    #mqtt-broker-con, #mqtt-topics-container {
+        min-width: 20rem;
+        max-width: 25rem;
+    }
+    .cards-container {
+        align-items: flex-start;
+    }
+    #component {
+        max-width: 65rem;
     }
 }
 
@@ -83,13 +110,29 @@ button {
         flex-wrap: wrap;
         justify-content: center;
     }
+    #mqtt-broker, #mqtt-topics {
+        width: auto;
+    }
+    .cards-container {
+        flex-direction: column;
+    }
+    .nfc-triggers-selected-body {
+        flex-wrap: wrap;
+    }
 }
 
-#mqtt-broker-conn {
+.fill-container {
     width: 100%;
     width: -moz-available;
     width: -webkit-fill-available;
     width: fill-available;
+}
+
+#buttons-group {
+    display: flex;
+    justify-content: center;
+    margin-top: 2rem;
+    gap: 64px;
 }
 
 

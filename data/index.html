@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html style="height: 100dvh;">
+<html>
 
 <head>
   <meta charset="utf-8">
@@ -24,6 +24,13 @@
     }
     wifiSignalStrength();
     setInterval(wifiSignalStrength, 5000)
+    function switchTab(el) {
+      var parentId = el.parentElement.id;
+      document.querySelector(`.${parentId}-selected-body`).classList.replace(`${parentId}-selected-body`,`${parentId}-hidden-body`);
+      document.querySelector(`div[data-${parentId}-body="${el.dataset.tabIndex}"]`).classList.replace(`${parentId}-hidden-body`, `${parentId}-selected-body`);
+      document.querySelector(`.${parentId}-selected-tab`).className = "";
+      el.classList.add(`${parentId}-selected-tab`);
+    }
     async function addComponent(name, button) {
       let loaderEl = document.createElement("span")
       loaderEl.className = "loader";
@@ -31,7 +38,7 @@
       document.querySelector("#main > span").insertAdjacentElement("afterend",loaderEl);
       let element = document.querySelector("#component");
       if(element){
-        element.remove(); 
+        element.remove();
       }
       let sel = document.querySelector(".selected-btn");
       if(sel){
@@ -40,8 +47,8 @@
       let main = document.querySelector("#main");
       let el = document.createElement("div");
       el.id = "component";
-      el.style = "display: flex;flex-direction: column;max-width: 32rem;margin-bottom: 1rem;";
-      let data = await fetch(name);
+      el.style = "display: flex;flex-direction: column;margin-bottom: 1rem;";
+      let data = await fetch(`${name}`);
       let string = await data.text();
       el.innerHTML = string;
       main.appendChild(el);
