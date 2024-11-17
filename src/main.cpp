@@ -91,9 +91,10 @@ namespace espConfig
     /* Flags */
     bool lockEnableCustomState = MQTT_CUSTOM_STATE_ENABLED;
     bool hassMqttDiscoveryEnabled = MQTT_DISCOVERY;
+    bool nfcTagNoPublish = false;
     std::map<std::string, int> customLockStates = { {"C_LOCKED", C_LOCKED}, {"C_UNLOCKING", C_UNLOCKING}, {"C_UNLOCKED", C_UNLOCKED}, {"C_LOCKING", C_LOCKING}, {"C_JAMMED", C_JAMMED}, {"C_UNKNOWN", C_UNKNOWN} };
     std::map<std::string, int> customLockActions = { {"UNLOCK", UNLOCK}, {"LOCK", LOCK} };
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(espConfig::mqttConfig_t, mqttBroker, mqttPort, mqttUsername, mqttPassword, mqttClientId, lwtTopic, hkTopic, lockStateTopic, lockStateCmd, lockCStateCmd, lockTStateCmd, lockCustomStateTopic, lockCustomStateCmd, lockEnableCustomState, hassMqttDiscoveryEnabled, customLockStates, customLockActions)
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(espConfig::mqttConfig_t, mqttBroker, mqttPort, mqttUsername, mqttPassword, mqttClientId, lwtTopic, hkTopic, lockStateTopic, lockStateCmd, lockCStateCmd, lockTStateCmd, lockCustomStateTopic, lockCustomStateCmd, lockEnableCustomState, hassMqttDiscoveryEnabled, customLockStates, customLockActions, nfcTagNoPublish)
   } mqttData;
 
   struct misc_config_t
@@ -871,6 +872,8 @@ String mqttHtmlProcess(const String& var) {
     return String(espConfig::mqttData.customLockStates["C_JAMMED"]);
   } else if (var == "CSTATEUNKNOWN") {
     return String(espConfig::mqttData.customLockStates["C_UNKNOWN"]);
+  } else if (var == "NFCTAGSNOPUBLISH") {
+    return String(espConfig::mqttData.nfcTagNoPublish);
   }
   return "";
 }
@@ -1014,6 +1017,8 @@ void setupWeb() {
         espConfig::mqttData.customLockStates["C_JAMMED"] = p->value().toInt();
       } else if (!strcmp(p->name().c_str(), "cstate-unknown")) {
         espConfig::mqttData.customLockStates["C_UNKNOWN"] = p->value().toInt();
+      } else if (!strcmp(p->name().c_str(), "nfc-tags-ignore-mqtt")) {
+        espConfig::mqttData.nfcTagNoPublish = p->value().toInt();
       }
     }
     json json_mqtt_config = espConfig::mqttData;
@@ -1302,6 +1307,7 @@ void nfc_thread_entry(void* arg) {
       uint8_t data[13] = { 0x00, 0xA4, 0x04, 0x00, 0x07, 0xA0, 0x00, 0x00, 0x08, 0x58, 0x01, 0x01, 0x0 };
       uint8_t selectCmdRes[9];
       uint16_t selectCmdResLength = 9;
+      LOG(I, "Requesting supported HomeKey versions");
       LOG(D, "SELECT HomeKey Applet, APDU: ");
       ESP_LOG_BUFFER_HEX_LEVEL(TAG, data, sizeof(data), ESP_LOG_VERBOSE);
       bool status = nfc.inDataExchange(data, sizeof(data), selectCmdRes, &selectCmdResLength);
@@ -1373,7 +1379,7 @@ void nfc_thread_entry(void* arg) {
           LOG(W, "We got status FlowFailed, mqtt untouched!");
         }
         nfc.setRFField(0x02, 0x01);
-      } else {
+      } else if(!espConfig::mqttData.nfcTagNoPublish) {
         LOG(W, "Invalid Response, probably not Homekey, publishing target's UID");
         bool status = false;
         if (espConfig::miscConfig.nfcSuccessPin != 255) {

@@ -54,6 +54,13 @@
           <label for="mqtt-hktopic">NFC/HK Topic</label>
           <input type="text" name="mqtt-hktopic" id="mqtt-hktopic" placeholder="topic/auth" required value="%HKTOPIC%">
         </div>
+        <div style="display: flex;flex-direction: column;">
+          <label for="nfc-tags-ignore-mqtt">Ignore NFC Tags</label>
+          <select name="nfc-tags-ignore-mqtt" id="nfc-tags-ignore-mqtt">
+              <option value="0">Disabled</option>
+              <option value="1">Enabled</option>
+          </select>
+      </div>
         <div style="display: flex; flex-direction: column;">
           <label for="mqtt-statetopic">Lock State Topic</label>
           <input type="text" name="mqtt-statetopic" id="mqtt-statetopic" placeholder="topic/state" required value="%STATETOPIC%">
@@ -75,7 +82,7 @@
     <div style="display:flex;flex-direction: column;border: 2px #8e8271 dashed;padding: 1rem;">
       <h3 style="margin-top: 0;">Custom State Topics</h3>
       <div style="display: flex;flex-direction: column;gap: 8px;">
-        <div>
+        <div style="display: flex;flex-direction: column;">
           <label for="mqtt-customstate-enable">MQTT Custom State</label>
           <select name="mqtt-customstate-enable" id="mqtt-customstate-enable">
             <option value="0">Disabled</option>
@@ -149,6 +156,7 @@
 <script>
   document.getElementById("mqtt-customstate-enable").selectedIndex = "%CUSTOMSTATE_ENABLED%";
   document.getElementById("mqtt-discovery-enable").selectedIndex = "%DISCOVERY_ENABLED%";
+  document.getElementById("nfc-tags-ignore-mqtt").selectedIndex = "%NFCTAGSNOPUBLISH%";
   let form = document.getElementById("mqttConfig");
   async function handleForm(event) {
     event.preventDefault();
