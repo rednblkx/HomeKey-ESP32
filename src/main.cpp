@@ -264,6 +264,7 @@ void gpio_task(void* arg) {
             }
           }
         } else if (status.action == 2) {
+          vTaskDelete(NULL);
           return;
         }
       }
@@ -298,6 +299,7 @@ void neopixel_task(void* arg) {
           }
           break;
         default:
+          vTaskDelete(NULL);
           return;
           break;
         }
@@ -333,6 +335,7 @@ void nfc_gpio_task(void* arg) {
           break;
         default:
           LOG(I, "STOP");
+          vTaskDelete(NULL);
           return;
           break;
         }
@@ -1201,7 +1204,7 @@ void setupWeb() {
           request->send(200, "text/plain", msg.c_str());
           return;
         }
-        if (espConfig::miscConfig.nfcNeopixelPin == 255 && p->value().toInt() != 255) {
+        if (espConfig::miscConfig.nfcNeopixelPin == 255 && p->value().toInt() != 255 && neopixel_task_handle == nullptr) {
           xTaskCreate(neopixel_task, "neopixel_task", 4096, NULL, 2, &neopixel_task_handle);
           if (!pixel) {
             pixel = std::make_unique<Pixel>(p->value().toInt(), PixelType::GRB);
@@ -1209,7 +1212,7 @@ void setupWeb() {
         } else if (espConfig::miscConfig.nfcNeopixelPin != 255 && p->value().toInt() == 255 && neopixel_task_handle != nullptr) {
           uint8_t status = 2;
           xQueueSend(neopixel_handle, &status, 0);
-          vTaskDelete(neopixel_task_handle);
+          neopixel_task_handle = nullptr;
         }
         espConfig::miscConfig.nfcNeopixelPin = p->value().toInt();
       } else if (!strcmp(p->name().c_str(), "neopixel-s-time")) {
@@ -1244,9 +1247,13 @@ void setupWeb() {
           pinMode(p->value().toInt(), OUTPUT);
           xTaskCreate(nfc_gpio_task, "nfc_gpio_task", 4096, NULL, 2, &gpio_led_task_handle);
         } else if (espConfig::miscConfig.nfcSuccessPin != 255 && p->value().toInt() == 255 && gpio_led_task_handle != nullptr) {
-          uint8_t status = 2;
-          xQueueSend(gpio_led_handle, &status, 0);
-          vTaskDelete(gpio_led_task_handle);
+          if (espConfig::miscConfig.nfcFailPin == 255) {
+            uint8_t status = 2;
+            xQueueSend(gpio_led_handle, &status, 0);
+            gpio_led_task_handle = nullptr;
+          }
+        } else if(p->value().toInt() != 255) {
+          pinMode(p->value().toInt(), OUTPUT);
         }
         espConfig::miscConfig.nfcSuccessPin = p->value().toInt();
       } else if (!strcmp(p->name().c_str(), "nfc-f-pin")) {
@@ -1260,9 +1267,13 @@ void setupWeb() {
           pinMode(p->value().toInt(), OUTPUT);
           xTaskCreate(nfc_gpio_task, "nfc_gpio_task", 4096, NULL, 2, &gpio_led_task_handle);
         } else if (espConfig::miscConfig.nfcFailPin != 255 && p->value().toInt() == 255 && gpio_led_task_handle != nullptr) {
-          uint8_t status = 2;
-          xQueueSend(gpio_led_handle, &status, 0);
-          vTaskDelete(gpio_led_task_handle);
+          if (espConfig::miscConfig.nfcSuccessPin == 255) {
+            uint8_t status = 2;
+            xQueueSend(gpio_led_handle, &status, 0);
+            gpio_led_task_handle = nullptr;
+          }
+        } else if(p->value().toInt() != 255) {
+          pinMode(p->value().toInt(), OUTPUT);
         }
         espConfig::miscConfig.nfcFailPin = p->value().toInt();
       } else if (!strcmp(p->name().c_str(), "nfc-s-hl")) {
@@ -1280,13 +1291,13 @@ void setupWeb() {
           request->send(200, "text/plain", msg.c_str());
           return;
         }
-        if (espConfig::miscConfig.gpioActionPin == 255 && p->value().toInt() != 255) {
+        if (espConfig::miscConfig.gpioActionPin == 255 && p->value().toInt() != 255 && gpio_lock_task_handle == nullptr) {
           pinMode(p->value().toInt(), OUTPUT);
           xTaskCreate(gpio_task, "gpio_task", 4096, NULL, 2, &gpio_lock_task_handle);
         } else if (espConfig::miscConfig.gpioActionPin != 255 && p->value().toInt() == 255 && gpio_lock_task_handle != nullptr) {
           gpioLockAction status{ .source = gpioLockAction::OTHER, .action = 2 };
           xQueueSend(gpio_lock_handle, &status, 0);
-          vTaskDelete(gpio_lock_task_handle);
+          gpio_lock_task_handle = nullptr;
         }
         espConfig::miscConfig.gpioActionPin = p->value().toInt();
       } else if (!strcmp(p->name().c_str(), "gpio-a-lock")) {
@@ -1508,7 +1519,7 @@ void nfc_thread_entry(void* arg) {
       } else if(!espConfig::mqttData.nfcTagNoPublish) {
         LOG(W, "Invalid Response, probably not Homekey, publishing target's UID");
         bool status = false;
-        if (espConfig::miscConfig.nfcSuccessPin != 255) {
+        if (espConfig::miscConfig.nfcFailPin != 255) {
           xQueueSend(gpio_led_handle, &status, 0);
         }
         if (espConfig::miscConfig.nfcNeopixelPin != 255) {
