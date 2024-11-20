@@ -1074,6 +1074,8 @@ void setupWeb() {
           rfidTopic.append("homeassistant/tag/").append(espConfig::mqttData.mqttClientId).append("/rfid/config");
           esp_mqtt_client_publish(client, rfidTopic.c_str(), "", 0, 0, false);
         }
+      } else if (!strcmp(p->name().c_str(), "mqtt-btrprox-cmd-topic")) {
+        espConfig::mqttData.btrLvlCmdTopic = p->value().c_str();
       }
     }
     json json_mqtt_config = espConfig::mqttData;
