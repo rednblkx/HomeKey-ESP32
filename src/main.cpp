@@ -661,7 +661,9 @@ void mqtt_connected_event(void* event_handler_arg, esp_event_base_t event_base, 
     std::string bufferpub = payload.dump();
     std::string rfidTopic;
     rfidTopic.append("homeassistant/tag/").append(espConfig::mqttData.mqttClientId).append("/rfid/config");
-    esp_mqtt_client_publish(client, rfidTopic.c_str(), bufferpub.c_str(), bufferpub.length(), 1, true);
+    if (!espConfig::mqttData.nfcTagNoPublish) {
+      esp_mqtt_client_publish(client, rfidTopic.c_str(), bufferpub.c_str(), bufferpub.length(), 1, true);
+    }
     payload = json();
     payload["topic"] = espConfig::mqttData.hkTopic;
     payload["value_template"] = "{{ value_json.issuerId }}";
@@ -1067,6 +1069,11 @@ void setupWeb() {
         espConfig::mqttData.customLockStates["C_UNKNOWN"] = p->value().toInt();
       } else if (!strcmp(p->name().c_str(), "nfc-tags-ignore-mqtt")) {
         espConfig::mqttData.nfcTagNoPublish = p->value().toInt();
+        if (espConfig::mqttData.nfcTagNoPublish) {
+          std::string rfidTopic;
+          rfidTopic.append("homeassistant/tag/").append(espConfig::mqttData.mqttClientId).append("/rfid/config");
+          esp_mqtt_client_publish(client, rfidTopic.c_str(), "", 0, 0, false);
+        }
       }
     }
     json json_mqtt_config = espConfig::mqttData;
