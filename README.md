@@ -28,17 +28,13 @@ Use this at your own risk, i'm not a cryptographic expert, just a hobbyist. Keep
 
 While functional as it is now, the project should still be considered as a **work in progress** so expect breaking changes.
 
-## Contributing
+## Contributing & Support
 
 All contributions to the repository are welcomed, if you think you can bring an improvement into the project, feel free to fork the repository and submit your pull requests.
 
 If you have a suggestion or are in need of assistance, you can open an issue. Additionally, you can join the Discord server at https://discord.com/invite/VWpZ5YyUcm
 
-## Support
-
 If you like the project, please consider giving it a start to show the appreciation and for others to know this repository is worth something.
-
-Additionally, if you have the means and are willing to, you can donate using the [Sponsor](https://github.com/sponsors/rednblkx) button.
 
 ## Credits
 
