@@ -34,7 +34,7 @@ All contributions to the repository are welcomed, if you think you can bring an 
 
 If you have a suggestion or are in need of assistance, you can open an issue. Additionally, you can join the Discord server at https://discord.com/invite/VWpZ5YyUcm
 
-If you like the project, please consider giving it a start to show the appreciation and for others to know this repository is worth something.
+If you like the project, please consider giving it a star ⭐ to show the appreciation for it and for others to know this repository is worth something.
 
 ## Credits
 
