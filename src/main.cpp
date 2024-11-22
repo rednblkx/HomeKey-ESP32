@@ -1446,6 +1446,7 @@ void nfc_thread_entry(void* arg) {
   uint32_t versiondata = nfc->getFirmwareVersion();
   if (!versiondata) {
     ESP_LOGE("NFC_SETUP", "Error establishing PN532 connection");
+    nfc->stop();
     xTaskCreate(nfc_retry, "nfc_reconnect_task", 8192, NULL, 1, &nfc_reconnect_task);
     vTaskSuspend(NULL);
   } else {
