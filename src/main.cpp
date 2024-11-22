@@ -30,6 +30,8 @@ QueueHandle_t gpio_lock_handle = nullptr;
 TaskHandle_t gpio_led_task_handle = nullptr;
 TaskHandle_t neopixel_task_handle = nullptr;
 TaskHandle_t gpio_lock_task_handle = nullptr;
+TaskHandle_t nfc_reconnect_task = nullptr;
+TaskHandle_t nfc_poll_task = nullptr;
 
 nvs_handle savedData;
 readerData_t readerData;
@@ -1414,12 +1416,38 @@ std::string hex_representation(const std::vector<uint8_t>& v) {
   return hex_tmp;
 }
 
-void nfc_thread_entry(void* arg) {
-  nfc->begin();
+void nfc_retry(void* arg) {
+  ESP_LOGI(TAG, "Starting reconnecting PN532");
+  while (1) {
+    nfc->begin();
+    uint32_t versiondata = nfc->getFirmwareVersion();
+    if (!versiondata) {
+      ESP_LOGE("NFC_SETUP", "Error establishing PN532 connection");
+    } else {
+      unsigned int model = (versiondata >> 24) & 0xFF;
+      ESP_LOGI("NFC_SETUP", "Found chip PN5%x", model);
+      int maj = (versiondata >> 16) & 0xFF;
+      int min = (versiondata >> 8) & 0xFF;
+      ESP_LOGI("NFC_SETUP", "Firmware ver. %d.%d", maj, min);
+      nfc->SAMConfig();
+      nfc->setRFField(0x02, 0x01);
+      nfc->setPassiveActivationRetries(0);
+      ESP_LOGI("NFC_SETUP", "Waiting for an ISO14443A card");
+      vTaskResume(nfc_poll_task);
+      vTaskDelete(NULL);
+      return;
+    }
+    nfc->stop();
+    vTaskDelay(50 / portTICK_PERIOD_MS);
+  }
+}
 
+void nfc_thread_entry(void* arg) {
   uint32_t versiondata = nfc->getFirmwareVersion();
   if (!versiondata) {
-    ESP_LOGE("NFC_SETUP", "Didn't find PN53x board");
+    ESP_LOGE("NFC_SETUP", "Error establishing PN532 connection");
+    vTaskDelete(NULL);
+    return;
   } else {
     unsigned int model = (versiondata >> 24) & 0xFF;
     ESP_LOGI("NFC_SETUP", "Found chip PN5%x", model);
@@ -1436,7 +1464,13 @@ void nfc_thread_entry(void* arg) {
   while (1) {
     uint8_t res[4];
     uint16_t resLen = 4;
-    nfc->writeRegister(0x633d, 0, true);
+    bool writeStatus = nfc->writeRegister(0x633d, 0, true);
+    if (!writeStatus) {
+      LOG(W, "writeRegister has failed, abandoning ship !!");
+      nfc->stop();
+      xTaskCreate(nfc_retry, "nfc_reconnect_task", 8192, NULL, 1, &nfc_reconnect_task);
+      vTaskSuspend(NULL);
+    }
     nfc->inCommunicateThru(ecpData, sizeof(ecpData), res, &resLen, 100, true);
     uint8_t uid[16];
     uint8_t uidLen = 0;
@@ -1563,6 +1597,7 @@ void nfc_thread_entry(void* arg) {
     vTaskDelay(50 / portTICK_PERIOD_MS);
   }
   vTaskDelete(NULL);
+  return;
 }
 
 void setup() {
@@ -1634,6 +1669,7 @@ void setup() {
   }
   pn532spi = new PN532_SPI(espConfig::miscConfig.nfcGpioPins[0], espConfig::miscConfig.nfcGpioPins[1], espConfig::miscConfig.nfcGpioPins[2], espConfig::miscConfig.nfcGpioPins[3]);
   nfc = new PN532(*pn532spi);
+  nfc->begin();
   if (espConfig::miscConfig.nfcSuccessPin && espConfig::miscConfig.nfcSuccessPin != 255) {
     pinMode(espConfig::miscConfig.nfcSuccessPin, OUTPUT);
     digitalWrite(espConfig::miscConfig.nfcSuccessPin, !espConfig::miscConfig.nfcSuccessHL);
@@ -1737,7 +1773,7 @@ void setup() {
   if (espConfig::miscConfig.gpioActionPin != 255) {
     xTaskCreate(gpio_task, "gpio_task", 4096, NULL, 2, &gpio_lock_task_handle);
   }
-  xTaskCreate(nfc_thread_entry, "nfc_task", 8192, NULL, 1, NULL);
+  xTaskCreate(nfc_thread_entry, "nfc_task", 8192, NULL, 1, &nfc_poll_task);
 }
 
 //////////////////////////////////////
