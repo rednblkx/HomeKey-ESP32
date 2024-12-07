@@ -1,0 +1,3 @@
+sudo ip tuntap add mode tun user `whoami`
+sudo ip link set dev tun0 up
+sudo ifconfig tun0 10.184.178.109 netmask 255.255.255.255 up

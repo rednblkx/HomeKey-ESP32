@@ -1,0 +1,223 @@
+menu "Example Configuration"
+
+    choice EXAMPLE_SERIAL_CONFIG
+        prompt "Type of serial connection to the modem"
+        default EXAMPLE_SERIAL_CONFIG_UART
+        config EXAMPLE_SERIAL_CONFIG_UART
+            bool "UART"
+            help
+                Connect to modem via UART.
+        config EXAMPLE_SERIAL_CONFIG_USB
+            bool "USB"
+            depends on IDF_TARGET_ESP32S2 || IDF_TARGET_ESP32S3 || IDF_TARGET_ESP32P4
+            help
+                Connect to modem via USB (CDC-ACM class). For IDF version >= 4.4.
+    endchoice
+
+    choice EXAMPLE_MODEM_DEVICE
+        prompt "Choose supported modem device (DCE)"
+        default EXAMPLE_MODEM_DEVICE_BG96
+        help
+            Select modem device connected to the ESP DTE.
+        config EXAMPLE_MODEM_DEVICE_SIM800
+            depends on EXAMPLE_SERIAL_CONFIG_UART
+            bool "SIM800"
+            help
+                SIMCom SIM800L is a GSM/GPRS module.
+                It supports Quad-band 850/900/1800/1900MHz.
+        config EXAMPLE_MODEM_DEVICE_BG96
+            bool "BG96"
+            help
+                Quectel BG96 is a series of LTE Cat M1/Cat NB1/EGPRS module.
+        config EXAMPLE_MODEM_DEVICE_EC20
+            depends on EXAMPLE_SERIAL_CONFIG_USB
+            bool "EC20"
+            help
+                Quectel EC20 is a series of LTE Cat M4 module.
+        config EXAMPLE_MODEM_DEVICE_SIM7000
+            depends on EXAMPLE_SERIAL_CONFIG_UART
+            bool "SIM7000"
+            help
+                SIM7000 is a Multi-Band LTE-FDD and GSM/GPRS/EDGE module.
+        config EXAMPLE_MODEM_DEVICE_SIM7070
+            depends on EXAMPLE_SERIAL_CONFIG_UART
+            bool "SIM7070"
+            help
+                SIM7070 is Multi-Band CAT M and NB IoT module.
+        config EXAMPLE_MODEM_DEVICE_SIM7600
+            bool "SIM7600"
+            help
+                SIM7600 is a Multi-Band LTE-TDD/LTE-FDD/HSPA+ and GSM/GPRS/EDGE module.
+        config EXAMPLE_MODEM_DEVICE_A7670
+            depends on EXAMPLE_SERIAL_CONFIG_USB
+            bool "A7670"
+            help
+                A7670X is Multi-Band LTE-FDD/LTE-TDD/GSM/GPRS/EDGE module.
+
+        config EXAMPLE_MODEM_DEVICE_CUSTOM
+            select ESP_MODEM_ADD_CUSTOM_MODULE
+            bool "Custom device"
+            help
+                This demonstrates use of a custom device in C-API.
+
+    endchoice
+
+    config EXAMPLE_MODEM_PPP_APN
+        string "Set MODEM APN"
+        default "internet"
+        help
+            Set APN (Access Point Name), a logical name to choose data network
+
+    config EXAMPLE_SEND_MSG
+        bool "Short message (SMS)"
+        default n
+        help
+            Select this, the modem will send a short message before power off.
+
+    if EXAMPLE_SEND_MSG
+        config EXAMPLE_SEND_MSG_PEER_PHONE_NUMBER
+            string "Peer Phone Number (with area code)"
+            default "+8610086"
+            help
+                Enter the peer phone number that you want to send message to.
+    endif
+
+    config EXAMPLE_NEED_SIM_PIN
+        bool "SIM PIN needed"
+        default n
+        help
+            Enable to set SIM PIN before starting the example
+
+    config EXAMPLE_SIM_PIN
+        string "Set SIM PIN"
+        default "1234"
+        depends on EXAMPLE_NEED_SIM_PIN
+        help
+            Pin to unlock the SIM
+
+    menu "UART Configuration"
+        depends on EXAMPLE_SERIAL_CONFIG_UART
+        config EXAMPLE_MODEM_UART_TX_PIN
+            int "TXD Pin Number"
+            default 25
+            range 0 56
+            help
+                Pin number of UART TX.
+
+        config EXAMPLE_MODEM_UART_RX_PIN
+            int "RXD Pin Number"
+            default 26
+            range 0 56
+            help
+                Pin number of UART RX.
+
+        config EXAMPLE_MODEM_UART_RTS_PIN
+            int "RTS Pin Number"
+            default 27
+            range 0 56
+            help
+                Pin number of UART RTS.
+
+        config EXAMPLE_MODEM_UART_CTS_PIN
+            int "CTS Pin Number"
+            default 23
+            range 0 56
+            help
+                Pin number of UART CTS.
+
+        config EXAMPLE_MODEM_UART_EVENT_TASK_STACK_SIZE
+            int "UART Event Task Stack Size"
+            range 2000 6000
+            default 2048
+            help
+                Stack size of UART event task.
+
+        config EXAMPLE_MODEM_UART_EVENT_TASK_PRIORITY
+            int "UART Event Task Priority"
+            range 3 22
+            default 5
+            help
+                Priority of UART event task.
+
+        config EXAMPLE_MODEM_UART_EVENT_QUEUE_SIZE
+            int "UART Event Queue Size"
+            range 10 40
+            default 30
+            help
+                Length of UART event queue.
+
+        config EXAMPLE_MODEM_UART_PATTERN_QUEUE_SIZE
+            int "UART Pattern Queue Size"
+            range 10 40
+            default 20
+            help
+                Length of UART pattern queue.
+
+        config EXAMPLE_MODEM_UART_TX_BUFFER_SIZE
+            int "UART TX Buffer Size"
+            range 256 2048
+            default 512
+            help
+                Buffer size of UART TX buffer.
+
+        config EXAMPLE_MODEM_UART_RX_BUFFER_SIZE
+            int "UART RX Buffer Size"
+            range 256 2048
+            default 1024
+            help
+                Buffer size of UART RX buffer.
+
+        choice EXAMPLE_FLOW_CONTROL
+            bool "Set preferred modem control flow"
+            default EXAMPLE_FLOW_CONTROL_NONE
+            help
+                Set the modem's preferred control flow
+
+            config EXAMPLE_FLOW_CONTROL_NONE
+                bool "No control flow"
+            config EXAMPLE_FLOW_CONTROL_SW
+                bool "SW control flow"
+            config EXAMPLE_FLOW_CONTROL_HW
+                bool "HW control flow"
+        endchoice
+
+    endmenu
+
+    config EXAMPLE_MQTT_BROKER_URI
+        string "MQTT Broker URL"
+        default "mqtt://mqtt.eclipseprojects.io"
+        help
+            URL of the mqtt broker which this example connects to.
+
+    config EXAMPLE_MQTT_TEST_TOPIC
+        string "MQTT topic to publish/subscribe"
+        default "/topic/esp-pppos"
+        help
+            MQTT topic, which we subscribe on and publish to.
+
+    config EXAMPLE_MQTT_TEST_DATA
+        string "MQTT data to publish/receive"
+        default "esp32-pppos"
+        help
+            MQTT data message, which we publish and expect to receive.
+
+    config EXAMPLE_PAUSE_NETIF_TO_CHECK_SIGNAL
+        bool "Demonstrate netif pause"
+        default n
+        help
+            Set this to true to demonstrate network pausing.
+            If enabled, the example waits for an MQTT data, then temporarily
+            drops network to check signal quality, resumes networking and
+            publishes another MQTT message.
+            Connection to the MQTT broker should be kept.
+
+    config EXAMPLE_DETECT_MODE_BEFORE_CONNECT
+        bool "Detect mode before connect"
+        default n
+        help
+            Set this to true to demonstrate mode auto-detection.
+            If enabled, the example tries to recognize the actual mode.
+            If mode is detected correctly and it is not a command mode,
+            then the example switches to command mode.
+
+endmenu

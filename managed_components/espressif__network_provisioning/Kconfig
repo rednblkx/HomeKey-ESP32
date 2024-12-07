@@ -1,0 +1,80 @@
+menu "Network Provisioning Manager"
+
+    choice NETWORK_PROV_NETWORK_TYPE
+        prompt "Network Type"
+        default NETWORK_PROV_NETWORK_TYPE_WIFI if ESP_WIFI_ENABLED
+        default NETWORK_PROV_NETWORK_TYPE_THREAD if !ESP_WIFI_ENABLE && OPENTHREAD_ENABLED
+
+        config NETWORK_PROV_NETWORK_TYPE_WIFI
+            bool "Network Type - Wi-Fi"
+            depends on ESP_WIFI_ENABLED
+
+        config NETWORK_PROV_NETWORK_TYPE_THREAD
+            bool "Network Type - Thread"
+            depends on OPENTHREAD_ENABLED
+
+    endchoice
+
+    config NETWORK_PROV_SCAN_MAX_ENTRIES
+        int "Max Network Scan Result Entries"
+        default 16
+        range 1 255
+        help
+            This sets the maximum number of entries of network scan results that will be kept by the
+            provisioning manager
+
+    config NETWORK_PROV_AUTOSTOP_TIMEOUT
+        int "Provisioning auto-stop timeout"
+        default 30
+        range 5 600
+        help
+            Time (in seconds) after which the network provisioning manager will auto-stop after connecting to
+            a network successfully.
+
+    config NETWORK_PROV_BLE_BONDING
+        bool
+        prompt "Enable BLE bonding"
+        depends on BT_ENABLED
+        help
+            This option is applicable only when provisioning transport is BLE. Used to enable BLE bonding process
+            where the information from the pairing process will be stored on the devices.
+
+    config NETWORK_PROV_BLE_SEC_CONN
+        bool
+        prompt "Enable BLE Secure connection flag"
+        depends on  BT_NIMBLE_ENABLED
+        default y
+        help
+            Used to enable Secure connection support when provisioning transport is BLE.
+
+    config NETWORK_PROV_BLE_FORCE_ENCRYPTION
+        bool
+        prompt "Force Link Encryption during characteristic Read / Write"
+        help
+            Used to enforce link encryption when attempting to read / write characteristic
+
+    config NETWORK_PROV_KEEP_BLE_ON_AFTER_PROV
+        bool "Keep BT on after provisioning is done"
+        depends on BT_ENABLED
+        select ESP_PROTOCOMM_KEEP_BLE_ON_AFTER_BLE_STOP
+
+    config NETWORK_PROV_DISCONNECT_AFTER_PROV
+        bool "Terminate connection after provisioning is done"
+        depends on NETWORK_PROV_KEEP_BLE_ON_AFTER_PROV
+        default y
+        select ESP_PROTOCOMM_DISCONNECT_AFTER_BLE_STOP
+
+    choice NETWORK_PROV_WIFI_STA_SCAN_METHOD
+        bool "Wifi Provisioning Scan Method"
+        depends on NETWORK_PROV_NETWORK_TYPE_WIFI
+        default NETWORK_PROV_WIFI_STA_ALL_CHANNEL_SCAN
+        config NETWORK_PROV_WIFI_STA_ALL_CHANNEL_SCAN
+            bool "All Channel Scan"
+            help
+                    Scan will end after scanning the entire channel. This option is useful in Mesh WiFi Systems.
+        config NETWORK_PROV_WIFI_STA_FAST_SCAN
+            bool "Fast Scan"
+            help
+                    Scan will end after an AP matching with the SSID has been detected.
+    endchoice
+endmenu

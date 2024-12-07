@@ -1,0 +1,8 @@
+dependencies:
+  idf:
+    version: '>=4.1'
+description: Simple APIs to use ESP Diagnostics data storage
+issues: https://github.com/espressif/esp-insights/issues
+repository: https://github.com/espressif/esp-insights.git
+url: https://github.com/espressif/esp-insights/tree/main/components/esp_diag_data_store
+version: 1.0.1

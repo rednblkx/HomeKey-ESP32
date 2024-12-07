@@ -1,0 +1,49 @@
+menu "Test App Configuration"
+
+    config TEST_APP_PPP_SERVER_IP
+        string "IP address of PPP server"
+        default "10.0.0.1"
+        help
+            IP address of PPP server. Note: this is also the address
+            where the TCP server is started to test the connection
+
+    config TEST_APP_PPP_CLIENT_IP
+        string "IP address of PPP client"
+        default "10.0.0.2"
+        help
+            IP address that PPP server assigns to PPP client.
+
+    config TEST_APP_UART_TX_PIN
+        int "TXD Pin Number"
+        default 6
+        range 0 56
+        help
+            Pin number of UART TX.
+
+    config TEST_APP_UART_RX_PIN
+        int "RXD Pin Number"
+        default 7
+        range 0 56
+        help
+            Pin number of UART RX.
+
+    config TEST_APP_AUTH
+        bool "Use PPP authentication"
+        select LWIP_PPP_CHAP_SUPPORT
+        default n
+        help
+            Set to true for the PPP client to use authentication
+
+    config TEST_APP_AUTH_USERNAME
+        string "Set username for authentication"
+        default "myclient"
+        help
+            Username to authenticate the PPP connection.
+
+    config TEST_APP_AUTH_PASSWORD
+        string "Set password for authentication"
+        default "mypassword"
+        help
+            Password to authenticate the PPP connection.
+
+endmenu

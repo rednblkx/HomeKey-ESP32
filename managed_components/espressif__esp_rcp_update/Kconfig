@@ -1,0 +1,31 @@
+menu "OpenThread RCP Update"
+
+    config AUTO_UPDATE_RCP
+        bool 'Update RCP automatically'
+        default n
+        help
+            If enabled, the device will store the RCP image in its firmware and
+            compare the stored image version with the running RCP image upon boot. The RCP
+            will be automatically updated upon version mismatch.
+
+    config CREATE_OTA_IMAGE_WITH_RCP_FW
+        bool 'Create the OTA image with rcp for border router'
+        default n
+        help
+            If enabled, an ota image will be generated during building.
+
+    config RCP_SRC_DIR
+        depends on AUTO_UPDATE_RCP || CREATE_OTA_IMAGE_WITH_RCP_FW
+        string "Source folder containing the RCP firmware"
+        default "$ENV{IDF_PATH}/examples/openthread/ot_rcp/build"
+        help
+            The source folder containing the RCP firmware.
+
+    config RCP_PARTITION_NAME
+        depends on AUTO_UPDATE_RCP
+        string "Name of RCP storage partition"
+        default "rcp_fw"
+        help
+            The name of RCP storage partition.
+
+endmenu

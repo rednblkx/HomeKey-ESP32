@@ -1,0 +1,10 @@
+dependencies:
+  idf:
+    version: '>=5.0'
+description: esp-zigbee library component
+repository: git://github.com/espressif/esp-zigbee-sdk.git
+repository_info:
+  commit_sha: 4bc9db729597cb75250462bf095ae54ab1ebd405
+  path: components/esp-zigbee-lib
+url: https://github.com/espressif/esp-zigbee-sdk
+version: 1.6.0

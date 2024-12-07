@@ -1,0 +1,16 @@
+# Contains the pre-commit hooks for the repository
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v3.3.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '.+\.(md|rst)'
+      - id: end-of-file-fixer
+      - id: check-executables-have-shebangs
+      - id: mixed-line-ending
+        args: ['-f=lf']
+  - repo: https://gitlab.com/pycqa/flake8
+    rev: 3.8.4
+    hooks:
+      - id: flake8
+        args: ['--config=.flake8', '--tee', '--benchmark']

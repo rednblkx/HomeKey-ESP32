@@ -1,0 +1,20 @@
+CMake Deprecation Warning at /home/red/esp/v5.3.2/esp-idf/components/mbedtls/mbedtls/CMakeLists.txt:21 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+ESP Insights Project commit: v0.5-55-g89c15d2-dirty
+CMake Deprecation Warning at managed_components/espressif__esp-serial-flasher/CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+ESP RainMaker Project commit: v0.5-55-g89c15d2-dirty

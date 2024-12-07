@@ -1,0 +1,3 @@
+default:
+  unit-test-app: "port"
+  # port value is updated run time during gitlab CI for local use update the port value manually

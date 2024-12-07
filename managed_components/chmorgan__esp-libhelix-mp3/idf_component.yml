@@ -1,0 +1,6 @@
+dependencies:
+  idf:
+    version: '>=4.1.0'
+description: libhelix-mp3 (mp3 decoder) component
+url: https://github.com/chmorgan/esp-libhelix-mp3
+version: 1.0.3

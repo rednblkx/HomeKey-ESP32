@@ -1,0 +1,107 @@
+menu "Diagnostics"
+    choice DIAG_LOG_MSG_ARG_FORMAT
+        prompt "Diagnostics log argument format"
+        default DIAG_LOG_MSG_ARG_FORMAT_TLV
+        help
+            For error/warning/event logs, diagnostics module collects program counter, timestamp,
+            tag, RO data pointer and log arguments. Log arguments are stored in statically allocated buffer.
+            This option configures how to format and store log arguments in buffer.
+            Log arguments can be formatted as TLV or complete log string formatted using vsnprintf.
+
+            If "TLV" is selected, buffer contains arguments formatted as TLV.
+            Type - 1 byte for the type of argument, please check esp_diag_arg_type_t.
+            Length - 1 byte for the size of argument, size is calculated using sizeof operator.
+            Value - Size bytes for the value.
+
+            If "STRING" is selected, buffer contains the entire string formatted using vsnprintf.
+
+        config DIAG_LOG_MSG_ARG_FORMAT_TLV
+            bool "Format arguments as TLV"
+        config DIAG_LOG_MSG_ARG_FORMAT_STRING
+            bool "Format arguments as string"
+    endchoice
+
+    config DIAG_LOG_MSG_ARG_MAX_SIZE
+        int "Maximum size of diagnostics log argument buffer"
+        range 32 255
+        default 64
+        help
+            Log arguments are stored in a static allocated buffer.
+            This option configures the maximum size of buffer for storing log arguments.
+
+    config DIAG_LOG_DROP_WIFI_LOGS
+        bool "Drop Wi-Fi logs"
+        default y
+        help
+            Every Wi-Fi log printed on the console adds three diagnostics logs.
+            For some users, Wi-Fi logs may not be that useful.
+            By default, diagnostics drops Wi-Fi logs. Set this config option to "n" for recording Wi-Fi logs.
+
+    config DIAG_ENABLE_METRICS
+        bool "Enable diagnostics metrics"
+        default y
+        help
+            Diagnostics module supports recording and reporting metrics to cloud.
+            This option enables the diagnostics metrics and related functionality.
+
+    config DIAG_METRICS_MAX_COUNT
+        depends on DIAG_ENABLE_METRICS
+        int "Maximum number of metrics"
+        default 20
+        help
+            This option configures the maximum number of metrics that can be registered.
+
+    config DIAG_ENABLE_HEAP_METRICS
+        depends on DIAG_ENABLE_METRICS
+        bool "Enable Heap Metrics"
+        default y
+        help
+            Enables the heap memory metrics. This collects free memory, largest free block,
+            and minimum free memory for heaps in internal as well as external memory.
+
+    config DIAG_ENABLE_WIFI_METRICS
+        depends on DIAG_ENABLE_METRICS
+        bool "Enable Wi-Fi Metrics"
+        default y
+        help
+            Enables Wi-Fi metrics and collects Wi-Fi RSSI and minumum ever Wi-Fi RSSI.
+
+    config DIAG_ENABLE_VARIABLES
+        bool "Enable diagnostics variables"
+        default y
+        help
+            Variables are similar to metrics but they represent entities where their current value
+            is much more important than over a period of time.
+            This option enables the diagnostics variables and related functionality
+
+    config DIAG_VARIABLES_MAX_COUNT
+        depends on DIAG_ENABLE_VARIABLES
+        int "Maximum number of variables"
+        default 20
+        help
+            This option configures the maximum number of variables that can be registered.
+
+    config DIAG_ENABLE_NETWORK_VARIABLES
+        depends on DIAG_ENABLE_VARIABLES
+        bool "Enable Network variables"
+        default y
+        help
+            Enables the Wi-Fi and IP address variables. Below variables are collected.
+            For Wi-Fi: SSID, BSSID, channel, auth mode, connection status, disconnection reason.
+            For IP: IPv4 address, netmask, and gateway of the device.
+
+    config DIAG_MORE_NETWORK_VARS
+        depends on DIAG_ENABLE_NETWORK_VARIABLES
+        bool "Enable More Advanced Network variables"
+        default n
+        help
+            Enable more advanced network variables
+
+    config DIAG_USE_EXTERNAL_LOG_WRAP
+        bool "Use external log wrapper"
+        default n
+        help
+            Diagnostics component wraps the esp_log_write and esp_log_writev APIs using `--wrap` gcc option.
+            There can be scenario where another component also wants to wrap the logging functions.
+            In that case, enable this option and use the data ingestion APIs esp_diag_log_write and esp_diag_log_writev.
+endmenu

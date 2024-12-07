@@ -1,0 +1,12 @@
+## IDF Component Manager Manifest File
+dependencies:
+  ## Required IDF version
+  idf: ">=4.1.0"
+  espressif/esp_modem:
+    version: "^1.0.0"
+    override_path: "../../../"
+  espressif/esp_modem_usb_dte:
+    version: "^1.2.0"
+    rules:
+      - if: "idf_version >=4.4"
+      - if: "target in [esp32s2, esp32s3, esp32p4]"

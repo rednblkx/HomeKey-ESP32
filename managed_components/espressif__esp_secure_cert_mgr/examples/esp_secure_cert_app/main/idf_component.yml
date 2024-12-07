@@ -1,0 +1,6 @@
+version: "1.0.0"
+description: ESP Secure Cert Manager Example
+dependencies:
+  espressif/esp_secure_cert_mgr:
+    version: '^2.0.8'
+    override_path: '../../../' # three levels up, pointing the directory with the component itself

@@ -1,0 +1,109 @@
+
+menu "Example Configuration"
+
+    choice EXAMPLE_MODEM_DEVICE
+        prompt "Choose supported modem device (DCE)"
+        default EXAMPLE_MODEM_DEVICE_SIM7080
+        help
+            Select modem device connected to the ESP DTE.
+        config EXAMPLE_MODEM_DEVICE_SIM7070
+            bool "SIM7070"
+            help
+                SIM7070 is Multi-Band CAT M and NB IoT module.
+        config EXAMPLE_MODEM_DEVICE_SIM7080
+            bool "SIM7080"
+            help
+                SIM7080 is Multi-Band CAT M and NB IoT module.
+    endchoice
+
+    menu "UART Configuration"
+        config EXAMPLE_MODEM_UART_TX_PIN
+            int "TXD Pin Number"
+            default 4
+            range 0 56
+            help
+                Pin number of UART TX.
+
+        config EXAMPLE_MODEM_UART_RX_PIN
+            int "RXD Pin Number"
+            default 5
+            range 0 56
+            help
+                Pin number of UART RX.
+
+        config EXAMPLE_MODEM_UART_EVENT_TASK_STACK_SIZE
+            int "UART Event Task Stack Size"
+            range 2000 6000
+            default 4096
+            help
+                Stack size of UART event task.
+
+        config EXAMPLE_MODEM_UART_EVENT_TASK_PRIORITY
+            int "UART Event Task Priority"
+            range 3 22
+            default 5
+            help
+                Priority of UART event task.
+
+        config EXAMPLE_MODEM_UART_EVENT_QUEUE_SIZE
+            int "UART Event Queue Size"
+            range 10 40
+            default 30
+            help
+                Length of UART event queue.
+
+        config EXAMPLE_MODEM_UART_TX_BUFFER_SIZE
+            int "UART TX Buffer Size"
+            range 256 2048
+            default 512
+            help
+                Buffer size of UART TX buffer.
+
+        config EXAMPLE_MODEM_UART_RX_BUFFER_SIZE
+            int "UART RX Buffer Size"
+            range 256 2048
+            default 1024
+            help
+                Buffer size of UART RX buffer.
+    endmenu
+
+    config EXAMPLE_MODEM_PWRKEY_PIN
+        int "PWRKEY Pin Number"
+        default 18
+        range 0 56
+        help
+            Pin number connected to modem's power key pin.
+
+    config EXAMPLE_MODEM_STATUS_PIN
+        int "STATUS Pin Number"
+        default 19
+        range 0 56
+        help
+            Pin number connected to modem's status pin.
+
+    config EXAMPLE_MODEM_LIGHT_SLEEP_DURATION
+        int "Light Sleep Duration"
+        default 10
+        range 0 15000
+        help
+            Duration in seconds, of which the esp32 goes into light sleep while the modem is awake.
+
+    config EXAMPLE_MODEM_PPP_APN
+        string "Set MODEM APN"
+        default "internet"
+        help
+            Set APN (Access Point Name), a logical name to choose data network
+
+    config EXAMPLE_MODEM_T3412_PERIODIC_TAU
+        string "T3412 Requester Periodic TAU"
+        default "00000100"
+        help
+            T3412 timer, i.e the duration of one awake and sleep cycle of the modem in PSM.
+
+    config EXAMPLE_MODEM_T3324_ACTIVE_TIME
+        string "T3324 Requester Active Time"
+        default "00000001"
+        help
+            T3324 timer, i.e the duration for which the modem stays PSM.
+
+endmenu

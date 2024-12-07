@@ -1,0 +1,3 @@
+pytest_embedded
+pytest_embedded_idf
+pytest_embedded_qemu

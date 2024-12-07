@@ -1,0 +1,60 @@
+menu "Test Configuration"
+
+    choice TEST_DEVICE
+        prompt "Choose supported modem device (DCE)"
+        default TEST_DEVICE_MODEM_GENERIC
+        help
+            Select modem device connected to the ESP DTE.
+
+        config TEST_DEVICE_MODEM_GENERIC
+            bool "Common modem device"
+            help
+                Generic device that could be used with most common modems (BG96, SIM76xx, A76xx).
+
+        config TEST_DEVICE_PPPD_SERVER
+            bool "PPPD Server"
+            help
+                Test device is a pppd service in server mode, running on linux.
+    endchoice
+
+    config TEST_MODEM_APN
+        string "Modem APN"
+        depends on TEST_DEVICE_MODEM_GENERIC
+        default "lpwa.vodafone.com"
+        help
+            Set APN (Access Point Name), a logical name to choose data network
+
+    config TEST_USE_VFS_TERM
+        bool "Use VFS terminal"
+        default n
+        help
+            Demonstrate use of VFS as a communication terminal of the DTE.
+            VFS driver implements non-block reads, writes and selects to communicate with esp-modem,
+            but this implementation uses UART resource only.
+
+    config TEST_OTA_URI
+        string "URI of the binary"
+        default "https://192.168.11.1/esp32.bin"
+        help
+            HTTPS address of the update binary.
+
+    config TEST_OTA_CA_CERT
+        string "Server certificate"
+        default "---paste the server side certificate here---"
+        help
+            Insert the CA cert of the server side here. copy the base64 text between  -----BEGIN CERTIFICATE-----
+            and -----END CERTIFICATE-----.
+
+    config TEST_OTA_CN
+        string "Server common name"
+        default "192.168.11.1"
+        help
+            Insert the server's common name to be checked within verification of the Server side certificat
+
+    config BROKER_URI
+        string "Broker URL"
+        default "mqtt://test.mosquitto.org"
+        help
+            URL of an mqtt broker which this example connects to.
+
+endmenu

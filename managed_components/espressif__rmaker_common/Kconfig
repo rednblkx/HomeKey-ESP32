@@ -1,0 +1,181 @@
+menu "ESP RainMaker Common"
+
+    choice ESP_RMAKER_MQTT_GLUE_LIB
+        bool "MQTT Library"
+        default ESP_RMAKER_LIB_ESP_MQTT
+        help
+            MQTT Library to be used
+
+        config ESP_RMAKER_LIB_ESP_MQTT
+            bool "ESP-MQTT"
+        config ESP_RMAKER_LIB_AWS_IOT
+            bool "AWS-IOT"
+    endchoice
+
+    config ESP_RMAKER_MQTT_GLUE_LIB
+        int
+        default 1 if ESP_RMAKER_LIB_ESP_MQTT
+        default 2 if ESP_RMAKER_LIB_AWS_IOT
+
+    choice ESP_RMAKER_MQTT_PORT
+        bool "MQTT Port"
+        default ESP_RMAKER_MQTT_PORT_443
+        help
+            ESP RainMaker MQTT Broker can be connected to either on Port 8883 or port 443.
+            Port 443 is recommended as it is generally not blocked by any firewalls,
+            since it is standard HTTPS port.
+
+        config ESP_RMAKER_MQTT_PORT_443
+            bool "443"
+        config ESP_RMAKER_MQTT_PORT_8883
+            bool "8883"
+    endchoice
+
+    config ESP_RMAKER_MQTT_PORT
+        int
+        default 1 if ESP_RMAKER_MQTT_PORT_443
+        default 2 if ESP_RMAKER_MQTT_PORT_8883
+
+    config ESP_RMAKER_MQTT_PERSISTENT_SESSION
+        bool "Use Persisent MQTT sessions"
+        default n
+        help
+            Use persistent MQTT sessions. This improves reliability as QOS1 messages missed
+            out due to some network issue are received after the MQTT reconnects. The broker
+            caches messages for a period of upto 1 hour. However, a side-effect of this is that
+            messages can be received at unexpected time. Enable this option only if it suits
+            your use case. Please read MQTT specs to understand more about persistent sessions
+            and the cleanSession flag.
+
+    config ESP_RMAKER_MQTT_SEND_USERNAME
+        bool "Send MQTT Username"
+        default y
+        help
+            Send a Username during MQTT Connect. This is generally required only for tracking
+            the MQTT client types, platform, SDK, etc. in AWS.
+
+    config ESP_RMAKER_MQTT_PRODUCT_NAME
+        string "Product Name"
+        depends on ESP_RMAKER_MQTT_SEND_USERNAME
+        default "RMDev"
+        help
+            Approved AWS product name. Please get in touch with your Espressif/AWS representative for more info.
+
+    config ESP_RMAKER_MQTT_PRODUCT_VERSION
+        string "Product Version"
+        depends on ESP_RMAKER_MQTT_SEND_USERNAME
+        default "1x0"
+        help
+            Approved AWS product version. Please get in touch with your Espressif/AWS representative for more info.
+
+    config ESP_RMAKER_MQTT_PRODUCT_SKU
+        string "Product SKU"
+        depends on ESP_RMAKER_MQTT_SEND_USERNAME
+        default "EX00"
+        help
+            Product SKU. Please get in touch with your Espressif/AWS representative for more info.
+
+    config ESP_RMAKER_MQTT_USE_CERT_BUNDLE
+        bool "Use Certificate Bundle"
+        default y
+        help
+            Use Certificate Bundle for server authentication. Enabling this is recommended to safeguard
+            against any changes in the server certificates in future. This has an impact on the binary
+            size as well as heap requirement.
+
+    config ESP_RMAKER_MAX_MQTT_SUBSCRIPTIONS
+        int "Maximum number of MQTT Subscriptions"
+        default 10
+        help
+            This value controls the maximum number of topics that the device can subscribe to.
+
+    config ESP_RMAKER_MQTT_KEEP_ALIVE_INTERVAL
+        int "MQTT Keep Alive Internal"
+        default 120
+        range 30 1200
+        help
+            MQTT Keep Alive Interval. Note that it can take upto 1.5x of keep alive interval for a device
+            to be reported by offline by the MQTT Broker. Change this only if required.
+
+    choice ESP_RMAKER_NETWORK_PROTOCOL_TYPE
+        prompt "ESP RainMaker Network Type"
+        default ESP_RMAKER_NETWORK_OVER_WIFI
+        help
+            Network protocol type over which the ESP RainMaker will run.
+
+        config ESP_RMAKER_NETWORK_OVER_WIFI
+            # ESP_WIFI_ENABLED was introduced in IDF v5.0
+            depends on IDF_TARGET_ESP32 || IDF_TARGET_ESP32C3 || IDF_TARGET_ESP32S2 || IDF_TARGET_ESP32S3 || ESP_WIFI_ENABLED
+            bool "ESP RainMaker over Wi-Fi"
+
+        config ESP_RMAKER_NETWORK_OVER_THREAD
+            depends on OPENTHREAD_ENABLED
+            bool "ESP RainMaker over Thread"
+    endchoice
+
+    config ESP_RMAKER_WORK_QUEUE_TASK_STACK
+        int "ESP RainMaker Work Queue Task stack"
+        default 4096
+        help
+            Stack size for the ESP RainMaker Work Queue Task.
+
+    config ESP_RMAKER_WORK_QUEUE_TASK_PRIORITY
+        int "ESP RainMaker Work Queue Task priority"
+        default 5
+        help
+            Priority for the ESP RainMaker Work Queue Task. Not recommended to be changed
+            unless you really need it.
+
+    config ESP_RMAKER_FACTORY_PARTITION_NAME
+        string "ESP RainMaker Factory Partition Name"
+        default "fctry"
+        help
+            Factory NVS Partition name which will have the MQTT connectivity credentials.
+
+    config ESP_RMAKER_FACTORY_NAMESPACE
+        string "ESP RainMaker Factory Namespace"
+        default "rmaker_creds"
+        help
+            Namespace in the Factory NVS Partition name which will have the MQTT
+            connectivity credentials.
+
+    config ESP_RMAKER_ENCRYPT_FACTORY_PARTITION
+        bool "Encrypt Rainmaker Factory partition"
+        default false
+        depends on NVS_ENCRYPTION
+        help
+            Enable this option if the factory partition is pre-encrypted before flashing and the encryption keys 
+            are flashed in partition with subtype nvs_keys specified by CONFIG_ESP_RMAKER_FACTORY_NVS_KEYS_PARTITION_NAME.
+            If an unencrypted factory partition is flashed, the device would not be able to read its data and 
+            the partition would be considered empty.
+            If nvs encryption keys are not flashed onto device, they would be auto-generated and any previous data 
+            in nvs/factory partition would become invalid.
+
+    config ESP_RMAKER_FACTORY_NVS_KEYS_PARTITION_NAME
+        string "ESP Rainmaker Factory NVS keys partition label"
+        default "nvs_key"
+        depends on ESP_RMAKER_ENCRYPT_FACTORY_PARTITION
+        help
+            Label of the partition of subtype "nvs_keys" used for encrypting/decrypting Rainmaker factory partition.
+
+    config ESP_RMAKER_DEF_TIMEZONE
+        string "Default Timezone"
+        default "Asia/Shanghai"
+        help
+            Default Timezone to use. Eg. "Asia/Shanghai", "America/Los_Angeles".
+            Check documentation for complete list of valid values. This value
+            will be used only if no timezone is set using the C APIs.
+
+    config ESP_RMAKER_SNTP_SERVER_NAME
+        string "ESP RainMaker SNTP Server Name"
+        default "pool.ntp.org"
+        help
+            Default SNTP Server which is used for time synchronization.
+
+    config ESP_RMAKER_MAX_COMMANDS
+        int "Maximum commands supported for command-response"
+        default 10
+        help
+            Maximum number of commands supported by the command-response framework
+
+endmenu

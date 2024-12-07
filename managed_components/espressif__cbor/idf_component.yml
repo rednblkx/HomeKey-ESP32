@@ -1,0 +1,6 @@
+dependencies:
+  idf:
+    version: '>=4.3'
+description: 'CBOR: Concise Binary Object Representation Library'
+url: https://github.com/espressif/idf-extra-components/tree/master/cbor
+version: 0.6.0~1

@@ -1,0 +1,4 @@
+dependencies:
+  espressif/catch2: "*"
+  idf:
+    version: ">=4.4"

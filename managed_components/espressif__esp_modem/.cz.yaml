@@ -1,0 +1,8 @@
+---
+commitizen:
+  bump_message: 'bump(modem): $current_version -> $new_version'
+  pre_bump_hooks: python ../../ci/changelog.py esp_modem
+  tag_format: modem-v$version
+  version: 1.3.0
+  version_files:
+  - idf_component.yml

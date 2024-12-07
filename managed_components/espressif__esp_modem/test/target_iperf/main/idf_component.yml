@@ -1,0 +1,6 @@
+## IDF Component Manager Manifest File
+dependencies:
+  espressif/esp_modem:
+    version: "^1.1.0"
+    override_path: "../../.."
+  espressif/iperf-cmd: "^0.1.1"

@@ -1,0 +1,34 @@
+# VS Code Settings
+.vscode/
+
+include/config
+include/sdkconfig.h
+build/
+sdkconfig.old
+sdkconfig
+.DS_Store
+
+*.pyc
+
+# Doc build artifacts
+docs/_build/
+docs/*/_build/
+docs/*/doxygen-warning-log.txt
+docs/*/sphinx-warning-log.txt
+docs/*/sphinx-warning-log-sanitized.txt
+docs/*/xml/
+docs/*/xml_in/
+docs/*/man/
+docs/doxygen_sqlite3.db
+_build/*
+
+# Downloaded font files
+docs/_static/DejaVuSans.ttf
+docs/_static/NotoSansSC-Regular.otf
+
+# ci
+test_apps/*/dependencies.lock
+test_apps/*/managed_components
+test_apps/*/*/build_*
+pytest_log
+XUNIT_RESULT.xml

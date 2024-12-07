@@ -1,0 +1,144 @@
+menu "Example Configuration"
+
+    choice EXAMPLE_MODEM_DEVICE
+        prompt "Choose supported modem device (DCE)"
+        default EXAMPLE_MODEM_DEVICE_BG96
+        help
+            Select modem device connected to the ESP DTE.
+        config EXAMPLE_MODEM_DEVICE_SIM800
+            bool "SIM800"
+            help
+                SIMCom SIM800L is a GSM/GPRS module.
+                It supports Quad-band 850/900/1800/1900MHz.
+        config EXAMPLE_MODEM_DEVICE_BG96
+            bool "BG96"
+            help
+                Quectel BG96 is a series of LTE Cat M1/Cat NB1/EGPRS module.
+        config EXAMPLE_MODEM_DEVICE_SIM7000
+            bool "SIM7000"
+            help
+                SIM7000 is a Multi-Band LTE-FDD and GSM/GPRS/EDGE module.
+        config EXAMPLE_MODEM_DEVICE_SIM7070
+            bool "SIM7070"
+            help
+                SIM7070 is Multi-Band CAT M and NB IoT module.
+        config EXAMPLE_MODEM_DEVICE_SIM7070_GNSS
+            bool "SIM7070_GNSS"
+            help
+                SIM7070 is Multi-Band CAT M and NB IoT module with Support for GNSS Location API
+        config EXAMPLE_MODEM_DEVICE_SIM7600
+            bool "SIM7600"
+            help
+                SIM7600 is a Multi-Band LTE-TDD/LTE-FDD/HSPA+ and GSM/GPRS/EDGE module.
+    endchoice
+
+    config EXAMPLE_MODEM_PPP_APN
+        string "Set MODEM APN"
+        default "internet"
+        help
+            Set APN (Access Point Name), a logical name to choose data network
+
+    config EXAMPLE_NEED_SIM_PIN
+        bool "SIM PIN needed"
+        default n
+        help
+            Enable to set SIM PIN before starting the example
+
+    config EXAMPLE_SIM_PIN
+        string "Set SIM PIN"
+        default "1234"
+        depends on EXAMPLE_NEED_SIM_PIN
+        help
+            Pin to unlock the SIM
+
+    choice EXAMPLE_FLOW_CONTROL
+        bool "Set preferred modem control flow"
+        default EXAMPLE_FLOW_CONTROL_NONE
+        help
+            Set the modem's preferred control flow
+
+        config EXAMPLE_FLOW_CONTROL_NONE
+            bool "No control flow"
+        config EXAMPLE_FLOW_CONTROL_SW
+            bool "SW control flow"
+        config EXAMPLE_FLOW_CONTROL_HW
+            bool "HW control flow"
+    endchoice
+
+    menu "UART Configuration"
+        config EXAMPLE_MODEM_UART_TX_PIN
+            int "TXD Pin Number"
+            default 25
+            range 0 56
+            help
+                Pin number of UART TX.
+
+        config EXAMPLE_MODEM_UART_RX_PIN
+            int "RXD Pin Number"
+            default 26
+            range 0 56
+            help
+                Pin number of UART RX.
+
+        config EXAMPLE_MODEM_UART_RTS_PIN
+            int "RTS Pin Number"
+            default 27
+            range 0 56
+            help
+                Pin number of UART RTS.
+
+        config EXAMPLE_MODEM_UART_CTS_PIN
+            int "CTS Pin Number"
+            default 23
+            range 0 56
+            help
+                Pin number of UART CTS.
+    endmenu
+
+    config EXAMPLE_USE_VFS_TERM
+        bool "Use VFS terminal"
+        default n
+        help
+            Demonstrate use of VFS as a communication terminal of the DTE.
+            VFS driver implements non-block reads, writes and selects to communicate with esp-modem,
+            but this implementation uses UART resource only.
+
+    config EXAMPLE_PERFORM_OTA
+        bool "Perform OTA in the example"
+        default n
+        help
+            Perform the OTA update after connecting to the network and mqtt broker.
+            This option is used only to exercise network stability in CMUX mode.
+
+    config EXAMPLE_PERFORM_OTA_URI
+        string "URI of the binary"
+        default "https://my.code/esp32.bin"
+        depends on EXAMPLE_PERFORM_OTA
+        help
+            HTTPS address of the update binary.
+
+    config EXAMPLE_CLOSE_CMUX_AT_END
+        bool "Close multiplexed mode at the end of the example"
+        default n
+        help
+            Close the multiplexed mode at the end of the example and rollback to command mode.
+
+    config BROKER_URI
+        string "Broker URL"
+        default "mqtt://test.mosquitto.org"
+        help
+            URL of an mqtt broker which this example connects to.
+
+    config EXAMPLE_MQTT_TEST_TOPIC
+        string "MQTT topic to publish/subscribe"
+        default "/topic/esp-pppos"
+        help
+            MQTT topic, which we subscribe on and publish to.
+
+    config EXAMPLE_MQTT_TEST_DATA
+        string "MQTT data to publish/receive"
+        default "esp32-pppos"
+        help
+            MQTT data message, which we publish and expect to receive.
+
+endmenu

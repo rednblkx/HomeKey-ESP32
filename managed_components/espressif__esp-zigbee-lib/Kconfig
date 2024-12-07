@@ -1,0 +1,72 @@
+menu "Zigbee"
+
+    config ZB_ENABLED
+        bool "Zigbee Enable"
+        default n
+        help
+            Select this option to enable Zigbee and show the submenu with Zigbee configuration choices.
+
+    choice ZB_DEVICE_TYPE
+        prompt "Configure the Zigbee device type"
+        depends on ZB_ENABLED
+        default ZB_ZCZR
+        help
+            Configure the Zigbee device type
+
+        config ZB_ZCZR
+            bool "Zigbee Coordinator or Router device"
+            help
+                Select this to enable Zigbee Coordinator or Router.
+           
+        config ZB_ZED
+            bool "Zigbee End Device"
+            help
+                Select this to enable Zigbee End Device.
+
+        config ZB_ZGPD
+            depends on SOC_IEEE802154_SUPPORTED
+            bool "Zigbee Green power device"
+            help
+                Select this to enable Zigbee Green Power Device.
+
+    endchoice
+
+    choice ZB_RADIO_TYPE
+        prompt "Configure the Zigbee radio type"
+        depends on ZB_ENABLED
+        default ZB_RADIO_NATIVE if SOC_IEEE802154_SUPPORTED
+        default ZB_RADIO_SPINEL_UART
+
+        config ZB_RADIO_NATIVE
+            bool "Native 15.4 radio"
+            help
+                Select this to use the native 15.4 radio.
+
+        config ZB_RADIO_SPINEL_UART
+            bool "Connect to 15.4 radio via Radio Spinel UART"
+            select OPENTHREAD_SPINEL_ONLY
+            help
+                Select this to connect to a Radio Co-Processor via Spinel UART.
+    endchoice
+    
+    menu "Zigbee Example"
+        depends on ZB_ENABLED
+
+        config ZB_GP_ENABLED
+            depends on (ZB_ZCZR || ZB_ZGPD) && SOC_IEEE802154_SUPPORTED
+            bool "Zigbee Green Power enable"
+            default y if ZB_ZCZR
+            help
+                when enable green power, example would support as green power proxy(zczr default enabled), green power combo or just green power device.
+
+    endmenu
+
+    config ZB_DEBUG_MODE
+        depends on ZB_ENABLED
+
+        bool "Zigbee Debug Mode"
+        default n
+        help
+            Setting Zigbee stack debug mode.
+    
+endmenu

@@ -1,0 +1,95 @@
+menu "esp-modem"
+
+    config ESP_MODEM_CMUX_DEFRAGMENT_PAYLOAD
+        bool "Defragment CMUX messages internally"
+        default y
+        help
+            If enabled (default), the esp-modem automatically defragments CMUX messages
+            to only pass the completed CMUX message to higher layers.
+            This is useful for messages in command mode (if they're received fragmented).
+            It's not a problem for messages in data mode as the upper layer (PPP protocol)
+            defines message boundaries.
+            Keep the default to true for most cases (as most devices use simply 1 byte CMUX
+            length, as the internal Rx buffer of size >= 256 bytes won't overflow)
+            Set to false if your devices uses 2 byte CMUX payload (e.g. A7672S).
+            The operation would work without an issue in data mode, but some replies
+            in command mode might come fragmented in rare cases so might need to retry
+            AT commands.
+
+    config ESP_MODEM_USE_INFLATABLE_BUFFER_IF_NEEDED
+        bool "Use inflatable buffer in DCE"
+        default n
+        help
+            If enabled we will process the ongoing AT command by growing the current
+            buffer (if we've run out the preconfigured buffer).
+            If disabled, we simply report a failure.
+            Use this if additional allocation is not a problem and you need to reliably process
+            all commands, usually with sporadically longer responses than the configured buffer.
+            Could be also used to defragment AT replies in CMUX mode if CMUX_DEFRAGMENT_PAYLOAD=n
+
+    config ESP_MODEM_CMUX_DELAY_AFTER_DLCI_SETUP
+        int "Delay in ms to wait before creating another virtual terminal"
+        default 0
+        help
+            Some devices might need a pause before sending SABM command that creates
+            virtual terminal. This delay applies only to establishing a CMUX mode.
+            The typical reason for failing SABM request without a delay is that
+            some devices (SIM800) send MSC requests just after opening a new DLCI.
+
+    config ESP_MODEM_CMUX_USE_SHORT_PAYLOADS_ONLY
+        bool "CMUX to support only short payloads (<128 bytes)"
+        default n
+        help
+            If enabled, the CMUX protocol would only use 1 byte size field.
+            You can use this option for devices that support only short CMUX payloads
+            to make the protocol more robust on noisy environments or when underlying
+            transport gets corrupted often (for example by Rx buffer overflows)
+
+    config ESP_MODEM_ADD_CUSTOM_MODULE
+        bool "Add support for custom module in C-API"
+        default n
+        help
+            If enabled, we adapt the C-API to create a DCE from a user defined class
+
+    config ESP_MODEM_CUSTOM_MODULE_HEADER
+        string "Header file name which defines custom DCE creation"
+        depends on ESP_MODEM_ADD_CUSTOM_MODULE
+        default "custom_module.hpp"
+        help
+            Name of the header file in the main component which implements esp_modem_create_custom_dce()
+            called from C-API for creating esp_modem_dce object.
+            This header provides definition of the custom module with some additional and/or updated commands
+            and API. It also defines creation of DCE based on this custom module, typically calling:
+            dce_factory::Factory::create_unique_dce_from<CustomModule, DCE*>(dce_config, std::move(dte), netif)
+            Please refer to the pppos_client example for more details.
+
+    config ESP_MODEM_C_API_STR_MAX
+        int "Size in bytes for response from AT commands returning textual values (C-API)"
+        default 128
+        help
+            Some AT commands returns textual values which C-API copy as c-string to user allocated space,
+            it also truncates the output data to this size. Increase this if some AT answers are truncated.
+
+    config ESP_MODEM_URC_HANDLER
+        bool "Enable support for adding URC handler"
+        default n
+        help
+            If enabled, APIs to add URC handler are available
+
+    config ESP_MODEM_PPP_ESCAPE_BEFORE_EXIT
+        bool "Send escape sequence when switching PPP -> CMD"
+        default n
+        help
+            If enabled, the library sends a PPP escape ("+++" command)
+            to switch to command mode. This make switching from PPP to CMD
+            mode more robust for some devices (e.g. Quectel), but might cause
+            trouble for other devices (e.g. SIMCOM).
+
+    config ESP_MODEM_ADD_DEBUG_LOGS
+        bool "Add UART Tx/Rx logs"
+        default n
+        help
+            If enabled, the library dumps all transmitted and received data.
+            This option is only used for debugging.
+
+endmenu

@@ -1,0 +1,7 @@
+dependencies:
+  espressif/esp_modem:
+    version: "^1.0.1"
+    override_path: "../../../"
+  espressif/mbedtls_cxx:
+    version: "*"
+    override_path: "../../../../mbedtls_cxx"

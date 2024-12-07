@@ -1,0 +1,4 @@
+libsodium/test_apps:
+  enable:
+    - if: IDF_TARGET in ["esp32", "esp32c3"]
+      reason: "Sufficient to test on one Xtensa and one RISC-V target"

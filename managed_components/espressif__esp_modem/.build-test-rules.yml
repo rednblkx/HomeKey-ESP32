@@ -1,0 +1,7 @@
+components/esp_modem/examples/ap_to_pppos:
+  disable:
+    - if: IDF_TARGET in ["esp32h2", "esp32p4"]
+
+components/esp_modem/examples/modem_console:
+  disable:
+    - if: IDF_TARGET in ["esp32h2"]

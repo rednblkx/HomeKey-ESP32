@@ -1,0 +1,35 @@
+dependencies:
+  espressif/esp_rcp_update:
+    rules:
+    - if: idf_version >= 5.1
+    version: ~1.2.0
+  espressif/esp_schedule:
+    version: ~1.2.0
+  espressif/esp_secure_cert_mgr:
+    rules:
+    - if: idf_version >=4.3
+    version: ^2.2.1
+  espressif/json_generator:
+    version: ~1.1.1
+  espressif/json_parser:
+    version: ~1.0.3
+  espressif/mdns:
+    rules:
+    - if: idf_version >=5.0
+    version: ^1.2.0
+  espressif/network_provisioning:
+    rules:
+    - if: idf_version >= 5.1
+    version: ~1.0.0
+  espressif/rmaker_common:
+    version: ~1.4.6
+description: ESP RainMaker firmware agent
+discussion: https://www.esp32.com/viewforum.php?f=41
+documentation: https://rainmaker.espressif.com/
+issues: https://github.com/espressif/esp-rainmaker/issues
+repository: git://github.com/espressif/esp-rainmaker.git
+repository_info:
+  commit_sha: 3328c7295f8b6b14833894ad1ebd4a2877558b29
+  path: components/esp_rainmaker
+url: https://github.com/espressif/esp-rainmaker/tree/master/components/esp_rainmaker
+version: 1.5.0

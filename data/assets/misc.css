@@ -16,6 +16,10 @@ h2 {
     margin-top: 1rem!important;         
 }
 
+h5 {
+    color: rgb(156, 147, 134)!important;
+}
+
 p,
 h5,
 h3,
@@ -59,45 +63,64 @@ button {
     border-color: hsl(240 3.7% 15.9%) !important;
 }
 
+.tabs-list {
+    display: flex;
+    justify-content: space-around;
+    overflow: auto;
+}
+
+input[type="number"]{
+    max-width: 5rem;
+}
+
+.tabs-container {
+    margin-bottom: .5rem;
+}
+
 div[class$="-selected-body"] {
     display: flex;
     flex-direction: column;
-    padding-inline: 1rem;
-    padding-bottom: .5rem;
+    padding-inline: .5rem;
+    padding-block: .5rem;
     gap: 16px;
 }
 
-h3[class$="-selected-tab"] {
+[class$="-selected-tab"] {
     border-bottom: 2px #8e8271 solid;
+    background: linear-gradient(180deg, rgba(174,152,118,0.05) 0%, rgba(150,134,110,0.15) 50%, rgba(142, 130, 113, 0.35) 100%);
+    border-radius: .2rem .2rem 0 0;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1), 0 0 20px rgba(0,0,0,0.1), 0 0 40px rgba(0,0,0,0.1), 0 0 60px rgba(0,0,0,0.1);
+    font-weight: bold;
+    color: white!important;
+}
+
+.tab-btn {
+    margin: 0;
+    width: fit-content;
+    padding: 0.5rem;
+    cursor: pointer;
+    color: gray;
 }
 
 div[class$="-hidden-body"] {
     display: none;
 }
 
-@media only screen and (min-width: 800px) {
-    button:hover {
-        opacity: .9;
-    }
+.flex-col-lg {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
 
-    #restart-btn:hover {
-        opacity: .8;
-    }
+.flex-row-lg {
+    display: flex;
+    flex-direction: row;
+    gap: 16px;
+}
 
-    #restart-btn:active {
-        background-color: #4040402e!important;
-    }
-
-    #mqtt-broker-con, #mqtt-topics-container {
-        min-width: 20rem;
-        max-width: 25rem;
-    }
-    .cards-container {
-        align-items: flex-start;
-    }
-    #component {
-        max-width: 65rem;
-    }
+.input-group {
+    display: flex;
+    justify-content: space-between;
 }
 
 @media only screen and (max-width: 600px) {
@@ -119,13 +142,94 @@ div[class$="-hidden-body"] {
     .nfc-triggers-selected-body {
         flex-wrap: wrap;
     }
+    #component {
+        max-width: 90dvw;
+    }
+    .flex-sm {
+        display: flex;
+        gap: inherit;
+        flex-direction: inherit;
+        gap: 16px;
+    }
+    .around-sm {
+        justify-content: space-around;
+    }
+    .flex-center-sm {
+        align-items: center;
+    }
+    .flex-end-sm {
+        align-items: flex-end;
+    }
 }
 
-.fill-container {
-    width: 100%;
-    width: -moz-available;
-    width: -webkit-fill-available;
-    width: fill-available;
+@media only screen and (min-width: 800px) {
+    button:hover {
+        opacity: .9;
+    }
+
+    #restart-btn:hover {
+        opacity: .8;
+    }
+
+    #restart-btn:active {
+        background-color: #4040402e!important;
+    }
+    .selected-btn:hover {
+        opacity: .7;
+    }
+
+    #mqtt-broker-con, #mqtt-topics-container {
+        min-width: 20rem;
+        max-width: 25rem;
+    }
+    .cards-container {
+        align-items: flex-start;
+    }
+    #component {
+        max-width: 65rem;
+    }
+}
+
+@media only screen and (max-width: 1090px) {
+    .flex-sm {
+        display: flex;
+        gap: inherit;
+        flex-direction: inherit;
+        gap: 16px;
+    }
+    .around-sm {
+        justify-content: space-around;
+    }
+    .flex-center-sm {
+        align-items: center;
+    }
+    .flex-col-sm {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+}
+
+@media only screen and (min-width: 1090px) {
+    .flex-center-lg {
+        align-items: center;
+    }
+}
+
+.card-content {
+    display: flex;
+    flex-direction: column;
+    border: 1px #8e8271 solid;
+    border-radius: 8px;
+    padding: 1rem;
+    box-shadow: 0px 1px 1px 0px;
+    background-color: #2d1d1d;
+    flex: 1;
+}
+
+select {
+    max-width: fit-content;
+    text-align: center;
 }
 
 #buttons-group {
@@ -144,7 +248,7 @@ div[class$="-hidden-body"] {
     overflow: hidden;
 }
 .loader::after {
-    content: '';  
+    content: '';
     width: 96px;
     height: 4.8px;
     background: #FFF;

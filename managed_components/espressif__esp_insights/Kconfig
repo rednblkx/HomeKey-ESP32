@@ -1,0 +1,66 @@
+menu "ESP Insights"
+
+    config ESP_INSIGHTS_ENABLED
+        bool "Enable ESP Insights"
+        default n
+
+    config ESP_INSIGHTS_DEBUG_ENABLED
+        depends on ESP_INSIGHTS_ENABLED
+        bool "Enable Insights debug prints"
+        default n
+
+    config ESP_INSIGHTS_DEBUG_PRINT_JSON
+        depends on ESP_INSIGHTS_DEBUG_ENABLED
+        bool "Dump CBOR decoded data instead of hexdump"
+        default y
+        help
+            Print pretty format json data for cbor messages
+            If this option is not enabled, hexdump will be presented instead of json data
+
+    config ESP_INSIGHTS_COREDUMP_ENABLE
+        bool "Enable core dump summary support"
+        default y
+        depends on (ESP_COREDUMP_ENABLE_TO_FLASH && ESP_COREDUMP_DATA_FORMAT_ELF) || (ESP32_ENABLE_COREDUMP_TO_FLASH && ESP32_COREDUMP_DATA_FORMAT_ELF)
+        help
+            This option enables core dump summary functionality in insights.
+            In case of crash, insights sends the core dump summary to cloud on next boot.
+
+    choice ESP_INSIGHTS_TRANSPORT
+        prompt "Insights default transport"
+        default ESP_INSIGHTS_TRANSPORT_HTTPS
+        help
+            By default insights can send data to cloud using MQTT and HTTPS transports.
+            This option configures the default insights transport.
+            Insights transport can be overridden using esp_insights_transport_register API.
+
+        config ESP_INSIGHTS_TRANSPORT_MQTT
+            bool "MQTT"
+
+        config ESP_INSIGHTS_TRANSPORT_HTTPS
+            bool "HTTPS"
+
+    endchoice
+
+    config ESP_INSIGHTS_TRANSPORT_HTTPS_HOST
+        depends on ESP_INSIGHTS_TRANSPORT_HTTPS
+        string "Insights https host"
+        default "https://client.insights.espressif.com"
+
+    config ESP_INSIGHTS_CLOUD_POST_MIN_INTERVAL_SEC
+        int "Insights cloud post min interval (sec)"
+        default 60
+        help
+            Minimum interval between two consecutive cloud posts.
+            There is a dynamic logic to decide the next timeout when the insights data will be reported.
+            It depends on whether the data was sent or not during the previous timeout.
+            If the data was sent, the next timeout is doubled and if not, it is halved.
+
+    config ESP_INSIGHTS_CLOUD_POST_MAX_INTERVAL_SEC
+        int "Insights cloud post max interval (sec)"
+        default 240
+        help
+            Maximum interval between two consecutive cloud posts.
+            There is a dynamic logic to decide the next timeout when the insights data will be reported.
+            It depends on whether the data was sent or not during the previous timeout.
+            If the data was sent, the next timeout is doubled and if not, it is halved.
+endmenu

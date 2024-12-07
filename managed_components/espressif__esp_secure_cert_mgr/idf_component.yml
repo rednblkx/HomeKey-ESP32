@@ -1,0 +1,10 @@
+dependencies:
+  idf:
+    version: '>=4.3'
+description: ESP Secure Cert Manager
+repository: git://github.com/espressif/esp_secure_cert_mgr.git
+repository_info:
+  commit_sha: 48c7dfe46c8beff161248eeb2a7d3ac94cca1949
+  path: .
+url: https://github.com/espressif/esp_secure_cert_mgr
+version: 2.5.0

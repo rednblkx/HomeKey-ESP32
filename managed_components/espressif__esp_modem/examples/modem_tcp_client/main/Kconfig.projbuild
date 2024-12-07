@@ -1,0 +1,101 @@
+menu "Example Configuration"
+
+    config EXAMPLE_CUSTOM_TCP_TRANSPORT
+        bool "Custom TCP transport"
+        help
+            Use custom TCP transport to connect to MQTT broker
+
+    choice EXAMPLE_MODEM_DEVICE
+        prompt "Choose supported modem device (DCE)"
+        default EXAMPLE_MODEM_DEVICE_BG96
+        help
+            Select modem device connected to the ESP DTE.
+        config EXAMPLE_MODEM_DEVICE_BG96
+            bool "BG96"
+            help
+                Quectel BG96 is a series of LTE Cat M1/Cat NB1/EGPRS module.
+        config EXAMPLE_MODEM_DEVICE_SIM7600
+            bool "SIM7600"
+            help
+                SIM7600 is Multi-Band LTE-TDD/LTE-FDD/HSPA+ and GSM/GPRS/EDGE module
+    endchoice
+
+    config EXAMPLE_MODEM_APN
+        string "Set MODEM APN"
+        default "internet"
+        help
+            Set APN (Access Point Name), a logical name to choose data network
+
+    menu "UART Configuration"
+        config EXAMPLE_MODEM_UART_TX_PIN
+            int "TXD Pin Number"
+            default 25
+            range 0 56
+            help
+                Pin number of UART TX.
+
+        config EXAMPLE_MODEM_UART_RX_PIN
+            int "RXD Pin Number"
+            default 26
+            range 0 56
+            help
+                Pin number of UART RX.
+
+        config EXAMPLE_MODEM_UART_RTS_PIN
+            int "RTS Pin Number"
+            default 27
+            range 0 56
+            help
+                Pin number of UART RTS.
+
+        config EXAMPLE_MODEM_UART_CTS_PIN
+            int "CTS Pin Number"
+            default 23
+            range 0 56
+            help
+                Pin number of UART CTS.
+
+        config EXAMPLE_MODEM_UART_EVENT_TASK_STACK_SIZE
+            int "UART Event Task Stack Size"
+            range 2000 6000
+            default 2048
+            help
+                Stack size of UART event task.
+
+        config EXAMPLE_MODEM_UART_EVENT_TASK_PRIORITY
+            int "UART Event Task Priority"
+            range 3 22
+            default 5
+            help
+                Priority of UART event task.
+
+        config EXAMPLE_MODEM_UART_EVENT_QUEUE_SIZE
+            int "UART Event Queue Size"
+            range 10 40
+            default 30
+            help
+                Length of UART event queue.
+
+        config EXAMPLE_MODEM_UART_PATTERN_QUEUE_SIZE
+            int "UART Pattern Queue Size"
+            range 10 40
+            default 20
+            help
+                Length of UART pattern queue.
+
+        config EXAMPLE_MODEM_UART_TX_BUFFER_SIZE
+            int "UART TX Buffer Size"
+            range 256 2048
+            default 512
+            help
+                Buffer size of UART TX buffer.
+
+        config EXAMPLE_MODEM_UART_RX_BUFFER_SIZE
+            int "UART RX Buffer Size"
+            range 256 2048
+            default 1024
+            help
+                Buffer size of UART RX buffer.
+    endmenu
+
+endmenu

@@ -1,0 +1,64 @@
+menu "Diagnostics data store"
+
+    choice DIAG_DATA_STORE_RTC_OR_FLASH
+        prompt "Diagnostics data store destination"
+        default DIAG_DATA_STORE_RTC
+        help
+            This option configures the place to store diagnostics data: RTC memory or Flash.
+
+            Flash store needs an additional patition table entry.
+            NOTE: Diagnostics data partition must be encrypted if Flash Encryption is enabled.
+
+        config DIAG_DATA_STORE_RTC
+            bool "RTC memory"
+
+        config DIAG_DATA_STORE_FLASH
+            bool "Flash"
+            help
+                Just a placeholder. This data store type is not supported as of now
+    endchoice
+
+    config DIAG_DATA_STORE_REPORTING_WATERMARK_PERCENT
+        int "Reporting watermark percentage"
+        range 50 90
+        default 80
+        help
+            Data store has facility to post an event when buffer is filled to a configured level.
+            This option configures the reporting watermark for critical and non critical data.
+
+    menu "RTC Store"
+        depends on DIAG_DATA_STORE_RTC
+
+        config RTC_STORE_DATA_SIZE
+            int "RTC store data size"
+            default 3072 if IDF_TARGET_ESP32
+            default 6144
+            range 512 7168
+            help
+                RTC data store is divided into two parts to store critical and non-critical data.
+                This option configures the total size of data store.
+                NOTE: On ESP32 devices, from esp-idf release v4.3 and onwards we can use all 8K RTC memory,
+                so max range is specified as 7K. On releases before v4.3 we can only access maximum 4K RTC memory and
+                RTC store uses few bytes for its operation so default for ESP32 is set to 3K.
+
+        config RTC_STORE_CRITICAL_DATA_SIZE
+            int "Maximum size of critical data store"
+            default 2048 if IDF_TARGET_ESP32
+            default 4096
+            range 512 RTC_STORE_DATA_SIZE
+            help
+                This option configures the size of critical data buffer and remaining is used for
+                non critical data buffer.
+    endmenu
+
+    menu "Flash Store"
+        depends on DIAG_DATA_STORE_FLASH
+
+        config FLASH_STORE_PARTITION_LABEL
+            string "Diagnostics data partition name"
+            default "diag_data"
+            help
+                Diagnostics data is stored in this partition
+    endmenu
+
+endmenu

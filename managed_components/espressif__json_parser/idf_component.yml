@@ -1,0 +1,8 @@
+dependencies:
+  jsmn:
+    rules:
+    - if: idf_version >=5.0
+    version: ~1.1
+description: This is a simple, light weight JSON parser built on top of jsmn
+url: https://github.com/espressif/json_parser
+version: 1.0.3

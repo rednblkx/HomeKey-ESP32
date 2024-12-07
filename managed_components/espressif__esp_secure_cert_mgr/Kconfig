@@ -1,0 +1,22 @@
+menu "ESP Secure Cert Manager"
+
+    config ESP_SECURE_CERT_DS_PERIPHERAL
+        bool "Enable DS peripheral support"
+        default y
+        depends on !IDF_TARGET_ESP32 && !IDF_TARGET_ESP32C2
+        help
+            Enable the DS peripheral support. Not supported on esp32 and esp32c2.
+
+    config ESP_SECURE_CERT_SUPPORT_LEGACY_FORMATS
+        bool "Enable support for legacy formats"
+        default n
+        help
+            This option enables support for the legacy formats along with
+            the current format in the esp_secure_cert component.
+            The current format is
+            cust_flash_tlv
+            The legacy formats are as follows:
+            cust_flash
+            nvs
+
+endmenu # ESP Secure Cert Manager

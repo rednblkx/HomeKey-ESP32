@@ -1,0 +1,124 @@
+dependencies:
+  chmorgan/esp-libhelix-mp3:
+    require: public
+    version: 1.0.3
+  espressif/cbor:
+    rules:
+    - if: target not in [esp32c2, esp32p4]
+    version: 0.6.0~1
+  espressif/esp-dsp:
+    rules:
+    - if: target != esp32c2
+    version: ^1.3.4
+  espressif/esp-modbus:
+    require: public
+    version: ^1.0.15
+  espressif/esp-sr:
+    rules:
+    - if: target in [esp32s3]
+    version: ^1.4.2
+  espressif/esp-zboss-lib:
+    require: public
+    rules:
+    - if: target not in [esp32c2, esp32p4]
+    version: ==1.6.0
+  espressif/esp-zigbee-lib:
+    require: public
+    rules:
+    - if: target not in [esp32c2, esp32p4]
+    version: ==1.6.0
+  espressif/esp_diag_data_store:
+    rules:
+    - if: target not in [esp32c2, esp32p4]
+    version: 1.0.1
+  espressif/esp_diagnostics:
+    rules:
+    - if: target not in [esp32c2, esp32p4]
+    version: 1.0.2
+  espressif/esp_hosted:
+    rules:
+    - if: target == esp32p4
+    version: ^0.0.25
+  espressif/esp_insights:
+    rules:
+    - if: target not in [esp32c2, esp32p4]
+    version: 1.0.1
+  espressif/esp_modem:
+    version: ^1.1.0
+  espressif/esp_rainmaker:
+    rules:
+    - if: target not in [esp32c2, esp32p4]
+    version: 1.5.0
+  espressif/esp_wifi_remote:
+    rules:
+    - if: target == esp32p4
+    version: ^0.4.1
+  espressif/libsodium:
+    require: public
+    version: ^1.0.20~1
+  espressif/mdns:
+    require: public
+    version: ^1.2.3
+  espressif/network_provisioning:
+    version: 1.0.2
+  espressif/qrcode:
+    rules:
+    - if: target not in [esp32c2, esp32p4]
+    version: 0.1.0~2
+  espressif/rmaker_common:
+    rules:
+    - if: target not in [esp32c2, esp32p4]
+    version: 1.4.6
+  idf: '>=5.3,<5.4'
+  joltwallet/littlefs:
+    version: ^1.10.2
+description: Arduino core for ESP32, ESP32-S and ESP32-C series of SoCs
+files:
+  exclude:
+  - docs/
+  - docs/**/*
+  - idf_component_examples/
+  - idf_component_examples/**/*
+  - package/
+  - package/**/*
+  - tests/
+  - tests/**/*
+  - tools/
+  - tools/**/*
+  - variants/**/*
+  - .gitignore
+  - .gitmodules
+  - .readthedocs.yaml
+  - boards.txt
+  - CODE_OF_CONDUCT.md
+  - LICENSE.md
+  - package.json
+  - platform.txt
+  - programmers.txt
+  include:
+  - variants/esp32/**/*
+  - variants/esp32s2/**/*
+  - variants/esp32s3/**/*
+  - variants/esp32c2/**/*
+  - variants/esp32c3/**/*
+  - variants/esp32c6/**/*
+  - variants/esp32h2/**/*
+  - variants/esp32p4/**/*
+license: LGPL-2.1
+repository: git://github.com/espressif/arduino-esp32.git
+repository_info:
+  commit_sha: f24daeb9e2f1019f80e6e7b255489ddca22be028
+  path: .
+tags:
+- arduino
+targets:
+- esp32
+- esp32s2
+- esp32s3
+- esp32c2
+- esp32c3
+- esp32c6
+- esp32h2
+- esp32p4
+url: https://github.com/espressif/arduino-esp32
+version: 3.1.0~1
