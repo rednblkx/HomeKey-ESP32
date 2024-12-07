@@ -61,6 +61,7 @@ enum class gpioMomentaryStateStatus : uint8_t
 #define MQTT_SET_CURRENT_STATE_TOPIC "homekit/set_current_state" // MQTT Control Topic for the HomeKit lock current state
 #define MQTT_STATE_TOPIC "homekit/state" // MQTT Topic for publishing the HomeKit lock target state
 #define MQTT_PROX_BAT_TOPIC "homekit/set_battery_lvl" // MQTT Topic for publishing the HomeKit lock target state
+#define MQTT_HK_ALT_ACTION_TOPIC "alt_action" // MQTT Topic for publishing the Alt Action
 
 // Miscellaneous
 #define HOMEKEY_COLOR TAN
@@ -93,6 +94,12 @@ enum class gpioMomentaryStateStatus : uint8_t
 #define GPIO_ACTION_UNLOCK_STATE HIGH
 #define GPIO_ACTION_MOMENTARY_STATE static_cast<uint8_t>(gpioMomentaryStateStatus::M_DISABLED)
 #define GPIO_ACTION_MOMENTARY_TIMEOUT 5000
+#define GPIO_HK_ALT_ACTION_INIT_PIN 255
+#define GPIO_HK_ALT_ACTION_INIT_TIMEOUT 5000
+#define GPIO_HK_ALT_ACTION_INIT_LED_PIN 255
+#define GPIO_HK_ALT_ACTION_PIN 255
+#define GPIO_HK_ALT_ACTION_TIMEOUT 5000
+#define GPIO_HK_ALT_ACTION_GPIO_STATE HIGH
 
 // WebUI
 #define WEB_AUTH_ENABLED false
