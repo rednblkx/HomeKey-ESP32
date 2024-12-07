@@ -128,6 +128,26 @@
               </div>
             </fieldset>
           </div>
+          <div>
+            <fieldset>
+              <legend>Alt. action(on success)</legend>
+              <div style="display: flex;flex-direction: column;">
+                <label for="nfc-alt-action-pin">GPIO Pin</label>
+                <input type="number" name="nfc-alt-action-pin" id="nfc-alt-action-pin" placeholder="2" required value="%NFCALTACTIONPIN%" min="0" max="255">
+              </div>
+              <div style="display: flex;flex-direction: column;margin-top: .7rem;">
+                <label for="nfc-alt-action-time">Timeout (ms)</label>
+                <input type="number" name="nfc-alt-action-time" id="nfc-alt-action-time" placeholder="1000" required value="%NFCALTACTIONTIME%">
+              </div>
+              <div style="display: flex;margin-top: .7rem;gap: 8px;">
+                <label for="nfc-alt-action-hl">GPIO State</label>
+                <select name="nfc-alt-action-hl" id="nfc-alt-action-hl">
+                  <option value="0">LOW</option>
+                  <option value="1">HIGH</option>
+                </select>
+              </div>
+            </fieldset>
+          </div>
         </div>
       </div>
     </div>
@@ -201,6 +221,7 @@
   let actionMomentary = document.querySelector("#gpio-a-momentary");
   let pixelType = document.querySelector("#neo-pixel-type")
   let hkGpioState = document.querySelector("#homekey-gpio-state")
+  let hkAltActionGpioState = document.querySelector("#nfc-alt-action-hl")
   hkGpioState.selectedIndex = "%HKGPIOCONTROLSTATE%"
   pixelType.selectedIndex = "%NEOPIXELTYPE%"
   nfcshl.selectedIndex = "%NFC1HL%";
@@ -208,6 +229,7 @@
   actionlock.selectedIndex = "%GPIOALOCK%";
   actionunlock.selectedIndex = "%GPIOAUNLOCK%";
   actionMomentary.selectedIndex = "%GPIOAMOEN%";
+  hkAltActionGpioState.selectedIndex = "%NFCALTACTIONGPIOSTATE%"
   let form = document.getElementById("actions-config");
   async function handleForm(event) {
     event.preventDefault();

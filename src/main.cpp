@@ -30,6 +30,7 @@ QueueHandle_t gpio_lock_handle = nullptr;
 TaskHandle_t gpio_led_task_handle = nullptr;
 TaskHandle_t neopixel_task_handle = nullptr;
 TaskHandle_t gpio_lock_task_handle = nullptr;
+TaskHandle_t alt_action_task_handle = nullptr;
 TaskHandle_t nfc_reconnect_task = nullptr;
 TaskHandle_t nfc_poll_task = nullptr;
 
@@ -74,6 +75,7 @@ namespace espConfig
       lockCustomStateTopic.append(id).append("/" MQTT_CUSTOM_STATE_TOPIC);
       lockCustomStateCmd.append(id).append("/" MQTT_CUSTOM_STATE_CTRL_TOPIC);
       btrLvlCmdTopic.append(id).append("/" MQTT_PROX_BAT_TOPIC);
+      hkAltActionTopic.append(id).append("/" MQTT_HK_ALT_ACTION_TOPIC);
     }
     /* MQTT Broker */
     std::string mqttBroker = MQTT_HOST;
@@ -89,6 +91,7 @@ namespace espConfig
     std::string lockCStateCmd;
     std::string lockTStateCmd;
     std::string btrLvlCmdTopic;
+    std::string hkAltActionTopic;
     /* MQTT Custom State */
     std::string lockCustomStateTopic;
     std::string lockCustomStateCmd;
@@ -98,7 +101,9 @@ namespace espConfig
     bool nfcTagNoPublish = false;
     std::map<std::string, int> customLockStates = { {"C_LOCKED", C_LOCKED}, {"C_UNLOCKING", C_UNLOCKING}, {"C_UNLOCKED", C_UNLOCKED}, {"C_LOCKING", C_LOCKING}, {"C_JAMMED", C_JAMMED}, {"C_UNKNOWN", C_UNKNOWN} };
     std::map<std::string, int> customLockActions = { {"UNLOCK", UNLOCK}, {"LOCK", LOCK} };
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(espConfig::mqttConfig_t, mqttBroker, mqttPort, mqttUsername, mqttPassword, mqttClientId, lwtTopic, hkTopic, lockStateTopic, lockStateCmd, lockCStateCmd, lockTStateCmd, lockCustomStateTopic, lockCustomStateCmd, lockEnableCustomState, hassMqttDiscoveryEnabled, customLockStates, customLockActions, nfcTagNoPublish, btrLvlCmdTopic)
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(espConfig::mqttConfig_t, mqttBroker, mqttPort, mqttUsername, mqttPassword, mqttClientId, lwtTopic, hkTopic, lockStateTopic,
+      lockStateCmd, lockCStateCmd, lockTStateCmd, lockCustomStateTopic, lockCustomStateCmd, lockEnableCustomState, hassMqttDiscoveryEnabled, customLockStates, customLockActions,
+      nfcTagNoPublish, btrLvlCmdTopic, hkAltActionTopic)
   } mqttData;
 
   struct misc_config_t
@@ -142,11 +147,22 @@ namespace espConfig
     uint8_t btrLowStatusThreshold = 10;
     bool proxBatEnabled = false;
     bool hkDumbSwitchMode = false;
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(misc_config_t, deviceName, otaPasswd, hk_key_color, setupCode, lockAlwaysUnlock, lockAlwaysLock, controlPin, hsStatusPin, nfcSuccessPin, nfcSuccessTime, nfcNeopixelPin, neopixelSuccessColor, neopixelFailureColor, neopixelSuccessTime, neopixelFailTime, nfcSuccessHL, nfcFailPin, nfcFailTime, nfcFailHL, gpioActionPin, gpioActionLockState, gpioActionUnlockState, gpioActionMomentaryEnabled, gpioActionMomentaryTimeout, webAuthEnabled, webUsername, webPassword, nfcGpioPins, btrLowStatusThreshold, proxBatEnabled, hkDumbSwitchMode)
+    uint8_t hkAltActionInitPin = GPIO_HK_ALT_ACTION_INIT_PIN;
+    uint8_t hkAltActionInitLedPin = GPIO_HK_ALT_ACTION_INIT_LED_PIN;
+    uint16_t hkAltActionInitTimeout = GPIO_HK_ALT_ACTION_INIT_TIMEOUT;
+    uint8_t hkAltActionPin = GPIO_HK_ALT_ACTION_PIN;
+    uint16_t hkAltActionTimeout = GPIO_HK_ALT_ACTION_TIMEOUT;
+    uint8_t hkAltActionGpioState = GPIO_HK_ALT_ACTION_GPIO_STATE;
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(misc_config_t, deviceName, otaPasswd, hk_key_color, setupCode, lockAlwaysUnlock, lockAlwaysLock, controlPin, hsStatusPin,
+      nfcSuccessPin, nfcSuccessTime, nfcNeopixelPin, neopixelSuccessColor, neopixelFailureColor, neopixelSuccessTime, neopixelFailTime, nfcSuccessHL, nfcFailPin, nfcFailTime,
+      nfcFailHL, gpioActionPin, gpioActionLockState, gpioActionUnlockState, gpioActionMomentaryEnabled, gpioActionMomentaryTimeout, webAuthEnabled, webUsername, webPassword,
+      nfcGpioPins, btrLowStatusThreshold, proxBatEnabled, hkDumbSwitchMode, hkAltActionInitPin, hkAltActionInitLedPin, hkAltActionInitTimeout, hkAltActionPin, hkAltActionTimeout,
+      hkAltActionGpioState)
   } miscConfig;
 };
 
 KeyFlow hkFlow = KeyFlow::kFlowFAST;
+bool hkAltActionActive = false;
 SpanCharacteristic* lockCurrentState;
 SpanCharacteristic* lockTargetState;
 SpanCharacteristic* statusLowBtr;
@@ -210,6 +226,30 @@ void with_crc16(unsigned char* data, unsigned int size, unsigned char* result) {
   crc16a(data, size, result);
 }
 
+void alt_action_task(void* arg) {
+  uint8_t buttonState = 0;
+  hkAltActionActive = false;
+  LOG(I, "Starting Alt Action button task");
+  while (true)
+  {
+    buttonState = digitalRead(espConfig::miscConfig.hkAltActionInitPin);
+    if (buttonState == HIGH) {
+      LOG(D, "BUTTON HIGH");
+      hkAltActionActive = true;
+      if(espConfig::miscConfig.hkAltActionInitLedPin != 255) {
+        digitalWrite(espConfig::miscConfig.hkAltActionInitLedPin, HIGH);
+      }
+      vTaskDelay(espConfig::miscConfig.hkAltActionInitTimeout / portTICK_PERIOD_MS);
+      if (espConfig::miscConfig.hkAltActionInitLedPin != 255) {
+        digitalWrite(espConfig::miscConfig.hkAltActionInitLedPin, LOW);
+      }
+      LOG(D, "TIMEOUT");
+      hkAltActionActive = false;
+    }
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+  }
+  vTaskDelete(NULL);
+}
 
 void gpio_task(void* arg) {
   gpioLockAction status;
@@ -335,6 +375,12 @@ void nfc_gpio_task(void* arg) {
             digitalWrite(espConfig::miscConfig.nfcSuccessPin, !espConfig::miscConfig.nfcSuccessHL);
           }
           break;
+        case 2:
+          if(hkAltActionActive){
+            digitalWrite(espConfig::miscConfig.hkAltActionPin, espConfig::miscConfig.hkAltActionGpioState);
+            delay(espConfig::miscConfig.hkAltActionTimeout);
+            digitalWrite(espConfig::miscConfig.hkAltActionPin, !espConfig::miscConfig.hkAltActionGpioState);
+          }
         default:
           LOG(I, "STOP");
           vTaskDelete(NULL);
@@ -841,6 +887,12 @@ String miscHtmlProcess(const String& var) {
     return String(espConfig::miscConfig.proxBatEnabled);
   } else if (var == "DUMBSWITCHMODE") {
     return String(espConfig::miscConfig.hkDumbSwitchMode);
+  } else if (var == "HKALTACTIONINITPIN") {
+    return String(espConfig::miscConfig.hkAltActionInitPin);
+  } else if (var == "HKALTACTIONLEDPIN") {
+    return String(espConfig::miscConfig.hkAltActionInitLedPin);
+  } else if (var == "HKALTACTIONINITTIME") {
+    return String(espConfig::miscConfig.hkAltActionInitTimeout);
   }
   return String();
 }
@@ -926,6 +978,8 @@ String mqttHtmlProcess(const String& var) {
     return String(espConfig::mqttData.nfcTagNoPublish);
   } else if (var == "BTRLEVELCMD") {
     return String(espConfig::mqttData.btrLvlCmdTopic.c_str());
+  } else if (var == "MQTTALTACTION") {
+    return String(espConfig::mqttData.hkAltActionTopic.c_str());
   }
   return "";
 }
@@ -984,6 +1038,12 @@ String actionsProcess(const String& var) {
     return String(espConfig::miscConfig.neopixelFailureColor[espConfig::misc_config_t::colorMap::B]);
   } else if (var == "HKGPIOCONTROLSTATE") {
     return String(espConfig::miscConfig.hkGpioControlledState);
+  } else if (var == "NFCALTACTIONPIN") {
+    return String(espConfig::miscConfig.hkAltActionPin);
+  } else if (var == "NFCALTACTIONTIME") {
+    return String(espConfig::miscConfig.hkAltActionTimeout);
+  } else if (var == "NFCALTACTIONGPIOSTATE") {
+    return String(espConfig::miscConfig.hkAltActionGpioState);
   }
   return "";
 }
@@ -1078,6 +1138,8 @@ void setupWeb() {
         }
       } else if (!strcmp(p->name().c_str(), "mqtt-btrprox-cmd-topic")) {
         espConfig::mqttData.btrLvlCmdTopic = p->value().c_str();
+      } else if (!strcmp(p->name().c_str(), "mqtt-alt-action")) {
+        espConfig::mqttData.hkAltActionTopic = p->value().c_str();
       }
     }
     json json_mqtt_config = espConfig::mqttData;
@@ -1185,6 +1247,12 @@ void setupWeb() {
         }
       } else if (!strcmp(p->name().c_str(), "homekit-dumb-switch-mode")) {
         espConfig::miscConfig.hkDumbSwitchMode = p->value().toInt();
+      } else if (!strcmp(p->name().c_str(), "hk-alt-action-init-pin")) {
+        espConfig::miscConfig.hkAltActionInitPin = p->value().toInt();
+      } else if (!strcmp(p->name().c_str(), "hk-alt-action-led-pin")) {
+        espConfig::miscConfig.hkAltActionInitLedPin = p->value().toInt();
+      }else if (!strcmp(p->name().c_str(), "hk-alt-action-init-timeout")) {
+        espConfig::miscConfig.hkAltActionInitTimeout = p->value().toInt();
       }
     }
     json json_misc_config = espConfig::miscConfig;
@@ -1321,6 +1389,12 @@ void setupWeb() {
         espConfig::miscConfig.gpioActionMomentaryEnabled = p->value().toInt();
       } else if (!strcmp(p->name().c_str(), "gpio-a-mo-timeout")) {
         espConfig::miscConfig.gpioActionMomentaryTimeout = p->value().toInt();
+      } else if (!strcmp(p->name().c_str(), "nfc-alt-action-pin")) {
+        espConfig::miscConfig.hkAltActionPin = p->value().toInt();
+      } else if (!strcmp(p->name().c_str(), "nfc-alt-action-time")) {
+        espConfig::miscConfig.hkAltActionTimeout = p->value().toInt();
+      } else if (!strcmp(p->name().c_str(), "nfc-alt-action-hl")) {
+        espConfig::miscConfig.hkAltActionGpioState = p->value().toInt();
       }
     }
     json json_misc_config = espConfig::miscConfig;
@@ -1511,6 +1585,13 @@ void nfc_thread_entry(void* arg) {
             const gpioLockAction action{ .source = gpioLockAction::HOMEKEY, .action = 0 };
             xQueueSend(gpio_lock_handle, &action, 0);
           }
+          if (espConfig::miscConfig.hkAltActionInitPin != 255 && espConfig::miscConfig.hkAltActionPin != 255) {
+            uint8_t status = 2;
+            xQueueSend(gpio_led_handle, &status, 0);
+          }
+          if (hkAltActionActive) {
+            mqtt_publish(espConfig::mqttData.hkAltActionTopic, "alt_action", 0, false);
+          }
           json payload;
           payload["issuerId"] = hex_representation(std::get<0>(authResult));
           payload["endpointId"] = hex_representation(std::get<1>(authResult));
@@ -1682,6 +1763,15 @@ void setup() {
   if (espConfig::miscConfig.gpioActionPin && espConfig::miscConfig.gpioActionPin != 255) {
     pinMode(espConfig::miscConfig.gpioActionPin, OUTPUT);
   }
+  if (espConfig::miscConfig.hkAltActionInitPin != 255) {
+    pinMode(espConfig::miscConfig.hkAltActionInitPin, INPUT);
+    if (espConfig::miscConfig.hkAltActionPin != 255) {
+      pinMode(espConfig::miscConfig.hkAltActionPin, OUTPUT);
+    }
+    if (espConfig::miscConfig.hkAltActionInitLedPin != 255) {
+      pinMode(espConfig::miscConfig.hkAltActionInitLedPin, OUTPUT);
+    }
+  }
   if (!LittleFS.begin(true)) {
     Serial.println("An Error has occurred while mounting LITTLEFS");
     return;
@@ -1773,6 +1863,9 @@ void setup() {
   }
   if (espConfig::miscConfig.gpioActionPin != 255) {
     xTaskCreate(gpio_task, "gpio_task", 4096, NULL, 2, &gpio_lock_task_handle);
+  }
+  if (espConfig::miscConfig.hkAltActionInitPin != 255) {
+    xTaskCreate(alt_action_task, "alt_action_task", 2048, NULL, 2, &alt_action_task_handle);
   }
   xTaskCreate(nfc_thread_entry, "nfc_task", 8192, NULL, 1, &nfc_poll_task);
 }
