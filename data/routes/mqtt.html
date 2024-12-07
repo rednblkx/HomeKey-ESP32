@@ -3,7 +3,7 @@
 <form id="mqttConfig" action="mqttconfig" method="post"
   style="display: inline-flex; flex-direction: column;margin-bottom: 0;align-items: center;">
   <div class="cards-container" style="display: flex;gap: 16px;">
-    <div id="mqtt-broker-con" style="display: flex;flex-direction: column;border: 1px #8e8271 solid;border-radius: 8px;padding: 1rem;box-shadow: 0px 1px 1px 0px;background-color: #2d1d1d;">
+    <div id="mqtt-broker-con" class="card-content">
       <h3 style="margin-top: 0;text-align: center;margin-bottom: .5rem;">Broker Connection</h3>
       <h5 style="text-align: center;margin-top: 0;margin-bottom: .5rem;">TCP - Without TLS</h5>
       <div style="display:flex;flex-direction: column;padding: .5rem;margin-bottom: .5rem;gap: 8px;">
@@ -46,16 +46,12 @@
         </div>
       </div>
     </div>
-    <div id="mqtt-topics-container" style="display: flex;flex-direction: column;border: 1px #8e8271 solid;border-radius: 8px;padding: 1rem;box-shadow: 0px 1px 1px 0px;background-color: #2d1d1d;">
+    <div id="mqtt-topics-container" class="card-content">
       <h3 style="text-align: center;margin-top: 0;">MQTT Topics</h3>
       <div style="margin-bottom: 1rem;">
-        <div id="mqtt-topics" style="display: flex;justify-content: space-around;">
-          <h3 class="mqtt-topics-selected-tab"
-          style="margin: 0;width: fit-content;padding: 0.5rem;cursor: pointer;"
-          onclick="switchTab(this)" data-tab-index="0">Core Topics</h3>
-          <h3
-          style="margin: 0;width: fit-content;padding: 0.5rem;cursor: pointer;"
-          onclick="switchTab(this)" data-tab-index="1">Custom Topics</h3>
+        <div id="mqtt-topics" class="tabs-container">
+          <p class="tab-btn mqtt-topics-selected-tab" onclick="switchTab(this)" data-tab-index="0">Core Topics</p>
+          <p class="tab-btn" onclick="switchTab(this)" data-tab-index="1">Custom Topics</p>
         </div>
         <span style="height: 1px;border-top: 1px #424242 solid;display: block;margin: 0;padding: 0;"></span>
       </div>
@@ -68,10 +64,14 @@
           <div style="display: flex;flex-direction: column;">
             <label for="nfc-tags-ignore-mqtt">Ignore NFC Tags</label>
             <select name="nfc-tags-ignore-mqtt" id="nfc-tags-ignore-mqtt">
-                <option value="0">Disabled</option>
-                <option value="1">Enabled</option>
+              <option value="0">Disabled</option>
+              <option value="1">Enabled</option>
             </select>
-        </div>
+          </div>
+          <div style="display: flex; flex-direction: column;">
+            <label for="mqtt-alt-action">Alternative action Topic</label>
+            <input type="text" name="mqtt-alt-action" id="mqtt-alt-action" placeholder="topic/alt_action" required value="%MQTTALTACTION%">
+          </div>
           <div style="display: flex; flex-direction: column;">
             <label for="mqtt-statetopic">Lock State Topic</label>
             <input type="text" name="mqtt-statetopic" id="mqtt-statetopic" placeholder="topic/state" required value="%STATETOPIC%">

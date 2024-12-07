@@ -2,15 +2,15 @@
 <h5 style="text-align:center;margin-top: 0;">Changes in this section will reboot the device</h5>
 <form id="misc-config" action="misc-config" method="post" style="display: inline-flex; flex-direction: column; margin-bottom: 0">
     <div class="cards-container" style="display: flex;gap: 16px;">
-        <div style="display: flex;flex-direction: column;border: 1px #8e8271 solid;border-radius: 8px;padding: 1rem;box-shadow: 0px 1px 1px 0px;background-color: #2d1d1d;">
+        <div class="card-content">
             <h3 style="margin-top: 0;text-align: center;">General settings</h3>
             <div style="display:flex;flex-direction: column;margin-bottom: 1rem;gap: 8px;">
                 <div style="margin-bottom: 1rem;">
-                    <div id="custom-tabs" style="display: flex;justify-content: space-around;">
-                        <h3 class="custom-tabs-selected-tab" style="margin: 0;width: fit-content;padding: 0.5rem;cursor: pointer;" onclick="switchTab(this)" data-tab-index="0">HomeKit</h3>
-                        <h3 style="margin: 0;width: fit-content;padding: 0.5rem;cursor: pointer;" onclick="switchTab(this)" data-tab-index="1">HomeKey</h3>
-                        <h3 style="margin: 0;width: fit-content;padding: 0.5rem;cursor: pointer;" onclick="switchTab(this)" data-tab-index="2">PN532</h3>
-                        <h3 style="margin: 0;width: fit-content;padding: 0.5rem;cursor: pointer;" onclick="switchTab(this)" data-tab-index="3">HomeSpan</h3>
+                    <div id="custom-tabs" class="tabs-container" style="overflow: auto;justify-content: unset;">
+                        <p class="tab-btn custom-tabs-selected-tab" onclick="switchTab(this)" data-tab-index="0">HomeKit</p>
+                        <p class="tab-btn" onclick="switchTab(this)" data-tab-index="1">HomeKey</p>
+                        <p class="tab-btn" onclick="switchTab(this)" data-tab-index="2">PN532</p>
+                        <p class="tab-btn" onclick="switchTab(this)" data-tab-index="3">HomeSpan</p>
                     </div>
                     <span style="height: 1px;border-top: 1px #424242 solid;display: block;margin: 0;padding: 0;"></span>
                 </div>
@@ -154,13 +154,13 @@
                 </div>
             </div>
         </div>
-        <div style="display: flex;flex-direction: column;border: 1px #8e8271 solid;border-radius: 8px;padding: 1rem;box-shadow: 0px 1px 1px 0px;background-color: #2d1d1d;">
+        <div class="card-content">
             <h3 style="margin-top: 0;text-align: center;">WebUI</h3>
             <div
                 style="display:flex;flex-direction: column;margin-bottom: 1rem;gap: 8px;">
                 <div style="margin-bottom: 1rem;">
-                    <div id="webui-tabs" style="display: flex;justify-content: space-around;">
-                        <h3 class="webui-tabs-selected-tab" style="margin: 0;width: fit-content;padding: 0.5rem;cursor: pointer;border-bottom: 2px #8e8271 solid;" data-tab-index="0" onclick='switchTab(this)'>Authentication</h3>
+                    <div id="webui-tabs" class="tabs-container">
+                        <p class="tab-btn webui-tabs-selected-tab" data-tab-index="0" onclick='switchTab(this)'>Authentication</p>
                     </div>
                     <span style="height: 1px;border-top: 1px #424242 solid;display: block;margin: 0;padding: 0;"></span>
                 </div>

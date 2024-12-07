@@ -16,6 +16,10 @@ h2 {
     margin-top: 1rem!important;         
 }
 
+h5 {
+    color: rgb(156, 147, 134)!important;
+}
+
 p,
 h5,
 h3,
@@ -59,6 +63,11 @@ button {
     border-color: hsl(240 3.7% 15.9%) !important;
 }
 
+.tabs-container {
+    display: flex;
+    justify-content: space-around;
+}
+
 div[class$="-selected-body"] {
     display: flex;
     flex-direction: column;
@@ -67,8 +76,21 @@ div[class$="-selected-body"] {
     gap: 16px;
 }
 
-h3[class$="-selected-tab"] {
+[class$="-selected-tab"] {
     border-bottom: 2px #8e8271 solid;
+    background: linear-gradient(180deg, rgba(174,152,118,0.05) 0%, rgba(150,134,110,0.15) 50%, rgba(142, 130, 113, 0.35) 100%);
+    border-radius: .2rem .2rem 0 0;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1), 0 0 20px rgba(0,0,0,0.1), 0 0 40px rgba(0,0,0,0.1), 0 0 60px rgba(0,0,0,0.1);
+    font-weight: bold;
+    color: white!important;
+}
+
+.tab-btn {
+    margin: 0;
+    width: fit-content;
+    padding: 0.5rem;
+    cursor: pointer;
+    color: gray;
 }
 
 div[class$="-hidden-body"] {
@@ -119,13 +141,19 @@ div[class$="-hidden-body"] {
     .nfc-triggers-selected-body {
         flex-wrap: wrap;
     }
+    #component {
+        max-width: 90dvw;
+    }
 }
 
-.fill-container {
-    width: 100%;
-    width: -moz-available;
-    width: -webkit-fill-available;
-    width: fill-available;
+.card-content {
+    display: flex;
+    flex-direction: column;
+    border: 1px #8e8271 solid;
+    border-radius: 8px;
+    padding: 1rem;
+    box-shadow: 0px 1px 1px 0px;
+    background-color: #2d1d1d;
 }
 
 #buttons-group {

@@ -4,17 +4,16 @@
   <h2 style="text-align: center;">Hardware Actions</h2>
   <h5 style="margin-top: 0;margin-bottom: 1rem;text-align: center;">Assigning 255 to any Pin field will disable the respective option</h5>
   <div class="cards-container" style="display: flex;gap: 16px;">
-    <div style="display: flex;flex-direction: column;border: 1px #8e8271 solid;border-radius: 8px;padding: 1rem;box-shadow: 0px 1px 1px 0px;background-color: #2d1d1d;">
-      <h3 style="margin-top: 0;text-align: center;">HomeKey/NFC Triggers</h3>
-      <h4 style="margin-top: 0;">Executed on successful/failed HomeKey Authentication and on NFC Tag detection(marked as a failed event)</h4>
-      <h4 style="margin-top: 0;">Both Neopixel and Simple GPIO have a momentary state</h4>
+    <div class="card-content">
+      <h3 style="margin-top: 0;text-align: center;">HomeKey Triggers</h3>
+      <h5 style="margin: 0;">! Executed on successful/failed HomeKey authentications and on NFC Tag detection(treated as a failed event).</h5>
+      <h5 style="margin-top: 0;">! Both Neopixel and Simple GPIO have a momentary state.</h5>
       <div style="margin-bottom: 1rem;">
-        <div id="nfc-triggers" style="display: flex;justify-content: space-around;">
-          <h3 class="nfc-triggers-selected-tab"
-            style="margin: 0;width: fit-content;padding: 0.5rem;cursor: pointer;"
-            onclick="switchTab(this)" data-tab-index="0">Neopixel</h3>
-          <h3 style="margin: 0;width: fit-content;padding: 0.5rem;cursor: pointer;" onclick="switchTab(this)"
-            data-tab-index="1">Simple GPIO</h3>
+        <div id="nfc-triggers" class="tabs-container" style="justify-content: space-around;">
+          <p class="tab-btn nfc-triggers-selected-tab"
+            onclick="switchTab(this)" data-tab-index="0">Neopixel</p>
+          <p class="tab-btn" onclick="switchTab(this)"
+            data-tab-index="1">Simple GPIO</p>
         </div>
         <span style="height: 1px;border-top: 1px #424242 solid;display: block;margin: 0;padding: 0;"></span>
       </div>
@@ -87,8 +86,8 @@
       </div>
   
       <div class="nfc-triggers-hidden-body" data-nfc-triggers-body="1">
-        <div style="display: flex;gap: 8px;flex-wrap: inherit;justify-content: center;">
-          <div style="display: flex;">
+        <div style="display: grid;grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));justify-items: center;grid-gap: 16px;">
+          <div style="width: 100%;">
             <fieldset>
               <legend>Auth Success</legend>
               <div style="display: flex;flex-direction: column;">
@@ -108,7 +107,7 @@
               </div>
             </fieldset>
           </div>
-          <div style="display: flex;">
+          <div style="width: 100%;">
             <fieldset>
               <legend>Auth Failure</legend>
               <div style="display: flex;flex-direction: column;">
@@ -128,7 +127,7 @@
               </div>
             </fieldset>
           </div>
-          <div>
+          <div style="width: 100%;">
             <fieldset>
               <legend>Alt. action(on success)</legend>
               <div style="display: flex;flex-direction: column;">
@@ -151,21 +150,20 @@
         </div>
       </div>
     </div>
-    <div style="display: flex;flex-direction: column;border: 1px #8e8271 solid;border-radius: 8px;padding: 1rem;box-shadow: 0px 1px 1px 0px;background-color: #2d1d1d;">
+    <div class="card-content">
       <h3 style="margin-top: 0;text-align: center;">HomeKit Triggers</h3>
-      <h4 style="margin-top: 0;margin-bottom: .5rem;">Executed upon interaction in the Home app and optionally on successful HomeKey Authentication(enabled by default)</h4>
+      <h5 style="margin-top: 0;margin-bottom: .5rem;">! Executed upon interaction in the Home app and optionally on successful HomeKey Authentication(enabled by default)</h5>
       <div style="margin-bottom: 1rem;">
-        <div id="homekit-triggers" style="display: flex;justify-content: space-around;">
-          <h3 class="homekit-triggers-selected-tab"
-            style="margin: 0;width: fit-content;padding: 0.5rem;cursor: pointer;border-bottom: 2px #8e8271 solid;"
-            onclick="switchTab(this)" data-tab-index="0">Simple GPIO</h3>
+        <div id="homekit-triggers" class="tabs-container">
+          <p class="tab-btn homekit-triggers-selected-tab"
+            onclick="switchTab(this)" data-tab-index="0">Simple GPIO</p>
         </div>
         <span style="height: 1px;border-top: 1px #424242 solid;display: block;margin: 0;padding: 0;"></span>
       </div>
       <div class="homekit-triggers-selected-body" data-homekit-triggers-body="0">
         <div>
-          <h5 style="margin-top: 0;margin-bottom: .5rem;">* Simple GPIO follows the "Always Lock/Unlock on HomeKey" option</h4>
-          <h5 style="margin-block: 0;">** Momentary state applies only if initial state is "LOCKED"</h4>
+          <h5 style="margin-top: 0;margin-bottom: .5rem;">! Simple GPIO follows the "Always Lock/Unlock on HomeKey" option</h5>
+          <h5 style="margin-block: 0;">! Momentary state applies only if initial state is "LOCKED"</h5>
         </div>
         <div style="display: flex;gap: 8px;">
           <label for="gpio-a-pin">GPIO Pin</label>
