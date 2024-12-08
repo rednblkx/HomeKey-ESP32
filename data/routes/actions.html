@@ -8,8 +8,8 @@
       <h3 style="margin-top: 0;text-align: center;">HomeKey Triggers</h3>
       <h5 style="margin: 0;">! Executed on successful/failed HomeKey authentications and on NFC Tag detection(treated as a failed event).</h5>
       <h5 style="margin-top: 0;">! Both Neopixel and Simple GPIO have a momentary state.</h5>
-      <div style="margin-bottom: 1rem;">
-        <div id="nfc-triggers" class="tabs-container" style="justify-content: space-around;">
+      <div class="tabs-container">
+        <div id="nfc-triggers" class="tabs-list">
           <p class="tab-btn nfc-triggers-selected-tab"
             onclick="switchTab(this)" data-tab-index="0">Neopixel</p>
           <p class="tab-btn" onclick="switchTab(this)"
@@ -18,35 +18,39 @@
         <span style="height: 1px;border-top: 1px #424242 solid;display: block;margin: 0;padding: 0;"></span>
       </div>
       <div class="nfc-triggers-selected-body" data-nfc-triggers-body="0">
-        <div style="display: flex; flex-direction: column;">
-          <label for="nfc-s-pin">GPIO Pin</label>
-          <input type="number" name="nfc-neopixel-pin" id="nfc-neopixel-pin" placeholder="8" required value="%NFCNEOPIXELPIN%" min="0" max="255">
-        </div>
-        <div style="display: flex;flex-direction: column;">
-          <label for="neopixel-s-time">Timeout (ms) - Auth Success</label>
-          <input type="number" name="neopixel-s-time" id="neopixel-s-time" placeholder="1000" required value="%NEOSTIME%">
-        </div>
-        <div style="display: flex;flex-direction: column;">
-          <label for="neopixel-f-time">Timeout (ms) - Auth Failed</label>
-          <input type="number" name="neopixel-f-time" id="neopixel-f-time" placeholder="1000" required value="%NEOFTIME%">
-        </div>
-        <div style="display: flex;flex-direction: column;">
-          <label for="neo-pixel-type">Pixel Type</label>
-          <select name="neo-pixel-type" id="neo-pixel-type">
-            <option value="0">RGB</option>
-            <option value="1">RBG</option>
-            <option value="2">BRG</option>
-            <option value="3">BGR</option>
-            <option value="4">GBR</option>
-            <option value="5">GRB</option>
-          </select>
+        <div class="flex-row-lg flex-col-sm flex-center-lg" style="flex-wrap: wrap;">
+          <div class="flex-col-lg" style="flex: 1;">
+            <div style="display: flex;gap: 16px;">
+              <label for="nfc-s-pin">GPIO Pin</label>
+              <input type="number" name="nfc-neopixel-pin" id="nfc-neopixel-pin" placeholder="8" required value="%NFCNEOPIXELPIN%" min="0" max="255">
+            </div>
+            <div style="display: flex;gap: 16px;">
+              <label for="neo-pixel-type">Pixel Type</label>
+              <select name="neo-pixel-type" id="neo-pixel-type">
+                <option value="0">RGB</option>
+                <option value="1">RBG</option>
+                <option value="2">BRG</option>
+                <option value="3">BGR</option>
+                <option value="4">GBR</option>
+                <option value="5">GRB</option>
+              </select>
+            </div>
+          </div>
+          <div class="flex-col-lg" style="flex: 1;">
+            <div style="display: flex;">
+              <label for="neopixel-s-time" style="max-width: 7rem;">Timeout (ms) Auth Success</label>
+              <input type="number" name="neopixel-s-time" id="neopixel-s-time" placeholder="1000" required value="%NEOSTIME%">
+            </div>
+            <div style="display: flex;">
+              <label for="neopixel-f-time" style="max-width: 7rem;">Timeout (ms) Auth Failed</label>
+              <input type="number" name="neopixel-f-time" id="neopixel-f-time" placeholder="1000" required value="%NEOFTIME%">
+            </div>
+          </div>
         </div>
         <div
-          style="display: flex;gap: 8px;border: 1px #8e8271 solid;padding: .5rem;margin-top: 1rem;justify-content: space-around;">
+          style="display: flex;border: 1px #8e8271 solid;padding: .5rem;justify-content: space-around;">
           <div id="nfc-s-color" style="display: flex;flex-direction: column;">
-            <div style="display: flex;">
-              <h4 style="margin: .1rem 0 0;text-align: center;">Auth Success Color</h4>
-            </div>
+            <h4 style="margin-block: .2rem;text-align: center;">Auth Success Color</h4>
             <div id="nfc-s-vals" style="display: flex;gap:8px;flex-wrap: wrap;justify-content: center;">
               <div style="display: flex; flex-direction: column;">
                 <label for="nfc-s-red-pixel">R</label>
@@ -64,9 +68,7 @@
           </div>
           <span style="border: 1px #8e8271 solid; margin: 1rem;"></span>
           <div id="nfc-f-color" style="display: flex;flex-direction: column;">
-            <div style="display: flex;">
-              <h4 style="margin: .1rem 0 0;text-align: center;">Auth Failure Color</h4>
-            </div>
+            <h4 style="margin-block: .2rem;text-align: center;">Auth Failure Color</h4>
             <div id="nfc-f-vals" style="display: flex;gap:8px;flex-wrap: wrap;justify-content: center;">
               <div style="display: flex; flex-direction: column;">
                 <label for="nfc-f-red-pixel">R</label>
@@ -86,75 +88,81 @@
       </div>
   
       <div class="nfc-triggers-hidden-body" data-nfc-triggers-body="1">
-        <div style="display: grid;grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));justify-items: center;grid-gap: 16px;">
-          <div style="width: 100%;">
-            <fieldset>
-              <legend>Auth Success</legend>
-              <div style="display: flex;flex-direction: column;">
-                <label for="nfc-s-pin">GPIO Pin</label>
-                <input type="number" name="nfc-s-pin" id="nfc-s-pin" placeholder="2" required value="%NFC1PIN%" min="0" max="255">
+        <div style="display: flex;flex-wrap: wrap;justify-content: space-between;gap: 10px;">
+          <fieldset>
+            <legend>Auth Success</legend>
+            <div class="flex-sm flex-col-lg flex-end-sm">
+              <div class="around-sm" style="display: flex;gap: 16px;flex: 2;align-items: flex-end">
+                <div style="display: flex;flex-direction: column;">
+                  <label for="nfc-s-pin">GPIO Pin</label>
+                  <input type="number" name="nfc-s-pin" id="nfc-s-pin" placeholder="2" required value="%NFC1PIN%" min="0" max="255">
+                </div>
+                <div style="display: flex;flex-direction: column;">
+                  <label for="nfc-s-time">Timeout (ms)</label>
+                  <input type="number" name="nfc-s-time" id="nfc-s-time" placeholder="1000" required value="%NFC1TIME%">
+                </div>
               </div>
-              <div style="display: flex;flex-direction: column;margin-top: .7rem;">
-                <label for="nfc-s-time">Timeout (ms)</label>
-                <input type="number" name="nfc-s-time" id="nfc-s-time" placeholder="1000" required value="%NFC1TIME%">
-              </div>
-              <div style="display: flex;margin-top: .7rem;gap: 8px;">
+              <div class="flex-center-sm" style="display: flex;flex-direction: column;flex: 1;">
                 <label for="nfc-s-hl">GPIO State</label>
                 <select name="nfc-s-hl" id="nfc-s-hl">
                   <option value="0">LOW</option>
                   <option value="1">HIGH</option>
                 </select>
               </div>
-            </fieldset>
-          </div>
-          <div style="width: 100%;">
-            <fieldset>
-              <legend>Auth Failure</legend>
-              <div style="display: flex;flex-direction: column;">
-                <label for="nfc-f-pin">GPIO Pin</label>
-                <input type="number" name="nfc-f-pin" id="nfc-f-pin" placeholder="2" required value="%NFC2PIN%" min="0" max="255">
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Auth Failure</legend>
+            <div class="flex-sm flex-col-lg flex-end-sm">
+              <div class="around-sm" style="display: flex;gap: 16px;flex: 2;align-items: flex-end">
+                <div style="display: flex;flex-direction: column;">
+                  <label for="nfc-f-pin">GPIO Pin</label>
+                  <input type="number" name="nfc-f-pin" id="nfc-f-pin" placeholder="2" required value="%NFC2PIN%" min="0" max="255">
+                </div>
+                <div style="display: flex;flex-direction: column;">
+                  <label for="nfc-f-time">Timeout (ms)</label>
+                  <input type="number" name="nfc-f-time" id="nfc-f-time" placeholder="1000" required value="%NFC2TIME%">
+                </div>
               </div>
-              <div style="display: flex;flex-direction: column;margin-top: .7rem;">
-                <label for="nfc-f-time">Timeout (ms)</label>
-                <input type="number" name="nfc-f-time" id="nfc-f-time" placeholder="1000" required value="%NFC2TIME%">
-              </div>
-              <div style="display: flex;margin-top: .7rem;gap: 8px;">
+              <div class="flex-center-sm" style="display: flex;flex-direction: column;flex: 1;">
                 <label for="nfc-f-hl">GPIO State</label>
                 <select name="nfc-f-hl" id="nfc-f-hl">
                   <option value="0">LOW</option>
                   <option value="1">HIGH</option>
                 </select>
               </div>
-            </fieldset>
-          </div>
-          <div style="width: 100%;">
-            <fieldset>
-              <legend>Alt. action(on success)</legend>
-              <div style="display: flex;flex-direction: column;">
-                <label for="nfc-alt-action-pin">GPIO Pin</label>
-                <input type="number" name="nfc-alt-action-pin" id="nfc-alt-action-pin" placeholder="2" required value="%NFCALTACTIONPIN%" min="0" max="255">
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Alt. action(on success)</legend>
+            <div class="flex-sm flex-col-lg flex-end-sm">
+              <div class="around-sm" style="display: flex;gap: 16px;flex: 2;align-items: flex-end">
+                <div style="display: flex;flex-direction: column;">
+                  <label for="nfc-alt-action-pin">GPIO Pin</label>
+                  <input type="number" name="nfc-alt-action-pin" id="nfc-alt-action-pin" placeholder="2" required value="%NFCALTACTIONPIN%" min="0" max="255">
+                </div>
+                <div style="display: flex;flex-direction: column;">
+                  <label for="nfc-alt-action-time">Timeout (ms)</label>
+                  <input type="number" name="nfc-alt-action-time" id="nfc-alt-action-time" placeholder="1000" required value="%NFCALTACTIONTIME%">
+                </div>
               </div>
-              <div style="display: flex;flex-direction: column;margin-top: .7rem;">
-                <label for="nfc-alt-action-time">Timeout (ms)</label>
-                <input type="number" name="nfc-alt-action-time" id="nfc-alt-action-time" placeholder="1000" required value="%NFCALTACTIONTIME%">
-              </div>
-              <div style="display: flex;margin-top: .7rem;gap: 8px;">
+              <div class="flex-center-sm" style="display: flex;flex-direction: column;flex: 1;">
                 <label for="nfc-alt-action-hl">GPIO State</label>
                 <select name="nfc-alt-action-hl" id="nfc-alt-action-hl">
                   <option value="0">LOW</option>
                   <option value="1">HIGH</option>
                 </select>
               </div>
-            </fieldset>
-          </div>
+            </div>
+          </fieldset>
         </div>
       </div>
     </div>
     <div class="card-content">
       <h3 style="margin-top: 0;text-align: center;">HomeKit Triggers</h3>
       <h5 style="margin-top: 0;margin-bottom: .5rem;">! Executed upon interaction in the Home app and optionally on successful HomeKey Authentication(enabled by default)</h5>
-      <div style="margin-bottom: 1rem;">
-        <div id="homekit-triggers" class="tabs-container">
+      <div class="tabs-container">
+        <div id="homekit-triggers" class="tabs-list">
           <p class="tab-btn homekit-triggers-selected-tab"
             onclick="switchTab(this)" data-tab-index="0">Simple GPIO</p>
         </div>

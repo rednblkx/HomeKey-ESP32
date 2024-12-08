@@ -63,16 +63,25 @@ button {
     border-color: hsl(240 3.7% 15.9%) !important;
 }
 
-.tabs-container {
+.tabs-list {
     display: flex;
     justify-content: space-around;
+    overflow: auto;
+}
+
+input[type="number"]{
+    max-width: 5rem;
+}
+
+.tabs-container {
+    margin-bottom: .5rem;
 }
 
 div[class$="-selected-body"] {
     display: flex;
     flex-direction: column;
-    padding-inline: 1rem;
-    padding-bottom: .5rem;
+    padding-inline: .5rem;
+    padding-block: .5rem;
     gap: 16px;
 }
 
@@ -95,6 +104,60 @@ div[class$="-selected-body"] {
 
 div[class$="-hidden-body"] {
     display: none;
+}
+
+.flex-col-lg {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.flex-row-lg {
+    display: flex;
+    flex-direction: row;
+    gap: 16px;
+}
+
+@media only screen and (max-width: 600px) {
+    #top-bar {
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+    }
+    #top-btns {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    #mqtt-broker, #mqtt-topics {
+        width: auto;
+    }
+    .cards-container {
+        flex-direction: column;
+    }
+    .nfc-triggers-selected-body {
+        flex-wrap: wrap;
+    }
+    #component {
+        max-width: 90dvw;
+    }
+    fieldset {
+        width: 100%;
+    }
+    .flex-sm {
+        display: flex;
+        gap: inherit;
+        flex-direction: inherit;
+        gap: 16px;
+    }
+    .around-sm {
+        justify-content: space-around;
+    }
+    .flex-center-sm {
+        align-items: center;
+    }
+    .flex-end-sm {
+        align-items: flex-end;
+    }
 }
 
 @media only screen and (min-width: 800px) {
@@ -122,27 +185,32 @@ div[class$="-hidden-body"] {
     }
 }
 
-@media only screen and (max-width: 600px) {
-    #top-bar {
-        flex-direction: column;
+@media only screen and (max-width: 1090px) {
+    fieldset {
+        width: 100%;
+    }
+    .flex-sm {
+        display: flex;
+        gap: inherit;
+        flex-direction: inherit;
+        gap: 16px;
+    }
+    .around-sm {
+        justify-content: space-around;
+    }
+    .flex-center-sm {
         align-items: center;
-        gap: 8px;
     }
-    #top-btns {
-        flex-wrap: wrap;
-        justify-content: center;
-    }
-    #mqtt-broker, #mqtt-topics {
-        width: auto;
-    }
-    .cards-container {
+    .flex-col-sm {
+        display: flex;
         flex-direction: column;
+        gap: 16px;
     }
-    .nfc-triggers-selected-body {
-        flex-wrap: wrap;
-    }
-    #component {
-        max-width: 90dvw;
+}
+
+@media only screen and (min-width: 1090px) {
+    .flex-center-lg {
+        align-items: center;
     }
 }
 
@@ -154,6 +222,11 @@ div[class$="-hidden-body"] {
     padding: 1rem;
     box-shadow: 0px 1px 1px 0px;
     background-color: #2d1d1d;
+    flex: 1;
+}
+
+select {
+    max-width: fit-content;
 }
 
 #buttons-group {

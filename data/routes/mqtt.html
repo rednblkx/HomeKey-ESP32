@@ -36,20 +36,18 @@
           <input type="password" name="mqtt-password" id="mqtt-password" placeholder="password" value="%MQTTPASSWORD%">
         </div>
       </div>
-      <div style="display:flex;flex-direction: column;padding: .5rem;gap: 8px;">
-        <div style="display:flex;flex-direction: column;">
-          <label for="mqtt-discovery-enable">HASS MQTT Discovery</label>
-          <select name="mqtt-discovery-enable" id="mqtt-discovery-enable">
-            <option value="0">Disabled</option>
-            <option value="1">Enabled</option>
-          </select>
-        </div>
+      <div style="display:flex;gap: 16px;padding: .5rem;">
+        <label for="mqtt-discovery-enable">HASS MQTT Discovery</label>
+        <select name="mqtt-discovery-enable" id="mqtt-discovery-enable">
+          <option value="0">Disabled</option>
+          <option value="1">Enabled</option>
+        </select>
       </div>
     </div>
     <div id="mqtt-topics-container" class="card-content">
       <h3 style="text-align: center;margin-top: 0;">MQTT Topics</h3>
-      <div style="margin-bottom: 1rem;">
-        <div id="mqtt-topics" class="tabs-container">
+      <div class="tabs-container">
+        <div id="mqtt-topics" class="tabs-list">
           <p class="tab-btn mqtt-topics-selected-tab" onclick="switchTab(this)" data-tab-index="0">Core Topics</p>
           <p class="tab-btn" onclick="switchTab(this)" data-tab-index="1">Custom Topics</p>
         </div>
@@ -61,7 +59,7 @@
             <label for="mqtt-hktopic">NFC/HK Topic</label>
             <input type="text" name="mqtt-hktopic" id="mqtt-hktopic" placeholder="topic/auth" required value="%HKTOPIC%">
           </div>
-          <div style="display: flex;flex-direction: column;">
+          <div class="flex-row-lg" style="padding-block: .5rem;">
             <label for="nfc-tags-ignore-mqtt">Ignore NFC Tags</label>
             <select name="nfc-tags-ignore-mqtt" id="nfc-tags-ignore-mqtt">
               <option value="0">Disabled</option>
@@ -112,7 +110,7 @@
             <input type="text" name="mqtt-customstate-cmd" id="mqtt-customstate-cmd" placeholder="topic/set_target_state" required value="%CUSTOMSTATECMD%">
           </div>
         </div>
-        <div style="display: flex;flex-direction: column;gap: 16px;">
+        <div style="display: grid;justify-items: center;gap: 16px;">
           <fieldset>
             <legend>Custom Lock Actions </legend>
             <div
