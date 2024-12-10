@@ -1,6 +1,6 @@
 <h2 style="text-align: center;">Miscellaneous</h2>
 <h5 style="text-align:center;margin-top: 0;">Changes in this section will reboot the device</h5>
-<form id="misc-config" action="misc-config" method="post" style="display: inline-flex; flex-direction: column; margin-bottom: 0">
+<form id="config-form" data-type="misc" style="display: inline-flex; flex-direction: column; margin-bottom: 0">
     <div class="cards-container" style="display: flex;gap: 16px;">
         <div class="card-content">
             <h3 style="margin-top: 0;text-align: center;">General settings</h3>
@@ -16,46 +16,44 @@
                 </div>
                 <div class="custom-tabs-selected-body" data-custom-tabs-body="0">
                     <div style="display: flex;gap: 8px;">
-                        <label for="device-name">Device Name</label>
-                        <input type="text" name="device-name" id="device-name" placeholder="HK" required value="%DEVICENAME%"
-                            style="width: fit-content;" />
+                        <label for="deviceName">Device Name</label>
+                        <input type="text" name="deviceName" id="deviceName" placeholder="HK" required style="width: fit-content;" />
                     </div>
                     <div style="display: flex;gap: 8px;">
-                        <label for="hk-setupcode">Setup Code</label>
-                        <input type="number" name="hk-setupcode" id="hk-setupcode" placeholder="46637726" required
-                            value="%HKSETUPCODE%" style="width: fit-content;" />
+                        <label for="setupCode">Setup Code</label>
+                        <input type="number" name="setupCode" id="setupCode" placeholder="46637726" required style="width: fit-content;" />
                     </div>
                     <div style="display: flex;gap: 8px;">
-                        <label for="hk-always-lock">Always Lock on HomeKey</label>
-                        <select name="hk-always-lock" id="hk-always-lock">
+                        <label for="lockAlwaysLock">Always Lock on HomeKey</label>
+                        <select name="lockAlwaysLock" id="lockAlwaysLock">
                             <option value="0">Disabled</option>
                             <option value="1">Enabled</option>
                         </select>
                     </div>
                     <div style="display: flex;gap: 8px;">
-                        <label for="hk-always-unlock">Always Unlock on HomeKey</label>
-                        <select name="hk-always-unlock" id="hk-always-unlock">
+                        <label for="lockAlwaysUnlock">Always Unlock on HomeKey</label>
+                        <select name="lockAlwaysUnlock" id="lockAlwaysUnlock">
                             <option value="0">Disabled</option>
                             <option value="1">Enabled</option>
                         </select>
                     </div>
                     <div style="display: flex;gap: 8px;">
-                        <label for="homekit-dumb-switch-mode">Dumb Switch Mode</label>
-                        <select name="homekit-dumb-switch-mode" id="homekit-dumb-switch-mode">
+                        <label for="hkDumbSwitchMode">Dumb Switch Mode</label>
+                        <select name="hkDumbSwitchMode" id="hkDumbSwitchMode">
                             <option value="0">Disabled</option>
                             <option value="1">Enabled</option>
                         </select>
                     </div>
                     <div style="display: flex;gap: 8px;">
-                        <label for="prox-bat-enable">SmartLock battery reporting</label>
-                        <select name="prox-bat-enable" id="prox-bat-enable">
+                        <label for="proxBatEnabled">SmartLock battery reporting</label>
+                        <select name="proxBatEnabled" id="proxBatEnabled">
                             <option value="0">Disabled</option>
                             <option value="1">Enabled</option>
                         </select>
                     </div>
                     <div style="display: flex;gap: 8px;">
-                        <label for="btr-low-threshold">Battery low status Threshold</label>
-                        <input type="number" name="btr-low-threshold" id="btr-low-threshold" placeholder="10" min="0" max="100" value="%BTRLOWTHRESHOLD%" style="width: 4rem;" />
+                        <label for="btrLowStatusThreshold">Battery low status Threshold</label>
+                        <input type="number" name="btrLowStatusThreshold" id="btrLowStatusThreshold" placeholder="10" min="0" max="100" style="width: 4rem;" />
                     </div>
                 </div>
                 <div class="custom-tabs-hidden-body" data-custom-tabs-body="1">
@@ -64,16 +62,16 @@
                             <legend>Alt action Initiator Button</legend>
                             <div style="display: flex;gap: 16px;flex-direction: column;padding: .5rem;">
                                 <div style="display: flex;gap: 8px;">
-                                    <label for="hk-alt-action-init-pin">GPIO Pin</label>
-                                    <input type="number" name="hk-alt-action-init-pin" id="hk-alt-action-init-pin" placeholder="255" min="0" max="100" value="%HKALTACTIONINITPIN%" style="width: 4rem;" />
+                                    <label for="hkAltActionInitPin">GPIO Pin</label>
+                                    <input type="number" name="hkAltActionInitPin" id="hkAltActionInitPin" placeholder="255" min="0" max="255" style="width: 4rem;" />
                                 </div>
                                 <div style="display: flex;gap: 8px;">
-                                    <label for="hk-alt-action-init-timeout">Timeout (ms)</label>
-                                    <input type="number" name="hk-alt-action-init-timeout" id="hk-alt-action-init-timeout" placeholder="5000" min="0" max="10000" value="%HKALTACTIONINITTIME%" style="width: 4rem;" />
+                                    <label for="hkAltActionInitTimeout">Timeout (ms)</label>
+                                    <input type="number" name="hkAltActionInitTimeout" id="hkAltActionInitTimeout" placeholder="5000" min="0" max="10000" style="width: 4rem;" />
                                 </div>
                                 <div style="display: flex;gap: 8px;">
-                                    <label for="hk-alt-action-led-pin">Feedback LED Pin</label>
-                                    <input type="number" name="hk-alt-action-led-pin" id="hk-alt-action-led-pin" placeholder="255" min="0" max="100" value="%HKALTACTIONLEDPIN%" style="width: 4rem;" />
+                                    <label for="hkAltActionInitLedPin">Feedback LED Pin</label>
+                                    <input type="number" name="hkAltActionInitLedPin" id="hkAltActionInitLedPin" placeholder="255" min="0" max="255" style="width: 4rem;" />
                                 </div>
                             </div>
                         </fieldset>
@@ -85,28 +83,28 @@
                                 </div>
                                 <div style="display: flex;flex-direction: column;align-items: flex-end;">
                                     <div>
-                                        <label id="tan" for="hk-tan">Tan</label>
-                                        <input type="radio" id="hk-finish-0"
+                                        <label id="hk-tan" for="hk_key_color-0">Tan</label>
+                                        <input type="radio" id="hk_key_color-0"
                                             onClick="document.getElementById('hkfinish').style.backgroundImage=`url(assets/hk-finish-0.webp)`"
-                                            name="hk-hwfinish" value="0" />
+                                            name="hk_key_color" value="0" />
                                     </div>
                                     <div>
-                                        <label id="gold" for="hk-gold">Gold</label>
-                                        <input type="radio" id="hk-finish-1"
+                                        <label id="hk-gold" for="hk_key_color-1">Gold</label>
+                                        <input type="radio" id="hk_key_color-1"
                                             onClick="document.getElementById('hkfinish').style.backgroundImage=`url(assets/hk-finish-1.webp)`"
-                                            name="hk-hwfinish" value="1" />
+                                            name="hk_key_color" value="1" />
                                     </div>
                                     <div>
-                                        <label id="silver" for="hk-silver">Silver</label>
-                                        <input type="radio" id="hk-finish-2"
+                                        <label id="hk-silver" for="hk_key_color-2">Silver</label>
+                                        <input type="radio" id="hk_key_color-2"
                                             onClick="document.getElementById('hkfinish').style.backgroundImage=`url(assets/hk-finish-2.webp)`"
-                                            name="hk-hwfinish" value="2" />
+                                            name="hk_key_color" value="2" />
                                     </div>
                                     <div>
-                                        <label id="black" for="hk-black">Black</label>
-                                        <input type="radio" id="hk-finish-3"
+                                        <label id="hk-black" for="hk_key_color-3">Black</label>
+                                        <input type="radio" id="hk_key_color-3"
                                             onClick="document.getElementById('hkfinish').style.backgroundImage=`url(assets/hk-finish-3.webp)`"
-                                            name="hk-hwfinish" value="3" />
+                                            name="hk_key_color" value="3" />
                                     </div>
                                 </div>
                             </div>
@@ -116,42 +114,42 @@
                 <div class="custom-tabs-hidden-body" data-custom-tabs-body="2">
                     <div style="display: flex;flex-wrap: wrap;justify-content: center;gap: 16px;">
                         <div style="display: flex;flex-direction: column;">
-                            <label for="nfc-ss-gpio-pin">SS Pin</label>
-                            <input type="number" name="nfc-ss-gpio-pin" id="nfc-ss-gpio-pin" placeholder="5" required
-                                value="%NFCSSGPIOPIN%" style="width: 4rem;" />
+                            <label for="nfcGpioPins!0">SS Pin</label>
+                            <input type="number" name="nfcGpioPins!0" id="nfcGpioPins!0" placeholder="5" required min="0" max="255"
+                                style="width: 4rem;" />
                         </div>
                         <div style="display: flex;flex-direction: column;">
-                            <label for="nfc-sck-gpio-pin">SCK Pin</label>
-                            <input type="number" name="nfc-sck-gpio-pin" id="nfc-sck-gpio-pin" placeholder="18" required
-                                value="%NFCSCKGPIOPIN%" style="width: 4rem;" />
+                            <label for="nfcGpioPins!1">SCK Pin</label>
+                            <input type="number" name="nfcGpioPins!1" id="nfcGpioPins!1" placeholder="18" required min="0" max="255"
+                                style="width: 4rem;" />
                         </div>
                         <div style="display: flex;flex-direction: column;">
-                            <label for="nfc-miso-gpio-pin">MISO Pin</label>
-                            <input type="number" name="nfc-miso-gpio-pin" id="nfc-miso-gpio-pin" placeholder="19" required
-                                value="%NFCMISOGPIOPIN%" style="width: 4rem;" />
+                            <label for="nfcGpioPins!2">MISO Pin</label>
+                            <input type="number" name="nfcGpioPins!2" id="nfcGpioPins!2" placeholder="19" required min="0" max="255"
+                                style="width: 4rem;" />
                         </div>
                         <div style="display: flex;flex-direction: column;">
-                            <label for="nfc-mosi-gpio-pin">MOSI Pin</label>
-                            <input type="number" name="nfc-mosi-gpio-pin" id="nfc-mosi-gpio-pin" placeholder="23" required
-                                value="%NFCMOSIGPIOPIN%" style="width: 4rem;" />
+                            <label for="nfcGpioPins!3">MOSI Pin</label>
+                            <input type="number" name="nfcGpioPins!3" id="nfcGpioPins!3" placeholder="23" required min="0" max="255"
+                                style="width: 4rem;" />
                         </div>
                     </div>
                 </div>
                 <div class="custom-tabs-hidden-body" data-custom-tabs-body="3">
                     <a href="https://github.com/HomeSpan/HomeSpan/blob/master/docs/GettingStarted.md#adding-a-control-button-and-status-led-optional" style="margin-bottom: 1rem;color: white;">HomeSpan Documentation</a>
                     <div>
-                        <label for="ota-passwd">OTA Password</label>
-                        <input type="password" name="ota-passwd" id="ota-passwd" placeholder="homespan-ota" required
-                            value="%OTAPASSWD%" />
+                        <label for="otaPasswd">OTA Password</label>
+                        <input type="password" name="otaPasswd" id="otaPasswd" placeholder="homespan-ota" required
+                            />
                     </div>
                     <div>
-                        <label for="control-pin">Control GPIO Pin</label>
-                        <input type="number" name="control-pin" id="control-pin" placeholder="26" required
-                            value="%CONTROLPIN%" style="width: 4rem;" />
+                        <label for="controlPin">Control GPIO Pin</label>
+                        <input type="number" name="controlPin" id="controlPin" placeholder="26" required
+                            style="width: 4rem;" />
                     </div>
                     <div>
-                        <label for="led-pin">Status LED GPIO Pin</label>
-                        <input type="number" name="led-pin" id="led-pin" placeholder="2" required value="%LEDPIN%" style="width: 4rem;" />
+                        <label for="hsStatusPin">Status LED GPIO Pin</label>
+                        <input type="number" name="hsStatusPin" id="hsStatusPin" placeholder="2" required style="width: 4rem;" />
                     </div>
                 </div>
             </div>
@@ -168,21 +166,21 @@
                 </div>
                 <div class="webui-tabs-selected-body" style="display: flex;flex-direction: column;gap: 8px;padding-inline: 1rem;" data-webui-tabs-body="0">
                     <div style="display: flex;flex-direction: column;">
-                        <label for="web-auth-enable">Status</label>
-                        <select name="web-auth-enable" id="web-auth-enable" style="width: fit-content;">
+                        <label for="webAuthEnabled">Status</label>
+                        <select name="webAuthEnabled" id="webAuthEnabled" style="width: fit-content;">
                           <option value="0">Disabled</option>
                           <option value="1">Enabled</option>
                         </select>
                     </div>
                     <div style="display: flex;flex-direction: column;">
-                        <label for="web-auth-username">Username</label>
-                        <input type="text" name="web-auth-username" id="web-auth-username" placeholder="admin" required
-                            value="%WEBUSERNAME%" style="width: fit-content;" />
+                        <label for="webUsername">Username</label>
+                        <input type="text" name="webUsername" id="webUsername" placeholder="admin" required
+                            style="width: fit-content;" />
                     </div>
                     <div style="display: flex;flex-direction: column;">
-                        <label for="web-auth-password">Password</label>
-                        <input type="password" name="web-auth-password" id="web-auth-password" placeholder="password" required
-                            value="%WEBPASSWORD%" style="width: fit-content;" />
+                        <label for="webPassword">Password</label>
+                        <input type="password" name="webPassword" id="webPassword" placeholder="password" required
+                            style="width: fit-content;" />
                     </div>
                 </div>
             </div>
@@ -199,7 +197,7 @@
         </button>
     </div>
 </form>
-<script>
+<!-- <script>
     let hwfinish = "%HWFINISH%";
     document
         .getElementById(`hk-finish-${hwfinish}`)
@@ -218,19 +216,7 @@
           method: "post",
       });
       let string = await response.text();
-      let element = document.querySelector("#status-text");
-      if (element) {
-          element.remove();
-      }
-      let component = document.getElementById("buttons-group");
-      let elStatus = document.createElement("h4");
-      elStatus.id = "status-text";
-      elStatus.style = "color: red;text-align: center;margin-bottom: 0;";
-      elStatus.innerText = string;
-      component.insertAdjacentElement("beforebegin", elStatus);
-      setTimeout(() => {
-          document.querySelector("#status-text").remove();
-      }, 5000);
+      alert(string);
     }
     form.addEventListener("submit", handleForm);
-</script>
+</script> -->
