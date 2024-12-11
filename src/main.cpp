@@ -851,36 +851,6 @@ void listDir(fs::FS& fs, const char* dirname, uint8_t levels) {
   }
 }
 
-String hkInfoHtmlProcess(const String& var) {
-  if (var == "READERGID") {
-    return String(utils::bufToHexString(readerData.reader_gid.data(), readerData.reader_gid.size(), true).c_str());
-  } else if (var == "READERID") {
-    return String(utils::bufToHexString(readerData.reader_id.data(), readerData.reader_id.size(), true).c_str());
-  } else if (var == "ISSUERSNO") {
-    return String(readerData.issuers.size());
-  } else if (var == "ISSUERSLIST") {
-    String result = "";
-    for (auto&& issuer : readerData.issuers) {
-      char issuerBuff[21 + 8];
-      result += "<li>";
-      snprintf(issuerBuff, sizeof(issuerBuff), "Issuer ID: %s", utils::bufToHexString(issuer.issuer_id.data(), issuer.issuer_id.size(), true).c_str());
-      result += issuerBuff;
-      result += "</li>\n";
-      result += "\t\t<ul>";
-      for (auto&& endpoint : issuer.endpoints) {
-        char endBuff[23 + 6];
-        result += "\n\t\t\t<li>";
-        snprintf(endBuff, sizeof(endBuff), "Endpoint ID: %s", utils::bufToHexString(endpoint.endpoint_id.data(), endpoint.endpoint_id.size(), true).c_str());
-        result += endBuff;
-        result += "</li>\n";
-      }
-      result += "\t\t</ul>";
-    }
-    return result;
-  }
-  return "";
-}
-
 String indexProcess(const String& var) {
   if (var == "VERSION") {
     const esp_app_desc_t* app_desc = esp_ota_get_app_description();
@@ -892,9 +862,6 @@ String indexProcess(const String& var) {
 
 bool headersFix(AsyncWebServerRequest* request) { request->addInterestingHeader("ANY"); return true; };
 void setupWeb() {
-  // auto infoHandle = new AsyncStaticWebHandler("/info", LittleFS, "/routes/info.html", NULL);
-  // webServer.addHandler(infoHandle);
-  // infoHandle->setTemplateProcessor(hkInfoHtmlProcess).setFilter(headersFix);
   auto assetsHandle = new AsyncStaticWebHandler("/assets", LittleFS, "/assets/", NULL);
   assetsHandle->setFilter(headersFix);
   webServer.addHandler(assetsHandle);
@@ -916,13 +883,45 @@ void setupWeb() {
     if (req->hasParam("type")) {
     json serializedData;
       AsyncWebParameter* data = req->getParam(0);
-      std::array<std::string, 3> pages = {"mqtt", "actions", "misc"};
+      std::array<std::string, 4> pages = {"mqtt", "actions", "misc", "hkinfo"};
       if (std::equal(data->value().begin(), data->value().end(), pages[0].begin(), pages[0].end())) {
         LOG(D, "MQTT CONFIG REQ");
         serializedData = espConfig::mqttData;
       } else if (std::equal(data->value().begin(), data->value().end(),pages[1].begin(), pages[1].end()) || std::equal(data->value().begin(), data->value().end(),pages[2].begin(), pages[2].end())) {
         LOG(D, "ACTIONS CONFIG REQ");
         serializedData = espConfig::miscConfig;
+      } else if (std::equal(data->value().begin(), data->value().end(),pages[3].begin(), pages[3].end())) {
+        LOG(D, "HK DATA REQ");
+        json inputData = readerData;
+        if (inputData.contains("group_identifier")) {
+          serializedData["group_identifier"] = utils::bufToHexString(readerData.reader_gid.data(), readerData.reader_gid.size(), true);
+        }
+        if (inputData.contains("unique_identifier")) {
+          serializedData["unique_identifier"] = utils::bufToHexString(readerData.reader_id.data(), readerData.reader_id.size(), true);
+        }
+        if (inputData.contains("issuers")) {
+          serializedData["issuers"] = json::array();
+          for (auto it = inputData.at("issuers").begin(); it != inputData.at("issuers").end(); ++it)
+          {
+            json issuer;
+            if (it.value().contains("issuerId")) {
+              std::vector<uint8_t> id = it.value().at("issuerId").get<std::vector<uint8_t>>();
+              issuer["issuerId"] = utils::bufToHexString(id.data(), id.size(), true);
+            }
+            if (it.value().contains("endpoints") && it.value().at("endpoints").size() > 0) {
+              issuer["endpoints"] = json::array();
+              for (auto it2 = it.value().at("endpoints").begin(); it2 != it.value().at("endpoints").end(); ++it2) {
+                json endpoint;
+                if (it2.value().contains("endpointId")) {
+                  std::vector<uint8_t> id = it2.value().at("endpointId").get<std::vector<uint8_t>>();
+                  endpoint["endpointId"] = utils::bufToHexString(id.data(), id.size(), true);
+                }
+                issuer["endpoints"].push_back(endpoint);
+              }
+            }
+            serializedData["issuers"].push_back(issuer);
+          }
+        }
       } else {
         req->send(400);
         return;
@@ -1200,6 +1199,7 @@ void setupWeb() {
     LOG(I, "Web Authentication Enabled");
     routesHandle->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
     dataProvision->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
+    dataLoad->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
     rootHandle->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
     resetHkHandle->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
     resetWifiHandle->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());

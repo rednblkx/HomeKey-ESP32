@@ -61,7 +61,7 @@
         for (const key in configJson) {
           if (Object.prototype.hasOwnProperty.call(configJson, key)) {
             const element = configJson[key];
-            if(typeof element == "object") {
+            if(typeof element == "object" && name != "hkinfo") {
               if((key == "neopixelSuccessColor" || key == "neopixelFailureColor") && name == "actions"){
                 for(const colorIndex in element){
                   const colorEl = element[colorIndex];
@@ -90,6 +90,44 @@
                 foundEl.value = isNaN(element) ? element : element | 0;
               }
             }
+          }
+        }
+      }
+      if(name == "hkinfo"){
+        const component = el.querySelector("#hkReaderDataList");
+        if(component){
+          let item = document.createElement("li");
+          item.textContent = `Reader GID: ${configJson?.group_identifier}`;
+          component.appendChild(item);
+          item = document.createElement("li");
+          item.textContent = `Reader ID: ${configJson?.unique_identifier}`;
+          component.appendChild(item);
+          item = document.createElement("li");
+          item.textContent = `Issuers (${configJson?.issuers?.length})`;
+          component.appendChild(item);
+          if(configJson?.issuers && configJson.issuers.length > 0){
+            let issuersList = document.createElement("ul");
+            let endpointsList = document.createElement("ul");
+            for (const issuerIndex in configJson.issuers) {
+              if (Object.prototype.hasOwnProperty.call(configJson.issuers, issuerIndex)) {
+                const issuer = configJson.issuers[issuerIndex];
+                item = document.createElement("li");
+                item.textContent = `Issuer ID: ${issuer?.issuerId}`;
+                issuersList.appendChild(item);
+                if(issuer?.endpoints && issuer.endpoints.length > 0){
+                  for (const endpointIndex in issuer.endpoints) {
+                    if (Object.prototype.hasOwnProperty.call(issuer.endpoints, endpointIndex)) {
+                      const endpoint = issuer.endpoints[endpointIndex];
+                      item = document.createElement("li");
+                      item.textContent = `Endpoint ID: ${endpoint?.endpointId}`;
+                      endpointsList.appendChild(item);
+                    }
+                  }
+                  issuersList.appendChild(endpointsList);
+                }
+              }
+            }
+            component.appendChild(issuersList);
           }
         }
       }
@@ -210,7 +248,7 @@
   </div>
   <div id="main" style="border: 2px groove #8e8271;padding: 1rem;background-color: #003232;margin-bottom: 1rem;align-self: center;">
     <div style="gap: 1rem; display: flex;justify-content: center;">
-      <button onclick='addComponent("info", this)' style="padding: .6rem;cursor: pointer;" rel="noopener noreferrer">HK Info</a>
+      <button onclick='addComponent("hkinfo", this)' style="padding: .6rem;cursor: pointer;" rel="noopener noreferrer">HK Info</a>
       <button onclick='addComponent("mqtt", this)' style="padding: .6rem;cursor: pointer;" rel="noopener noreferrer">MQTT</a>
       <button onclick='addComponent("actions", this)' style="padding: .6rem;cursor: pointer;" rel="noopener noreferrer">Actions</a>
       <button onclick='addComponent("misc", this)' style="padding: .6rem;cursor: pointer;" rel="noopener noreferrer">Misc</a>
