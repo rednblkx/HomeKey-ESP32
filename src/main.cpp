@@ -1036,8 +1036,14 @@ void setupWeb() {
                 break;
             }
           }
-          if (configData.at(it.key()).is_boolean() && !it.value().is_boolean()) {
+          if (configData.at(it.key()).is_boolean() && it.value().is_number()) {
             it.value() = static_cast<bool>(it.value().template get<uint8_t>());
+          } else {
+            LOG(E, "\"%s\" could not validate!", it.key().c_str());
+            std::string msg = "\"\" is not a valid value for \"\"";
+            msg.insert(1, it.value().dump().c_str()).insert(msg.length() - 1, it.key());
+            req->send(400, "text/plain", msg.c_str());
+            break;
           }
           propertiesProcessed++;
         } else {
