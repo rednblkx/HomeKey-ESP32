@@ -87,7 +87,7 @@
             } else {
               const foundEl = el.querySelector(`#${key}`);
               if(foundEl){
-                foundEl.value = isNaN(element) ? element : element | 0;
+                foundEl.value = isNaN(element) || (element == "" && String(element) != "false") ? element : element | 0;
               }
             }
           }
