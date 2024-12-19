@@ -1006,7 +1006,7 @@ void setupWeb() {
             std::string code = it.value().template get<std::string>();
             if (it.value().is_string() && (!code.empty() && std::find_if(code.begin(), code.end(), [](unsigned char c) { return !std::isdigit(c); }) == code.end()) && it.value().template get<std::string>().length() == 8) {
               if (homeSpan.controllerListBegin() != homeSpan.controllerListEnd()) {
-                LOG(E, "The Setup Code can only be set if no devices are paired, reset if any issues!", it.key().c_str());
+                LOG(E, "The Setup Code can only be set if no devices are paired, reset if any issues!");
                 std::string msg = "\"\" is not a valid value for \"\"";
                 msg.insert(1, it.value().dump().c_str()).insert(msg.length() - 1, it.key());
                 req->send(400, "text/plain", msg.c_str());
