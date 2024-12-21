@@ -197,26 +197,3 @@
         </button>
     </div>
 </form>
-<!-- <script>
-    let hwfinish = "%HWFINISH%";
-    document
-        .getElementById(`hk-finish-${hwfinish}`)
-        .setAttribute("checked", "");
-    document.getElementById('hkfinish').style.backgroundImage = `url(assets/hk-finish-${hwfinish}.webp)`;
-    document.getElementById("hk-always-unlock").selectedIndex = "%ALWAYSUNLOCK%";
-    document.getElementById("hk-always-lock").selectedIndex = "%ALWAYSLOCK%";
-    document.getElementById("web-auth-enable").selectedIndex = "%WEBENABLE%";
-    document.getElementById("prox-bat-enable").selectedIndex = "%PROXBATENABLE%";
-    document.getElementById("homekit-dumb-switch-mode").selectedIndex = "%DUMBSWITCHMODE%";
-    let form = document.getElementById("misc-config");
-    async function handleForm(event) {
-      event.preventDefault();
-      let response = await fetch("misc-config", {
-          body: new FormData(form),
-          method: "post",
-      });
-      let string = await response.text();
-      alert(string);
-    }
-    form.addEventListener("submit", handleForm);
-</script> -->

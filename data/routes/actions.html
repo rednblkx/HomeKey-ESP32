@@ -217,32 +217,3 @@
     <button type="reset" style="cursor: pointer;" class="destructive-btn">Reset</button>
   </div>
 </form>
-<!-- <script>
-  let nfcshl = document.querySelector("#nfc-s-hl");
-  let nfcfhl = document.querySelector("#nfc-f-hl");
-  let actionunlock = document.querySelector("#gpio-a-unlock");
-  let actionlock = document.querySelector("#gpio-a-lock");
-  let actionMomentary = document.querySelector("#gpio-a-momentary");
-  let pixelType = document.querySelector("#neo-pixel-type")
-  let hkGpioState = document.querySelector("#homekey-gpio-state")
-  let hkAltActionGpioState = document.querySelector("#nfc-alt-action-hl")
-  hkGpioState.selectedIndex = "%HKGPIOCONTROLSTATE%"
-  pixelType.selectedIndex = "%NEOPIXELTYPE%"
-  nfcshl.selectedIndex = "%NFC1HL%";
-  nfcfhl.selectedIndex = "%NFC2HL%";
-  actionlock.selectedIndex = "%GPIOALOCK%";
-  actionunlock.selectedIndex = "%GPIOAUNLOCK%";
-  actionMomentary.selectedIndex = "%GPIOAMOEN%";
-  hkAltActionGpioState.selectedIndex = "%NFCALTACTIONGPIOSTATE%"
-  let form = document.getElementById("actions-config");
-  async function handleForm(event) {
-    event.preventDefault();
-    let response = await fetch("actions-config", {
-        body: new FormData(form),
-        method: "post",
-    });
-    let string = await response.text();
-    alert(string);
-  }
-  form.addEventListener("submit", handleForm);
-</script> -->
