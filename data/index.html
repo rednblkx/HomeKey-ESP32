@@ -52,8 +52,12 @@
       let el = document.createElement("div");
       el.id = "component";
       el.style = "display: flex;flex-direction: column;margin-bottom: 1rem;";
-      let data = await fetch(`fragment/${name}.html`);
-      let string = await data.text();
+      let string;
+      if(!sessionStorage.getItem(`htmlCache-${name}`)){
+        let data = await fetch(`fragment/${name}.html`);
+        string = await data.text();
+        sessionStorage.setItem(`htmlCache-${name}`, string);
+      } else string = sessionStorage.getItem(`htmlCache-${name}`);
       el.innerHTML = string;
       let configData = await fetch(`config?type=${name}`);
       let configJson = await configData.json();
