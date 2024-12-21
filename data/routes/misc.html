@@ -15,43 +15,43 @@
                     <span style="height: 1px;border-top: 1px #424242 solid;display: block;margin: 0;padding: 0;"></span>
                 </div>
                 <div class="custom-tabs-selected-body" data-custom-tabs-body="0">
-                    <div style="display: flex;gap: 8px;">
+                    <div class="input-group">
                         <label for="deviceName">Device Name</label>
                         <input type="text" name="deviceName" id="deviceName" placeholder="HK" required style="width: fit-content;" />
                     </div>
-                    <div style="display: flex;gap: 8px;">
+                    <div class="input-group">
                         <label for="setupCode">Setup Code</label>
-                        <input type="number" name="setupCode" id="setupCode" placeholder="46637726" required style="width: fit-content;" />
+                        <input type="number" name="setupCode" id="setupCode" placeholder="46637726" maxlength="8" required style="width: fit-content;" />
                     </div>
-                    <div style="display: flex;gap: 8px;">
+                    <div class="input-group">
                         <label for="lockAlwaysLock">Always Lock on HomeKey</label>
                         <select name="lockAlwaysLock" id="lockAlwaysLock">
                             <option value="0">Disabled</option>
                             <option value="1">Enabled</option>
                         </select>
                     </div>
-                    <div style="display: flex;gap: 8px;">
+                    <div class="input-group">
                         <label for="lockAlwaysUnlock">Always Unlock on HomeKey</label>
                         <select name="lockAlwaysUnlock" id="lockAlwaysUnlock">
                             <option value="0">Disabled</option>
                             <option value="1">Enabled</option>
                         </select>
                     </div>
-                    <div style="display: flex;gap: 8px;">
+                    <div class="input-group">
                         <label for="hkDumbSwitchMode">Dumb Switch Mode</label>
                         <select name="hkDumbSwitchMode" id="hkDumbSwitchMode">
                             <option value="0">Disabled</option>
                             <option value="1">Enabled</option>
                         </select>
                     </div>
-                    <div style="display: flex;gap: 8px;">
+                    <div class="input-group">
                         <label for="proxBatEnabled">SmartLock battery reporting</label>
                         <select name="proxBatEnabled" id="proxBatEnabled">
                             <option value="0">Disabled</option>
                             <option value="1">Enabled</option>
                         </select>
                     </div>
-                    <div style="display: flex;gap: 8px;">
+                    <div class="input-group">
                         <label for="btrLowStatusThreshold">Battery low status Threshold</label>
                         <input type="number" name="btrLowStatusThreshold" id="btrLowStatusThreshold" placeholder="10" min="0" max="100" style="width: 4rem;" />
                     </div>
@@ -61,15 +61,15 @@
                         <fieldset>
                             <legend>Alt action Initiator Button</legend>
                             <div style="display: flex;gap: 16px;flex-direction: column;padding: .5rem;">
-                                <div style="display: flex;gap: 8px;">
+                                <div class="input-group">
                                     <label for="hkAltActionInitPin">GPIO Pin</label>
                                     <input type="number" name="hkAltActionInitPin" id="hkAltActionInitPin" placeholder="255" min="0" max="255" style="width: 4rem;" />
                                 </div>
-                                <div style="display: flex;gap: 8px;">
+                                <div class="input-group">
                                     <label for="hkAltActionInitTimeout">Timeout (ms)</label>
                                     <input type="number" name="hkAltActionInitTimeout" id="hkAltActionInitTimeout" placeholder="5000" min="0" max="10000" style="width: 4rem;" />
                                 </div>
-                                <div style="display: flex;gap: 8px;">
+                                <div class="input-group">
                                     <label for="hkAltActionInitLedPin">Feedback LED Pin</label>
                                     <input type="number" name="hkAltActionInitLedPin" id="hkAltActionInitLedPin" placeholder="255" min="0" max="255" style="width: 4rem;" />
                                 </div>
@@ -137,17 +137,17 @@
                 </div>
                 <div class="custom-tabs-hidden-body" data-custom-tabs-body="3">
                     <a href="https://github.com/HomeSpan/HomeSpan/blob/master/docs/GettingStarted.md#adding-a-control-button-and-status-led-optional" style="margin-bottom: 1rem;color: white;">HomeSpan Documentation</a>
-                    <div>
+                    <div class="input-group">
                         <label for="otaPasswd">OTA Password</label>
                         <input type="password" name="otaPasswd" id="otaPasswd" placeholder="homespan-ota" required
                             />
                     </div>
-                    <div>
+                    <div class="input-group">
                         <label for="controlPin">Control GPIO Pin</label>
                         <input type="number" name="controlPin" id="controlPin" placeholder="26" required
                             style="width: 4rem;" />
                     </div>
-                    <div>
+                    <div class="input-group">
                         <label for="hsStatusPin">Status LED GPIO Pin</label>
                         <input type="number" name="hsStatusPin" id="hsStatusPin" placeholder="2" required style="width: 4rem;" />
                     </div>

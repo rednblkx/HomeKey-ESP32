@@ -118,6 +118,11 @@ div[class$="-hidden-body"] {
     gap: 16px;
 }
 
+.input-group {
+    display: flex;
+    justify-content: space-between;
+}
+
 @media only screen and (max-width: 600px) {
     #top-bar {
         flex-direction: column;
@@ -139,9 +144,6 @@ div[class$="-hidden-body"] {
     }
     #component {
         max-width: 90dvw;
-    }
-    fieldset {
-        width: 100%;
     }
     .flex-sm {
         display: flex;
@@ -186,9 +188,6 @@ div[class$="-hidden-body"] {
 }
 
 @media only screen and (max-width: 1090px) {
-    fieldset {
-        width: 100%;
-    }
     .flex-sm {
         display: flex;
         gap: inherit;
