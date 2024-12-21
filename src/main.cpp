@@ -1005,11 +1005,9 @@ void setupWeb() {
           if (it.key() == std::string("setupCode")) {
             std::string code = it.value().template get<std::string>();
             if (it.value().is_string() && (!code.empty() && std::find_if(code.begin(), code.end(), [](unsigned char c) { return !std::isdigit(c); }) == code.end()) && it.value().template get<std::string>().length() == 8) {
-              if (homeSpan.controllerListBegin() != homeSpan.controllerListEnd()) {
+              if (homeSpan.controllerListBegin() != homeSpan.controllerListEnd() && code.compare(configData.at(it.key()).template get<std::string>())) {
                 LOG(E, "The Setup Code can only be set if no devices are paired, reset if any issues!");
-                std::string msg = "\"\" is not a valid value for \"\"";
-                msg.insert(1, it.value().dump().c_str()).insert(msg.length() - 1, it.key());
-                req->send(400, "text/plain", msg.c_str());
+                req->send(400, "text/plain", "The Setup Code can only be set if no devices are paired, reset if any issues!");
                 break;
               }
             } else {
@@ -1038,7 +1036,7 @@ void setupWeb() {
           }
           if (configData.at(it.key()).is_boolean() && it.value().is_number()) {
             it.value() = static_cast<bool>(it.value().template get<uint8_t>());
-          } else {
+          } else if(configData.at(it.key()).is_boolean() && !it.value().is_number()) {
             LOG(E, "\"%s\" could not validate!", it.key().c_str());
             std::string msg = "\"\" is not a valid value for \"\"";
             msg.insert(1, it.value().dump().c_str()).insert(msg.length() - 1, it.key());
@@ -1206,9 +1204,11 @@ void setupWeb() {
     routesHandle->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
     dataProvision->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
     dataLoad->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
+    dataClear->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
     rootHandle->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
     resetHkHandle->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
     resetWifiHandle->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
+    getWifiRssi->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
   }
   webServer.onNotFound(notFound);
   webServer.begin();
