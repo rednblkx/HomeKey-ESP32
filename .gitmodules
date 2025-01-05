@@ -1,0 +1,18 @@
+[submodule "PN532"]
+	path = components/PN532
+	url = https://github.com/rednblkx/PN532.git
+	branch = esp-idf
+[submodule "HK-HomeKit-Lib"]
+	path = components/HK-HomeKit-Lib
+	url = https://github.com/rednblkx/HK-HomeKit-Lib.git
+	branch = esp-idf
+[submodule "AsyncTCP"]
+	path = components/AsyncTCP
+	url = https://github.com/me-no-dev/AsyncTCP.git
+[submodule "ESPAsyncWebServer"]
+	path = components/ESPAsyncWebServer
+	url = https://github.com/me-no-dev/ESPAsyncWebServer.git
+[submodule "HomeSpan"]
+	path = components/HomeSpan/upstream
+	url = https://github.com/HomeSpan/HomeSpan.git
+	branch = 2.1.0
