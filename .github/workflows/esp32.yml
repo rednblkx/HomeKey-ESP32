@@ -46,14 +46,15 @@ jobs:
       - name: Archive merged binary
         uses: actions/upload-artifact@v4
         with:
-          name: esp32-merged-binary
+          name: esp32-firmware-merged
           path: build/merged-binary.bin
       - uses: actions/cache@v4
         with:
           path: |
-            ~/.cache/pip
-            ~/.ccache
-          key: ${{ runner.os }}-esp32-ccache
+            build
+            managed_components
+            sdkconfig
+          key: ${{ runner.os }}-esp32-build
   esp32c3:
     runs-on: ubuntu-latest
     steps:
@@ -84,9 +85,10 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: |
-            ~/.cache/pip
-            ~/.ccache
-          key: ${{ runner.os }}-esp32c3-ccache
+            build
+            managed_components
+            sdkconfig
+          key: ${{ runner.os }}-esp32c3-build
   esp32s3:
     runs-on: ubuntu-latest
     steps:
@@ -112,14 +114,15 @@ jobs:
       - name: Archive merged binary
         uses: actions/upload-artifact@v4
         with:
-          name: esp32s3-merged-binary
+          name: esp32s3-firmware-merged
           path: build/merged-binary.bin
       - uses: actions/cache@v4
         with:
           path: |
-            ~/.cache/pip
-            ~/.ccache
-          key: ${{ runner.os }}-esp32s3-ccache
+            build
+            managed_components
+            sdkconfig
+          key: ${{ runner.os }}-esp32s3-build
   littlefs:
     runs-on: ubuntu-latest
     steps:
