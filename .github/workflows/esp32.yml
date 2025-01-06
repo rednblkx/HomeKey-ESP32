@@ -133,7 +133,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install PlatformIO Core
+      - name: Install LittleFS Tool
         run: pip install littlefs-python
       - name: Create LittleFS Image
         run: littlefs-python create $(pwd)/data littlefs.bin -v --fs-size=0x20000 --name-max=64 --block-size=4096
