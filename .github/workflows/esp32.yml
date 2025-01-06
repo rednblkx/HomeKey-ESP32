@@ -89,7 +89,7 @@ jobs:
       - name: Archive merged binary
         uses: actions/upload-artifact@v4
         with:
-          name: esp32c3-firmare-merged
+          name: esp32c3-firmware-merged
           path: build/merged-binary.bin
   esp32s3:
     runs-on: ubuntu-latest
