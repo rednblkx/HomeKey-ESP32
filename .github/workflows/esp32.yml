@@ -41,12 +41,12 @@ jobs:
       - name: Archive firmware
         uses: actions/upload-artifact@v4
         with:
-          name: esp32s3-firmware
+          name: esp32-firmware
           path: build/HomeKey-ESP32.bin
       - name: Archive merged binary
         uses: actions/upload-artifact@v4
         with:
-          name: esp32s3-merged-binary
+          name: esp32-merged-binary
           path: build/merged-binary.bin
       - uses: actions/cache@v4
         with:
@@ -74,12 +74,12 @@ jobs:
       - name: Archive firmware
         uses: actions/upload-artifact@v4
         with:
-          name: esp32s3-firmware
+          name: esp32c3-firmware
           path: build/HomeKey-ESP32.bin
       - name: Archive merged binary
         uses: actions/upload-artifact@v4
         with:
-          name: esp32s3-merged-binary
+          name: esp32c3-firmare-merged
           path: build/merged-binary.bin
       - uses: actions/cache@v4
         with:
@@ -120,3 +120,19 @@ jobs:
             ~/.cache/pip
             ~/.ccache
           key: ${{ runner.os }}-esp32s3-ccache
+  littlefs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          submodules: 'recursive'
+      - name: Create LittleFS Image
+        run: build/littlefs_py_venv/bin/littlefs-python create $(pwd)/data spiffs.bin -v --fs-size=0x20000 --name-max=64 --block-size=4096
+      - name: Archive LittleFS image
+        uses: actions/upload-artifact@v4
+        with:
+          name: littlefs-binary
+          path: spiffs.bin
