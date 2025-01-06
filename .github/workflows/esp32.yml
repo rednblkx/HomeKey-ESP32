@@ -4,19 +4,12 @@ name: CI
 
 # Controls when the action will run. Triggers the workflow on push or pull request
 on:
-  push:
-    branches: [ main, dev ]
-    paths:
-      - 'src/**'
-      - 'data/**'
-      - 'sdkconfig.defaults'
-      - 'with_ota.csv'
   pull_request:
-    paths:
-      - 'src/**'
-      - 'data/**'
-      - 'sdkconfig.defaults'
-      - 'with_ota.csv'
+    paths-ignore:
+      - '.vscode/**'
+      - '.gitignore'
+      - 'LICENSE'
+      - 'README.md'
   workflow_dispatch:
 
 jobs:
