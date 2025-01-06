@@ -15,7 +15,6 @@ on:
 jobs:
   esp32:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,6 +22,14 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
           submodules: 'recursive'
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.ccache
+            build
+            managed_components
+            sdkconfig
+          key: ${{ runner.os }}-esp32-build
       - name: Cache Docker images.
         uses: ScribeMD/docker-cache@0.5.0
         with:
@@ -45,13 +52,6 @@ jobs:
         with:
           name: esp32-firmware-merged
           path: build/merged-binary.bin
-      - uses: actions/cache@v4
-        with:
-          path: |
-            build
-            managed_components
-            sdkconfig
-          key: ${{ runner.os }}-esp32-build
   esp32c3:
     runs-on: ubuntu-latest
     steps:
@@ -61,6 +61,14 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
           submodules: 'recursive'
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.ccache
+            build
+            managed_components
+            sdkconfig
+          key: ${{ runner.os }}-esp32c3-build
       - name: Cache Docker images.
         uses: ScribeMD/docker-cache@0.5.0
         with:
@@ -83,13 +91,6 @@ jobs:
         with:
           name: esp32c3-firmare-merged
           path: build/merged-binary.bin
-      - uses: actions/cache@v4
-        with:
-          path: |
-            build
-            managed_components
-            sdkconfig
-          key: ${{ runner.os }}-esp32c3-build
   esp32s3:
     runs-on: ubuntu-latest
     steps:
@@ -99,6 +100,14 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
           submodules: 'recursive'
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.ccache
+            build
+            managed_components
+            sdkconfig
+          key: ${{ runner.os }}-esp32s3-build
       - name: Cache Docker images.
         uses: ScribeMD/docker-cache@0.5.0
         with:
@@ -121,13 +130,6 @@ jobs:
         with:
           name: esp32s3-firmware-merged
           path: build/merged-binary.bin
-      - uses: actions/cache@v4
-        with:
-          path: |
-            build
-            managed_components
-            sdkconfig
-          key: ${{ runner.os }}-esp32s3-build
   littlefs:
     runs-on: ubuntu-latest
     steps:
