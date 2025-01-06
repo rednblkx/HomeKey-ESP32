@@ -126,13 +126,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-          fetch-tags: true
-          submodules: 'recursive'
+          sparse-checkout: 'data'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PlatformIO Core
+        run: pip install littlefs-python
       - name: Create LittleFS Image
-        run: build/littlefs_py_venv/bin/littlefs-python create $(pwd)/data spiffs.bin -v --fs-size=0x20000 --name-max=64 --block-size=4096
+        run: littlefs-python create $(pwd)/data littlefs.bin -v --fs-size=0x20000 --name-max=64 --block-size=4096
       - name: Archive LittleFS image
         uses: actions/upload-artifact@v4
         with:
           name: littlefs-binary
-          path: spiffs.bin
+          path: littlefs.bin
