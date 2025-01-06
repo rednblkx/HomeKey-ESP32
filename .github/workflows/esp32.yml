@@ -8,23 +8,19 @@ on:
     branches: [ main, dev ]
     paths:
       - 'src/**'
-      - 'platformio.ini'
-      - 'sdkconfig.defaults'
       - 'data/**'
+      - 'sdkconfig.defaults'
       - 'with_ota.csv'
-      - 'fs.py'
   pull_request:
-    branches: [ main, dev ]
     paths:
       - 'src/**'
       - 'data/**'
-      - 'platformio.ini'
       - 'sdkconfig.defaults'
       - 'with_ota.csv'
-      - 'fs.py'
+  workflow_dispatch:
 
 jobs:
-  build:
+  esp32:
     runs-on: ubuntu-latest
 
     steps:
@@ -33,58 +29,94 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
+          submodules: 'recursive'
+      - name: ESP32 Build
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.3.2
+          target: esp32
+          path: '.'
+          extra_docker_args: -v ~/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
+          command: idf.py --ccache build && idf.py merge-bin
+      - name: Archive firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32s3-firmware
+          path: build/HomeKey-ESP32.bin
+      - name: Archive merged binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32s3-merged-binary
+          path: build/merged-binary.bin
       - uses: actions/cache@v4
         with:
           path: |
             ~/.cache/pip
-            ~/.platformio/.cache
-          key: ${{ runner.os }}-pio
-      - uses: actions/setup-python@v5
+            ~/.ccache
+          key: ${{ runner.os }}-esp32-ccache
+  esp32c3:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          python-version: '3.11'
-      - name: Install PlatformIO Core
-        run: pip install --upgrade platformio
-
-      - name: Install tool-mklittlefs
-        run: pio run -t buildfs
-      - name: Build Firmware ESP32
-        run: pio run
-      - name: Archive merged firmware
-        uses: actions/upload-artifact@v4
+          fetch-depth: 0
+          fetch-tags: true
+          submodules: 'recursive'
+      - name: ESP32C3 Build
+        uses: espressif/esp-idf-ci-action@v1
         with:
-          name: esp32-firmware-merged
-          path: .pio/build/release/firmware_merged.bin
+          esp_idf_version: v5.3.2
+          target: esp32c3
+          path: '.'
+          extra_docker_args: -v ~/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
+          command: idf.py --ccache build && idf.py merge-bin
       - name: Archive firmware
         uses: actions/upload-artifact@v4
         with:
-          name: esp32-app-firmware
-          path: .pio/build/release/firmware.bin
-      - name: Archive spiffs
+          name: esp32s3-firmware
+          path: build/HomeKey-ESP32.bin
+      - name: Archive merged binary
         uses: actions/upload-artifact@v4
         with:
-          name: spiffs-binary
-          path: .pio/build/release/littlefs.bin
-      - name: Build Firmware ESP32-C3
-        run: pio run -e c3
-      - name: Archive merged firmware
-        uses: actions/upload-artifact@v4
+          name: esp32s3-merged-binary
+          path: build/merged-binary.bin
+      - uses: actions/cache@v4
         with:
-          name: esp32c3-firmware-merged
-          path: .pio/build/c3/firmware_merged.bin
+          path: |
+            ~/.cache/pip
+            ~/.ccache
+          key: ${{ runner.os }}-esp32c3-ccache
+  esp32s3:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          submodules: 'recursive'
+      - name: ESP32S3 Build
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.3.2
+          target: esp32s3
+          path: '.'
+          extra_docker_args: -v ~/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
+          command: idf.py --ccache build && idf.py merge-bin
       - name: Archive firmware
         uses: actions/upload-artifact@v4
         with:
-          name: esp32c3-app-firmware
-          path: .pio/build/c3/firmware.bin
-      - name: Build Firmware ESP32-S3
-        run: pio run -e s3
-      - name: Archive merged firmware
+          name: esp32s3-firmware
+          path: build/HomeKey-ESP32.bin
+      - name: Archive merged binary
         uses: actions/upload-artifact@v4
         with:
-          name: esp32s3-firmware-merged
-          path: .pio/build/s3/firmware_merged.bin
-      - name: Archive firmware
-        uses: actions/upload-artifact@v4
+          name: esp32s3-merged-binary
+          path: build/merged-binary.bin
+      - uses: actions/cache@v4
         with:
-          name: esp32s3-app-firmware
-          path: .pio/build/s3/firmware.bin
+          path: |
+            ~/.cache/pip
+            ~/.ccache
+          key: ${{ runner.os }}-esp32s3-ccache
