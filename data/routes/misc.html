@@ -11,6 +11,7 @@
                         <p class="tab-btn" onclick="switchTab(this)" data-tab-index="1">HomeKey</p>
                         <p class="tab-btn" onclick="switchTab(this)" data-tab-index="2">PN532</p>
                         <p class="tab-btn" onclick="switchTab(this)" data-tab-index="3">HomeSpan</p>
+                        <p class="tab-btn" onclick="switchTab(this)" data-tab-index="4">Ethernet</p>
                     </div>
                     <span style="height: 1px;border-top: 1px #424242 solid;display: block;margin: 0;padding: 0;"></span>
                 </div>
@@ -150,6 +151,94 @@
                     <div class="input-group">
                         <label for="hsStatusPin">Status LED GPIO Pin</label>
                         <input type="number" name="hsStatusPin" id="hsStatusPin" placeholder="2" required style="width: 4rem;" />
+                    </div>
+                </div>
+                <div class="custom-tabs-hidden-body" data-custom-tabs-body="4">
+                    <div class="input-group">
+                        <label for="ethernetEnabled">Status</label>
+                        <select name="ethernetEnabled" id="ethernetEnabled">
+                            <option value="0">Disabled</option>
+                            <option value="1">Enabled</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="ethActivePreset">Board Preset</label>
+                        <select name="ethActivePreset" id="ethActivePreset" onchange="handleEthPreset(this)">
+                            <option value="255">Custom</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="ethPhyType">Ethernet chip</label>
+                        <select disabled name="ethPhyType" id="ethPhyType" onchange="handleEthChipChange(this)">
+                        </select>
+                    </div>
+                    <div id="eth_spi_container" style="display: flex;flex-wrap: wrap;justify-content: space-between;gap: 16px;">
+                        <div style="display: flex;flex-direction: column;">
+                            <label for="ethSpiConfig!0">SPI Frequency</label>
+                            <input disabled type="number" name="ethSpiConfig!0" id="ethSpiConfig!0" placeholder="20" min="0" max="80"
+                                style="width: 4rem;" />
+                        </div>
+                        <div style="display: flex;flex-direction: column;">
+                            <label for="ethSpiConfig!1">SS Pin</label>
+                            <input disabled type="number" name="ethSpiConfig!1" id="ethSpiConfig!1" placeholder="-1" min="-1" max="255"
+                                style="width: 4rem;" />
+                        </div>
+                        <div style="display: flex;flex-direction: column;">
+                            <label for="ethSpiConfig!2">IRQ Pin</label>
+                            <input disabled type="number" name="ethSpiConfig!2" id="ethSpiConfig!2" placeholder="-1" min="-1" max="255"
+                                style="width: 4rem;" />
+                        </div>
+                        <div style="display: flex;flex-direction: column;">
+                            <label for="ethSpiConfig!3">RST Pin</label>
+                            <input disabled type="number" name="ethSpiConfig!3" id="ethSpiConfig!3" placeholder="-1" min="-1" max="255"
+                                style="width: 4rem;" />
+                        </div>
+                        <div style="display: flex;flex-direction: column;">
+                            <label for="ethSpiConfig!4">SCK Pin</label>
+                            <input disabled type="number" name="ethSpiConfig!4" id="ethSpiConfig!4" placeholder="-1" min="-1" max="255"
+                                style="width: 4rem;" />
+                        </div>
+                        <div style="display: flex;flex-direction: column;">
+                            <label for="ethSpiConfig!5">MISO Pin</label>
+                            <input disabled type="number" name="ethSpiConfig!5" id="ethSpiConfig!5" placeholder="-1" min="-1" max="255"
+                                style="width: 4rem;" />
+                        </div>
+                        <div style="display: flex;flex-direction: column;">
+                            <label for="ethSpiConfig!6">MOSI Pin</label>
+                            <input disabled type="number" name="ethSpiConfig!6" id="ethSpiConfig!6" placeholder="-1" min="-1" max="255"
+                                style="width: 4rem;" />
+                        </div>
+                    </div>
+                    <div id="eth_rmii_container" style="display: flex;flex-wrap: wrap;justify-content: space-between;gap: 16px;">
+                        <div style="display: flex;flex-direction: column;">
+                            <label for="ethRmiiConfig!0">PHY Address</label>
+                            <input disabled type="number" name="ethRmiiConfig!0" id="ethRmiiConfig!0" placeholder="1" min="0" max="255"
+                                style="width: 4rem;" />
+                        </div>
+                        <div style="display: flex;flex-direction: column;">
+                            <label for="ethRmiiConfig!1">MCD Pin</label>
+                            <input disabled type="number" name="ethRmiiConfig!1" id="ethRmiiConfig!1" placeholder="23" min="-1" max="255"
+                                style="width: 4rem;" />
+                        </div>
+                        <div style="display: flex;flex-direction: column;">
+                            <label for="ethRmiiConfig!2">MDIO Pin</label>
+                            <input disabled type="number" name="ethRmiiConfig!2" id="ethRmiiConfig!2" placeholder="18" min="-1" max="255"
+                                style="width: 4rem;" />
+                        </div>
+                        <div style="display: flex;flex-direction: column;">
+                            <label for="ethRmiiConfig!3">Power Pin</label>
+                            <input disabled type="number" name="ethRmiiConfig!3" id="ethRmiiConfig!3" placeholder="255" min="-1" max="255"
+                                style="width: 4rem;" />
+                        </div>
+                        <div style="display: flex;flex-direction: column;">
+                            <label for="ethRmiiConfig!4">RMII Clock Mode</label>
+                            <select disabled name="ethRmiiConfig!4" id="ethRmiiConfig!4">
+                                <option value="0">ETH_CLOCK_GPIO0_IN</option>
+                                <option value="1">ETH_CLOCK_GPIO0_OUT</option>
+                                <option value="2">ETH_CLOCK_GPIO16_OUT</option>
+                                <option value="3">ETH_CLOCK_GPIO17_OUT</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
             </div>
