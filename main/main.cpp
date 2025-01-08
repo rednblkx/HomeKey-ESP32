@@ -1165,8 +1165,8 @@ void setupWeb() {
             }
           }
         } else if (it.key() == std::string("neoPixelType")) {
-          std::string pixelType = it.value().template get<std::string>();
-          if (pixelType.compare(configData.at(it.key()).template get<std::string>())) {
+          uint8_t pixelType = it.value().template get<uint8_t>();
+          if (pixelType != configData.at(it.key()).template get<uint8_t>()) {
             rebootNeeded = true;
             rebootMsg = "Pixel Type was changed, reboot needed! Rebooting...";
           }
