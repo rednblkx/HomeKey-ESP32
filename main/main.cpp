@@ -223,7 +223,7 @@ struct NFCAccessoryInformation : Service::AccessoryInformation
     new Characteristic::Manufacturer("rednblkx");
     new Characteristic::Model("HomeKey-ESP32");
     new Characteristic::Name(DEVICE_NAME);
-    const esp_app_desc_t* app_desc = esp_ota_get_app_description();
+    const esp_app_desc_t* app_desc = esp_app_get_description();
     std::string app_version = app_desc->version;
     uint8_t mac[6];
     WiFi.macAddress(mac);
@@ -416,6 +416,7 @@ void nfc_gpio_task(void* arg) {
             delay(espConfig::miscConfig.hkAltActionTimeout);
             digitalWrite(espConfig::miscConfig.hkAltActionPin, !espConfig::miscConfig.hkAltActionGpioState);
           }
+          break;
         default:
           LOG(I, "STOP");
           vTaskDelete(NULL);
@@ -902,7 +903,7 @@ void listDir(fs::FS& fs, const char* dirname, uint8_t levels) {
 
 String indexProcess(const String& var) {
   if (var == "VERSION") {
-    const esp_app_desc_t* app_desc = esp_ota_get_app_description();
+    const esp_app_desc_t* app_desc = esp_app_get_description();
     std::string app_version = app_desc->version;
     return String(app_version.c_str());
   }
@@ -1285,11 +1286,13 @@ void mqttConfigReset(const char* buf) {
   ESP.restart();
 }
 
-void wifiCallback() {
-  if (espConfig::mqttData.mqttBroker.size() >= 7 && espConfig::mqttData.mqttBroker.size() <= 16 && !std::equal(espConfig::mqttData.mqttBroker.begin(), espConfig::mqttData.mqttBroker.end(), "0.0.0.0")) {
-    mqtt_app_start();
+void wifiCallback(int status) {
+  if (status == 1) {
+    if (espConfig::mqttData.mqttBroker.size() >= 7 && espConfig::mqttData.mqttBroker.size() <= 16 && !std::equal(espConfig::mqttData.mqttBroker.begin(), espConfig::mqttData.mqttBroker.end(), "0.0.0.0")) {
+      mqtt_app_start();
+    }
+    setupWeb();
   }
-  setupWeb();
 }
 
 void mqtt_publish(std::string topic, std::string payload, uint8_t qos, bool retain) {
@@ -1502,7 +1505,7 @@ void nfc_thread_entry(void* arg) {
 
 void setup() {
   Serial.begin(115200);
-  const esp_app_desc_t* app_desc = esp_ota_get_app_description();
+  const esp_app_desc_t* app_desc = esp_app_get_description();
   std::string app_version = app_desc->version;
   gpio_led_handle = xQueueCreate(2, sizeof(uint8_t));
   neopixel_handle = xQueueCreate(2, sizeof(uint8_t));
@@ -1654,7 +1657,7 @@ void setup() {
     new PhysicalLockBattery();
   }
   homeSpan.setControllerCallback(pairCallback);
-  homeSpan.setWifiCallback(wifiCallback);
+  homeSpan.setConnectionCallback(wifiCallback);
   if (espConfig::miscConfig.nfcNeopixelPin != 255) {
     pixel = std::make_unique<Pixel>(espConfig::miscConfig.nfcNeopixelPin, pixelTypeMap[espConfig::miscConfig.neoPixelType]);
     xTaskCreate(neopixel_task, "neopixel_task", 4096, NULL, 2, &neopixel_task_handle);
