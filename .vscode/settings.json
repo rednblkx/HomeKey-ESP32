@@ -84,5 +84,6 @@
   "idf.port": "/dev/ttyACM0",
   "idf.openOcdConfigs": [
     "board/esp32s3-builtin.cfg"
-  ]
+  ],
+  "clangd.path": "${userHome}/.espressif/tools/esp-clang/16.0.1-fe4f10a809/esp-clang/bin/clangd"
 }
