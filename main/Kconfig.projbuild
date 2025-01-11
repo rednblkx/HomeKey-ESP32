@@ -1,0 +1,6 @@
+menu "Arduino Console USB-JTAG"
+  config ARDUINO_USE_USB_JTAG
+    depends on !IDF_TARGET_ESP32
+    bool "Output serial log via the USB/JTAG controller"
+    default n
+endmenu
