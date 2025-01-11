@@ -15,10 +15,8 @@
 #include "HK_HomeKit.h"
 #include "config.h"
 #include "mqtt_client.h"
-#include "esp_ota_ops.h"
-#include "esp_task.h"
+#include "esp_app_desc.h"
 #include "pins_arduino.h"
-#include "string_view"
 #include "NFC_SERV_CHARS.h"
 #include <mbedtls/sha256.h>
 #include <esp_mac.h>
