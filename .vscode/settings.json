@@ -83,7 +83,13 @@
   "idf.flashType": "UART",
   "idf.port": "/dev/ttyACM0",
   "idf.openOcdConfigs": [
-    "board/esp32s3-builtin.cfg"
+    "board/esp32c3-builtin.cfg"
   ],
-  "clangd.path": "${userHome}/.espressif/tools/esp-clang/16.0.1-fe4f10a809/esp-clang/bin/clangd"
+  "clangd.path": "${userHome}/esp-clang/bin/clangd",
+  "clangd.arguments": [
+    "--clang-tidy",
+    "--background-index",
+    "--import-insertions",
+    "--all-scopes-completion"
+  ]
 }
