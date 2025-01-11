@@ -83,11 +83,11 @@
   "idf.flashType": "UART",
   "idf.port": "/dev/ttyACM0",
   "idf.openOcdConfigs": [
-    "board/esp32c3-builtin.cfg"
+    "board/esp32s3-builtin.cfg"
   ],
   "clangd.path": "${userHome}/esp-clang/bin/clangd",
   "clangd.arguments": [
-    "--clang-tidy",
+    "--query-driver=${userHome}/.espressif/tools/xtensa-esp-elf/**/xtensa-esp-elf/bin/xtensa-*-elf-*,${userHome}/tools/riscv32-esp-elf/**/riscv32-esp-elf/bin/riscv32-esp-elf-*",
     "--background-index",
     "--import-insertions",
     "--all-scopes-completion"
