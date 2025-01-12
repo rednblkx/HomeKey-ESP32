@@ -1,3 +1,4 @@
+#include <memory>
 #define JSON_NOEXCEPTION 1
 #include <sodium/crypto_sign.h>
 #include <sodium/crypto_box.h>
@@ -171,7 +172,7 @@ SpanCharacteristic* statusLowBtr;
 SpanCharacteristic* btrLevel;
 esp_mqtt_client_handle_t client = nullptr;
 
-std::unique_ptr<Pixel> pixel;
+std::shared_ptr<Pixel> pixel;
 
 bool save_to_nvs() {
   std::vector<uint8_t> serialized = nlohmann::json::to_msgpack(readerData);
@@ -1122,7 +1123,7 @@ void setupWeb() {
           if (espConfig::miscConfig.nfcNeopixelPin == 255 && it.value() != 255 && neopixel_task_handle == nullptr) {
             xTaskCreate(neopixel_task, "neopixel_task", 4096, NULL, 2, &neopixel_task_handle);
             if (!pixel) {
-              pixel = std::make_unique<Pixel>(it.value(), PixelType::GRB);
+              pixel = std::make_shared<Pixel>(it.value(), PixelType::GRB);
             }
           } else if (espConfig::miscConfig.nfcNeopixelPin != 255 && it.value() == 255 && neopixel_task_handle != nullptr) {
             uint8_t status = 2;
@@ -1657,7 +1658,7 @@ void setup() {
   homeSpan.setControllerCallback(pairCallback);
   homeSpan.setConnectionCallback(wifiCallback);
   if (espConfig::miscConfig.nfcNeopixelPin != 255) {
-    pixel = std::make_unique<Pixel>(espConfig::miscConfig.nfcNeopixelPin, pixelTypeMap[espConfig::miscConfig.neoPixelType]);
+    pixel = std::make_shared<Pixel>(espConfig::miscConfig.nfcNeopixelPin, pixelTypeMap[espConfig::miscConfig.neoPixelType]);
     xTaskCreate(neopixel_task, "neopixel_task", 4096, NULL, 2, &neopixel_task_handle);
   }
   if (espConfig::miscConfig.nfcSuccessPin != 255 || espConfig::miscConfig.nfcFailPin != 255) {
