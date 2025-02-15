@@ -8,8 +8,9 @@
                 <div style="margin-bottom: 1rem;">
                     <div id="custom-tabs" style="display: flex;justify-content: space-around;">
                         <h3 class="custom-tabs-selected-tab" style="margin: 0;width: fit-content;padding: 0.5rem;cursor: pointer;" onclick="switchTab(this)" data-tab-index="0">HomeKit</h3>
-                        <h3 style="margin: 0;width: fit-content;padding: 0.5rem;cursor: pointer;" onclick="switchTab(this)" data-tab-index="1">PN532</h3>
-                        <h3 style="margin: 0;width: fit-content;padding: 0.5rem;cursor: pointer;" onclick="switchTab(this)" data-tab-index="2">HomeSpan</h3>
+                        <h3 style="margin: 0;width: fit-content;padding: 0.5rem;cursor: pointer;" onclick="switchTab(this)" data-tab-index="1">HomeKey</h3>
+                        <h3 style="margin: 0;width: fit-content;padding: 0.5rem;cursor: pointer;" onclick="switchTab(this)" data-tab-index="2">PN532</h3>
+                        <h3 style="margin: 0;width: fit-content;padding: 0.5rem;cursor: pointer;" onclick="switchTab(this)" data-tab-index="3">HomeSpan</h3>
                     </div>
                     <span style="height: 1px;border-top: 1px #424242 solid;display: block;margin: 0;padding: 0;"></span>
                 </div>
@@ -56,6 +57,25 @@
                         <label for="btr-low-threshold">Battery low status Threshold</label>
                         <input type="number" name="btr-low-threshold" id="btr-low-threshold" placeholder="10" min="0" max="100" value="%BTRLOWTHRESHOLD%" style="width: 4rem;" />
                     </div>
+                </div>
+                <div class="custom-tabs-hidden-body" data-custom-tabs-body="1">
+                    <fieldset>
+                        <legend>Alt action Initiator Button</legend>
+                        <div style="display: flex;gap: 16px;flex-direction: column;padding: .5rem;">
+                            <div style="display: flex;gap: 8px;">
+                                <label for="hk-alt-action-init-pin">GPIO Pin</label>
+                                <input type="number" name="hk-alt-action-init-pin" id="hk-alt-action-init-pin" placeholder="255" min="0" max="100" value="%HKALTACTIONINITPIN%" style="width: 4rem;" />
+                            </div>
+                            <div style="display: flex;gap: 8px;">
+                                <label for="hk-alt-action-init-timeout">Timeout (ms)</label>
+                                <input type="number" name="hk-alt-action-init-timeout" id="hk-alt-action-init-timeout" placeholder="5000" min="0" max="10000" value="%HKALTACTIONINITTIME%" style="width: 4rem;" />
+                            </div>
+                            <div style="display: flex;gap: 8px;">
+                                <label for="hk-alt-action-led-pin">Feedback LED Pin</label>
+                                <input type="number" name="hk-alt-action-led-pin" id="hk-alt-action-led-pin" placeholder="255" min="0" max="100" value="%HKALTACTIONLEDPIN%" style="width: 4rem;" />
+                            </div>
+                        </div>
+                    </fieldset>
                     <fieldset>
                         <legend>HomeKey Card Finish:</legend>
                         <div style="display: flex;justify-content: space-evenly;margin-bottom: 0;padding-bottom: 0;">
@@ -91,7 +111,7 @@
                         </div>
                     </fieldset>
                 </div>
-                <div class="custom-tabs-hidden-body" data-custom-tabs-body="1">
+                <div class="custom-tabs-hidden-body" data-custom-tabs-body="2">
                     <div style="display: flex;flex-wrap: wrap;justify-content: center;gap: 16px;">
                         <div style="display: flex;flex-direction: column;">
                             <label for="nfc-ss-gpio-pin">SS Pin</label>
@@ -115,7 +135,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="custom-tabs-hidden-body" data-custom-tabs-body="2">
+                <div class="custom-tabs-hidden-body" data-custom-tabs-body="3">
                     <a href="https://github.com/HomeSpan/HomeSpan/blob/master/docs/GettingStarted.md#adding-a-control-button-and-status-led-optional" style="margin-bottom: 1rem;color: white;">HomeSpan Documentation</a>
                     <div>
                         <label for="ota-passwd">OTA Password</label>
