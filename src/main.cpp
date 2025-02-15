@@ -1078,7 +1078,7 @@ void setupWeb() {
     const char* TAG = "mqttconfig";
     int params = request->params();
     for (int i = 0; i < params; i++) {
-      AsyncWebParameter* p = request->getParam(i);
+      const AsyncWebParameter* p = request->getParam(i);
       LOG(V, "POST[%s]: %s\n", p->name().c_str(), p->value().c_str());
       if (!strcmp(p->name().c_str(), "mqtt-broker")) {
         espConfig::mqttData.mqttBroker = p->value().c_str();
@@ -1161,7 +1161,7 @@ void setupWeb() {
     const char* TAG = "misc-config";
     int params = request->params();
     for (int i = 0; i < params; i++) {
-      AsyncWebParameter* p = request->getParam(i);
+      const AsyncWebParameter* p = request->getParam(i);
       LOG(V, "POST[%s]: %s\n", p->name().c_str(), p->value().c_str());
       if (!strcmp(p->name().c_str(), "device-name")) {
         espConfig::miscConfig.deviceName = p->value().c_str();
@@ -1274,7 +1274,7 @@ void setupWeb() {
     const char* TAG = "actions-config";
     int params = request->params();
     for (int i = 0; i < params; i++) {
-      AsyncWebParameter* p = request->getParam(i);
+      const AsyncWebParameter* p = request->getParam(i);
       LOG(V, "POST[%s]: %s\n", p->name().c_str(), p->value().c_str());
       if (!strcmp(p->name().c_str(), "nfc-neopixel-pin")) {
         if (!GPIO_IS_VALID_GPIO(p->value().toInt()) && !GPIO_IS_VALID_OUTPUT_GPIO(p->value().toInt()) && p->value().toInt() != 255) {
