@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <memory>
 #define JSON_NOEXCEPTION 1
 #include <sodium/crypto_sign.h>
@@ -56,11 +57,98 @@ struct gpioLockAction
 
 std::string platform_create_id_string(void) {
   uint8_t mac[6];
-  char id_string[32];
-  esp_read_mac(mac, ESP_MAC_WIFI_STA);
+  char id_string[13];
+  esp_read_mac(mac, ESP_MAC_BT);
   sprintf(id_string, "ESP32_%02x%02X%02X", mac[3], mac[4], mac[5]);
-  return std::string();
+  return std::string(id_string);
 }
+
+struct eth_chip_desc_t {
+  std::string name;
+  bool emac;
+  eth_phy_type_t phy_type;
+  NLOHMANN_DEFINE_TYPE_INTRUSIVE_ONLY_SERIALIZE(eth_chip_desc_t, name, emac, phy_type)
+};
+
+struct eth_board_presets_t {
+  std::string name;
+  eth_chip_desc_t ethChip;
+  #if CONFIG_ETH_USE_ESP32_EMAC
+  struct rmii_conf_t {
+    int32_t phy_addr = 1;
+    uint8_t pin_mcd = 23;
+    uint8_t pin_mdio = 18;
+    int8_t pin_power = -1;
+    eth_clock_mode_t pin_rmii_clock = ETH_CLOCK_GPIO0_IN;
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE_ONLY_SERIALIZE(rmii_conf_t, phy_addr, pin_mcd, pin_mdio, pin_power, pin_rmii_clock)
+  } rmii_conf;
+  #endif
+  struct spi_conf_t {
+    uint8_t spi_freq_mhz = 20;
+    uint8_t pin_cs = SS;
+    uint8_t pin_irq = A4;
+    uint8_t pin_rst = A5;
+    uint8_t pin_sck = SCK;
+    uint8_t pin_miso = MISO;
+    uint8_t pin_mosi = MOSI;
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE_ONLY_SERIALIZE(spi_conf_t, spi_freq_mhz, pin_cs, pin_irq, pin_rst, pin_sck, pin_miso, pin_mosi)
+  } spi_conf;
+  friend void to_json(nlohmann ::json &nlohmann_json_j, const eth_board_presets_t &nlohmann_json_t) {
+    nlohmann_json_j["name"] = nlohmann_json_t.name;
+    nlohmann_json_j["ethChip"] = nlohmann_json_t.ethChip;
+    if (nlohmann_json_t.ethChip.emac) {
+    #if CONFIG_ETH_USE_ESP32_EMAC
+      nlohmann_json_j["rmii_conf"] = nlohmann_json_t.rmii_conf;
+    #endif
+    } else {
+      nlohmann_json_j["spi_conf"] = nlohmann_json_t.spi_conf;
+    }
+  }
+};
+
+namespace eth_config_ns {
+  std::map<eth_phy_type_t, eth_chip_desc_t> supportedChips = {
+  #if CONFIG_ETH_USE_ESP32_EMAC
+      {ETH_PHY_LAN8720, eth_chip_desc_t{"LAN8720", true, ETH_PHY_LAN8720}},
+      {ETH_PHY_TLK110, eth_chip_desc_t{"TLK110", true, ETH_PHY_TLK110}},
+      {ETH_PHY_RTL8201, eth_chip_desc_t{"RTL8201", true, ETH_PHY_RTL8201}},
+      {ETH_PHY_DP83848, eth_chip_desc_t{"DP83848", true, ETH_PHY_DP83848}},
+      {ETH_PHY_KSZ8041, eth_chip_desc_t{"KSZ8041", true, ETH_PHY_KSZ8041}},
+      {ETH_PHY_KSZ8081, eth_chip_desc_t{"KSZ8081", true, ETH_PHY_KSZ8081}},
+  #endif
+  #if CONFIG_ETH_SPI_ETHERNET_DM9051
+      {ETH_PHY_DM9051, eth_chip_desc_t{"DM9051", false, ETH_PHY_DM9051}},
+  #endif
+  #if CONFIG_ETH_SPI_ETHERNET_W5500
+      {ETH_PHY_W5500, eth_chip_desc_t{"W5500", false, ETH_PHY_W5500}},
+  #endif
+  #if CONFIG_ETH_SPI_ETHERNET_KSZ8851SNL
+      {ETH_PHY_KSZ8851, eth_chip_desc_t{"KSZ8851", false, ETH_PHY_KSZ8851}},
+  #endif
+  };
+  std::vector<eth_board_presets_t> boardPresets = {
+      eth_board_presets_t{.name = "Generic W5500",
+                          .ethChip = supportedChips[ETH_PHY_W5500],
+                          .spi_conf{20, SS, A3, A4, SCK, MISO, MOSI}},
+      eth_board_presets_t{.name = "T-ETH-Lite-ESP32S3",
+                          .ethChip = supportedChips[ETH_PHY_W5500],
+                          .spi_conf{20, 9, 13, 14, 10, 11, 12}},
+  #if CONFIG_ETH_USE_ESP32_EMAC
+      eth_board_presets_t{.name = "WT32-ETH01",
+                          .ethChip = supportedChips[ETH_PHY_LAN8720],
+                          .rmii_conf{1, 23, 18, 16, ETH_CLOCK_GPIO0_IN}},
+      eth_board_presets_t{.name = "Olimex ESP32-POE",
+                          .ethChip = supportedChips[ETH_PHY_LAN8720],
+                          .rmii_conf{0, 23, 18, 12, ETH_CLOCK_GPIO17_OUT}},
+      eth_board_presets_t{.name = "EST-PoE-32",
+                          .ethChip = supportedChips[ETH_PHY_LAN8720],
+                          .rmii_conf{0, 23, 18, 12, ETH_CLOCK_GPIO17_OUT}},
+      eth_board_presets_t{.name = "T-ETH-Lite-ESP32",
+                          .ethChip = supportedChips[ETH_PHY_RTL8201],
+                          .rmii_conf{0, 23, 18, 12, ETH_CLOCK_GPIO0_IN}}
+  #endif
+  };
+};
 
 namespace espConfig
 {
@@ -156,13 +244,33 @@ namespace espConfig
     uint8_t hkAltActionPin = GPIO_HK_ALT_ACTION_PIN;
     uint16_t hkAltActionTimeout = GPIO_HK_ALT_ACTION_TIMEOUT;
     uint8_t hkAltActionGpioState = GPIO_HK_ALT_ACTION_GPIO_STATE;
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(misc_config_t, deviceName, otaPasswd, hk_key_color, setupCode, lockAlwaysUnlock, lockAlwaysLock, controlPin, hsStatusPin,
-      nfcSuccessPin, nfcSuccessTime, nfcNeopixelPin, neoPixelType, neopixelSuccessColor, neopixelFailureColor, neopixelSuccessTime, neopixelFailTime, nfcSuccessHL, nfcFailPin,
-      nfcFailTime, nfcFailHL, gpioActionPin, gpioActionLockState, gpioActionUnlockState, gpioActionMomentaryEnabled, gpioActionMomentaryTimeout, webAuthEnabled, webUsername,
-      webPassword, nfcGpioPins, btrLowStatusThreshold, proxBatEnabled, hkDumbSwitchMode, hkAltActionInitPin, hkAltActionInitLedPin, hkAltActionInitTimeout, hkAltActionPin,
-      hkAltActionTimeout, hkAltActionGpioState, hkGpioControlledState)
+    bool ethernetEnabled = false;
+    uint8_t ethActivePreset = 255; // 255 for custom pins
+    uint8_t ethPhyType = 0;
+    #if CONFIG_ETH_USE_ESP32_EMAC
+    std::array<int8_t, 5> ethRmiiConfig = {0, -1, -1, -1, 0};
+    #endif
+    std::array<int8_t, 7> ethSpiConfig = {20, -1, -1, -1, -1, -1, -1};
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(
+        misc_config_t, deviceName, otaPasswd, hk_key_color, setupCode,
+        lockAlwaysUnlock, lockAlwaysLock, controlPin, hsStatusPin,
+        nfcSuccessPin, nfcSuccessTime, nfcNeopixelPin, neoPixelType,
+        neopixelSuccessColor, neopixelFailureColor, neopixelSuccessTime,
+        neopixelFailTime, nfcSuccessHL, nfcFailPin, nfcFailTime, nfcFailHL,
+        gpioActionPin, gpioActionLockState, gpioActionUnlockState,
+        gpioActionMomentaryEnabled, gpioActionMomentaryTimeout, webAuthEnabled,
+        webUsername, webPassword, nfcGpioPins, btrLowStatusThreshold,
+        proxBatEnabled, hkDumbSwitchMode, hkAltActionInitPin,
+        hkAltActionInitLedPin, hkAltActionInitTimeout, hkAltActionPin,
+        hkAltActionTimeout, hkAltActionGpioState, hkGpioControlledState,
+        ethernetEnabled, ethActivePreset, ethPhyType,
+#if CONFIG_ETH_USE_ESP32_EMAC
+        ethRmiiConfig,
+#endif
+        ethSpiConfig
+    )
   } miscConfig;
-};
+}; // namespace espConfig
 
 KeyFlow hkFlow = KeyFlow::kFlowFAST;
 bool hkAltActionActive = false;
@@ -225,8 +333,8 @@ struct NFCAccessoryInformation : Service::AccessoryInformation
     const esp_app_desc_t* app_desc = esp_app_get_description();
     std::string app_version = app_desc->version;
     uint8_t mac[6];
-    WiFi.macAddress(mac);
-    char macStr[18] = { 0 };
+    esp_read_mac(mac, ESP_MAC_BT);
+    char macStr[9] = { 0 };
     sprintf(macStr, "%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3]);
     std::string serialNumber = "HK-";
     serialNumber.append(macStr);
@@ -582,20 +690,20 @@ void setFlow(const char* buf) {
   switch (buf[1]) {
   case '0':
     hkFlow = KeyFlow::kFlowFAST;
-    Serial.println("FAST Flow");
+    LOG(I, "FAST Flow");
     break;
 
   case '1':
     hkFlow = KeyFlow::kFlowSTANDARD;
-    Serial.println("STANDARD Flow");
+    LOG(I, "STANDARD Flow");
     break;
   case '2':
     hkFlow = KeyFlow::kFlowATTESTATION;
-    Serial.println("ATTESTATION Flow");
+    LOG(I, "ATTESTATION Flow");
     break;
 
   default:
-    Serial.println("0 = FAST flow, 1 = STANDARD Flow, 2 = ATTESTATION Flow");
+    LOG(I, "0 = FAST flow, 1 = STANDARD Flow, 2 = ATTESTATION Flow");
     break;
   }
 }
@@ -604,22 +712,22 @@ void setLogLevel(const char* buf) {
   esp_log_level_t level = esp_log_level_get("*");
   if (strncmp(buf + 1, "E", 1) == 0) {
     level = ESP_LOG_ERROR;
-    Serial.println("ERROR");
+    LOG(I, "ERROR");
   } else if (strncmp(buf + 1, "W", 1) == 0) {
     level = ESP_LOG_WARN;
-    Serial.println("WARNING");
+    LOG(I, "WARNING");
   } else if (strncmp(buf + 1, "I", 1) == 0) {
     level = ESP_LOG_INFO;
-    Serial.println("INFO");
+    LOG(I, "INFO");
   } else if (strncmp(buf + 1, "D", 1) == 0) {
     level = ESP_LOG_DEBUG;
-    Serial.println("DEBUG");
+    LOG(I, "DEBUG");
   } else if (strncmp(buf + 1, "V", 1) == 0) {
     level = ESP_LOG_VERBOSE;
-    Serial.println("VERBOSE");
+    LOG(I, "VERBOSE");
   } else if (strncmp(buf + 1, "N", 1) == 0) {
     level = ESP_LOG_NONE;
-    Serial.println("NONE");
+    LOG(I, "NONE");
   }
 
   esp_log_level_set(TAG, level);
@@ -847,7 +955,7 @@ void mqtt_data_handler(void* event_handler_arg, esp_event_base_t event_base, int
  * parameters.
  */
 static void mqtt_app_start(void) {
-  esp_mqtt_client_config_t mqtt_cfg;
+  esp_mqtt_client_config_t mqtt_cfg {};
   mqtt_cfg.broker.address.hostname = espConfig::mqttData.mqttBroker.c_str();
   mqtt_cfg.broker.address.port = espConfig::mqttData.mqttPort;
   mqtt_cfg.broker.address.transport = MQTT_TRANSPORT_OVER_TCP;
@@ -870,15 +978,15 @@ void notFound(AsyncWebServerRequest* request) {
 }
 
 void listDir(fs::FS& fs, const char* dirname, uint8_t levels) {
-  Serial.printf("Listing directory: %s\r\n", dirname);
+  LOG(I, "Listing directory: %s\r\n", dirname);
 
   File root = fs.open(dirname);
   if (!root) {
-    Serial.println("- failed to open directory");
+    LOG(I, "- failed to open directory");
     return;
   }
   if (!root.isDirectory()) {
-    Serial.println(" - not a directory");
+    LOG(I, " - not a directory");
     return;
   }
 
@@ -886,7 +994,7 @@ void listDir(fs::FS& fs, const char* dirname, uint8_t levels) {
   while (file) {
     if (file.isDirectory()) {
       Serial.print("  DIR : ");
-      Serial.println(file.name());
+      LOG(I, "%s", file.name());
       if (levels) {
         listDir(fs, file.name(), levels - 1);
       }
@@ -894,7 +1002,7 @@ void listDir(fs::FS& fs, const char* dirname, uint8_t levels) {
       Serial.print("  FILE: ");
       Serial.print(file.name());
       Serial.print("\tSIZE: ");
-      Serial.println(file.size());
+      LOG(I, "%d", file.size());
     }
     file = root.openNextFile();
   }
@@ -974,6 +1082,20 @@ void setupWeb() {
         req->send(500);
       }
     } else req->send(500);
+  });
+  AsyncCallbackWebHandler* ethSuppportConfig = new AsyncCallbackWebHandler();
+  webServer.addHandler(ethSuppportConfig);
+  ethSuppportConfig->setUri("/eth_get_config");
+  ethSuppportConfig->setMethod(HTTP_GET);
+  ethSuppportConfig->onRequest([](AsyncWebServerRequest *req) {
+    json eth_config;
+    eth_config["supportedChips"] = json::array();
+    for (auto &&v : eth_config_ns::supportedChips) {
+      eth_config.at("supportedChips").push_back(v.second);
+    }
+    eth_config["boardPresets"] = eth_config_ns::boardPresets;
+    eth_config["ethEnabled"] = espConfig::miscConfig.ethernetEnabled;
+    req->send(200, "application/json", eth_config.dump().c_str());
   });
   AsyncCallbackWebHandler* dataClear = new AsyncCallbackWebHandler();
   webServer.addHandler(dataClear);
@@ -1222,6 +1344,16 @@ void setupWeb() {
     ESP.restart();
     });
   webServer.addHandler(rebootDeviceHandle);
+  auto startConfigAP = new AsyncCallbackWebHandler();
+  startConfigAP->setUri("/start_config_ap");
+  startConfigAP->setMethod(HTTP_GET);
+  startConfigAP->onRequest([](AsyncWebServerRequest* request) {
+    request->send(200, "text/plain", "Starting the AP...");
+    delay(1000);
+    webServer.end();
+    homeSpan.processSerialCommand("A");
+    });
+  webServer.addHandler(startConfigAP);
   auto resetHkHandle = new AsyncCallbackWebHandler();
   resetHkHandle->setUri("/reset_hk_pair");
   resetHkHandle->setMethod(HTTP_GET);
@@ -1274,6 +1406,8 @@ void setupWeb() {
     resetHkHandle->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
     resetWifiHandle->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
     getWifiRssi->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
+    startConfigAP->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
+    ethSuppportConfig->setAuthentication(espConfig::miscConfig.webUsername.c_str(), espConfig::miscConfig.webPassword.c_str());
   }
   webServer.onNotFound(notFound);
   webServer.begin();
@@ -1502,6 +1636,31 @@ void nfc_thread_entry(void* arg) {
   return;
 }
 
+void onEvent(arduino_event_id_t event, arduino_event_info_t info) {
+  uint8_t mac[6] = { 0, 0, 0, 0, 0, 0 };
+  char macStr[13] = {0};
+  switch (event) {
+    case ARDUINO_EVENT_ETH_START:
+      LOG(I, "ETH Started");
+      ETH.macAddress(mac);
+      sprintf(macStr, "ESP32_%02X%02X%02X", mac[0], mac[1], mac[2]);
+      ETH.setHostname(macStr);
+      break;
+    case ARDUINO_EVENT_ETH_CONNECTED: LOG(I, "ETH Connected"); break;
+    case ARDUINO_EVENT_ETH_GOT_IP:    LOG(I, "ETH Got IP: '%s'\n", esp_netif_get_desc(info.got_ip.esp_netif)); break;
+    case ARDUINO_EVENT_ETH_LOST_IP:
+      LOG(I, "ETH Lost IP");
+      break;
+    case ARDUINO_EVENT_ETH_DISCONNECTED:
+      LOG(I, "ETH Disconnected");
+      break;
+    case ARDUINO_EVENT_ETH_STOP:
+      LOG(I, "ETH Stopped");
+      break;
+    default: break;
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   const esp_app_desc_t* app_desc = esp_app_get_description();
@@ -1593,10 +1752,39 @@ void setup() {
     }
   }
   if (!LittleFS.begin(true)) {
-    Serial.println("An Error has occurred while mounting LITTLEFS");
+    LOG(I, "An Error has occurred while mounting LITTLEFS");
     return;
   }
   listDir(LittleFS, "/", 0);
+  LOG(I, "LittleFS used space: %d / %d", LittleFS.usedBytes(), LittleFS.totalBytes());
+  if (espConfig::miscConfig.ethernetEnabled) {
+    Network.onEvent(onEvent);
+    if (espConfig::miscConfig.ethActivePreset != 255) {
+      if (espConfig::miscConfig.ethActivePreset >= eth_config_ns::boardPresets.size()) {
+        LOG(E, "Invalid preset index, not initializing ethernet!");
+      } else {
+        eth_board_presets_t ethPreset = eth_config_ns::boardPresets[espConfig::miscConfig.ethActivePreset];
+        if (!ethPreset.ethChip.emac) {
+          ETH.begin(ethPreset.ethChip.phy_type, 1, ethPreset.spi_conf.pin_cs, ethPreset.spi_conf.pin_irq, ethPreset.spi_conf.pin_rst, SPI2_HOST, ethPreset.spi_conf.pin_sck, ethPreset.spi_conf.pin_miso, ethPreset.spi_conf.pin_mosi, ethPreset.spi_conf.spi_freq_mhz);
+        } else {
+  #if CONFIG_ETH_USE_ESP32_EMAC
+          ETH.begin(ethPreset.ethChip.phy_type, ethPreset.rmii_conf.phy_addr, ethPreset.rmii_conf.pin_mcd, ethPreset.rmii_conf.pin_mdio, ethPreset.rmii_conf.pin_power, ethPreset.rmii_conf.pin_rmii_clock);
+  #else
+          LOG(E, "Selected a chip without MAC but %s doesn't have a builtin MAC, cannot initialize ethernet!", CONFIG_IDF_TARGET);
+  #endif
+        }
+      }
+    } else if (espConfig::miscConfig.ethActivePreset == 255) {
+      eth_chip_desc_t chipType = eth_config_ns::supportedChips[eth_phy_type_t(espConfig::miscConfig.ethPhyType)];
+      if (!chipType.emac) {
+        ETH.begin(chipType.phy_type, 1, espConfig::miscConfig.ethSpiConfig[1], espConfig::miscConfig.ethSpiConfig[2], espConfig::miscConfig.ethSpiConfig[3], SPI2_HOST, espConfig::miscConfig.ethSpiConfig[4], espConfig::miscConfig.ethSpiConfig[5], espConfig::miscConfig.ethSpiConfig[6], espConfig::miscConfig.ethSpiConfig[0]);
+      } else {
+#if CONFIG_ETH_USE_ESP32_EMAC
+        ETH.begin(chipType.phy_type, espConfig::miscConfig.ethRmiiConfig[0], espConfig::miscConfig.ethRmiiConfig[1], espConfig::miscConfig.ethRmiiConfig[2], espConfig::miscConfig.ethRmiiConfig[3], eth_clock_mode_t(espConfig::miscConfig.ethRmiiConfig[4]));
+#endif
+      }
+    }
+  }
   if (espConfig::miscConfig.controlPin != 255) {
     homeSpan.setControlPin(espConfig::miscConfig.controlPin);
   }
@@ -1617,7 +1805,12 @@ void setup() {
   homeSpan.enableAutoStartAP();
   homeSpan.enableOTA(espConfig::miscConfig.otaPasswd.c_str());
   homeSpan.setPortNum(1201);
-  homeSpan.begin(Category::Locks, espConfig::miscConfig.deviceName.c_str(), "HK", "HomeKey-ESP32");
+  uint8_t mac[6];
+  esp_read_mac(mac, ESP_MAC_BT);
+  char macStr[9] = { 0 };
+  sprintf(macStr, "%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3]);
+  homeSpan.setHostNameSuffix(macStr);
+  homeSpan.begin(Category::Locks, espConfig::miscConfig.deviceName.c_str(), "HK-", "HomeKey-ESP32");
 
   new SpanUserCommand('D', "Delete Home Key Data", deleteReaderData);
   new SpanUserCommand('L', "Set Log Level", setLogLevel);
@@ -1646,9 +1839,9 @@ void setup() {
   });
 
   new SpanAccessory();
+  new NFCAccessoryInformation();
   new Service::HAPProtocolInformation();
   new Characteristic::Version();
-  new NFCAccessoryInformation();
   new LockManagement();
   new LockMechanism();
   new NFCAccess();
