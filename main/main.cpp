@@ -1,24 +1,26 @@
+#include <memory>
 #define JSON_NOEXCEPTION 1
-#include <hkAuthContext.h>
-#include <HomeKey.h>
-#include <array>
-#include <utils.h>
-#include <HomeSpan.h>
-#include <PN532_SPI.h>
-#include <PN532.h>
-#include <HAP.h>
-#include <chrono>
-#include <AsyncTCP.h>
-#include <ESPAsyncWebServer.h>
-#include <LittleFS.h>
-#include <HK_HomeKit.h>
+#include <sodium/crypto_sign.h>
+#include <sodium/crypto_box.h>
+#include "HAP.h"
+#include "hkAuthContext.h"
+#include "HomeKey.h"
+#include "array"
+#include "logging.h"
+#include "HomeSpan.h"
+#include "PN532_SPI.h"
+#include "PN532.h"
+#include "chrono"
+#include "ESPAsyncWebServer.h"
+#include "LittleFS.h"
+#include "HK_HomeKit.h"
 #include "config.h"
-#include <mqtt_client.h>
-#include <esp_ota_ops.h>
-#include <esp_task.h>
-#include <pins_arduino.h>
-#include <src/extras/Pixel.h>
-#include <string_view>
+#include "mqtt_client.h"
+#include "esp_app_desc.h"
+#include "pins_arduino.h"
+#include "NFC_SERV_CHARS.h"
+#include <mbedtls/sha256.h>
+#include <esp_mac.h>
 
 const char* TAG = "MAIN";
 
@@ -39,7 +41,7 @@ nvs_handle savedData;
 readerData_t readerData;
 uint8_t ecpData[18] = { 0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0 };
 const std::array<std::array<uint8_t, 6>, 4> hk_color_vals = { {{0x01,0x04,0xce,0xd5,0xda,0x00}, {0x01,0x04,0xaa,0xd6,0xec,0x00}, {0x01,0x04,0xe3,0xe3,0xe3,0x00}, {0x01,0x04,0x00,0x00,0x00,0x00}} };
-const std::array<const uint8_t*, 6> pixelTypeMap = { PixelType::RGB, PixelType::RBG, PixelType::BRG, PixelType::BGR, PixelType::GBR, PixelType::GRB };
+const std::array<const char*, 6> pixelTypeMap = { "RGB", "RBG", "BRG", "BGR", "GBR", "GRB" };
 struct gpioLockAction
 {
   enum
@@ -57,7 +59,7 @@ std::string platform_create_id_string(void) {
   char id_string[32];
   esp_read_mac(mac, ESP_MAC_WIFI_STA);
   sprintf(id_string, "ESP32_%02x%02X%02X", mac[3], mac[4], mac[5]);
-  return std::string(id_string);
+  return std::string();
 }
 
 namespace espConfig
@@ -170,7 +172,7 @@ SpanCharacteristic* statusLowBtr;
 SpanCharacteristic* btrLevel;
 esp_mqtt_client_handle_t client = nullptr;
 
-std::unique_ptr<Pixel> pixel;
+std::shared_ptr<Pixel> pixel;
 
 bool save_to_nvs() {
   std::vector<uint8_t> serialized = nlohmann::json::to_msgpack(readerData);
@@ -184,7 +186,7 @@ bool save_to_nvs() {
 struct PhysicalLockBattery : Service::BatteryService
 {
   PhysicalLockBattery() {
-    LOG(D, "Configuring PhysicalLockBattery");
+    LOG(I, "Configuring PhysicalLockBattery");
     statusLowBtr = new Characteristic::StatusLowBattery(0, true);
     btrLevel = new Characteristic::BatteryLevel(100, true);
   }
@@ -198,7 +200,7 @@ struct LockManagement : Service::LockManagement
 
   LockManagement() : Service::LockManagement() {
 
-    LOG(D, "Configuring LockManagement"); // initialization message
+    LOG(I, "Configuring LockManagement"); // initialization message
 
     lockControlPoint = new Characteristic::LockControlPoint();
     version = new Characteristic::Version();
@@ -206,6 +208,37 @@ struct LockManagement : Service::LockManagement
   } // end constructor
 
 }; // end LockManagement
+
+struct NFCAccessoryInformation : Service::AccessoryInformation
+{
+  const char* TAG = "NFCAccessoryInformation";
+
+  NFCAccessoryInformation() : Service::AccessoryInformation() {
+
+    LOG(I, "Configuring NFCAccessoryInformation"); // initialization message
+
+    opt.push_back(&_CUSTOM_HardwareFinish);
+    new Characteristic::Identify();
+    new Characteristic::Manufacturer("rednblkx");
+    new Characteristic::Model("HomeKey-ESP32");
+    new Characteristic::Name(DEVICE_NAME);
+    const esp_app_desc_t* app_desc = esp_app_get_description();
+    std::string app_version = app_desc->version;
+    uint8_t mac[6];
+    WiFi.macAddress(mac);
+    char macStr[18] = { 0 };
+    sprintf(macStr, "%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3]);
+    std::string serialNumber = "HK-";
+    serialNumber.append(macStr);
+    new Characteristic::SerialNumber(serialNumber.c_str());
+    new Characteristic::FirmwareRevision(app_version.c_str());
+    std::array<uint8_t, 6> decB64 = hk_color_vals[HK_COLOR(espConfig::miscConfig.hk_key_color)];
+    TLV8 hwfinish(NULL, 0);
+    hwfinish.unpack(decB64.data(), decB64.size());
+    new Characteristic::HardwareFinish(hwfinish);
+
+  } // end constructor
+};
 
 // Function to calculate CRC16
 void crc16a(unsigned char* data, unsigned int size, unsigned char* result) {
@@ -382,6 +415,7 @@ void nfc_gpio_task(void* arg) {
             delay(espConfig::miscConfig.hkAltActionTimeout);
             digitalWrite(espConfig::miscConfig.hkAltActionPin, !espConfig::miscConfig.hkAltActionGpioState);
           }
+          break;
         default:
           LOG(I, "STOP");
           vTaskDelete(NULL);
@@ -462,9 +496,9 @@ struct NFCAccess : Service::NFCAccess
   }
 
   boolean update() {
-    LOG(D, "PROVISIONED READER KEY: %s", utils::bufToHexString(readerData.reader_pk.data(), readerData.reader_pk.size()).c_str());
-    LOG(D, "READER GROUP IDENTIFIER: %s", utils::bufToHexString(readerData.reader_gid.data(), readerData.reader_gid.size()).c_str());
-    LOG(D, "READER UNIQUE IDENTIFIER: %s", utils::bufToHexString(readerData.reader_id.data(), readerData.reader_id.size()).c_str());
+    LOG(D, "PROVISIONED READER KEY: %s", red_log::bufToHexString(readerData.reader_pk.data(), readerData.reader_pk.size()).c_str());
+    LOG(D, "READER GROUP IDENTIFIER: %s", red_log::bufToHexString(readerData.reader_gid.data(), readerData.reader_gid.size()).c_str());
+    LOG(D, "READER UNIQUE IDENTIFIER: %s", red_log::bufToHexString(readerData.reader_id.data(), readerData.reader_id.size()).c_str());
 
     TLV8 ctrlData(NULL, 0);
     nfcControlPoint->getNewTLV(ctrlData);
@@ -472,7 +506,7 @@ struct NFCAccess : Service::NFCAccess
     ctrlData.pack(tlvData.data());
     if (tlvData.size() == 0)
       return false;
-    LOG(D, "Decoded data: %s", utils::bufToHexString(tlvData.data(), tlvData.size()).c_str());
+    LOG(D, "Decoded data: %s", red_log::bufToHexString(tlvData.data(), tlvData.size()).c_str());
     LOG(D, "Decoded data length: %d", tlvData.size());
     HK_HomeKit hkCtx(readerData, savedData, "READERDATA", tlvData);
     std::vector<uint8_t> result = hkCtx.processResult();
@@ -503,24 +537,38 @@ void deleteReaderData(const char* buf = "") {
   LOG(D, "*** NVS W STATUS");
 }
 
+std::vector<uint8_t> getHashIdentifier(const uint8_t* key, size_t len) {
+  const char* TAG = "getHashIdentifier";
+  LOG(V, "Key: %s, Length: %d", red_log::bufToHexString(key, len).c_str(), len);
+  std::vector<unsigned char> hashable;
+  std::string string = "key-identifier";
+  hashable.insert(hashable.begin(), string.begin(), string.end());
+  hashable.insert(hashable.end(), key, key + len);
+  LOG(V, "Hashable: %s", red_log::bufToHexString(&hashable.front(), hashable.size()).c_str());
+  uint8_t hash[32];
+  mbedtls_sha256(&hashable.front(), hashable.size(), hash, 0);
+  LOG(V, "HashIdentifier: %s", red_log::bufToHexString(hash, 8).c_str());
+  return std::vector<uint8_t>{hash, hash + 8};
+}
+
 void pairCallback() {
   if (HAPClient::nAdminControllers() == 0) {
     deleteReaderData(NULL);
     return;
   }
   for (auto it = homeSpan.controllerListBegin(); it != homeSpan.controllerListEnd(); ++it) {
-    std::vector<uint8_t> id = utils::getHashIdentifier(it->getLTPK(), 32, true);
-    LOG(D, "Found allocated controller - Hash: %s", utils::bufToHexString(id.data(), 8).c_str());
+    std::vector<uint8_t> id = getHashIdentifier(it->getLTPK(), 32);
+    LOG(D, "Found allocated controller - Hash: %s", red_log::bufToHexString(id.data(), 8).c_str());
     hkIssuer_t* foundIssuer = nullptr;
     for (auto&& issuer : readerData.issuers) {
       if (std::equal(issuer.issuer_id.begin(), issuer.issuer_id.end(), id.begin())) {
-        LOG(D, "Issuer %s already added, skipping", utils::bufToHexString(issuer.issuer_id.data(), issuer.issuer_id.size()).c_str());
+        LOG(D, "Issuer %s already added, skipping", red_log::bufToHexString(issuer.issuer_id.data(), issuer.issuer_id.size()).c_str());
         foundIssuer = &issuer;
         break;
       }
     }
     if (foundIssuer == nullptr) {
-      LOG(D, "Adding new issuer - ID: %s", utils::bufToHexString(id.data(), 8).c_str());
+      LOG(D, "Adding new issuer - ID: %s", red_log::bufToHexString(id.data(), 8).c_str());
       hkIssuer_t newIssuer;
       newIssuer.issuer_id = std::vector<uint8_t>{ id.begin(), id.begin() + 8 };
       newIssuer.issuer_pk.insert(newIssuer.issuer_pk.begin(), it->getLTPK(), it->getLTPK() + 32);
@@ -592,9 +640,9 @@ void setLogLevel(const char* buf) {
 
 void print_issuers(const char* buf) {
   for (auto&& issuer : readerData.issuers) {
-    LOG(I, "Issuer ID: %s, Public Key: %s", utils::bufToHexString(issuer.issuer_id.data(), issuer.issuer_id.size()).c_str(), utils::bufToHexString(issuer.issuer_pk.data(), issuer.issuer_pk.size()).c_str());
+    LOG(I, "Issuer ID: %s, Public Key: %s", red_log::bufToHexString(issuer.issuer_id.data(), issuer.issuer_id.size()).c_str(), red_log::bufToHexString(issuer.issuer_pk.data(), issuer.issuer_pk.size()).c_str());
     for (auto&& endpoint : issuer.endpoints) {
-      LOG(I, "Endpoint ID: %s, Public Key: %s", utils::bufToHexString(endpoint.endpoint_id.data(), endpoint.endpoint_id.size()).c_str(), utils::bufToHexString(endpoint.endpoint_pk.data(), endpoint.endpoint_pk.size()).c_str());
+      LOG(I, "Endpoint ID: %s, Public Key: %s", red_log::bufToHexString(endpoint.endpoint_id.data(), endpoint.endpoint_id.size()).c_str(), red_log::bufToHexString(endpoint.endpoint_pk.data(), endpoint.endpoint_pk.size()).c_str());
     }
   }
 }
@@ -682,7 +730,7 @@ void set_state_handler(esp_mqtt_client_handle_t client, int state) {
 void mqtt_connected_event(void* event_handler_arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
   esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
   esp_mqtt_client_handle_t client = event->client;
-  const esp_app_desc_t* app_desc = esp_ota_get_app_description();
+  const esp_app_desc_t* app_desc = esp_app_get_description();
   std::string app_version = app_desc->version;
   uint8_t mac[6];
   WiFi.macAddress(mac);
@@ -763,7 +811,7 @@ void mqtt_connected_event(void* event_handler_arg, esp_event_base_t event_base, 
 }
 
 void mqtt_data_handler(void* event_handler_arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
-  ESP_LOGD(TAG, "Event dispatched from callback type=%d", event_id);
+  // ESP_LOGD(TAG, "Event dispatched from callback type=%d", event_id);
   esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
   esp_mqtt_client_handle_t client = event->client;
   std::string topic(event->topic, event->topic + event->topic_len);
@@ -799,17 +847,18 @@ void mqtt_data_handler(void* event_handler_arg, esp_event_base_t event_base, int
  * parameters.
  */
 static void mqtt_app_start(void) {
-  esp_mqtt_client_config_t mqtt_cfg = { };
-  mqtt_cfg.host = espConfig::mqttData.mqttBroker.c_str();
-  mqtt_cfg.port = espConfig::mqttData.mqttPort;
-  mqtt_cfg.client_id = espConfig::mqttData.mqttClientId.c_str();
-  mqtt_cfg.username = espConfig::mqttData.mqttUsername.c_str();
-  mqtt_cfg.password = espConfig::mqttData.mqttPassword.c_str();
-  mqtt_cfg.lwt_topic = espConfig::mqttData.lwtTopic.c_str();
-  mqtt_cfg.lwt_msg = "offline";
-  mqtt_cfg.lwt_qos = 1;
-  mqtt_cfg.lwt_retain = 1;
-  mqtt_cfg.lwt_msg_len = 7;
+  esp_mqtt_client_config_t mqtt_cfg;
+  mqtt_cfg.broker.address.hostname = espConfig::mqttData.mqttBroker.c_str();
+  mqtt_cfg.broker.address.port = espConfig::mqttData.mqttPort;
+  mqtt_cfg.broker.address.transport = MQTT_TRANSPORT_OVER_TCP;
+  mqtt_cfg.credentials.client_id = espConfig::mqttData.mqttClientId.c_str();
+  mqtt_cfg.credentials.username = espConfig::mqttData.mqttUsername.c_str();
+  mqtt_cfg.credentials.authentication.password = espConfig::mqttData.mqttPassword.c_str();
+  mqtt_cfg.session.last_will.topic = espConfig::mqttData.lwtTopic.c_str();
+  mqtt_cfg.session.last_will.msg = "offline";
+  mqtt_cfg.session.last_will.msg_len = 7;
+  mqtt_cfg.session.last_will.retain = true;
+  mqtt_cfg.session.last_will.qos = 1;
   client = esp_mqtt_client_init(&mqtt_cfg);
   esp_mqtt_client_register_event(client, MQTT_EVENT_CONNECTED, mqtt_connected_event, client);
   esp_mqtt_client_register_event(client, MQTT_EVENT_DATA, mqtt_data_handler, client);
@@ -853,7 +902,7 @@ void listDir(fs::FS& fs, const char* dirname, uint8_t levels) {
 
 String indexProcess(const String& var) {
   if (var == "VERSION") {
-    const esp_app_desc_t* app_desc = esp_ota_get_app_description();
+    const esp_app_desc_t* app_desc = esp_app_get_description();
     std::string app_version = app_desc->version;
     return String(app_version.c_str());
   }
@@ -887,10 +936,10 @@ void setupWeb() {
         LOG(D, "HK DATA REQ");
         json inputData = readerData;
         if (inputData.contains("group_identifier")) {
-          serializedData["group_identifier"] = utils::bufToHexString(readerData.reader_gid.data(), readerData.reader_gid.size(), true);
+          serializedData["group_identifier"] = red_log::bufToHexString(readerData.reader_gid.data(), readerData.reader_gid.size(), true);
         }
         if (inputData.contains("unique_identifier")) {
-          serializedData["unique_identifier"] = utils::bufToHexString(readerData.reader_id.data(), readerData.reader_id.size(), true);
+          serializedData["unique_identifier"] = red_log::bufToHexString(readerData.reader_id.data(), readerData.reader_id.size(), true);
         }
         if (inputData.contains("issuers")) {
           serializedData["issuers"] = json::array();
@@ -899,7 +948,7 @@ void setupWeb() {
             json issuer;
             if (it.value().contains("issuerId")) {
               std::vector<uint8_t> id = it.value().at("issuerId").get<std::vector<uint8_t>>();
-              issuer["issuerId"] = utils::bufToHexString(id.data(), id.size(), true);
+              issuer["issuerId"] = red_log::bufToHexString(id.data(), id.size(), true);
             }
             if (it.value().contains("endpoints") && it.value().at("endpoints").size() > 0) {
               issuer["endpoints"] = json::array();
@@ -907,7 +956,7 @@ void setupWeb() {
                 json endpoint;
                 if (it2.value().contains("endpointId")) {
                   std::vector<uint8_t> id = it2.value().at("endpointId").get<std::vector<uint8_t>>();
-                  endpoint["endpointId"] = utils::bufToHexString(id.data(), id.size(), true);
+                  endpoint["endpointId"] = red_log::bufToHexString(id.data(), id.size(), true);
                 }
                 issuer["endpoints"].push_back(endpoint);
               }
@@ -1052,6 +1101,8 @@ void setupWeb() {
         }
         return;
       }
+      bool rebootNeeded = false;
+      std::string rebootMsg;
       for (auto it = serializedData->begin(); it != serializedData->end(); ++it) {
         if (it.key() == std::string("nfcTagNoPublish") && (it.value() != 0)) {
           std::string clientId;
@@ -1063,7 +1114,7 @@ void setupWeb() {
           esp_mqtt_client_publish(client, rfidTopic.c_str(), "", 0, 0, false);
         } else if (it.key() == std::string("setupCode")) {
           std::string code = it.value().template get<std::string>();
-          if (espConfig::miscConfig.setupCode != it.value() && code.length() == 8) {
+          if (espConfig::miscConfig.setupCode.c_str() != it.value() && code.length() == 8) {
             if (homeSpan.controllerListBegin() == homeSpan.controllerListEnd()) {
               homeSpan.setPairingCode(code.c_str());
             }
@@ -1072,7 +1123,7 @@ void setupWeb() {
           if (espConfig::miscConfig.nfcNeopixelPin == 255 && it.value() != 255 && neopixel_task_handle == nullptr) {
             xTaskCreate(neopixel_task, "neopixel_task", 4096, NULL, 2, &neopixel_task_handle);
             if (!pixel) {
-              pixel = std::make_unique<Pixel>(it.value(), PixelType::GRB);
+              pixel = std::make_shared<Pixel>(it.value(), PixelType::GRB);
             }
           } else if (espConfig::miscConfig.nfcNeopixelPin != 255 && it.value() == 255 && neopixel_task_handle != nullptr) {
             uint8_t status = 2;
@@ -1114,8 +1165,10 @@ void setupWeb() {
             }
           }
         } else if (it.key() == std::string("neoPixelType")) {
-          if (pixel) {
-            pixel->setPixelType(pixelTypeMap[it.value().template get<uint8_t>()]);
+          uint8_t pixelType = it.value().template get<uint8_t>();
+          if (pixelType != configData.at(it.key()).template get<uint8_t>()) {
+            rebootNeeded = true;
+            rebootMsg = "Pixel Type was changed, reboot needed! Rebooting...";
           }
         } else if (it.key() == std::string("gpioActionPin")) {
           if (espConfig::miscConfig.gpioActionPin == 255 && it.value() != 255 && gpio_lock_task_handle == nullptr) {
@@ -1152,7 +1205,11 @@ void setupWeb() {
         vTaskDelay(1000 / portTICK_PERIOD_MS);
         ESP.restart();
       } else {
-        req->send(200, "text/plain", "Saved and applied!");
+        if(rebootNeeded){
+          req->send(200, "text/plain", rebootMsg.c_str());
+        } else {
+          req->send(200, "text/plain", "Saved and applied!");
+        }
       }
     }
   });
@@ -1228,11 +1285,13 @@ void mqttConfigReset(const char* buf) {
   ESP.restart();
 }
 
-void wifiCallback() {
-  if (espConfig::mqttData.mqttBroker.size() >= 7 && espConfig::mqttData.mqttBroker.size() <= 16 && !std::equal(espConfig::mqttData.mqttBroker.begin(), espConfig::mqttData.mqttBroker.end(), "0.0.0.0")) {
-    mqtt_app_start();
+void wifiCallback(int status) {
+  if (status == 1) {
+    if (espConfig::mqttData.mqttBroker.size() >= 7 && espConfig::mqttData.mqttBroker.size() <= 16 && !std::equal(espConfig::mqttData.mqttBroker.begin(), espConfig::mqttData.mqttBroker.end(), "0.0.0.0")) {
+      mqtt_app_start();
+    }
+    setupWeb();
   }
-  setupWeb();
 }
 
 void mqtt_publish(std::string topic, std::string payload, uint8_t qos, bool retain) {
@@ -1331,8 +1390,8 @@ void nfc_thread_entry(void* arg) {
       ESP_LOG_BUFFER_HEX_LEVEL(TAG, selectCmdRes, selectCmdResLength, ESP_LOG_VERBOSE);
       if (status && selectCmdRes[selectCmdResLength - 2] == 0x90 && selectCmdRes[selectCmdResLength - 1] == 0x00) {
         LOG(D, "*** SELECT HOMEKEY APPLET SUCCESSFUL ***");
-        LOG(D, "Reader Private Key: %s", utils::bufToHexString(readerData.reader_pk.data(), readerData.reader_pk.size()).c_str());
-        HKAuthenticationContext authCtx(*nfc, readerData, savedData);
+        LOG(D, "Reader Private Key: %s", red_log::bufToHexString(readerData.reader_pk.data(), readerData.reader_pk.size()).c_str());
+        HKAuthenticationContext authCtx([](uint8_t* s, uint8_t l, uint8_t* r, uint16_t* rl, bool il) -> bool {return nfc->inDataExchange(s, l, r, rl, il);}, readerData, savedData);
         auto authResult = authCtx.authenticate(hkFlow);
         if (std::get<2>(authResult) != kFlowFailed) {
           bool status = true;
@@ -1445,7 +1504,7 @@ void nfc_thread_entry(void* arg) {
 
 void setup() {
   Serial.begin(115200);
-  const esp_app_desc_t* app_desc = esp_ota_get_app_description();
+  const esp_app_desc_t* app_desc = esp_app_get_description();
   std::string app_version = app_desc->version;
   gpio_led_handle = xQueueCreate(2, sizeof(uint8_t));
   neopixel_handle = xQueueCreate(2, sizeof(uint8_t));
@@ -1548,12 +1607,12 @@ void setup() {
   homeSpan.setLogLevel(0);
   homeSpan.setSketchVersion(app_version.c_str());
 
-  LOG(I, "READER GROUP ID (%d): %s", readerData.reader_gid.size(), utils::bufToHexString(readerData.reader_gid.data(), readerData.reader_gid.size()).c_str());
-  LOG(I, "READER UNIQUE ID (%d): %s", readerData.reader_id.size(), utils::bufToHexString(readerData.reader_id.data(), readerData.reader_id.size()).c_str());
+  LOG(I, "READER GROUP ID (%d): %s", readerData.reader_gid.size(), red_log::bufToHexString(readerData.reader_gid.data(), readerData.reader_gid.size()).c_str());
+  LOG(I, "READER UNIQUE ID (%d): %s", readerData.reader_id.size(), red_log::bufToHexString(readerData.reader_id.data(), readerData.reader_id.size()).c_str());
 
   LOG(I, "HOMEKEY ISSUERS: %d", readerData.issuers.size());
   for (auto&& issuer : readerData.issuers) {
-    LOG(D, "Issuer ID: %s, Public Key: %s", utils::bufToHexString(issuer.issuer_id.data(), issuer.issuer_id.size()).c_str(), utils::bufToHexString(issuer.issuer_pk.data(), issuer.issuer_pk.size()).c_str());
+    LOG(D, "Issuer ID: %s, Public Key: %s", red_log::bufToHexString(issuer.issuer_id.data(), issuer.issuer_id.size()).c_str(), red_log::bufToHexString(issuer.issuer_pk.data(), issuer.issuer_pk.size()).c_str());
   }
   homeSpan.enableAutoStartAP();
   homeSpan.enableOTA(espConfig::miscConfig.otaPasswd.c_str());
@@ -1587,36 +1646,19 @@ void setup() {
   });
 
   new SpanAccessory();
-  new Service::AccessoryInformation();
-  new Characteristic::Identify();
-  new Characteristic::Manufacturer("rednblkx");
-  new Characteristic::Model("HomeKey-ESP32");
-  new Characteristic::Name(DEVICE_NAME);
-  uint8_t mac[6];
-  WiFi.macAddress(mac);
-  char macStr[18] = { 0 };
-  sprintf(macStr, "%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3]);
-  std::string serialNumber = "HK-";
-  serialNumber.append(macStr);
-  new Characteristic::SerialNumber(serialNumber.c_str());
-  new Characteristic::FirmwareRevision(app_version.c_str());
-  std::array<uint8_t, 6> decB64 = hk_color_vals[HK_COLOR(espConfig::miscConfig.hk_key_color)];
-  TLV8 hwfinish(NULL, 0);
-  hwfinish.unpack(decB64.data(), decB64.size());
-  new Characteristic::HardwareFinish(hwfinish);
-
+  new Service::HAPProtocolInformation();
+  new Characteristic::Version();
+  new NFCAccessoryInformation();
   new LockManagement();
   new LockMechanism();
   new NFCAccess();
-  new Service::HAPProtocolInformation();
-  new Characteristic::Version();
   if (espConfig::miscConfig.proxBatEnabled) {
     new PhysicalLockBattery();
   }
   homeSpan.setControllerCallback(pairCallback);
-  homeSpan.setWifiCallback(wifiCallback);
+  homeSpan.setConnectionCallback(wifiCallback);
   if (espConfig::miscConfig.nfcNeopixelPin != 255) {
-    pixel = std::make_unique<Pixel>(espConfig::miscConfig.nfcNeopixelPin, pixelTypeMap[espConfig::miscConfig.neoPixelType]);
+    pixel = std::make_shared<Pixel>(espConfig::miscConfig.nfcNeopixelPin, pixelTypeMap[espConfig::miscConfig.neoPixelType]);
     xTaskCreate(neopixel_task, "neopixel_task", 4096, NULL, 2, &neopixel_task_handle);
   }
   if (espConfig::miscConfig.nfcSuccessPin != 255 || espConfig::miscConfig.nfcFailPin != 255) {
