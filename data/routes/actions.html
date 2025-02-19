@@ -162,6 +162,8 @@
         <div id="homekit-triggers" class="tabs-list">
           <p class="tab-btn homekit-triggers-selected-tab"
             onclick="switchTab(this)" data-tab-index="0">Simple GPIO</p>
+          <p class="tab-btn"
+            onclick="switchTab(this)" data-tab-index="1">Dummy</p>
         </div>
         <span style="height: 1px;border-top: 1px #424242 solid;display: block;margin: 0;padding: 0;"></span>
       </div>
@@ -206,7 +208,34 @@
             </select>
           </div>
           <div class="input-group">
-            <label for="gpioActionMomentaryTimeout">Momentary Timeout (ms)</label>
+            <label for="gpioActionMomentaryTimeout">Momentary timeout (ms)</label>
+            <input type="number" name="gpioActionMomentaryTimeout" id="gpioActionMomentaryTimeout" placeholder="5000" required style="width: 4rem;">
+          </div>
+        </div>
+      </div>
+      <div class="homekit-triggers-hidden-body" data-homekit-triggers-body="1">
+        <div>
+          <h5 style="margin-block: 0;">! Momentary state applies only if initial state is "LOCKED"</h5>
+        </div>
+        <div class="flex-col-lg">
+          <div class="input-group">
+            <label for="hkDumbSwitchMode">Status</label>
+            <select name="hkDumbSwitchMode" id="hkDumbSwitchMode">
+                <option value="0">Disabled</option>
+                <option value="1">Enabled</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <label for="gpioActionMomentaryEnabled">Momentary state</label>
+            <select name="gpioActionMomentaryEnabled" id="gpioActionMomentaryEnabled">
+              <option value="0">Disabled</option>
+              <option value="1">Home App Only</option>
+              <option value="2">Home Key Only</option>
+              <option value="3">Home App + Home Key</option>
+            </select>
+          </div>
+          <div class="input-group">
+            <label for="gpioActionMomentaryTimeout">Momentary timeout (ms)</label>
             <input type="number" name="gpioActionMomentaryTimeout" id="gpioActionMomentaryTimeout" placeholder="5000" required style="width: 4rem;">
           </div>
         </div>

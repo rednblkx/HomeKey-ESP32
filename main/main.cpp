@@ -432,7 +432,9 @@ void gpio_task(void* arg) {
             if (status.source != gpioLockAction::HOMEKIT) {
               lockTargetState->setVal(!currentState);
             }
-            digitalWrite(espConfig::miscConfig.gpioActionPin, currentState == lockStates::UNLOCKED ? espConfig::miscConfig.gpioActionLockState : espConfig::miscConfig.gpioActionUnlockState);
+            if(espConfig::miscConfig.gpioActionPin != 255){
+              digitalWrite(espConfig::miscConfig.gpioActionPin, currentState == lockStates::UNLOCKED ? espConfig::miscConfig.gpioActionLockState : espConfig::miscConfig.gpioActionUnlockState);
+            }
             lockCurrentState->setVal(!currentState);
             if (client != nullptr) {
               esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockCurrentState->getNewVal()).c_str(), 1, 0, false);
@@ -440,7 +442,9 @@ void gpio_task(void* arg) {
             if ((static_cast<uint8_t>(espConfig::miscConfig.gpioActionMomentaryEnabled) & status.source) && currentState == lockStates::LOCKED) {
               delay(espConfig::miscConfig.gpioActionMomentaryTimeout);
               lockTargetState->setVal(currentState);
-              digitalWrite(espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionLockState);
+              if(espConfig::miscConfig.gpioActionPin != 255){
+                digitalWrite(espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionLockState);
+              }
               lockCurrentState->setVal(currentState);
               if (client != nullptr) {
                 esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockCurrentState->getNewVal()).c_str(), 1, 0, false);
@@ -562,7 +566,8 @@ struct LockMechanism : Service::LockMechanism
       const gpioLockAction gpioAction{ .source = gpioLockAction::HOMEKIT, .action = 0 };
       xQueueSend(gpio_lock_handle, &gpioAction, 0);
     } else if (espConfig::miscConfig.hkDumbSwitchMode) {
-      lockCurrentState->setVal(targetState);
+      const gpioLockAction gpioAction{ .source = gpioLockAction::HOMEKIT, .action = 0 };
+      xQueueSend(gpio_lock_handle, &gpioAction, 0);
     }
     int currentState = lockCurrentState->getNewVal();
     if (client != nullptr) {
@@ -1293,17 +1298,26 @@ void setupWeb() {
             rebootMsg = "Pixel Type was changed, reboot needed! Rebooting...";
           }
         } else if (it.key() == std::string("gpioActionPin")) {
-          if (espConfig::miscConfig.gpioActionPin == 255 && it.value() != 255 && gpio_lock_task_handle == nullptr) {
+          if (espConfig::miscConfig.gpioActionPin == 255 && it.value() != 255 ) {
             LOG(D, "ENABLING HomeKit Trigger - Simple GPIO");
             pinMode(it.value(), OUTPUT);
-            xTaskCreate(gpio_task, "gpio_task", 4096, NULL, 2, &gpio_lock_task_handle);
-          } else if (espConfig::miscConfig.gpioActionPin != 255 && it.value() == 255 && gpio_lock_task_handle != nullptr) {
+            if(gpio_lock_task_handle == nullptr){
+              xTaskCreate(gpio_task, "gpio_task", 4096, NULL, 2, &gpio_lock_task_handle);
+            }
+            if(espConfig::miscConfig.hkDumbSwitchMode){
+              serializedData->at("hkDumbSwitchMode") = false;
+            }
+          } else if (espConfig::miscConfig.gpioActionPin != 255 && it.value() == 255) {
             LOG(D, "DISABLING HomeKit Trigger - Simple GPIO");
-            gpioLockAction status{ .source = gpioLockAction::OTHER, .action = 2 };
-            xQueueSend(gpio_lock_handle, &status, 0);
-            gpio_lock_task_handle = nullptr;
+            if( gpio_lock_task_handle != nullptr){
+              gpioLockAction status{ .source = gpioLockAction::OTHER, .action = 2 };
+              xQueueSend(gpio_lock_handle, &status, 0);
+              gpio_lock_task_handle = nullptr;
+            }
             gpio_reset_pin(gpio_num_t(espConfig::miscConfig.gpioActionPin));
           }
+        } else if (it.key() == std::string("hkDumbSwitchMode") && gpio_lock_task_handle == nullptr) {
+          xTaskCreate(gpio_task, "gpio_task", 4096, NULL, 2, &gpio_lock_task_handle);
         }
         configData.at(it.key()) = it.value();
       }
@@ -1857,7 +1871,7 @@ void setup() {
   if (espConfig::miscConfig.nfcSuccessPin != 255 || espConfig::miscConfig.nfcFailPin != 255) {
     xTaskCreate(nfc_gpio_task, "nfc_gpio_task", 4096, NULL, 2, &gpio_led_task_handle);
   }
-  if (espConfig::miscConfig.gpioActionPin != 255) {
+  if (espConfig::miscConfig.gpioActionPin != 255 || espConfig::miscConfig.hkDumbSwitchMode) {
     xTaskCreate(gpio_task, "gpio_task", 4096, NULL, 2, &gpio_lock_task_handle);
   }
   if (espConfig::miscConfig.hkAltActionInitPin != 255) {

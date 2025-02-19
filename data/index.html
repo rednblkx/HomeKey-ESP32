@@ -172,14 +172,14 @@
                 }
               }
             } else if(typeof element == "number" && key == "hk_key_color"){
-              const foundEl = el.querySelector(`#${key}-${element}`);
-              if(foundEl){
-                foundEl.setAttribute("checked", "");
+              const elList = el.querySelectorAll(`#${key}-${element}`);
+              if(elList){
+                elList.forEach(el => el.setAttribute("checked", ""));
               }
             } else {
-              const foundEl = el.querySelector(`#${key}`);
-              if(foundEl){
-                foundEl.value = isNaN(element) || (element == "" && String(element) != "false") ? element : element | 0;
+              const elList = el.querySelectorAll(`#${key}`);
+              if(elList){
+                elList.forEach(el => el.value = isNaN(element) || (element == "" && String(element) != "false") ? element : element | 0);
               }
             }
           }
