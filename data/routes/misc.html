@@ -1,166 +1,268 @@
 <h2 style="text-align: center;">Miscellaneous</h2>
 <h5 style="text-align:center;margin-top: 0;">Changes in this section will reboot the device</h5>
-<form id="misc-config" action="misc-config" method="post" style="display: inline-flex; flex-direction: column; margin-bottom: 0">
+<form id="config-form" data-type="misc" style="display: inline-flex; flex-direction: column; margin-bottom: 0">
     <div class="cards-container" style="display: flex;gap: 16px;">
-        <div style="display: flex;flex-direction: column;border: 1px #8e8271 solid;border-radius: 8px;padding: 1rem;box-shadow: 0px 1px 1px 0px;background-color: #2d1d1d;">
+        <div class="card-content" style="max-width: 26rem;">
             <h3 style="margin-top: 0;text-align: center;">General settings</h3>
-            <div style="display:flex;flex-direction: column;margin-bottom: 1rem;gap: 8px;">
-                <div style="margin-bottom: 1rem;">
-                    <div id="custom-tabs" style="display: flex;justify-content: space-around;">
-                        <h3 class="custom-tabs-selected-tab" style="margin: 0;width: fit-content;padding: 0.5rem;cursor: pointer;" onclick="switchTab(this)" data-tab-index="0">HomeKit</h3>
-                        <h3 style="margin: 0;width: fit-content;padding: 0.5rem;cursor: pointer;" onclick="switchTab(this)" data-tab-index="1">PN532</h3>
-                        <h3 style="margin: 0;width: fit-content;padding: 0.5rem;cursor: pointer;" onclick="switchTab(this)" data-tab-index="2">HomeSpan</h3>
+            <div style="display:flex;flex-direction: column;gap: 8px;">
+                <div class="tabs-container">
+                    <div id="custom-tabs" class="tabs-list" style="justify-content: safe center;">
+                        <p class="tab-btn custom-tabs-selected-tab" onclick="switchTab(this)" data-tab-index="0">HomeKit</p>
+                        <p class="tab-btn" onclick="switchTab(this)" data-tab-index="1">HomeKey</p>
+                        <p class="tab-btn" onclick="switchTab(this)" data-tab-index="2">PN532</p>
+                        <p class="tab-btn" onclick="switchTab(this)" data-tab-index="3">HomeSpan</p>
+                        <p class="tab-btn" onclick="switchTab(this)" data-tab-index="4">Ethernet</p>
                     </div>
                     <span style="height: 1px;border-top: 1px #424242 solid;display: block;margin: 0;padding: 0;"></span>
                 </div>
                 <div class="custom-tabs-selected-body" data-custom-tabs-body="0">
-                    <div style="display: flex;gap: 8px;">
-                        <label for="device-name">Device Name</label>
-                        <input type="text" name="device-name" id="device-name" placeholder="HK" required value="%DEVICENAME%"
-                            style="width: fit-content;" />
+                    <div class="input-group">
+                        <label for="deviceName">Device Name</label>
+                        <input type="text" name="deviceName" id="deviceName" placeholder="HK" required style="width: fit-content;" />
                     </div>
-                    <div style="display: flex;gap: 8px;">
-                        <label for="hk-setupcode">Setup Code</label>
-                        <input type="number" name="hk-setupcode" id="hk-setupcode" placeholder="46637726" required
-                            value="%HKSETUPCODE%" style="width: fit-content;" />
+                    <div class="input-group">
+                        <label for="setupCode">Setup Code</label>
+                        <input type="number" name="setupCode" id="setupCode" placeholder="46637726" maxlength="8" required style="width: fit-content;" />
                     </div>
-                    <div style="display: flex;gap: 8px;">
-                        <label for="hk-always-lock">Always Lock on HomeKey</label>
-                        <select name="hk-always-lock" id="hk-always-lock">
+                    <div class="input-group">
+                        <label for="lockAlwaysLock">Always Lock on HomeKey</label>
+                        <select name="lockAlwaysLock" id="lockAlwaysLock">
                             <option value="0">Disabled</option>
                             <option value="1">Enabled</option>
                         </select>
                     </div>
-                    <div style="display: flex;gap: 8px;">
-                        <label for="hk-always-unlock">Always Unlock on HomeKey</label>
-                        <select name="hk-always-unlock" id="hk-always-unlock">
+                    <div class="input-group">
+                        <label for="lockAlwaysUnlock">Always Unlock on HomeKey</label>
+                        <select name="lockAlwaysUnlock" id="lockAlwaysUnlock">
                             <option value="0">Disabled</option>
                             <option value="1">Enabled</option>
                         </select>
                     </div>
-                    <div style="display: flex;gap: 8px;">
-                        <label for="homekit-dumb-switch-mode">Dumb Switch Mode</label>
-                        <select name="homekit-dumb-switch-mode" id="homekit-dumb-switch-mode">
+                    <div class="input-group">
+                        <label for="proxBatEnabled">SmartLock battery reporting</label>
+                        <select name="proxBatEnabled" id="proxBatEnabled">
                             <option value="0">Disabled</option>
                             <option value="1">Enabled</option>
                         </select>
                     </div>
-                    <div style="display: flex;gap: 8px;">
-                        <label for="prox-bat-enable">SmartLock battery reporting</label>
-                        <select name="prox-bat-enable" id="prox-bat-enable">
-                            <option value="0">Disabled</option>
-                            <option value="1">Enabled</option>
-                        </select>
+                    <div class="input-group">
+                        <label for="btrLowStatusThreshold">Battery low status Threshold</label>
+                        <input type="number" name="btrLowStatusThreshold" id="btrLowStatusThreshold" placeholder="10" min="0" max="100" style="width: 4rem;" />
                     </div>
-                    <div style="display: flex;gap: 8px;">
-                        <label for="btr-low-threshold">Battery low status Threshold</label>
-                        <input type="number" name="btr-low-threshold" id="btr-low-threshold" placeholder="10" min="0" max="100" value="%BTRLOWTHRESHOLD%" style="width: 4rem;" />
-                    </div>
-                    <fieldset>
-                        <legend>HomeKey Card Finish:</legend>
-                        <div style="display: flex;justify-content: space-evenly;margin-bottom: 0;padding-bottom: 0;">
-                            <div id="hkfinish"
-                                style="background-image: url(assets/hk-finish-0.webp);background-size: contain;background-repeat: no-repeat;width: 9rem;">
-                            </div>
-                            <div style="display: flex;flex-direction: column;align-items: flex-end;">
-                                <div>
-                                    <label id="tan" for="hk-tan">Tan</label>
-                                    <input type="radio" id="hk-finish-0"
-                                        onClick="document.getElementById('hkfinish').style.backgroundImage=`url(assets/hk-finish-0.webp)`"
-                                        name="hk-hwfinish" value="0" />
-                                </div>
-                                <div>
-                                    <label id="gold" for="hk-gold">Gold</label>
-                                    <input type="radio" id="hk-finish-1"
-                                        onClick="document.getElementById('hkfinish').style.backgroundImage=`url(assets/hk-finish-1.webp)`"
-                                        name="hk-hwfinish" value="1" />
-                                </div>
-                                <div>
-                                    <label id="silver" for="hk-silver">Silver</label>
-                                    <input type="radio" id="hk-finish-2"
-                                        onClick="document.getElementById('hkfinish').style.backgroundImage=`url(assets/hk-finish-2.webp)`"
-                                        name="hk-hwfinish" value="2" />
-                                </div>
-                                <div>
-                                    <label id="black" for="hk-black">Black</label>
-                                    <input type="radio" id="hk-finish-3"
-                                        onClick="document.getElementById('hkfinish').style.backgroundImage=`url(assets/hk-finish-3.webp)`"
-                                        name="hk-hwfinish" value="3" />
-                                </div>
-                            </div>
-                        </div>
-                    </fieldset>
                 </div>
                 <div class="custom-tabs-hidden-body" data-custom-tabs-body="1">
-                    <div style="display: flex;flex-wrap: wrap;justify-content: center;gap: 16px;">
-                        <div style="display: flex;flex-direction: column;">
-                            <label for="nfc-ss-gpio-pin">SS Pin</label>
-                            <input type="number" name="nfc-ss-gpio-pin" id="nfc-ss-gpio-pin" placeholder="5" required
-                                value="%NFCSSGPIOPIN%" style="width: 4rem;" />
-                        </div>
-                        <div style="display: flex;flex-direction: column;">
-                            <label for="nfc-sck-gpio-pin">SCK Pin</label>
-                            <input type="number" name="nfc-sck-gpio-pin" id="nfc-sck-gpio-pin" placeholder="18" required
-                                value="%NFCSCKGPIOPIN%" style="width: 4rem;" />
-                        </div>
-                        <div style="display: flex;flex-direction: column;">
-                            <label for="nfc-miso-gpio-pin">MISO Pin</label>
-                            <input type="number" name="nfc-miso-gpio-pin" id="nfc-miso-gpio-pin" placeholder="19" required
-                                value="%NFCMISOGPIOPIN%" style="width: 4rem;" />
-                        </div>
-                        <div style="display: flex;flex-direction: column;">
-                            <label for="nfc-mosi-gpio-pin">MOSI Pin</label>
-                            <input type="number" name="nfc-mosi-gpio-pin" id="nfc-mosi-gpio-pin" placeholder="23" required
-                                value="%NFCMOSIGPIOPIN%" style="width: 4rem;" />
-                        </div>
+                    <div style="display: flex;flex-direction: column;gap: 16px;">
+                        <fieldset>
+                            <legend>Alt action Initiator Button</legend>
+                            <div style="display: flex;gap: 16px;flex-direction: column;padding: .5rem;">
+                                <div class="input-group">
+                                    <label for="hkAltActionInitPin">GPIO Pin</label>
+                                    <input type="number" name="hkAltActionInitPin" id="hkAltActionInitPin" placeholder="255" min="0" max="255" style="width: 4rem;" />
+                                </div>
+                                <div class="input-group">
+                                    <label for="hkAltActionInitTimeout">Timeout (ms)</label>
+                                    <input type="number" name="hkAltActionInitTimeout" id="hkAltActionInitTimeout" placeholder="5000" min="0" max="10000" style="width: 4rem;" />
+                                </div>
+                                <div class="input-group">
+                                    <label for="hkAltActionInitLedPin">Feedback LED Pin</label>
+                                    <input type="number" name="hkAltActionInitLedPin" id="hkAltActionInitLedPin" placeholder="255" min="0" max="255" style="width: 4rem;" />
+                                </div>
+                            </div>
+                        </fieldset>
+                        <fieldset>
+                            <legend>HomeKey Card Finish:</legend>
+                            <div style="display: flex;justify-content: space-evenly;margin-bottom: 0;padding-bottom: 0;">
+                                <div id="hkfinish"
+                                    style="background-image: url(assets/hk-finish-0.webp);background-size: contain;background-repeat: no-repeat;width: 9rem;">
+                                </div>
+                                <div style="display: flex;flex-direction: column;align-items: flex-end;">
+                                    <div>
+                                        <label id="hk-tan" for="hk_key_color-0">Tan</label>
+                                        <input type="radio" id="hk_key_color-0"
+                                            onClick="document.getElementById('hkfinish').style.backgroundImage=`url(assets/hk-finish-0.webp)`"
+                                            name="hk_key_color" value="0" />
+                                    </div>
+                                    <div>
+                                        <label id="hk-gold" for="hk_key_color-1">Gold</label>
+                                        <input type="radio" id="hk_key_color-1"
+                                            onClick="document.getElementById('hkfinish').style.backgroundImage=`url(assets/hk-finish-1.webp)`"
+                                            name="hk_key_color" value="1" />
+                                    </div>
+                                    <div>
+                                        <label id="hk-silver" for="hk_key_color-2">Silver</label>
+                                        <input type="radio" id="hk_key_color-2"
+                                            onClick="document.getElementById('hkfinish').style.backgroundImage=`url(assets/hk-finish-2.webp)`"
+                                            name="hk_key_color" value="2" />
+                                    </div>
+                                    <div>
+                                        <label id="hk-black" for="hk_key_color-3">Black</label>
+                                        <input type="radio" id="hk_key_color-3"
+                                            onClick="document.getElementById('hkfinish').style.backgroundImage=`url(assets/hk-finish-3.webp)`"
+                                            name="hk_key_color" value="3" />
+                                    </div>
+                                </div>
+                            </div>
+                        </fieldset>
                     </div>
                 </div>
                 <div class="custom-tabs-hidden-body" data-custom-tabs-body="2">
+                    <div style="display: flex;flex-wrap: wrap;justify-content: center;gap: 16px;">
+                        <div style="display: flex;flex-direction: column;">
+                            <label for="nfcGpioPins!0">SS Pin</label>
+                            <input type="number" name="nfcGpioPins!0" id="nfcGpioPins!0" placeholder="5" required min="0" max="255"
+                                style="width: 4rem;" />
+                        </div>
+                        <div style="display: flex;flex-direction: column;">
+                            <label for="nfcGpioPins!1">SCK Pin</label>
+                            <input type="number" name="nfcGpioPins!1" id="nfcGpioPins!1" placeholder="18" required min="0" max="255"
+                                style="width: 4rem;" />
+                        </div>
+                        <div style="display: flex;flex-direction: column;">
+                            <label for="nfcGpioPins!2">MISO Pin</label>
+                            <input type="number" name="nfcGpioPins!2" id="nfcGpioPins!2" placeholder="19" required min="0" max="255"
+                                style="width: 4rem;" />
+                        </div>
+                        <div style="display: flex;flex-direction: column;">
+                            <label for="nfcGpioPins!3">MOSI Pin</label>
+                            <input type="number" name="nfcGpioPins!3" id="nfcGpioPins!3" placeholder="23" required min="0" max="255"
+                                style="width: 4rem;" />
+                        </div>
+                    </div>
+                </div>
+                <div class="custom-tabs-hidden-body" data-custom-tabs-body="3">
                     <a href="https://github.com/HomeSpan/HomeSpan/blob/master/docs/GettingStarted.md#adding-a-control-button-and-status-led-optional" style="margin-bottom: 1rem;color: white;">HomeSpan Documentation</a>
-                    <div>
-                        <label for="ota-passwd">OTA Password</label>
-                        <input type="password" name="ota-passwd" id="ota-passwd" placeholder="homespan-ota" required
-                            value="%OTAPASSWD%" />
+                    <div class="input-group">
+                        <label for="otaPasswd">OTA Password</label>
+                        <input type="password" name="otaPasswd" id="otaPasswd" placeholder="homespan-ota" required
+                            />
                     </div>
-                    <div>
-                        <label for="control-pin">HomeSpan Control GPIO Pin</label>
-                        <input type="number" name="control-pin" id="control-pin" placeholder="26" required
-                            value="%CONTROLPIN%" style="width: 4rem;" />
+                    <div class="input-group">
+                        <label for="controlPin">Control GPIO Pin</label>
+                        <input type="number" name="controlPin" id="controlPin" placeholder="26" required
+                            style="width: 4rem;" />
                     </div>
-                    <div>
-                        <label for="led-pin">HomeSpan Status LED GPIO Pin</label>
-                        <input type="number" name="led-pin" id="led-pin" placeholder="2" required value="%LEDPIN%" style="width: 4rem;" />
+                    <div class="input-group">
+                        <label for="hsStatusPin">Status LED GPIO Pin</label>
+                        <input type="number" name="hsStatusPin" id="hsStatusPin" placeholder="2" required style="width: 4rem;" />
+                    </div>
+                </div>
+                <div class="custom-tabs-hidden-body" data-custom-tabs-body="4">
+                    <div class="input-group">
+                        <label for="ethernetEnabled">Status</label>
+                        <select name="ethernetEnabled" id="ethernetEnabled">
+                            <option value="0">Disabled</option>
+                            <option value="1">Enabled</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="ethActivePreset">Board Preset</label>
+                        <select name="ethActivePreset" id="ethActivePreset" onchange="handleEthPreset(this)">
+                            <option value="255">Custom</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="ethPhyType">Ethernet chip</label>
+                        <select disabled name="ethPhyType" id="ethPhyType" onchange="handleEthChipChange(this)">
+                        </select>
+                    </div>
+                    <div id="eth_spi_container" style="display: flex;flex-wrap: wrap;justify-content: space-between;gap: 16px;">
+                        <div style="display: flex;flex-direction: column;">
+                            <label for="ethSpiConfig!0">SPI Frequency</label>
+                            <input disabled type="number" name="ethSpiConfig!0" id="ethSpiConfig!0" placeholder="20" min="0" max="80"
+                                style="width: 4rem;" />
+                        </div>
+                        <div style="display: flex;flex-direction: column;">
+                            <label for="ethSpiConfig!1">SS Pin</label>
+                            <input disabled type="number" name="ethSpiConfig!1" id="ethSpiConfig!1" placeholder="-1" min="-1" max="255"
+                                style="width: 4rem;" />
+                        </div>
+                        <div style="display: flex;flex-direction: column;">
+                            <label for="ethSpiConfig!2">IRQ Pin</label>
+                            <input disabled type="number" name="ethSpiConfig!2" id="ethSpiConfig!2" placeholder="-1" min="-1" max="255"
+                                style="width: 4rem;" />
+                        </div>
+                        <div style="display: flex;flex-direction: column;">
+                            <label for="ethSpiConfig!3">RST Pin</label>
+                            <input disabled type="number" name="ethSpiConfig!3" id="ethSpiConfig!3" placeholder="-1" min="-1" max="255"
+                                style="width: 4rem;" />
+                        </div>
+                        <div style="display: flex;flex-direction: column;">
+                            <label for="ethSpiConfig!4">SCK Pin</label>
+                            <input disabled type="number" name="ethSpiConfig!4" id="ethSpiConfig!4" placeholder="-1" min="-1" max="255"
+                                style="width: 4rem;" />
+                        </div>
+                        <div style="display: flex;flex-direction: column;">
+                            <label for="ethSpiConfig!5">MISO Pin</label>
+                            <input disabled type="number" name="ethSpiConfig!5" id="ethSpiConfig!5" placeholder="-1" min="-1" max="255"
+                                style="width: 4rem;" />
+                        </div>
+                        <div style="display: flex;flex-direction: column;">
+                            <label for="ethSpiConfig!6">MOSI Pin</label>
+                            <input disabled type="number" name="ethSpiConfig!6" id="ethSpiConfig!6" placeholder="-1" min="-1" max="255"
+                                style="width: 4rem;" />
+                        </div>
+                    </div>
+                    <div id="eth_rmii_container" style="display: flex;flex-wrap: wrap;justify-content: space-between;gap: 16px;">
+                        <div style="display: flex;flex-direction: column;">
+                            <label for="ethRmiiConfig!0">PHY Address</label>
+                            <input disabled type="number" name="ethRmiiConfig!0" id="ethRmiiConfig!0" placeholder="1" min="0" max="255"
+                                style="width: 4rem;" />
+                        </div>
+                        <div style="display: flex;flex-direction: column;">
+                            <label for="ethRmiiConfig!1">MCD Pin</label>
+                            <input disabled type="number" name="ethRmiiConfig!1" id="ethRmiiConfig!1" placeholder="23" min="-1" max="255"
+                                style="width: 4rem;" />
+                        </div>
+                        <div style="display: flex;flex-direction: column;">
+                            <label for="ethRmiiConfig!2">MDIO Pin</label>
+                            <input disabled type="number" name="ethRmiiConfig!2" id="ethRmiiConfig!2" placeholder="18" min="-1" max="255"
+                                style="width: 4rem;" />
+                        </div>
+                        <div style="display: flex;flex-direction: column;">
+                            <label for="ethRmiiConfig!3">Power Pin</label>
+                            <input disabled type="number" name="ethRmiiConfig!3" id="ethRmiiConfig!3" placeholder="255" min="-1" max="255"
+                                style="width: 4rem;" />
+                        </div>
+                        <div style="display: flex;flex-direction: column;">
+                            <label for="ethRmiiConfig!4">RMII Clock Mode</label>
+                            <select disabled name="ethRmiiConfig!4" id="ethRmiiConfig!4">
+                                <option value="0">ETH_CLOCK_GPIO0_IN</option>
+                                <option value="1">ETH_CLOCK_GPIO0_OUT</option>
+                                <option value="2">ETH_CLOCK_GPIO16_OUT</option>
+                                <option value="3">ETH_CLOCK_GPIO17_OUT</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-        <div style="display: flex;flex-direction: column;border: 1px #8e8271 solid;border-radius: 8px;padding: 1rem;box-shadow: 0px 1px 1px 0px;background-color: #2d1d1d;">
+        <div class="card-content" style="max-width: 14rem;">
             <h3 style="margin-top: 0;text-align: center;">WebUI</h3>
             <div
                 style="display:flex;flex-direction: column;margin-bottom: 1rem;gap: 8px;">
                 <div style="margin-bottom: 1rem;">
-                    <div id="webui-tabs" style="display: flex;justify-content: space-around;">
-                        <h3 class="webui-tabs-selected-tab" style="margin: 0;width: fit-content;padding: 0.5rem;cursor: pointer;border-bottom: 2px #8e8271 solid;" data-tab-index="0" onclick='switchTab(this)'>Authentication</h3>
+                    <div id="webui-tabs" class="tabs-list">
+                        <p class="tab-btn webui-tabs-selected-tab" data-tab-index="0" onclick='switchTab(this)'>Authentication</p>
                     </div>
                     <span style="height: 1px;border-top: 1px #424242 solid;display: block;margin: 0;padding: 0;"></span>
                 </div>
                 <div class="webui-tabs-selected-body" style="display: flex;flex-direction: column;gap: 8px;padding-inline: 1rem;" data-webui-tabs-body="0">
                     <div style="display: flex;flex-direction: column;">
-                        <label for="web-auth-enable">Status</label>
-                        <select name="web-auth-enable" id="web-auth-enable" style="width: fit-content;">
+                        <label for="webAuthEnabled">Status</label>
+                        <select name="webAuthEnabled" id="webAuthEnabled" style="width: fit-content;">
                           <option value="0">Disabled</option>
                           <option value="1">Enabled</option>
                         </select>
                     </div>
                     <div style="display: flex;flex-direction: column;">
-                        <label for="web-auth-username">Username</label>
-                        <input type="text" name="web-auth-username" id="web-auth-username" placeholder="admin" required
-                            value="%WEBUSERNAME%" style="width: fit-content;" />
+                        <label for="webUsername">Username</label>
+                        <input type="text" name="webUsername" id="webUsername" placeholder="admin" required
+                            style="width: fit-content;" />
                     </div>
                     <div style="display: flex;flex-direction: column;">
-                        <label for="web-auth-password">Password</label>
-                        <input type="password" name="web-auth-password" id="web-auth-password" placeholder="password" required
-                            value="%WEBPASSWORD%" style="width: fit-content;" />
+                        <label for="webPassword">Password</label>
+                        <input type="password" name="webPassword" id="webPassword" placeholder="password" required
+                            style="width: fit-content;" />
                     </div>
                 </div>
             </div>
@@ -177,38 +279,3 @@
         </button>
     </div>
 </form>
-<script>
-    let hwfinish = "%HWFINISH%";
-    document
-        .getElementById(`hk-finish-${hwfinish}`)
-        .setAttribute("checked", "");
-    document.getElementById('hkfinish').style.backgroundImage = `url(assets/hk-finish-${hwfinish}.webp)`;
-    document.getElementById("hk-always-unlock").selectedIndex = "%ALWAYSUNLOCK%";
-    document.getElementById("hk-always-lock").selectedIndex = "%ALWAYSLOCK%";
-    document.getElementById("web-auth-enable").selectedIndex = "%WEBENABLE%";
-    document.getElementById("prox-bat-enable").selectedIndex = "%PROXBATENABLE%";
-    document.getElementById("homekit-dumb-switch-mode").selectedIndex = "%DUMBSWITCHMODE%";
-    let form = document.getElementById("misc-config");
-    async function handleForm(event) {
-      event.preventDefault();
-      let response = await fetch("misc-config", {
-          body: new FormData(form),
-          method: "post",
-      });
-      let string = await response.text();
-      let element = document.querySelector("#status-text");
-      if (element) {
-          element.remove();
-      }
-      let component = document.getElementById("buttons-group");
-      let elStatus = document.createElement("h4");
-      elStatus.id = "status-text";
-      elStatus.style = "color: red;text-align: center;margin-bottom: 0;";
-      elStatus.innerText = string;
-      component.insertAdjacentElement("beforebegin", elStatus);
-      setTimeout(() => {
-          document.querySelector("#status-text").remove();
-      }, 5000);
-    }
-    form.addEventListener("submit", handleForm);
-</script>

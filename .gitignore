@@ -8,5 +8,7 @@ lib
 .cache
 compile_commands.json
 src/config.h
-sdkconfig.*
+sdkconfig*
 dependencies.lock
+build
+managed_components

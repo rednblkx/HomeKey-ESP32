@@ -4,87 +4,148 @@ name: CI
 
 # Controls when the action will run. Triggers the workflow on push or pull request
 on:
-  push:
-    branches: [ main, dev ]
-    paths:
-      - 'src/**'
-      - 'platformio.ini'
-      - 'sdkconfig.defaults'
-      - 'data/**'
-      - 'with_ota.csv'
-      - 'fs.py'
+  workflow_dispatch:
   pull_request:
-    branches: [ main, dev ]
-    paths:
-      - 'src/**'
-      - 'data/**'
-      - 'platformio.ini'
-      - 'sdkconfig.defaults'
-      - 'with_ota.csv'
-      - 'fs.py'
+    paths-ignore:
+      - '.vscode/**'
+      - '.gitignore'
+      - 'LICENSE'
+      - 'README.md'
 
 jobs:
-  build:
+  esp32:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           fetch-tags: true
+          submodules: 'recursive'
       - uses: actions/cache@v4
         with:
           path: |
-            ~/.cache/pip
-            ~/.platformio/.cache
-          key: ${{ runner.os }}-pio
-      - uses: actions/setup-python@v5
+            ~/.ccache
+            build
+            managed_components
+            sdkconfig
+          key: ${{ runner.os }}-esp32-build
+      - name: Cache Docker images.
+        uses: ScribeMD/docker-cache@0.5.0
         with:
-          python-version: '3.11'
-      - name: Install PlatformIO Core
-        run: pip install --upgrade platformio
-
-      - name: Install tool-mklittlefs
-        run: pio run -t buildfs
-      - name: Build Firmware ESP32
-        run: pio run
-      - name: Archive merged firmware
+          key: docker-${{ runner.os }}-espidf
+      - name: ESP32 Build
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.3.2
+          target: esp32
+          path: '.'
+          extra_docker_args: -v ~/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
+          command: idf.py --ccache build && idf.py merge-bin
+      - name: Archive firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32-firmware
+          path: build/HomeKey-ESP32.bin
+      - name: Archive merged binary
         uses: actions/upload-artifact@v4
         with:
           name: esp32-firmware-merged
-          path: .pio/build/release/firmware_merged.bin
+          path: build/merged-binary.bin
+  esp32c3:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          submodules: 'recursive'
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.ccache
+            build
+            managed_components
+            sdkconfig
+          key: ${{ runner.os }}-esp32c3-build
+      - name: Cache Docker images.
+        uses: ScribeMD/docker-cache@0.5.0
+        with:
+          key: docker-${{ runner.os }}-espidf
+      - name: ESP32C3 Build
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.3.2
+          target: esp32c3
+          path: '.'
+          extra_docker_args: -v ~/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
+          command: idf.py --ccache build && idf.py merge-bin
       - name: Archive firmware
         uses: actions/upload-artifact@v4
         with:
-          name: esp32-app-firmware
-          path: .pio/build/release/firmware.bin
-      - name: Archive spiffs
-        uses: actions/upload-artifact@v4
-        with:
-          name: spiffs-binary
-          path: .pio/build/release/littlefs.bin
-      - name: Build Firmware ESP32-C3
-        run: pio run -e c3
-      - name: Archive merged firmware
+          name: esp32c3-firmware
+          path: build/HomeKey-ESP32.bin
+      - name: Archive merged binary
         uses: actions/upload-artifact@v4
         with:
           name: esp32c3-firmware-merged
-          path: .pio/build/c3/firmware_merged.bin
+          path: build/merged-binary.bin
+  esp32s3:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          submodules: 'recursive'
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.ccache
+            build
+            managed_components
+            sdkconfig
+          key: ${{ runner.os }}-esp32s3-build
+      - name: Cache Docker images.
+        uses: ScribeMD/docker-cache@0.5.0
+        with:
+          key: docker-${{ runner.os }}-espidf
+      - name: ESP32S3 Build
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.3.2
+          target: esp32s3
+          path: '.'
+          extra_docker_args: -v ~/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
+          command: idf.py --ccache build && idf.py merge-bin
       - name: Archive firmware
         uses: actions/upload-artifact@v4
         with:
-          name: esp32c3-app-firmware
-          path: .pio/build/c3/firmware.bin
-      - name: Build Firmware ESP32-S3
-        run: pio run -e s3
-      - name: Archive merged firmware
+          name: esp32s3-firmware
+          path: build/HomeKey-ESP32.bin
+      - name: Archive merged binary
         uses: actions/upload-artifact@v4
         with:
           name: esp32s3-firmware-merged
-          path: .pio/build/s3/firmware_merged.bin
-      - name: Archive firmware
+          path: build/merged-binary.bin
+  littlefs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: 'data'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install LittleFS Tool
+        run: pip install littlefs-python
+      - name: Create LittleFS Image
+        run: littlefs-python create $(pwd)/data littlefs.bin -v --fs-size=0x20000 --name-max=64 --block-size=4096
+      - name: Archive LittleFS image
         uses: actions/upload-artifact@v4
         with:
-          name: esp32s3-app-firmware
-          path: .pio/build/s3/firmware.bin
+          name: littlefs-binary
+          path: littlefs.bin
