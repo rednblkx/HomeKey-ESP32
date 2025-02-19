@@ -15,4 +15,4 @@
 [submodule "HomeSpan"]
 	path = components/HomeSpan/upstream
 	url = https://github.com/HomeSpan/HomeSpan.git
-	branch = 2.1.0
+	branch = release-2.1.1
