@@ -73,7 +73,7 @@ jobs:
         uses: ScribeMD/docker-cache@0.5.0
         with:
           key: docker-${{ runner.os }}-espidf
-      - name: ESP32C6 Build
+      - name: ESP32-C6 Build
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.3.2
