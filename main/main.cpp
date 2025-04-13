@@ -22,6 +22,7 @@
 #include "NFC_SERV_CHARS.h"
 #include <mbedtls/sha256.h>
 #include <esp_mac.h>
+#include <freertos/semphr.h>
 
 const char* TAG = "MAIN";
 
@@ -39,6 +40,7 @@ TaskHandle_t nfc_reconnect_task = nullptr;
 TaskHandle_t nfc_poll_task = nullptr;
 
 nvs_handle savedData;
+SemaphoreHandle_t readerDataMutex = nullptr;
 readerData_t readerData;
 uint8_t ecpData[18] = { 0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0 };
 const std::array<std::array<uint8_t, 6>, 4> hk_color_vals = { {{0x01,0x04,0xce,0xd5,0xda,0x00}, {0x01,0x04,0xaa,0xd6,0xec,0x00}, {0x01,0x04,0xe3,0xe3,0xe3,0x00}, {0x01,0x04,0x00,0x00,0x00,0x00}} };
@@ -282,13 +284,35 @@ esp_mqtt_client_handle_t client = nullptr;
 
 std::shared_ptr<Pixel> pixel;
 
-bool save_to_nvs() {
-  std::vector<uint8_t> serialized = nlohmann::json::to_msgpack(readerData);
+// This internal version assumes the CALLER holds the mutex
+bool save_to_nvs_internal() {
+  // Check added just in case, but lock should be held by caller
+  if (readerDataMutex == nullptr || xSemaphoreGetMutexHolder(readerDataMutex) != xTaskGetCurrentTaskHandle()) {
+      LOG(E, "save_to_nvs_internal called without holding mutex!");
+      return false;
+  }
+  std::vector<uint8_t> serialized = nlohmann::json::to_msgpack(readerData); // Read shared data
   esp_err_t set_nvs = nvs_set_blob(savedData, "READERDATA", serialized.data(), serialized.size());
   esp_err_t commit_nvs = nvs_commit(savedData);
   LOG(D, "NVS SET STATUS: %s", esp_err_to_name(set_nvs));
   LOG(D, "NVS COMMIT STATUS: %s", esp_err_to_name(commit_nvs));
   return !set_nvs && !commit_nvs;
+}
+
+
+bool save_to_nvs() {
+  if (readerDataMutex == nullptr) {
+    LOG(E, "readerDataMutex not initialized in save_to_nvs wrapper!");
+    return false;
+}
+bool success = false;
+if (xSemaphoreTake(readerDataMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+   success = save_to_nvs_internal(); // Call the internal function
+   xSemaphoreGive(readerDataMutex);
+} else {
+    LOG(E, "Failed to take readerDataMutex in save_to_nvs wrapper!");
+}
+return success;
 }
 
 struct PhysicalLockBattery : Service::BatteryService
@@ -395,76 +419,171 @@ void alt_action_task(void* arg) {
 
 void gpio_task(void* arg) {
   gpioLockAction status;
-  while (1) {
-    if (gpio_lock_handle != nullptr) {
-      status = {};
-      if (uxQueueMessagesWaiting(gpio_lock_handle) > 0) {
-        xQueueReceive(gpio_lock_handle, &status, 0);
-        LOG(D, "Got something in queue - source = %d action = %d", status.source, status.action);
-        if (status.action == 0) {
-          LOG(D, "%d - %d - %d -%d", espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionMomentaryEnabled, espConfig::miscConfig.lockAlwaysUnlock, espConfig::miscConfig.lockAlwaysLock);
-          if (espConfig::miscConfig.lockAlwaysUnlock && status.source != gpioLockAction::HOMEKIT) {
-            lockTargetState->setVal(lockStates::UNLOCKED);
-            if(espConfig::miscConfig.gpioActionPin != 255){
-              digitalWrite(espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionUnlockState);
-            }
-            lockCurrentState->setVal(lockStates::UNLOCKED);
-            if (client != nullptr) {
-              esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockStates::UNLOCKED).c_str(), 1, 0, false);
-            } else LOG(W, "MQTT Client not initialized, cannot publish message");
+  bool initial_state_set = false; // Flag for initial setup
+  const TickType_t initial_delay_ticks = pdMS_TO_TICKS(1500); // Time for HomeSpan chars to init
+  const TickType_t loop_delay_ticks = pdMS_TO_TICKS(100); // Poll interval
 
-            if (static_cast<uint8_t>(espConfig::miscConfig.gpioActionMomentaryEnabled) & status.source) {
-              delay(espConfig::miscConfig.gpioActionMomentaryTimeout);
-              lockTargetState->setVal(lockStates::LOCKED);
-              if(espConfig::miscConfig.gpioActionPin != 255){
-                digitalWrite(espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionLockState);
+  LOG(I, "gpio_task started.");
+
+  while (1) {
+      // *** SET INITIAL GPIO STATE (runs only once after boot/task start) ***
+      if (!initial_state_set && espConfig::miscConfig.gpioActionPin != 255) {
+          // Wait a bit for HomeSpan characteristics to be ready
+          LOG(D, "gpio_task: Delaying %dms for initial state check...", pdTICKS_TO_MS(initial_delay_ticks));
+          vTaskDelay(initial_delay_ticks);
+
+          // Check if the global characteristic pointers are valid
+          if (lockCurrentState != nullptr && lockTargetState != nullptr) {
+              int current_state = lockCurrentState->getVal();
+              LOG(I, "gpio_task: Setting initial GPIO state based on LockCurrentState: %d", current_state);
+
+              uint8_t initial_level;
+              if (current_state == lockStates::LOCKED) {
+                  initial_level = espConfig::miscConfig.gpioActionLockState;
+              } else { // Assume UNLOCKED or other states use the unlock level initially
+                  initial_level = espConfig::miscConfig.gpioActionUnlockState;
               }
-              lockCurrentState->setVal(lockStates::LOCKED);
-              if (client != nullptr) {
-                esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockStates::LOCKED).c_str(), 1, 0, false);
-              } else LOG(W, "MQTT Client not initialized, cannot publish message");
-            }
-          } else if (espConfig::miscConfig.lockAlwaysLock && status.source != gpioLockAction::HOMEKIT) {
-            lockTargetState->setVal(lockStates::LOCKED);
-            if(espConfig::miscConfig.gpioActionPin != 255){
-              digitalWrite(espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionLockState);
-            }
-            lockCurrentState->setVal(lockStates::LOCKED);
-            if (client != nullptr) {
-              esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockStates::LOCKED).c_str(), 1, 0, false);
-            } else LOG(W, "MQTT Client not initialized, cannot publish message");
+
+              // Ensure pin is output
+              pinMode(espConfig::miscConfig.gpioActionPin, OUTPUT);
+              // Write initial state
+              digitalWrite(espConfig::miscConfig.gpioActionPin, initial_level);
+              initial_state_set = true;
+              LOG(I, "gpio_task: Initial GPIO pin %d set to level %d", espConfig::miscConfig.gpioActionPin, initial_level);
+
+              // Ensure target state matches initial current state if needed
+               if(lockTargetState->getVal() != current_state) {
+                    LOG(I, "gpio_task: Aligning initial target state to current state (%d)", current_state);
+                    lockTargetState->setVal(current_state);
+               }
+
           } else {
-            int currentState = lockCurrentState->getVal();
-            if (status.source != gpioLockAction::HOMEKIT) {
-              lockTargetState->setVal(!currentState);
-            }
-            if(espConfig::miscConfig.gpioActionPin != 255){
-              digitalWrite(espConfig::miscConfig.gpioActionPin, currentState == lockStates::UNLOCKED ? espConfig::miscConfig.gpioActionLockState : espConfig::miscConfig.gpioActionUnlockState);
-            }
-            lockCurrentState->setVal(!currentState);
-            if (client != nullptr) {
-              esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockCurrentState->getNewVal()).c_str(), 1, 0, false);
-            } else LOG(W, "MQTT Client not initialized, cannot publish message");
-            if ((static_cast<uint8_t>(espConfig::miscConfig.gpioActionMomentaryEnabled) & status.source) && currentState == lockStates::LOCKED) {
-              delay(espConfig::miscConfig.gpioActionMomentaryTimeout);
-              lockTargetState->setVal(currentState);
-              if(espConfig::miscConfig.gpioActionPin != 255){
-                digitalWrite(espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionLockState);
-              }
-              lockCurrentState->setVal(currentState);
-              if (client != nullptr) {
-                esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockCurrentState->getNewVal()).c_str(), 1, 0, false);
-              } else LOG(W, "MQTT Client not initialized, cannot publish message");
-            }
+               LOG(E, "gpio_task: lockCurrentState/lockTargetState characteristic not valid for initial state set!");
+               // Optionally retry or set a default safe state (e.g., locked)
+               // pinMode(espConfig::miscConfig.gpioActionPin, OUTPUT);
+               // digitalWrite(espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionLockState);
+               // initial_state_set = true; // Mark as set even if fallback?
           }
-        } else if (status.action == 2) {
-          vTaskDelete(NULL);
-          return;
-        }
       }
-    }
-    vTaskDelay(100 / portTICK_PERIOD_MS);
-  }
+      // Reset flag if pin gets disabled via web config later
+      if (espConfig::miscConfig.gpioActionPin == 255 && initial_state_set) {
+           LOG(I, "gpio_task: gpioActionPin disabled, resetting initial_state_set flag.");
+           initial_state_set = false;
+      }
+
+
+      // *** PROCESS QUEUE MESSAGES ***
+      if (gpio_lock_handle != nullptr) {
+          // Check queue without blocking (timeout 0)
+          if (xQueueReceive(gpio_lock_handle, &status, 0) == pdPASS) {
+              LOG(D, "gpio_task: Received action - source=%d action=%d", status.source, status.action);
+
+              // Only process if GPIO pin is currently enabled
+              if (espConfig::miscConfig.gpioActionPin == 255 && !espConfig::miscConfig.hkDumbSwitchMode) {
+                  LOG(W, "gpio_task: Received action but gpioActionPin is disabled (and not dumb mode). Ignoring.");
+                  // Skip rest of processing for this message
+              }
+              // Process action 0 (state change request)
+              else if (status.action == 0) {
+                  if(lockTargetState == nullptr || lockCurrentState == nullptr) {
+                      LOG(E, "gpio_task: Characteristics pointers invalid, cannot process action 0.");
+                      continue; // Skip to next loop iteration
+                  }
+
+                  int target_state_val = lockTargetState->getNewVal(); // Get intended state
+                  uint8_t gpio_level_to_set;
+                  bool isUnlockAction = (target_state_val == lockStates::UNLOCKED);
+
+                  LOG(D, "GPIO Task Action: Target State=%d", target_state_val);
+
+                  // Determine GPIO level based on target state
+                  if (isUnlockAction) {
+                      gpio_level_to_set = espConfig::miscConfig.gpioActionUnlockState;
+                      // Set intermediate HomeKit state for feedback
+                      if(lockCurrentState->getVal() != lockStates::UNLOCKING) {
+                           lockCurrentState->setVal(lockStates::UNLOCKING);
+                           if (client) esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockStates::UNLOCKING).c_str(), 0, 1, true);
+                      }
+                  } else { // Target is LOCKED
+                      gpio_level_to_set = espConfig::miscConfig.gpioActionLockState;
+                       // Set intermediate HomeKit state for feedback
+                      if(lockCurrentState->getVal() != lockStates::LOCKING) {
+                          lockCurrentState->setVal(lockStates::LOCKING);
+                           if (client) esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockStates::LOCKING).c_str(), 0, 1, true);
+                      }
+                  }
+
+                  // --- Perform Physical Action ---
+                  if (espConfig::miscConfig.gpioActionPin != 255) { // Only write if pin is valid
+                      LOG(D, "GPIO Task: Writing pin %d to level %d", espConfig::miscConfig.gpioActionPin, gpio_level_to_set);
+                      digitalWrite(espConfig::miscConfig.gpioActionPin, gpio_level_to_set);
+                  } else if (espConfig::miscConfig.hkDumbSwitchMode) {
+                      // Dumb switch mode might just mean "toggle" regardless of target state
+                      // Or maybe it simulates a momentary press? Define this behaviour.
+                      // Example: Simple Toggle (assumes it needs a pulse)
+                      LOG(D, "GPIO Task: Dumb Switch Mode - Simulating momentary toggle");
+                      uint8_t pressLevel = espConfig::miscConfig.gpioActionUnlockState; // Or some dedicated pulse level?
+                      uint8_t releaseLevel = espConfig::miscConfig.gpioActionLockState; // Or inverse of pressLevel?
+                      // Assume hkDumbSwitchMode uses gpioActionPin if set, otherwise needs a pin? Error if 255?
+                       if(espConfig::miscConfig.gpioActionPin != 255) {
+                           digitalWrite(espConfig::miscConfig.gpioActionPin, pressLevel);
+                           vTaskDelay(pdMS_TO_TICKS(espConfig::miscConfig.gpioActionMomentaryTimeout > 0 ? espConfig::miscConfig.gpioActionMomentaryTimeout : 200)); // Use timeout or default
+                           digitalWrite(espConfig::miscConfig.gpioActionPin, releaseLevel);
+                       } else {
+                            LOG(E, "Dumb Switch Mode enabled but no valid gpioActionPin configured!");
+                       }
+                      // In dumb mode, HK state might just toggle immediately
+                      lockCurrentState->setVal(target_state_val);
+                      if (client) esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(target_state_val).c_str(), 0, 1, true);
+                      continue; // Skip momentary logic below for dumb mode? Or adapt it?
+                  }
+                   // --- End Physical Action ---
+
+
+                  // --- Momentary Logic (Only if NOT Dumb Mode and pin is valid) ---
+                  if (espConfig::miscConfig.gpioActionPin != 255 && isUnlockAction && (static_cast<uint8_t>(espConfig::miscConfig.gpioActionMomentaryEnabled) & status.source)) {
+                      LOG(D, "GPIO Task: Starting momentary delay (%d ms) for UNLOCK", espConfig::miscConfig.gpioActionMomentaryTimeout);
+                      vTaskDelay(pdMS_TO_TICKS(espConfig::miscConfig.gpioActionMomentaryTimeout));
+
+                      LOG(D, "GPIO Task: Momentary timeout, returning pin %d to LOCK level (%d).", espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionLockState);
+                      digitalWrite(espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionLockState);
+
+                      // Update HomeKit state AFTER momentary action completes
+                      // Check if HomeKit still expects UNLOCKED (user might have changed target during delay)
+                      if(lockTargetState->getVal() == lockStates::UNLOCKED) {
+                          LOG(D,"GPIO Task: Momentary done, setting TargetState back to LOCKED");
+                          lockTargetState->setVal(lockStates::LOCKED); // Re-target to Locked
+                      }
+                      lockCurrentState->setVal(lockStates::LOCKED); // Set current to Locked
+                      if (client) esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockStates::LOCKED).c_str(), 0, 1, true);
+
+                  } else if (espConfig::miscConfig.gpioActionPin != 255) {
+                      // If NOT momentary, or if it was a LOCK action:
+                      // Physical action is done, update HomeKit current state to match the final target state
+                      LOG(D, "GPIO Task: Non-momentary action complete, setting CurrentState to %d", target_state_val);
+                      // Optional short delay if physical lock needs time to settle before updating state
+                      // vTaskDelay(pdMS_TO_TICKS(200));
+                      lockCurrentState->setVal(target_state_val);
+                      if (client) esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(target_state_val).c_str(), 0, 1, true);
+                  }
+                  // --- End Momentary Logic ---
+
+              }
+              // Process action 2 (stop task command)
+              else if (status.action == 2) {
+                  LOG(I, "gpio_task stopping command received.");
+                  vTaskDelete(NULL); // Gracefully delete self
+                  return; // Exit function
+              }
+          } // End if xQueueReceive successful
+      } else {
+          // Handle case where queue handle is somehow null (shouldn't happen if setup is correct)
+          LOG(E, "gpio_task: gpio_lock_handle is NULL!");
+          vTaskDelay(pdMS_TO_TICKS(1000)); // Delay longer before retrying
+      }
+
+      vTaskDelay(loop_delay_ticks); // Prevent task from hogging CPU
+  } // End while(1)
 }
 
 void neopixel_task(void* arg) {
@@ -480,7 +599,7 @@ void neopixel_task(void* arg) {
           if (espConfig::miscConfig.nfcNeopixelPin && espConfig::miscConfig.nfcNeopixelPin != 255) {
             LOG(D, "SUCCESS PIXEL %d:%d,%d,%d", espConfig::miscConfig.nfcNeopixelPin, espConfig::miscConfig.neopixelFailureColor[espConfig::misc_config_t::colorMap::R], espConfig::miscConfig.neopixelFailureColor[espConfig::misc_config_t::colorMap::G], espConfig::miscConfig.neopixelFailureColor[espConfig::misc_config_t::colorMap::B]);
             pixel->set(pixel->RGB(espConfig::miscConfig.neopixelFailureColor[espConfig::misc_config_t::colorMap::R], espConfig::miscConfig.neopixelFailureColor[espConfig::misc_config_t::colorMap::G], espConfig::miscConfig.neopixelFailureColor[espConfig::misc_config_t::colorMap::B]));
-            delay(espConfig::miscConfig.neopixelFailTime);
+            vTaskDelay(pdMS_TO_TICKS(espConfig::miscConfig.neopixelFailTime));
             pixel->off();
           }
           break;
@@ -488,7 +607,7 @@ void neopixel_task(void* arg) {
           if (espConfig::miscConfig.nfcNeopixelPin && espConfig::miscConfig.nfcNeopixelPin != 255) {
             LOG(D, "FAIL PIXEL %d:%d,%d,%d", espConfig::miscConfig.nfcNeopixelPin, espConfig::miscConfig.neopixelSuccessColor[espConfig::misc_config_t::colorMap::R], espConfig::miscConfig.neopixelSuccessColor[espConfig::misc_config_t::colorMap::G], espConfig::miscConfig.neopixelSuccessColor[espConfig::misc_config_t::colorMap::B]);
             pixel->set(pixel->RGB(espConfig::miscConfig.neopixelSuccessColor[espConfig::misc_config_t::colorMap::R], espConfig::miscConfig.neopixelSuccessColor[espConfig::misc_config_t::colorMap::G], espConfig::miscConfig.neopixelSuccessColor[espConfig::misc_config_t::colorMap::B]));
-            delay(espConfig::miscConfig.neopixelSuccessTime);
+            vTaskDelay(pdMS_TO_TICKS(espConfig::miscConfig.neopixelSuccessTime));
             pixel->off();
           }
           break;
@@ -515,7 +634,7 @@ void nfc_gpio_task(void* arg) {
           if (espConfig::miscConfig.nfcFailPin && espConfig::miscConfig.nfcFailPin != 255) {
             LOG(D, "FAIL LED %d:%d", espConfig::miscConfig.nfcFailPin, espConfig::miscConfig.nfcFailHL);
             digitalWrite(espConfig::miscConfig.nfcFailPin, espConfig::miscConfig.nfcFailHL);
-            delay(espConfig::miscConfig.nfcFailTime);
+            vTaskDelay(pdMS_TO_TICKS(espConfig::miscConfig.nfcFailTime));
             digitalWrite(espConfig::miscConfig.nfcFailPin, !espConfig::miscConfig.nfcFailHL);
           }
           break;
@@ -523,14 +642,14 @@ void nfc_gpio_task(void* arg) {
           if (espConfig::miscConfig.nfcSuccessPin && espConfig::miscConfig.nfcSuccessPin != 255) {
             LOG(D, "SUCCESS LED %d:%d", espConfig::miscConfig.nfcSuccessPin, espConfig::miscConfig.nfcSuccessHL);
             digitalWrite(espConfig::miscConfig.nfcSuccessPin, espConfig::miscConfig.nfcSuccessHL);
-            delay(espConfig::miscConfig.nfcSuccessTime);
+            vTaskDelay(pdMS_TO_TICKS(espConfig::miscConfig.nfcSuccessTime));
             digitalWrite(espConfig::miscConfig.nfcSuccessPin, !espConfig::miscConfig.nfcSuccessHL);
           }
           break;
         case 2:
           if(hkAltActionActive){
             digitalWrite(espConfig::miscConfig.hkAltActionPin, espConfig::miscConfig.hkAltActionGpioState);
-            delay(espConfig::miscConfig.hkAltActionTimeout);
+            vTaskDelay(pdMS_TO_TICKS(espConfig::miscConfig.hkAltActionTimeout));
             digitalWrite(espConfig::miscConfig.hkAltActionPin, !espConfig::miscConfig.hkAltActionGpioState);
           }
           break;
@@ -551,39 +670,55 @@ struct LockMechanism : Service::LockMechanism
   const char* TAG = "LockMechanism";
 
   LockMechanism() : Service::LockMechanism() {
-    LOG(I, "Configuring LockMechanism"); // initialization message
+    LOG(I, "Configuring LockMechanism");
     lockCurrentState = new Characteristic::LockCurrentState(1, true);
     lockTargetState = new Characteristic::LockTargetState(1, true);
-    memcpy(ecpData + 8, readerData.reader_gid.data(), readerData.reader_gid.size());
-    with_crc16(ecpData, 16, ecpData + 16);
-    if (espConfig::miscConfig.gpioActionPin != 255) {
-      if (lockCurrentState->getVal() == lockStates::LOCKED) {
-        digitalWrite(espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionLockState);
-      } else if (lockCurrentState->getVal() == lockStates::UNLOCKED) {
-        digitalWrite(espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionUnlockState);
-      }
+
+    // --- Protect read of readerData.reader_gid ---
+    if (readerDataMutex != nullptr) {
+        if (xSemaphoreTake(readerDataMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+            if(readerData.reader_gid.size() >= 8) {
+                memcpy(ecpData + 8, readerData.reader_gid.data(), 8); // Read shared data
+                with_crc16(ecpData, 16, ecpData + 16);
+            } else {
+                LOG(W, "Reader GID not available/valid size in LockMechanism constructor.");
+            }
+            xSemaphoreGive(readerDataMutex);
+        } else {
+            LOG(E, "Failed to take readerDataMutex in LockMechanism constructor!");
+        }
+    } else {
+         LOG(E, "readerDataMutex not initialized for LockMechanism constructor!");
     }
-  } // end constructor
+  } 
 
   boolean update() {
     int targetState = lockTargetState->getNewVal();
     LOG(I, "New LockState=%d, Current LockState=%d", targetState, lockCurrentState->getVal());
-    if (espConfig::miscConfig.gpioActionPin != 255) {
-      const gpioLockAction gpioAction{ .source = gpioLockAction::HOMEKIT, .action = 0 };
-      xQueueSend(gpio_lock_handle, &gpioAction, 0);
-    } else if (espConfig::miscConfig.hkDumbSwitchMode) {
-      const gpioLockAction gpioAction{ .source = gpioLockAction::HOMEKIT, .action = 0 };
-      xQueueSend(gpio_lock_handle, &gpioAction, 0);
-    }
-    int currentState = lockCurrentState->getNewVal();
-    if (client != nullptr) {
-      if (espConfig::miscConfig.gpioActionPin == 255) {
-        if (targetState != currentState) {
-          esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), targetState == lockStates::UNLOCKED ? std::to_string(lockStates::UNLOCKING).c_str() : std::to_string(lockStates::LOCKING).c_str(), 1, 1, true);
-        } else {
-          esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(currentState).c_str(), 1, 1, true);
-        }
+
+    // Sends the action to the gpio_task queue
+    if ((espConfig::miscConfig.gpioActionPin != 255 && espConfig::miscConfig.hkGpioControlledState) || espConfig::miscConfig.hkDumbSwitchMode) {
+      // Only send to queue if the pin is enabled OR dumb switch mode is on
+      const gpioLockAction gpioAction{ .source = gpioLockAction::HOMEKIT, .action = 0 }; // action 0 = process state change
+      LOG(D, "LockMechanism::update() sending action to gpio_task queue.");
+      // Use a small timeout for the queue send in case the queue is full
+      if (xQueueSend(gpio_lock_handle, &gpioAction, pdMS_TO_TICKS(50)) != pdPASS) {
+           LOG(E, "Failed to send action to gpio_lock_handle queue!");
       }
+    } else {
+         LOG(D, "LockMechanism::update() - GPIO action pin disabled or not HK controlled, not sending to queue.");
+    }
+
+    int currentState = lockCurrentState->getNewVal(); // Use getNewVal as it reflects intermediate states maybe? Or getVal()? Test this.
+    if (client != nullptr) {
+        // Report intermediate states if possible (gpio_task might set these)
+        if(currentState == lockStates::UNLOCKING || currentState == lockStates::LOCKING) {
+             esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(currentState).c_str(), 1, 1, true);
+        } else {
+            // Report final target state once reached (gpio_task should update this)
+             esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(targetState).c_str(), 1, 1, true);
+        }
+
       if (espConfig::mqttData.lockEnableCustomState) {
         if (targetState == lockStates::UNLOCKED) {
           esp_mqtt_client_publish(client, espConfig::mqttData.lockCustomStateTopic.c_str(), std::to_string(espConfig::mqttData.customLockActions["UNLOCK"]).c_str(), 0, 0, false);
@@ -593,6 +728,8 @@ struct LockMechanism : Service::LockMechanism
       }
     } else LOG(W, "MQTT Client not initialized, cannot publish message");
 
+    // HomeSpan expects update() to return true if the action is accepted.
+    // Since we delegate to gpio_task, we should usually return true here.
     return (true);
   }
 };
@@ -615,45 +752,100 @@ struct NFCAccess : Service::NFCAccess
   }
 
   boolean update() {
-    LOG(D, "PROVISIONED READER KEY: %s", red_log::bufToHexString(readerData.reader_pk.data(), readerData.reader_pk.size()).c_str());
-    LOG(D, "READER GROUP IDENTIFIER: %s", red_log::bufToHexString(readerData.reader_gid.data(), readerData.reader_gid.size()).c_str());
-    LOG(D, "READER UNIQUE IDENTIFIER: %s", red_log::bufToHexString(readerData.reader_id.data(), readerData.reader_id.size()).c_str());
-
+    LOG(D,"NFCAccess::update() called.");
+    boolean resultStatus = false; // To return status
     TLV8 ctrlData(NULL, 0);
-    nfcControlPoint->getNewTLV(ctrlData);
+    nfcControlPoint->getNewTLV(ctrlData); // Get data from HAP
     std::vector<uint8_t> tlvData(ctrlData.pack_size());
     ctrlData.pack(tlvData.data());
-    if (tlvData.size() == 0)
-      return false;
-    LOG(D, "Decoded data: %s", red_log::bufToHexString(tlvData.data(), tlvData.size()).c_str());
-    LOG(D, "Decoded data length: %d", tlvData.size());
-    HK_HomeKit hkCtx(readerData, savedData, "READERDATA", tlvData);
-    std::vector<uint8_t> result = hkCtx.processResult();
-    if (readerData.reader_gid.size() > 0) {
-      memcpy(ecpData + 8, readerData.reader_gid.data(), readerData.reader_gid.size());
-      with_crc16(ecpData, 16, ecpData + 16);
-    }
-    TLV8 res(NULL, 0);
-    res.unpack(result.data(), result.size());
-    nfcControlPoint->setTLV(res, false);
-    return true;
-  }
 
-};
+    if (tlvData.size() == 0) {
+         LOG(W, "NFCAccess::update received empty control point data.");
+         return false; // No data to process
+    }
+
+    LOG(D, "Decoded TLV data length: %d", tlvData.size());
+    ESP_LOG_BUFFER_HEX_LEVEL(TAG, tlvData.data(), tlvData.size(), ESP_LOG_VERBOSE);
+
+    // --- Protect readerData modification and save ---
+    if (readerDataMutex == nullptr) {
+        LOG(E, "readerDataMutex not initialized in NFCAccess::update!");
+        return false;
+    }
+    if (xSemaphoreTake(readerDataMutex, pdMS_TO_TICKS(2000)) == pdTRUE) { // Longer timeout maybe needed for processing+NVS
+         // --- Start Critical Section ---
+         LOG(D, "Processing NFC Control Point data (mutex acquired).");
+         LOG(D, "Current Reader Key (before processing): %s", red_log::bufToHexString(readerData.reader_pk.data(), readerData.reader_pk.size()).c_str());
+
+         // HK_HomeKit processes TLV and potentially modifies readerData
+         HK_HomeKit hkCtx(readerData, savedData, "READERDATA", tlvData);
+         std::vector<uint8_t> result = hkCtx.processResult();
+
+         // Check if GID was updated by hkCtx before using it and saving
+         LOG(D, "Reader GID (after processing): %s", red_log::bufToHexString(readerData.reader_gid.data(), readerData.reader_gid.size()).c_str());
+         if (readerData.reader_gid.size() >= 8) {
+             memcpy(ecpData + 8, readerData.reader_gid.data(), 8); // Update ecpData based on potentially new GID
+             with_crc16(ecpData, 16, ecpData + 16);
+         }
+
+         // Save the potentially modified readerData
+         LOG(D, "Saving potentially modified readerData to NVS...");
+         save_to_nvs_internal(); // Call internal save function
+
+         // Set the response TLV for HomeKit
+         TLV8 res(NULL, 0);
+         res.unpack(result.data(), result.size());
+         nfcControlPoint->setTLV(res, false);
+         resultStatus = true; // Indicate success
+         // --- End Critical Section ---
+         xSemaphoreGive(readerDataMutex);
+         LOG(D, "NFCAccess::update finished processing (mutex released).");
+    } else {
+         LOG(E, "Failed to take readerDataMutex in NFCAccess::update!");
+         resultStatus = false;
+         // Optionally set an error TLV?
+         // TLV8 errRes; errRes.add(HAP_TLV_TYPE_ERROR, HAP_TLV_ERROR_BUSY);
+         // nfcControlPoint->setTLV(errRes, false);
+    }
+    // --- End protection ---
+
+    return resultStatus;
+}
 
 void deleteReaderData(const char* buf = "") {
-  esp_err_t erase_nvs = nvs_erase_key(savedData, "READERDATA");
-  esp_err_t commit_nvs = nvs_commit(savedData);
-  readerData.issuers.clear();
-  readerData.reader_gid.clear();
-  readerData.reader_id.clear();
-  readerData.reader_pk.clear();
-  readerData.reader_pk_x.clear();
-  readerData.reader_sk.clear();
-  LOG(D, "*** NVS W STATUS");
-  LOG(D, "ERASE: %s", esp_err_to_name(erase_nvs));
-  LOG(D, "COMMIT: %s", esp_err_to_name(commit_nvs));
-  LOG(D, "*** NVS W STATUS");
+  LOG(W, "Attempting to delete reader data...");
+  // --- Protect readerData modification ---
+  if (readerDataMutex == nullptr) {
+      LOG(E, "readerDataMutex not initialized in deleteReaderData!");
+      return;
+  }
+  if (xSemaphoreTake(readerDataMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+      // --- Start Critical Section ---
+      esp_err_t erase_nvs = nvs_erase_key(savedData, "READERDATA");
+      esp_err_t commit_nvs = nvs_commit(savedData); // Commit erase
+      LOG(D, "*** NVS W STATUS");
+      LOG(D, "ERASE: %s", esp_err_to_name(erase_nvs));
+      LOG(D, "COMMIT: %s", esp_err_to_name(commit_nvs));
+      LOG(D, "*** NVS W STATUS");
+
+      // Clear in-memory data *after* successful erase/commit
+      if (erase_nvs == ESP_OK && commit_nvs == ESP_OK) {
+          LOG(I,"Clearing in-memory readerData structure.");
+          readerData.issuers.clear();
+          readerData.reader_gid.clear();
+          readerData.reader_id.clear();
+          readerData.reader_pk.clear();
+          readerData.reader_pk_x.clear();
+          readerData.reader_sk.clear();
+      } else {
+           LOG(E, "Failed to erase/commit readerData from NVS. In-memory data NOT cleared.");
+      }
+      // --- End Critical Section ---
+      xSemaphoreGive(readerDataMutex);
+  } else {
+       LOG(E, "Failed to take readerDataMutex in deleteReaderData!");
+  }
+  // --- End protection ---
 }
 
 std::vector<uint8_t> getHashIdentifier(const uint8_t* key, size_t len) {
@@ -671,30 +863,64 @@ std::vector<uint8_t> getHashIdentifier(const uint8_t* key, size_t len) {
 }
 
 void pairCallback() {
-  if (HAPClient::nAdminControllers() == 0) {
-    deleteReaderData(NULL);
-    return;
+  LOG(I, "Pairing callback triggered.");
+  // --- Protect readerData modification and save ---
+  if (readerDataMutex == nullptr) {
+      LOG(E, "readerDataMutex not initialized in pairCallback!");
+      return;
   }
-  for (auto it = homeSpan.controllerListBegin(); it != homeSpan.controllerListEnd(); ++it) {
-    std::vector<uint8_t> id = getHashIdentifier(it->getLTPK(), 32);
-    LOG(D, "Found allocated controller - Hash: %s", red_log::bufToHexString(id.data(), 8).c_str());
-    hkIssuer_t* foundIssuer = nullptr;
-    for (auto&& issuer : readerData.issuers) {
-      if (std::equal(issuer.issuer_id.begin(), issuer.issuer_id.end(), id.begin())) {
-        LOG(D, "Issuer %s already added, skipping", red_log::bufToHexString(issuer.issuer_id.data(), issuer.issuer_id.size()).c_str());
-        foundIssuer = &issuer;
-        break;
-      }
-    }
-    if (foundIssuer == nullptr) {
-      LOG(D, "Adding new issuer - ID: %s", red_log::bufToHexString(id.data(), 8).c_str());
-      hkIssuer_t newIssuer;
-      newIssuer.issuer_id = std::vector<uint8_t>{ id.begin(), id.begin() + 8 };
-      newIssuer.issuer_pk.insert(newIssuer.issuer_pk.begin(), it->getLTPK(), it->getLTPK() + 32);
-      readerData.issuers.emplace_back(newIssuer);
-    }
+  if (xSemaphoreTake(readerDataMutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+       // --- Start Critical Section ---
+       if (HAPClient::nAdminControllers() == 0) {
+           LOG(I, "pairCallback: No controllers paired. Clearing readerData.");
+           // Clear in-memory data first
+           readerData.issuers.clear();
+           readerData.reader_gid.clear();
+           readerData.reader_id.clear();
+           readerData.reader_pk.clear();
+           readerData.reader_pk_x.clear();
+           readerData.reader_sk.clear();
+           // Then erase from NVS
+           nvs_erase_key(savedData, "READERDATA");
+           nvs_commit(savedData); // Commit erase
+       } else {
+           LOG(I, "pairCallback: Processing %d controllers.", HAPClient::nAdminControllers());
+           bool changed = false; // Track if we actually modify data
+           for (auto it = homeSpan.controllerListBegin(); it != homeSpan.controllerListEnd(); ++it) {
+               std::vector<uint8_t> id = getHashIdentifier(it->getLTPK(), 32);
+               LOG(D, "Controller hash: %s", red_log::bufToHexString(id.data(), 8).c_str());
+               bool issuer_found = false;
+               for (auto&& issuer : readerData.issuers) { // Read shared data
+                   if (issuer.issuer_id.size() == 8 && std::equal(issuer.issuer_id.begin(), issuer.issuer_id.end(), id.begin())) {
+                       LOG(D, "Issuer %s already added.", red_log::bufToHexString(issuer.issuer_id.data(), issuer.issuer_id.size()).c_str());
+                       issuer_found = true;
+                       break;
+                   }
+               }
+               if (!issuer_found) {
+                   LOG(I, "Adding new issuer - ID: %s", red_log::bufToHexString(id.data(), 8).c_str());
+                   hkIssuer_t newIssuer;
+                   newIssuer.issuer_id = std::vector<uint8_t>{ id.begin(), id.begin() + 8 };
+                   newIssuer.issuer_pk.assign(it->getLTPK(), it->getLTPK() + 32); // Use assign for clarity
+                   readerData.issuers.emplace_back(newIssuer); // Modify shared data
+                   changed = true; // Mark that data was changed
+               }
+           } // end for loop controllers
+
+           // Save only if data actually changed
+           if(changed) {
+                LOG(I, "pairCallback: readerData modified, saving to NVS...");
+                save_to_nvs_internal(); // Call internal save function
+           } else {
+                LOG(D, "pairCallback: No changes detected in readerData issuers.");
+           }
+       } // end else (controllers > 0)
+       // --- End Critical Section ---
+      xSemaphoreGive(readerDataMutex);
+  } else {
+      LOG(E, "Failed to take readerDataMutex in pairCallback!");
   }
-  save_to_nvs();
+  // --- End protection ---
 }
 
 void setFlow(const char* buf) {
@@ -758,14 +984,37 @@ void setLogLevel(const char* buf) {
 }
 
 void print_issuers(const char* buf) {
-  for (auto&& issuer : readerData.issuers) {
-    LOG(I, "Issuer ID: %s, Public Key: %s", red_log::bufToHexString(issuer.issuer_id.data(), issuer.issuer_id.size()).c_str(), red_log::bufToHexString(issuer.issuer_pk.data(), issuer.issuer_pk.size()).c_str());
-    for (auto&& endpoint : issuer.endpoints) {
-      LOG(I, "Endpoint ID: %s, Public Key: %s", red_log::bufToHexString(endpoint.endpoint_id.data(), endpoint.endpoint_id.size()).c_str(), red_log::bufToHexString(endpoint.endpoint_pk.data(), endpoint.endpoint_pk.size()).c_str());
-    }
+  LOG(I, "--- Printing Issuers ---");
+  // --- Protect readerData read ---
+  if (readerDataMutex == nullptr) {
+      LOG(E, "readerDataMutex not initialized in print_issuers!");
+      return;
   }
+  if (xSemaphoreTake(readerDataMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+       // --- Start Critical Section ---
+       if(readerData.issuers.empty()) {
+           LOG(I, "  (No issuers configured)");
+       } else {
+           for (auto&& issuer : readerData.issuers) { // Read shared data
+               LOG(I, "  Issuer ID: %s, PK: %s...", red_log::bufToHexString(issuer.issuer_id.data(), issuer.issuer_id.size()).c_str(), red_log::bufToHexString(issuer.issuer_pk.data(), 8).c_str()); // Log only start of PK maybe
+               if(!issuer.endpoints.empty()) {
+                   LOG(I, "    Endpoints:");
+                   for (auto&& endpoint : issuer.endpoints) { // Read shared data
+                       LOG(I, "      Endpoint ID: %s, PK: %s...", red_log::bufToHexString(endpoint.endpoint_id.data(), endpoint.endpoint_id.size()).c_str(), red_log::bufToHexString(endpoint.endpoint_pk.data(), 8).c_str());
+                   }
+               } else {
+                    LOG(I, "    (No endpoints for this issuer)");
+               }
+           }
+       }
+       // --- End Critical Section ---
+       xSemaphoreGive(readerDataMutex);
+  } else {
+       LOG(E, "Failed to take readerDataMutex in print_issuers!");
+  }
+  // --- End protection ---
+   LOG(I, "--- End Printing Issuers ---");
 }
-
 /**
  * The function `set_custom_state_handler` translate the custom states to their HomeKit counterpart
  * updating the state of the lock and publishes the new state to the `MQTT_STATE_TOPIC` MQTT topic.
@@ -777,71 +1026,77 @@ void print_issuers(const char* buf) {
  *  received custom state value
  */
 void set_custom_state_handler(esp_mqtt_client_handle_t client, int state) {
+  // Ensure states that imply an ACTION (like UNLOCKING/LOCKING) primarily set the target state.
+  // States that just REPORT status (like UNLOCKED/LOCKED/JAMMED) should set the current state.
+
   if (espConfig::mqttData.customLockStates["C_UNLOCKING"] == state) {
-    lockTargetState->setVal(lockStates::UNLOCKED);
+    LOG(I, "MQTT set_custom_state_handler: Received C_UNLOCKING. Setting target state.");
+    lockTargetState->setVal(lockStates::UNLOCKED); // Use Target State to trigger action
     esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockStates::UNLOCKING).c_str(), 0, 1, true);
     return;
   } else if (espConfig::mqttData.customLockStates["C_LOCKING"] == state) {
-    lockTargetState->setVal(lockStates::LOCKED);
+    LOG(I, "MQTT set_custom_state_handler: Received C_LOCKING. Setting target state.");
+    lockTargetState->setVal(lockStates::LOCKED); // Use Target State to trigger action
     esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockStates::LOCKING).c_str(), 0, 1, true);
     return;
   } else if (espConfig::mqttData.customLockStates["C_UNLOCKED"] == state) {
-    if (espConfig::miscConfig.gpioActionPin != 255) {
-      digitalWrite(espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionUnlockState);
-    }
+     LOG(I, "MQTT set_custom_state_handler: Received C_UNLOCKED. Updating current state.");
+    // This reports the lock IS unlocked. Only update CurrentState.
+    // Don't call digitalWrite here. If the GPIO needs setting, the source should ensure it happened.
     lockCurrentState->setVal(lockStates::UNLOCKED);
     esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockStates::UNLOCKED).c_str(), 0, 1, true);
     return;
   } else if (espConfig::mqttData.customLockStates["C_LOCKED"] == state) {
-    if (espConfig::miscConfig.gpioActionPin != 255) {
-      digitalWrite(espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionLockState);
-    }
+     LOG(I, "MQTT set_custom_state_handler: Received C_LOCKED. Updating current state.");
+    // This reports the lock IS locked. Only update CurrentState.
     lockCurrentState->setVal(lockStates::LOCKED);
+    // Optional: Ensure TargetState matches if necessary?
+    // if(lockTargetState->getVal() != lockStates::LOCKED) lockTargetState->setVal(lockStates::LOCKED);
     esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockStates::LOCKED).c_str(), 0, 1, true);
     return;
   } else if (espConfig::mqttData.customLockStates["C_JAMMED"] == state) {
+    LOG(I, "MQTT set_custom_state_handler: Received C_JAMMED. Updating current state.");
     lockCurrentState->setVal(lockStates::JAMMED);
     esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockStates::JAMMED).c_str(), 0, 1, true);
     return;
   } else if (espConfig::mqttData.customLockStates["C_UNKNOWN"] == state) {
+    LOG(I, "MQTT set_custom_state_handler: Received C_UNKNOWN. Updating current state.");
     lockCurrentState->setVal(lockStates::UNKNOWN);
     esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockStates::UNKNOWN).c_str(), 0, 1, true);
     return;
   }
-  LOG(D, "Update state failed! Recv value not valid");
+  LOG(W, "MQTT set_custom_state_handler: Update state failed! Received invalid custom state value: %d", state);
 }
 
 void set_state_handler(esp_mqtt_client_handle_t client, int state) {
   switch (state) {
   case lockStates::UNLOCKED:
-    if (espConfig::miscConfig.gpioActionPin != 255) {
-      digitalWrite(espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionUnlockState);
-    }
-    lockTargetState->setVal(state);
-    lockCurrentState->setVal(state);
-    esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockStates::UNLOCKED).c_str(), 0, 1, true);
+    // REMOVE: digitalWrite call block
+    LOG(I, "MQTT set_state_handler: Received UNLOCK command. Setting target state.");
+    lockTargetState->setVal(state); // Trigger HomeKit update -> LockMechanism::update -> gpio_task
+    // lockCurrentState->setVal(state); // Don't set current state here, let gpio_task confirm it
+    esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockStates::UNLOCKING).c_str(), 0, 1, true); // Publish UNLOCKING state
     if (espConfig::mqttData.lockEnableCustomState) {
       esp_mqtt_client_publish(client, espConfig::mqttData.lockCustomStateTopic.c_str(), std::to_string(espConfig::mqttData.customLockActions["UNLOCK"]).c_str(), 0, 0, false);
     }
     break;
   case lockStates::LOCKED:
-    if (espConfig::miscConfig.gpioActionPin != 255) {
-      digitalWrite(espConfig::miscConfig.gpioActionPin, espConfig::miscConfig.gpioActionLockState);
-    }
-    lockTargetState->setVal(state);
-    lockCurrentState->setVal(state);
-    esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockStates::LOCKED).c_str(), 0, 1, true);
+    LOG(I, "MQTT set_state_handler: Received LOCK command. Setting target state.");
+    lockTargetState->setVal(state); // Trigger HomeKit update -> LockMechanism::update -> gpio_task
+    // lockCurrentState->setVal(state); // Don't set current state here
+    esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(lockStates::LOCKING).c_str(), 0, 1, true); // Publish LOCKING state
     if (espConfig::mqttData.lockEnableCustomState) {
       esp_mqtt_client_publish(client, espConfig::mqttData.lockCustomStateTopic.c_str(), std::to_string(espConfig::mqttData.customLockActions["LOCK"]).c_str(), 0, 0, false);
     }
     break;
-  case lockStates::JAMMED:
+  case lockStates::JAMMED: // These only update CURRENT state, no physical action triggered
   case lockStates::UNKNOWN:
+    LOG(I, "MQTT set_state_handler: Received non-actionable state %d. Updating current state.", state);
     lockCurrentState->setVal(state);
     esp_mqtt_client_publish(client, espConfig::mqttData.lockStateTopic.c_str(), std::to_string(state).c_str(), 0, 1, true);
     break;
   default:
-    LOG(D, "Update state failed! Recv value not valid");
+    LOG(W, "MQTT set_state_handler: Update state failed! Received invalid state value: %d", state);
     break;
   }
 }
@@ -865,9 +1120,10 @@ void mqtt_connected_event(void* event_handler_arg, esp_event_base_t event_base, 
     json device;
     device["name"] = espConfig::miscConfig.deviceName.c_str();
     char identifier[18];
-    sprintf(identifier, "%.2s%.2s%.2s%.2s%.2s%.2s", HAPClient::accessory.ID, HAPClient::accessory.ID + 3, HAPClient::accessory.ID + 6, HAPClient::accessory.ID + 9, HAPClient::accessory.ID + 12, HAPClient::accessory.ID + 15);
+    std::string hap_id_str = HAPClient::accessory.ID;
+    // sprintf(identifier, "%.2s%.2s%.2s%.2s%.2s%.2s", HAPClient::accessory.ID, HAPClient::accessory.ID + 3, HAPClient::accessory.ID + 6, HAPClient::accessory.ID + 9, HAPClient::accessory.ID + 12, HAPClient::accessory.ID + 15);
     std::string id = identifier;
-    device["identifiers"].push_back(id);
+    device["identifiers"].push_back(hap_id_str);     // Add real ID to device identifiers
     device["identifiers"].push_back(serialNumber);
     device["manufacturer"] = "rednblkx";
     device["model"] = "HomeKey-ESP32";
@@ -908,7 +1164,7 @@ void mqtt_connected_event(void* event_handler_arg, esp_event_base_t event_base, 
     payload["state_locking"] = "5";
     payload["state_jammed"] = "2";
     payload["availability_topic"] = espConfig::mqttData.lwtTopic.c_str();
-    payload["unique_id"] = id;
+    payload["unique_id"] = hap_id_str;
     payload["device"] = device;
     payload["retain"] = "false";
     bufferpub = payload.dump();
@@ -1360,7 +1616,7 @@ void setupWeb() {
   rebootDeviceHandle->setMethod(HTTP_GET);
   rebootDeviceHandle->onRequest([](AsyncWebServerRequest* request) {
     request->send(200, "text/plain", "Rebooting the device...");
-    delay(1000);
+    vTaskDelay(pdMS_TO_TICKS(1000));
     ESP.restart();
     });
   webServer.addHandler(rebootDeviceHandle);
@@ -1369,7 +1625,7 @@ void setupWeb() {
   startConfigAP->setMethod(HTTP_GET);
   startConfigAP->onRequest([](AsyncWebServerRequest* request) {
     request->send(200, "text/plain", "Starting the AP...");
-    delay(1000);
+    vTaskDelay(pdMS_TO_TICKS(1000));
     webServer.end();
     homeSpan.processSerialCommand("A");
     });
@@ -1379,7 +1635,7 @@ void setupWeb() {
   resetHkHandle->setMethod(HTTP_GET);
   resetHkHandle->onRequest([](AsyncWebServerRequest* request) {
     request->send(200, "text/plain", "Erasing HomeKit pairings and restarting...");
-    delay(1000);
+    vTaskDelay(pdMS_TO_TICKS(1000));
     deleteReaderData();
     homeSpan.processSerialCommand("H");
     });
@@ -1389,7 +1645,7 @@ void setupWeb() {
   resetWifiHandle->setMethod(HTTP_GET);
   resetWifiHandle->onRequest([](AsyncWebServerRequest* request) {
     request->send(200, "text/plain", "Erasing WiFi credentials and restarting, AP will start on boot...");
-    delay(1000);
+    vTaskDelay(pdMS_TO_TICKS(1000));
     homeSpan.processSerialCommand("X");
     });
   webServer.addHandler(resetWifiHandle);
@@ -1490,171 +1746,363 @@ void nfc_retry(void* arg) {
   }
 }
 
-void nfc_thread_entry(void* arg) {
-  uint32_t versiondata = nfc->getFirmwareVersion();
-  if (!versiondata) {
-    ESP_LOGE("NFC_SETUP", "Error establishing PN532 connection");
-    nfc->stop();
-    xTaskCreate(nfc_retry, "nfc_reconnect_task", 8192, NULL, 1, &nfc_reconnect_task);
-    vTaskSuspend(NULL);
-  } else {
-    unsigned int model = (versiondata >> 24) & 0xFF;
-    ESP_LOGI("NFC_SETUP", "Found chip PN5%x", model);
-    int maj = (versiondata >> 16) & 0xFF;
-    int min = (versiondata >> 8) & 0xFF;
-    ESP_LOGI("NFC_SETUP", "Firmware ver. %d.%d", maj, min);
-    nfc->SAMConfig();
-    nfc->setRFField(0x02, 0x01);
-    nfc->setPassiveActivationRetries(0);
-    ESP_LOGI("NFC_SETUP", "Waiting for an ISO14443A card");
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h> // Header for semaphores (mutexes)
+// ... other includes like HAP.h, HKAuthContext.h, PN532.h, logging.h, etc.
+
+// --- Assume these globals are declared elsewhere ---
+extern PN532 *nfc;
+extern readerData_t readerData;
+extern SemaphoreHandle_t readerDataMutex; // Mutex handle must be created in setup()
+extern QueueHandle_t gpio_led_handle;
+extern QueueHandle_t neopixel_handle;
+extern QueueHandle_t gpio_lock_handle;
+extern TaskHandle_t nfc_reconnect_task;
+extern esp_mqtt_client_handle_t client;
+extern SpanCharacteristic* lockCurrentState;
+extern SpanCharacteristic* lockTargetState;
+extern KeyFlow hkFlow;
+extern bool hkAltActionActive;
+extern uint8_t ecpData[18]; // Used for communicateThru
+
+// Function declarations needed if not already visible
+extern std::string hex_representation(const std::vector<uint8_t>& v);
+extern void mqtt_publish(std::string topic, std::string payload, uint8_t qos, bool retain);
+extern void with_crc16(unsigned char* data, unsigned int size, unsigned char* result); // Assuming this is declared
+extern void nfc_retry(void* arg); 
+extern void trigger_nfc_reconnect(const char* reason);
+// --- End Assume Globals/Declarations ---
+
+
+// Stops NFC, ensures the retry task is created (if needed), and suspends the current task.
+void trigger_nfc_reconnect(const char* reason) {
+  const char* TAG_RECONNECT = "NFC_RECONNECT";
+  ESP_LOGE(TAG_RECONNECT, "Triggering PN532 reconnect due to: %s", reason);
+
+  if (nfc) {
+      nfc->stop(); // Attempt to cleanly stop the NFC interface
   }
-  memcpy(ecpData + 8, readerData.reader_gid.data(), readerData.reader_gid.size());
-  with_crc16(ecpData, 16, ecpData + 16);
+
+  // Check if the reconnect task handle is already valid (meaning task might exist)
+  // A more robust check would involve querying task state if possible, but checking
+  // the handle is a basic preventative measure against creating duplicates rapidly.
+  if (nfc_reconnect_task == nullptr) {
+      ESP_LOGI(TAG_RECONNECT, "Creating nfc_reconnect_task...");
+      BaseType_t ret = xTaskCreate(nfc_retry, "nfc_reconnect_task", 8192, NULL, 5, &nfc_reconnect_task); // Increased priority maybe?
+      if (ret != pdPASS) {
+          ESP_LOGE(TAG_RECONNECT, "Failed to create nfc_reconnect_task! System may not recover NFC.");
+          // Cannot suspend if task creation failed, maybe just loop with delay?
+          // Or maybe attempt recovery again later? For now, log the error.
+          // Ideally, we should not reach the suspend below if creation fails.
+           nfc_reconnect_task = nullptr; // Ensure handle is null if creation failed
+           // If creation failed, maybe just return and let the main loop try again?
+           // return; // Decide on failure strategy here. For now, proceed to suspend.
+      }
+  } else {
+      ESP_LOGW(TAG_RECONNECT, "nfc_reconnect_task handle already exists. Assuming task is running or pending.");
+      // If the task exists but crashed, this won't restart it. A more advanced
+      // system might delete the old task handle and create a new one.
+  }
+
+  ESP_LOGW(TAG_RECONNECT, "Suspending nfc_poll_task. nfc_reconnect_task will attempt recovery.");
+  vTaskSuspend(NULL); // Suspend the current task (nfc_poll_task)
+}
+
+// =========================================================================
+// ==               NFC Thread Entry Function (with Mutex)                ==
+// =========================================================================
+void nfc_thread_entry(void* arg) {
+  const char* TAG_NFC = "NFC_TASK"; // Tag for logging within this task
+  uint32_t versiondata = 0;
+  bool nfc_initialized = false;
+
+  // --- Initial PN532 Check & Setup ---
+  ESP_LOGI(TAG_NFC, "Starting initial PN532 check...");
+  versiondata = nfc->getFirmwareVersion();
+  if (!versiondata) {
+      ESP_LOGE(TAG_NFC, "Initial PN532 check failed. Triggering reconnect...");
+      trigger_nfc_reconnect("Initial getFirmwareVersion failed");
+      // Should not return here if suspended correctly
+      return;
+  } else {
+      // Log firmware version etc.
+      unsigned int model = (versiondata >> 24) & 0xFF;
+      ESP_LOGI(TAG_NFC, "Found chip PN5%x", model);
+      int maj = (versiondata >> 16) & 0xFF;
+      int min = (versiondata >> 8) & 0xFF;
+      ESP_LOGI(TAG_NFC, "Firmware ver. %d.%d", maj, min);
+
+      // Configure the PN532
+      if (!nfc->SAMConfig()) {
+           ESP_LOGE(TAG_NFC, "Initial SAMConfig failed. Triggering reconnect...");
+           trigger_nfc_reconnect("Initial SAMConfig failed");
+           return; // Should not return
+      }
+      if (!nfc->setRFField(0x02, 0x01)) { // Turn RF field on
+           ESP_LOGE(TAG_NFC, "Initial setRFField failed. Triggering reconnect...");
+           trigger_nfc_reconnect("Initial setRFField failed");
+           return; // Should not return
+      }
+      nfc->setPassiveActivationRetries(0); // Don't retry endlessly in readPassiveTargetID during polling
+      nfc_initialized = true; // Mark as successfully initialized
+      ESP_LOGI(TAG_NFC, "NFC Initialized. Waiting for an ISO14443A card...");
+  }
+
+  // ===========================//
+  // === Main NFC Loop ===      //
+  // ===========================//
   while (1) {
-    uint8_t res[4];
-    uint16_t resLen = 4;
-    bool writeStatus = nfc->writeRegister(0x633d, 0, true);
-    if (!writeStatus) {
-      LOG(W, "writeRegister has failed, abandoning ship !!");
-      nfc->stop();
-      xTaskCreate(nfc_retry, "nfc_reconnect_task", 8192, NULL, 1, &nfc_reconnect_task);
-      vTaskSuspend(NULL);
-    }
-    nfc->inCommunicateThru(ecpData, sizeof(ecpData), res, &resLen, 100, true);
-    uint8_t uid[16];
-    uint8_t uidLen = 0;
-    uint8_t atqa[2];
-    uint8_t sak[1];
-    bool passiveTarget = nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, atqa, sak, 500, true, true);
-    if (passiveTarget) {
-      nfc->setPassiveActivationRetries(5);
-      LOG(D, "ATQA: %02x", atqa[0]);
-      LOG(D, "SAK: %02x", sak[0]);
-      ESP_LOG_BUFFER_HEX_LEVEL(TAG, uid, (size_t)uidLen, ESP_LOG_VERBOSE);
-      LOG(I, "*** PASSIVE TARGET DETECTED ***");
-      auto startTime = std::chrono::high_resolution_clock::now();
-      uint8_t data[13] = { 0x00, 0xA4, 0x04, 0x00, 0x07, 0xA0, 0x00, 0x00, 0x08, 0x58, 0x01, 0x01, 0x0 };
-      uint8_t selectCmdRes[9];
-      uint16_t selectCmdResLength = 9;
-      LOG(I, "Requesting supported HomeKey versions");
-      LOG(D, "SELECT HomeKey Applet, APDU: ");
-      ESP_LOG_BUFFER_HEX_LEVEL(TAG, data, sizeof(data), ESP_LOG_VERBOSE);
-      bool status = nfc->inDataExchange(data, sizeof(data), selectCmdRes, &selectCmdResLength);
-      LOG(D, "SELECT HomeKey Applet, Response");
-      ESP_LOG_BUFFER_HEX_LEVEL(TAG, selectCmdRes, selectCmdResLength, ESP_LOG_VERBOSE);
-      if (status && selectCmdRes[selectCmdResLength - 2] == 0x90 && selectCmdRes[selectCmdResLength - 1] == 0x00) {
-        LOG(D, "*** SELECT HOMEKEY APPLET SUCCESSFUL ***");
-        LOG(D, "Reader Private Key: %s", red_log::bufToHexString(readerData.reader_pk.data(), readerData.reader_pk.size()).c_str());
-        HKAuthenticationContext authCtx([](uint8_t* s, uint8_t l, uint8_t* r, uint16_t* rl, bool il) -> bool {return nfc->inDataExchange(s, l, r, rl, il);}, readerData, savedData);
-        auto authResult = authCtx.authenticate(hkFlow);
-        if (std::get<2>(authResult) != kFlowFailed) {
-          bool status = true;
-          if (espConfig::miscConfig.nfcSuccessPin != 255) {
-            xQueueSend(gpio_led_handle, &status, 0);
-          }
-          if (espConfig::miscConfig.nfcNeopixelPin != 255) {
-            xQueueSend(neopixel_handle, &status, 0);
-          }
-          if ((espConfig::miscConfig.gpioActionPin != 255 && espConfig::miscConfig.hkGpioControlledState) || espConfig::miscConfig.hkDumbSwitchMode) {
-            const gpioLockAction action{ .source = gpioLockAction::HOMEKEY, .action = 0 };
-            xQueueSend(gpio_lock_handle, &action, 0);
-          }
-          if (espConfig::miscConfig.hkAltActionInitPin != 255 && espConfig::miscConfig.hkAltActionPin != 255) {
-            uint8_t status = 2;
-            xQueueSend(gpio_led_handle, &status, 0);
-          }
-          if (hkAltActionActive) {
-            mqtt_publish(espConfig::mqttData.hkAltActionTopic, "alt_action", 0, false);
-          }
-          json payload;
-          payload["issuerId"] = hex_representation(std::get<0>(authResult));
-          payload["endpointId"] = hex_representation(std::get<1>(authResult));
-          payload["readerId"] = hex_representation(readerData.reader_id);
-          payload["homekey"] = true;
-          std::string payloadStr = payload.dump();
-          mqtt_publish(espConfig::mqttData.hkTopic, payloadStr, 0, false);
-          if (espConfig::miscConfig.lockAlwaysUnlock) {
-            if (espConfig::miscConfig.gpioActionPin == 255 || !espConfig::miscConfig.hkGpioControlledState) {
-              lockCurrentState->setVal(lockStates::UNLOCKED);
-              lockTargetState->setVal(lockStates::UNLOCKED);
-              mqtt_publish(espConfig::mqttData.lockStateTopic, std::to_string(lockStates::UNLOCKED), 1, true);
-            }
-            if (espConfig::mqttData.lockEnableCustomState) {
-              mqtt_publish(espConfig::mqttData.lockCustomStateTopic, std::to_string(espConfig::mqttData.customLockActions["UNLOCK"]), 0, false);
-            }
-          } else if (espConfig::miscConfig.lockAlwaysLock) {
-            if (espConfig::miscConfig.gpioActionPin == 255 || espConfig::miscConfig.hkGpioControlledState) {
-              lockCurrentState->setVal(lockStates::LOCKED);
-              lockTargetState->setVal(lockStates::LOCKED);
-              mqtt_publish(espConfig::mqttData.lockStateTopic, std::to_string(lockStates::LOCKED), 1, true);
-            }
-            if (espConfig::mqttData.lockEnableCustomState) {
-              mqtt_publish(espConfig::mqttData.lockCustomStateTopic, std::to_string(espConfig::mqttData.customLockActions["LOCK"]), 0, false);
-            }
-          } else {
-            int currentState = lockCurrentState->getVal();
-            if (espConfig::mqttData.lockEnableCustomState) {
-              if (currentState == lockStates::UNLOCKED) {
-                mqtt_publish(espConfig::mqttData.lockCustomStateTopic, std::to_string(espConfig::mqttData.customLockActions["LOCK"]), 0, false);
-              } else if (currentState == lockStates::LOCKED) {
-                mqtt_publish(espConfig::mqttData.lockCustomStateTopic, std::to_string(espConfig::mqttData.customLockActions["UNLOCK"]), 0, false);
+      if (!nfc_initialized) {
+          // Should not happen if initial checks passed, but as a safeguard
+          ESP_LOGE(TAG_NFC, "NFC not initialized at start of loop. Attempting reconnect.");
+          trigger_nfc_reconnect("NFC initialization flag was false");
+          continue; // Skip rest of loop, will suspend in helper
+      }
+
+      // --- Prepare ECP Data (Option 2: Inside loop, under mutex) ---
+      bool ecp_prep_success = false;
+      if (readerDataMutex != nullptr) {
+          if (xSemaphoreTake(readerDataMutex, pdMS_TO_TICKS(50)) == pdTRUE) { // Short timeout
+              // --- Start Critical Section (Read GID) ---
+              if(readerData.reader_gid.size() >= 8) {
+                  memcpy(ecpData + 8, readerData.reader_gid.data(), 8);
+                  with_crc16(ecpData, 16, ecpData + 16);
+                  ecp_prep_success = true;
+              } else {
+                  ESP_LOGD(TAG_NFC, "Reader GID invalid size (%d) for ECP data in loop.", readerData.reader_gid.size());
               }
-            }
+              // --- End Critical Section ---
+              xSemaphoreGive(readerDataMutex);
+          } else {
+              ESP_LOGW(TAG_NFC, "Failed mutex for ECP prep in loop (Timeout?). Skipping CommunicateThru.");
+          }
+      } else {
+          ESP_LOGE(TAG_NFC, "Mutex invalid for ECP prep in loop!");
+          // Cannot prepare ECP data safely
+      }
+      // --- End ECP Data Prep ---
+
+
+      // --- Optional: Wakeup/CommunicateThru Command ---
+      if (ecp_prep_success) { // Only run if ECP data was prepared successfully
+          uint8_t res[4];
+          uint16_t resLen = 4;
+          // Write register (Check for failure -> indicates chip issue)
+          if (!nfc->writeRegister(0x633d, 0, true)) {
+              trigger_nfc_reconnect("writeRegister(0x633d) failed");
+              continue; // Skip rest of loop, will suspend in helper
+          }
+          // Send ECP data (Failure here might be less critical for wakeup?)
+          if (!nfc->inCommunicateThru(ecpData, sizeof(ecpData), res, &resLen, 100, true)) {
+               ESP_LOGW(TAG_NFC, "inCommunicateThru failed. Card might not wake quickly.");
+               // Decide if this warrants a full reconnect or just continue polling
+               // For now, just log and continue polling
+          }
+      } else {
+           ESP_LOGD(TAG_NFC, "Skipping CommunicateThru, ECP data prep failed.");
+           // Maybe still do writeRegister? Depends on its purpose.
+           // If writeRegister is essential even without ECP:
+           // if (!nfc->writeRegister(0x633d, 0, true)) {
+           //     trigger_nfc_reconnect("writeRegister(0x633d) failed (no ECP)");
+           //     continue;
+           // }
+      }
+      // --- End Optional Wakeup ---
+
+
+      // --- Poll for Passive Target ---
+      uint8_t uid[16];
+      uint8_t uidLen = 0;
+      uint8_t atqa[2];
+      uint8_t sak[1];
+      // The PN532 library's readPassiveTargetID often returns `false` on timeout,
+      // but might return `false` for other communication errors too.
+      // We treat timeout (no card) as normal, but need to consider other failures.
+      // Unfortunately, the library might not distinguish error from timeout easily.
+      // We rely on the writeRegister check above as the main indicator of chip health.
+      bool passiveTarget = nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, atqa, sak, 500, true, true);
+
+
+      // --- Process if Target Found ---
+      if (passiveTarget) {
+          ESP_LOGI(TAG_NFC, "*** PASSIVE TARGET DETECTED (UID Len: %d) ***", uidLen);
+          ESP_LOGD(TAG_NFC, "ATQA: %02x%02x, SAK: %02x", atqa[1], atqa[0], sak[0]);
+          ESP_LOG_BUFFER_HEX_LEVEL(TAG_NFC, uid, uidLen, ESP_LOG_VERBOSE);
+
+          nfc->setPassiveActivationRetries(5); // Increase retries for subsequent commands
+          auto startTime = std::chrono::high_resolution_clock::now();
+
+          // --- Select HomeKey Applet ---
+          uint8_t selectApdu[] = { 0x00, 0xA4, 0x04, 0x00, 0x07, 0xA0, 0x00, 0x00, 0x08, 0x58, 0x01, 0x01, 0x00 };
+          uint8_t selectCmdRes[64];
+          uint16_t selectCmdResLength = sizeof(selectCmdRes);
+          ESP_LOGI(TAG_NFC, "Selecting HomeKey Applet...");
+
+          // Check return status of inDataExchange
+          bool selectStatus = nfc->inDataExchange(selectApdu, sizeof(selectApdu), selectCmdRes, &selectCmdResLength);
+
+          ESP_LOGD(TAG_NFC, "SELECT Applet Response (Status: %d, Len: %d)", selectStatus, selectCmdResLength);
+          ESP_LOG_BUFFER_HEX_LEVEL(TAG_NFC, selectCmdRes, selectCmdResLength, ESP_LOG_VERBOSE);
+
+          // --- Authenticate if Select Successful ---
+          // Check selectStatus AND the SW1/SW2 bytes
+          if (selectStatus && selectCmdResLength >= 2 && selectCmdRes[selectCmdResLength - 2] == 0x90 && selectCmdRes[selectCmdResLength - 1] == 0x00) {
+              ESP_LOGD(TAG_NFC, "*** SELECT HOMEKEY APPLET SUCCESSFUL ***");
+
+              // --- Authenticate (Protected Access to readerData) ---
+              std::vector<uint8_t> issuerIdResult;
+              std::vector<uint8_t> endpointIdResult;
+              std::string readerIdHexResult;
+              KeyFlow flowResult = kFlowFailed;
+              bool authAttempted = false;
+
+              if (readerDataMutex != nullptr) {
+                  if (xSemaphoreTake(readerDataMutex, pdMS_TO_TICKS(2000)) == pdTRUE) { // Allow longer time for auth
+                      authAttempted = true;
+                      ESP_LOGD(TAG_NFC, "Mutex acquired for HomeKey authentication.");
+                      // --- Start Critical Section ---
+                      readerIdHexResult = hex_representation(readerData.reader_id);
+                      // Create Auth Context - check if reader SK exists first?
+                      if(readerData.reader_sk.empty()) {
+                          ESP_LOGE(TAG_NFC,"Authentication impossible: Reader secret key is missing!");
+                          flowResult = kFlowFailed; // Ensure failure state
+                      } else {
+                          HKAuthenticationContext authCtx(
+                              [](uint8_t* s, uint8_t l, uint8_t* r, uint16_t* rl, bool il) -> bool {
+                                  // Lambda for NFC exchange - add logging/error check here?
+                                  bool nfc_status = nfc->inDataExchange(s, l, r, rl, il);
+                                  if (!nfc_status) {
+                                      ESP_LOGW("NFC_AUTH_LAMBDA", "inDataExchange failed during authentication step!");
+                                      // Don't trigger reconnect here, let AuthCtx handle flow failure
+                                  }
+                                  return nfc_status;
+                              },
+                              readerData, savedData
+                          );
+                          ESP_LOGI(TAG_NFC, "Starting HomeKey authentication (Flow: %d)...", hkFlow);
+                          auto authResultTuple = authCtx.authenticate(hkFlow);
+                          issuerIdResult = std::get<0>(authResultTuple);
+                          endpointIdResult = std::get<1>(authResultTuple);
+                          flowResult = std::get<2>(authResultTuple);
+                          ESP_LOGI(TAG_NFC, "HomeKey authentication finished (Result Flow: %d).", flowResult);
+                      }
+                      // --- End Critical Section ---
+                      xSemaphoreGive(readerDataMutex);
+                      ESP_LOGD(TAG_NFC, "Mutex released after HomeKey authentication attempt.");
+                  } else {
+                      ESP_LOGE(TAG_NFC, "Failed to take readerDataMutex for authentication!");
+                      // flowResult remains kFlowFailed
+                  }
+              } else {
+                  ESP_LOGE(TAG_NFC, "readerDataMutex not initialized for authentication!");
+                  // flowResult remains kFlowFailed
+              }
+              // --- End Protected Authentication ---
+
+
+              // --- Process Authentication Result (outside the lock) ---
+              if (authAttempted && flowResult != kFlowFailed) {
+                  ESP_LOGI(TAG_NFC, ">>> HomeKey Authentication Successful! <<<");
+                  bool successStatus = true;
+                  if (espConfig::miscConfig.nfcSuccessPin != 255) xQueueSend(gpio_led_handle, &successStatus, 0);
+                  if (espConfig::miscConfig.nfcNeopixelPin != 255) xQueueSend(neopixel_handle, &successStatus, 0);
+
+                  if ((espConfig::miscConfig.gpioActionPin != 255 && espConfig::miscConfig.hkGpioControlledState) || espConfig::miscConfig.hkDumbSwitchMode) {
+                      ESP_LOGD(TAG_NFC,"Sending action to gpio_task queue due to successful HomeKey auth.");
+                      const gpioLockAction action{ .source = gpioLockAction::HOMEKEY, .action = 0 };
+                      if (gpio_lock_handle) xQueueSend(gpio_lock_handle, &action, pdMS_TO_TICKS(50));
+                  }
+
+                  if (espConfig::miscConfig.hkAltActionInitPin != 255 && espConfig::miscConfig.hkAltActionPin != 255 && hkAltActionActive) {
+                       ESP_LOGI(TAG_NFC, "Alt Action is active, triggering related GPIO/MQTT.");
+                       uint8_t alt_action_status = 2;
+                       if(gpio_led_handle) xQueueSend(gpio_led_handle, &alt_action_status, 0);
+                       mqtt_publish(espConfig::mqttData.hkAltActionTopic, "alt_action", 0, false);
+                  }
+
+                  json payload;
+                  payload["issuerId"] = hex_representation(issuerIdResult);
+                  payload["endpointId"] = hex_representation(endpointIdResult);
+                  payload["readerId"] = readerIdHexResult;
+                  payload["homekey"] = true;
+                  mqtt_publish(espConfig::mqttData.hkTopic, payload.dump(), 0, false);
+
+                  if (espConfig::miscConfig.lockAlwaysUnlock) {
+                       ESP_LOGI(TAG_NFC, "Config lockAlwaysUnlock=true, setting TargetState to UNLOCKED.");
+                       lockTargetState->setVal(lockStates::UNLOCKED);
+                       if (espConfig::mqttData.lockEnableCustomState) mqtt_publish(espConfig::mqttData.lockCustomStateTopic, std::to_string(espConfig::mqttData.customLockActions["UNLOCK"]), 0, false);
+                  } else if (espConfig::miscConfig.lockAlwaysLock) {
+                       ESP_LOGI(TAG_NFC, "Config lockAlwaysLock=true, setting TargetState to LOCKED.");
+                       lockTargetState->setVal(lockStates::LOCKED);
+                       if (espConfig::mqttData.lockEnableCustomState) mqtt_publish(espConfig::mqttData.lockCustomStateTopic, std::to_string(espConfig::mqttData.customLockActions["LOCK"]), 0, false);
+                  } else {
+                       if(lockCurrentState != nullptr && lockTargetState != nullptr) {
+                            int current_state = lockCurrentState->getVal();
+                            int new_target = (current_state == lockStates::LOCKED) ? lockStates::UNLOCKED : lockStates::LOCKED;
+                            ESP_LOGI(TAG_NFC, "Config toggling state, setting TargetState to %d (opposite of current %d).", new_target, current_state);
+                            lockTargetState->setVal(new_target);
+                            if (espConfig::mqttData.lockEnableCustomState) {
+                                 std::string customAction = (new_target == lockStates::UNLOCKED) ? "UNLOCK" : "LOCK";
+                                 mqtt_publish(espConfig::mqttData.lockCustomStateTopic, std::to_string(espConfig::mqttData.customLockActions[customAction]), 0, false);
+                            }
+                       } else { ESP_LOGE(TAG_NFC, "Cannot toggle state, characteristics invalid!"); }
+                  }
+                  auto stopTime = std::chrono::high_resolution_clock::now();
+                  ESP_LOGI(TAG_NFC, "Total Time (detection->auth->queue): %lli ms", std::chrono::duration_cast<std::chrono::milliseconds>(stopTime - startTime).count());
+              } else {
+                  ESP_LOGW(TAG_NFC, "--- HomeKey Authentication FAILED (AuthAttempted: %d, FlowResult: %d) ---", authAttempted, flowResult);
+                  bool failStatus = false;
+                  if (espConfig::miscConfig.nfcFailPin != 255) xQueueSend(gpio_led_handle, &failStatus, 0);
+                  if (espConfig::miscConfig.nfcNeopixelPin != 255) xQueueSend(neopixel_handle, &failStatus, 0);
+              }
+              // --- End Process Authentication Result ---
+
+          } // End if (Select Applet Successful)
+          // --- Handle Non-HomeKey Tag (if select failed) ---
+          else {
+              // Select failed (either status false or bad SW1/SW2)
+              ESP_LOGW(TAG_NFC, "Select HomeKey Applet failed (Status: %d, SW1: %02x, SW2: %02x). Assuming non-HomeKey tag.",
+                       selectStatus,
+                       (selectCmdResLength >= 2) ? selectCmdRes[selectCmdResLength - 2] : 0xFF,
+                       (selectCmdResLength >= 1) ? selectCmdRes[selectCmdResLength - 1] : 0xFF);
+
+              bool failStatus = false; // Signal failure locally
+              if (espConfig::miscConfig.nfcFailPin != 255) xQueueSend(gpio_led_handle, &failStatus, 0);
+              if (espConfig::miscConfig.nfcNeopixelPin != 255) xQueueSend(neopixel_handle, &failStatus, 0);
+
+              if (!espConfig::mqttData.nfcTagNoPublish) {
+                  // Publish UID etc. to MQTT if configured
+                  json payload;
+                  payload["atqa"] = hex_representation(std::vector<uint8_t>(atqa, atqa + 2));
+                  payload["sak"] = hex_representation(std::vector<uint8_t>(sak, sak + 1));
+                  payload["uid"] = hex_representation(std::vector<uint8_t>(uid, uid + uidLen));
+                  payload["homekey"] = false;
+                  mqtt_publish(espConfig::mqttData.hkTopic, payload.dump(), 0, false);
+              } else {
+                  ESP_LOGD(TAG_NFC, "Non-HK tag publishing is disabled.");
+              }
           }
 
-          auto stopTime = std::chrono::high_resolution_clock::now();
-          LOG(I, "Total Time (detection->auth->gpio->mqtt): %lli ms", std::chrono::duration_cast<std::chrono::milliseconds>(stopTime - startTime).count());
-        } else {
-          bool status = false;
-          if (espConfig::miscConfig.nfcFailPin != 255) {
-            xQueueSend(gpio_led_handle, &status, 0);
-          }
-          if (espConfig::miscConfig.nfcNeopixelPin != 255) {
-            xQueueSend(neopixel_handle, &status, 0);
-          }
-          LOG(W, "We got status FlowFailed, mqtt untouched!");
-        }
-        nfc->setRFField(0x02, 0x01);
-      } else if(!espConfig::mqttData.nfcTagNoPublish) {
-        LOG(W, "Invalid Response, probably not Homekey, publishing target's UID");
-        bool status = false;
-        if (espConfig::miscConfig.nfcFailPin != 255) {
-          xQueueSend(gpio_led_handle, &status, 0);
-        }
-        if (espConfig::miscConfig.nfcNeopixelPin != 255) {
-          xQueueSend(neopixel_handle, &status, 0);
-        }
-        json payload;
-        payload["atqa"] = hex_representation(std::vector<uint8_t>(atqa, atqa + 2));
-        payload["sak"] = hex_representation(std::vector<uint8_t>(sak, sak + 1));
-        payload["uid"] = hex_representation(std::vector<uint8_t>(uid, uid + uidLen));
-        payload["homekey"] = false;
-        std::string payload_dump = payload.dump();
-        if (client != nullptr) {
-          esp_mqtt_client_publish(client, espConfig::mqttData.hkTopic.c_str(), payload_dump.c_str(), 0, 0, false);
-        } else LOG(W, "MQTT Client not initialized, cannot publish message");
-      }
-      vTaskDelay(50 / portTICK_PERIOD_MS);
-      nfc->inRelease();
-      int counter = 50;
-      bool deviceStillInField = nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
-      LOG(D, "Target still present: %d", deviceStillInField);
-      while (deviceStillInField) {
-        if (counter == 0) break;
-        vTaskDelay(50 / portTICK_PERIOD_MS);
-        nfc->inRelease();
-        deviceStillInField = nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
-        --counter;
-        LOG(D, "Target still present: %d Counter=%d", deviceStillInField, counter);
-      }
-      nfc->inRelease();
-      nfc->setPassiveActivationRetries(0);
-    }
-    vTaskDelay(50 / portTICK_PERIOD_MS);
-  }
-  vTaskDelete(NULL);
-  return;
-}
+          // --- Card Removal / Cleanup for this interaction ---
+          ESP_LOGD(TAG_NFC, "Processing complete for this target interaction.");
+          // Release is implicitly handled by readPassiveTargetID with waitForCardRemoval=true
+          nfc->setPassiveActivationRetries(0); // Reset retries for the next polling cycle
+
+      } // End if (passiveTarget)
+
+      // Short delay in the main loop to prevent busy-waiting and yield CPU
+      vTaskDelay(pdMS_TO_TICKS(50));
+
+  } // End while(1)
+
+  // --- Cleanup (Should not be reached in normal operation) ---
+  ESP_LOGE(TAG_NFC, "nfc_thread_entry exited main while loop unexpectedly!");
+  if (nfc) nfc->stop(); // Try to clean up NFC state
+  vTaskDelete(NULL); // Delete self
+  return; // Should not be reached
+}// =========================================================================
+// ==            End of NFC Thread Entry Function                         ==
+// =========================================================================
 
 void onEvent(arduino_event_id_t event, arduino_event_info_t info) {
   uint8_t mac[6] = { 0, 0, 0, 0, 0, 0 };
@@ -1688,19 +2136,27 @@ void setup() {
   gpio_led_handle = xQueueCreate(2, sizeof(uint8_t));
   neopixel_handle = xQueueCreate(2, sizeof(uint8_t));
   gpio_lock_handle = xQueueCreate(2, sizeof(gpioLockAction));
+  readerDataMutex = xSemaphoreCreateMutex();
   size_t len;
   const char* TAG = "SETUP";
   nvs_open("SAVED_DATA", NVS_READWRITE, &savedData);
-  if (!nvs_get_blob(savedData, "READERDATA", NULL, &len)) {
-    std::vector<uint8_t> savedBuf(len);
-    nvs_get_blob(savedData, "READERDATA", savedBuf.data(), &len);
-    LOG(D, "NVS READERDATA LENGTH: %d", len);
-    ESP_LOG_BUFFER_HEX_LEVEL(TAG, savedBuf.data(), savedBuf.size(), ESP_LOG_VERBOSE);
-    nlohmann::json data = nlohmann::json::from_msgpack(savedBuf);
-    if (!data.is_discarded()) {
-      data.get_to<readerData_t>(readerData);
-      LOG(I, "Reader Data loaded from NVS");
-    }
+  if (readerDataMutex != nullptr) {
+    if (xSemaphoreTake(readerDataMutex, pdMS_TO_TICKS(1000)) == pdTRUE) { 
+        if (!nvs_get_blob(savedData, "READERDATA", NULL, &len)) {
+          std::vector<uint8_t> savedBuf(len);
+          nvs_get_blob(savedData, "READERDATA", savedBuf.data(), &len);
+          LOG(D, "NVS READERDATA LENGTH: %d", len);
+          ESP_LOG_BUFFER_HEX_LEVEL(TAG, savedBuf.data(), savedBuf.size(), ESP_LOG_VERBOSE);
+          nlohmann::json data = nlohmann::json::from_msgpack(savedBuf);
+          if (!data.is_discarded()) {
+            data.get_to<readerData_t>(readerData);
+            LOG(I, "Reader Data loaded from NVS");
+          }
+        }
+        xSemaphoreGive(readerDataMutex); // Release mutex
+      } else {
+          LOG(E, "Failed to take readerDataMutex during NVS load in setup!");
+      }
   }
   if (!nvs_get_blob(savedData, "MQTTDATA", NULL, &len)) {
     std::vector<uint8_t> dataBuf(len);
@@ -1761,6 +2217,11 @@ void setup() {
   }
   if (espConfig::miscConfig.gpioActionPin && espConfig::miscConfig.gpioActionPin != 255) {
     pinMode(espConfig::miscConfig.gpioActionPin, OUTPUT);
+    uint8_t initial_safe_level = espConfig::miscConfig.gpioActionLockState ? HIGH : LOW;
+
+    digitalWrite(espConfig::miscConfig.gpioActionPin, initial_safe_level);
+    LOG(I, "Setup: Setting initial safe state for Action Pin %d to %s (Locked Level)",
+        espConfig::miscConfig.gpioActionPin, initial_safe_level == HIGH ? "HIGH" : "LOW");
   }
   if (espConfig::miscConfig.hkAltActionInitPin != 255) {
     pinMode(espConfig::miscConfig.hkAltActionInitPin, INPUT);
@@ -1815,12 +2276,17 @@ void setup() {
   homeSpan.setLogLevel(0);
   homeSpan.setSketchVersion(app_version.c_str());
 
-  LOG(I, "READER GROUP ID (%d): %s", readerData.reader_gid.size(), red_log::bufToHexString(readerData.reader_gid.data(), readerData.reader_gid.size()).c_str());
-  LOG(I, "READER UNIQUE ID (%d): %s", readerData.reader_id.size(), red_log::bufToHexString(readerData.reader_id.data(), readerData.reader_id.size()).c_str());
+  if (xSemaphoreTake(readerDataMutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+    LOG(I, "READER GROUP ID (%d): %s", readerData.reader_gid.size(), red_log::bufToHexString(readerData.reader_gid.data(), readerData.reader_gid.size()).c_str());
+    LOG(I, "READER UNIQUE ID (%d): %s", readerData.reader_id.size(), red_log::bufToHexString(readerData.reader_id.data(), readerData.reader_id.size()).c_str());
 
-  LOG(I, "HOMEKEY ISSUERS: %d", readerData.issuers.size());
-  for (auto&& issuer : readerData.issuers) {
-    LOG(D, "Issuer ID: %s, Public Key: %s", red_log::bufToHexString(issuer.issuer_id.data(), issuer.issuer_id.size()).c_str(), red_log::bufToHexString(issuer.issuer_pk.data(), issuer.issuer_pk.size()).c_str());
+    LOG(I, "HOMEKEY ISSUERS: %d", readerData.issuers.size());
+    for (auto&& issuer : readerData.issuers) {
+      LOG(D, "Issuer ID: %s, Public Key: %s", red_log::bufToHexString(issuer.issuer_id.data(), issuer.issuer_id.size()).c_str(), red_log::bufToHexString(issuer.issuer_pk.data(), issuer.issuer_pk.size()).c_str());
+    }
+    xSemaphoreGive(readerDataMutex);
+  } else {
+    LOG(E, "Failed to take readerDataMutex for setup logging!");
   }
   homeSpan.enableAutoStartAP();
   homeSpan.enableOTA(espConfig::miscConfig.otaPasswd.c_str());
