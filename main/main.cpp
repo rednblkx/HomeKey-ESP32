@@ -247,9 +247,7 @@ namespace espConfig
     bool ethernetEnabled = false;
     uint8_t ethActivePreset = 255; // 255 for custom pins
     uint8_t ethPhyType = 0;
-    #if CONFIG_ETH_USE_ESP32_EMAC
     std::array<int8_t, 5> ethRmiiConfig = {0, -1, -1, -1, 0};
-    #endif
     std::array<int8_t, 7> ethSpiConfig = {20, -1, -1, -1, -1, -1, -1};
     NLOHMANN_DEFINE_TYPE_INTRUSIVE_WITH_DEFAULT(
         misc_config_t, deviceName, otaPasswd, hk_key_color, setupCode,
@@ -263,10 +261,7 @@ namespace espConfig
         proxBatEnabled, hkDumbSwitchMode, hkAltActionInitPin,
         hkAltActionInitLedPin, hkAltActionInitTimeout, hkAltActionPin,
         hkAltActionTimeout, hkAltActionGpioState, hkGpioControlledState,
-        ethernetEnabled, ethActivePreset, ethPhyType,
-#if CONFIG_ETH_USE_ESP32_EMAC
-        ethRmiiConfig,
-#endif
+        ethernetEnabled, ethActivePreset, ethPhyType, ethRmiiConfig,
         ethSpiConfig
     )
   } miscConfig;
@@ -340,7 +335,7 @@ struct NFCAccessoryInformation : Service::AccessoryInformation
     serialNumber.append(macStr);
     new Characteristic::SerialNumber(serialNumber.c_str());
     new Characteristic::FirmwareRevision(app_version.c_str());
-    std::array<uint8_t, 6> decB64 = hk_color_vals[HK_COLOR(espConfig::miscConfig.hk_key_color)];
+    std::array<uint8_t, 6> decB64 = hk_color_vals[static_cast<HK_COLOR>(espConfig::miscConfig.hk_key_color)];
     TLV8 hwfinish(NULL, 0);
     hwfinish.unpack(decB64.data(), decB64.size());
     new Characteristic::HardwareFinish(hwfinish);

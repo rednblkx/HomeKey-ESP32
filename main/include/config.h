@@ -1,3 +1,4 @@
+#include <cstdint>
 enum HK_COLOR
 {
   TAN,
