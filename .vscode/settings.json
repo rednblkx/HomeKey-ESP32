@@ -83,7 +83,8 @@
   "idf.flashType": "UART",
   "idf.port": "/dev/ttyACM0",
   "idf.openOcdConfigs": [
-    "board/esp32c6-builtin.cfg"
+    "interface/ftdi/esp32_devkitj_v1.cfg",
+    "target/esp32.cfg"
   ],
   "clangd.path": "${userHome}/esp-clang/bin/clangd",
   "clangd.arguments": [
@@ -93,14 +94,11 @@
     "--all-scopes-completion"
   ],
   "idf.customExtraVars": {
-    "IDF_TARGET": "esp32c6"
+    "IDF_TARGET": "esp32"
   },
   "cmake.automaticReconfigure": false,
   "cmake.autoSelectActiveFolder": false,
   "cmake.buildBeforeRun": false,
   "cmake.configureOnEdit": false,
-  "cmake.configureOnOpen": false,
-  "idf.espIdfPath": "${userHome}/esp/v5.4.1/esp-idf",
-  "idf.toolsPath": "${userHome}/.espressif",
-  "idf.pythonInstallPath": "/usr/bin/python"
+  "cmake.configureOnOpen": false
 }
