@@ -1,5 +1,8 @@
+#include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <memory>
+#include <vector>
 #define JSON_NOEXCEPTION 1
 #include <sodium/crypto_sign.h>
 #include <sodium/crypto_box.h>
@@ -1540,7 +1543,7 @@ void nfc_thread_entry(void* arg) {
       if (status && selectCmdRes[selectCmdResLength - 2] == 0x90 && selectCmdRes[selectCmdResLength - 1] == 0x00) {
         LOG(D, "*** SELECT HOMEKEY APPLET SUCCESSFUL ***");
         LOG(D, "Reader Private Key: %s", red_log::bufToHexString(readerData.reader_pk.data(), readerData.reader_pk.size()).c_str());
-        HKAuthenticationContext authCtx([](uint8_t* s, uint8_t l, uint8_t* r, uint16_t* rl, bool il) -> bool {return nfc->inDataExchange(s, l, r, rl, il);}, readerData, savedData);
+        HKAuthenticationContext authCtx([](std::vector<uint8_t>& s, std::vector<uint8_t>& r, bool il) -> bool {uint8_t tr[256]; uint16_t trl = 256; bool st = nfc->inDataExchange(s.data(), s.size(), tr, &trl, il); r.reserve(trl); r.insert(r.begin(), tr, tr+trl); return st;}, readerData, savedData);
         auto authResult = authCtx.authenticate(hkFlow);
         if (std::get<2>(authResult) != kFlowFailed) {
           bool status = true;
