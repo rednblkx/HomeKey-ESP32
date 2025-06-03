@@ -39,6 +39,9 @@ TaskHandle_t alt_action_task_handle = nullptr;
 TaskHandle_t nfc_reconnect_task = nullptr;
 TaskHandle_t nfc_poll_task = nullptr;
 
+struct DoorbellSensor;
+extern DoorbellSensor* homekit_doorbell;
+
 nvs_handle savedData;
 SemaphoreHandle_t readerDataMutex = nullptr;
 readerData_t readerData;
@@ -56,6 +59,59 @@ struct gpioLockAction
   uint8_t source;
   uint8_t action;
 };
+
+struct DoorbellSensor : Service::StatelessProgrammableSwitch {
+
+    // This characteristic will store the event type.
+    // We'll use SINGLE_PRESS for a doorbell ring.
+    SpanCharacteristic *switchEvent;
+
+    // A unique index for this switch if you had multiple stateless switches on one accessory.
+    // For a single doorbell, 1 is fine.
+    const int switchIndex = 1;
+
+    DoorbellSensor() : Service::StatelessProgrammableSwitch() {
+        LOG(I, "Configuring HomeKit DoorbellSensor Service");
+
+        // Create the Programmable Switch Event characteristic.
+        // The constructor takes the initial value (0 for no event) and a boolean
+        // indicating if it supports notifications (true).
+        switchEvent = new Characteristic::ProgrammableSwitchEvent(0, true);
+
+        // Add the Service Label Index characteristic. This is required by Apple
+        // if you have multiple services of the same type (though we only have one here).
+        // It helps differentiate them in some contexts.
+        new Characteristic::ServiceLabelIndex(switchIndex);
+
+        // Optional: Add a Name characteristic to this service if you want to customize
+        // its name in some third-party HomeKit apps (the Home app usually uses the
+        // accessory name or allows you to rename it).
+        // new Characteristic::Name("Physical Doorbell");
+
+        LOG(I, "DoorbellSensor Service configured with Index %d", switchIndex);
+    }
+
+    // This method will be called by our ESP32 code when the physical doorbell is pressed.
+    void triggerHomeKitEvent() {
+        if (switchEvent) {
+            LOG(I, "HomeKit: Triggering Doorbell SINGLE_PRESS event.");
+            // Set the value to SINGLE_PRESS (0).
+            // Other values are DOUBLE_PRESS (1) and LONG_PRESS (2),
+            // but SINGLE_PRESS is most appropriate for a standard doorbell.
+            switchEvent->setVal(Characteristic::ProgrammableSwitchEvent::SINGLE_PRESS);
+
+            // Note: StatelessProgrammableSwitch events are "momentary".
+            // HomeKit controllers expect the value to be set and then effectively clear.
+            // HomeSpan handles notifying controllers. You don't need to set it back to 0 manually
+            // for the event to register. The *next* event will overwrite it.
+        } else {
+            LOG(E, "HomeKit: switchEvent characteristic is null, cannot trigger event!");
+        }
+    }
+};
+
+// Instantiate the global pointer
+DoorbellSensor* homekit_doorbell = nullptr;
 
 std::string platform_create_id_string(void) {
   uint8_t mac[6];
@@ -87,12 +143,12 @@ struct eth_board_presets_t {
   #endif
   struct spi_conf_t {
     uint8_t spi_freq_mhz = 20;
-    uint8_t pin_cs = SS;
+    uint8_t pin_cs = 0; //SS;
     uint8_t pin_irq = A4;
     uint8_t pin_rst = A5;
-    uint8_t pin_sck = SCK;
-    uint8_t pin_miso = MISO;
-    uint8_t pin_mosi = MOSI;
+    uint8_t pin_sck = 5; //SCK;
+    uint8_t pin_miso = 6; // MISO;
+    uint8_t pin_mosi = 7; // MOSI;
     NLOHMANN_DEFINE_TYPE_INTRUSIVE_ONLY_SERIALIZE(spi_conf_t, spi_freq_mhz, pin_cs, pin_irq, pin_rst, pin_sck, pin_miso, pin_mosi)
   } spi_conf;
   friend void to_json(nlohmann ::json &nlohmann_json_j, const eth_board_presets_t &nlohmann_json_t) {
@@ -2137,6 +2193,11 @@ void setup() {
   neopixel_handle = xQueueCreate(2, sizeof(uint8_t));
   gpio_lock_handle = xQueueCreate(2, sizeof(gpioLockAction));
   readerDataMutex = xSemaphoreCreateMutex();
+  LOG(I, "Setting up physical doorbell sense pin %d...", GPIO_DOORBELL_SENSE_PIN);
+    pinMode(GPIO_DOORBELL_SENSE_PIN, INPUT);
+    attachInterrupt(digitalPinToInterrupt(GPIO_DOORBELL_SENSE_PIN), handle_doorbell_sense_interrupt, FALLING);
+    LOG(I, "Interrupt attached to GPIO %d for doorbell sense (FALLING edge).", GPIO_DOORBELL_SENSE_PIN);
+
   size_t len;
   const char* TAG = "SETUP";
   nvs_open("SAVED_DATA", NVS_READWRITE, &savedData);
@@ -2331,6 +2392,7 @@ void setup() {
   new LockManagement();
   new LockMechanism();
   new NFCAccess();
+  homekit_doorbell = new DoorbellSensor();
   if (espConfig::miscConfig.proxBatEnabled) {
     new PhysicalLockBattery();
   }
@@ -2354,7 +2416,55 @@ void setup() {
 
 //////////////////////////////////////
 
+#define GPIO_DOORBELL_SENSE_PIN   10  // Example GPIO, choose an available one
+
+// --- Global state for interrupt safety ---
+volatile bool physical_doorbell_pressed_flag = false;
+unsigned long last_physical_press_event_time = 0;
+const unsigned long SENSE_DEBOUNCE_MS = 500; // milliseconds
+
+// --- Interrupt Service Routine (ISR) ---
+void IRAM_ATTR handle_doorbell_sense_interrupt() {
+    unsigned long current_time = millis();
+    if (digitalRead(GPIO_DOORBELL_SENSE_PIN) == LOW) { // Active LOW (3.3V -> 0V on press)
+        if (current_time - last_physical_press_event_time > SENSE_DEBOUNCE_MS) {
+            physical_doorbell_pressed_flag = true;
+            last_physical_press_event_time = current_time;
+        }
+    }
+}
+
+// --- Function to be called from the main loop to act on the interrupt flag ---
+void check_and_notify_doorbell_press() {
+    if (physical_doorbell_pressed_flag) {
+        LOG(I, "Physical doorbell button was pressed!");
+
+        // === YOUR NOTIFICATION LOGIC GOES HERE ===
+
+        // 1. Trigger HomeKit Event
+        if (homekit_doorbell != nullptr) {
+            homekit_doorbell->triggerHomeKitEvent();
+        } else {
+            LOG(E, "homekit_doorbell service not initialized!");
+        }
+
+        // 2. Send an MQTT message (optional, if you still want this)
+        if (client != nullptr) {
+           mqtt_publish("your/doorbell/topic", "pressed", 0, false); // Change topic as needed
+        }
+
+        // 3. Other actions (flash LED, etc.)
+        // ...
+
+        // =========================================
+
+        // Reset the flag so we don't process the same press again
+        physical_doorbell_pressed_flag = false;
+    }
+}
+
 void loop() {
   homeSpan.poll();
+  check_and_notify_doorbell_press();
   vTaskDelay(5);
 }
