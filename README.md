@@ -12,7 +12,7 @@ This project aims to provide the Apple HomeKey functionality with just an ESP32 
 
 - It integrates with HomeAssistant's Tags which makes it easier to create automations based on a person(issuer) or device(endpoint).
 - The internal state is published and controlled via MQTT through user-defined topics
-- Any NFC Target that's not identified as HomeKey will skip the flow and publish the UID, ATQA and SAK on the same MQTT topic as  with the `""` field set to `false` 
+- Any NFC Target that's not identified as HomeKey will skip the flow and publish the UID, ATQA and SAK on the same MQTT topic as HomeKey with the `"HomeKey"` field set to `false` 
 - Code is not ready for battery-powered applications
 - Designed for a board with an ESP32 chip and 4MB Flash size
 
