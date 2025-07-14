@@ -8,15 +8,15 @@
 
 ## Overview
 
-This project aims to provide the Apple HomeKey functionality with just an ESP32 and PN532 NFC Module. Sole purpose of the project is to provide the HomeKey functionality and other NFC functionalities such as MIfare Authentication or others are out of scope.
+This project aims to provide the Apple HomeKey functionality with just an ESP32 and PN532 NFC Module. Sole purpose of the project is to provide the HomeKey functionality and other NFC functionalities such as MIFARE® Authentication or others are out of scope.
 
 - It integrates with HomeAssistant's Tags which makes it easier to create automations based on a person(issuer) or device(endpoint).
 - The internal state is published and controlled via MQTT through user-defined topics
-- Any NFC Target that's not identified as homekey will skip the flow and publish the UID, ATQA and SAK on the same MQTT topic as HomeKey with the `"homekey"` field set to `false` 
+- Any NFC Target that's not identified as HomeKey will skip the flow and publish the UID, ATQA and SAK on the same MQTT topic as  with the `""` field set to `false` 
 - Code is not ready for battery-powered applications
 - Designed for a board with an ESP32 chip and 4MB Flash size
 
-Goal of the project is to make it possible to add the homekey functionality to locks that don't support it or to anything for that matter :)
+Goal of the project is to make it possible to add the HomeKey functionality to locks that don't support it or to anything for that matter :)
 
 For more advanced functionality, you might also be interested in [HAP-ESPHome](https://github.com/rednblkx/HAP-ESPHome) which attempts to integrate HomeKit (and HomeKey) into ESPHome for ultimate automations.
 
@@ -41,5 +41,5 @@ If you like the project, please consider giving it a star ⭐ to show the apprec
 ## Credits
 
 - [@kormax](https://github.com/kormax) for reverse-engineering the Homekey [NFC Protocol](https://github.com/kormax/apple-home-key) and publishing a [PoC](https://github.com/kormax/apple-home-key-reader)
-- [@kupa22](https://github.com/kupa22) for the [research](https://github.com/kupa22/apple-homekey) on the HAP side of things for Homekey
+- [@kupa22](https://github.com/kupa22) for the [research](https://github.com/kupa22/apple-homekey) on the HAP side of things for HomeKey
 - [HomeSpan](https://github.com/HomeSpan/HomeSpan) which is being used as the framework implementing the HomeKit accessory
