@@ -104,13 +104,10 @@
             component.appendChild(item);
             if(configJson?.issuers && configJson.issuers.length > 0){
               let issuersList = document.createElement("ul");
-              let endpointsList = document.createElement("ul");
               for (const issuerIndex in configJson.issuers) {
+                let endpointsList = document.createElement("ul");
                 if (Object.prototype.hasOwnProperty.call(configJson.issuers, issuerIndex)) {
                   const issuer = configJson.issuers[issuerIndex];
-                  item = document.createElement("li");
-                  item.textContent = `Issuer ID: ${issuer?.issuerId}`;
-                  issuersList.appendChild(item);
                   if(issuer?.endpoints && issuer.endpoints.length > 0){
                     for (const endpointIndex in issuer.endpoints) {
                       if (Object.prototype.hasOwnProperty.call(issuer.endpoints, endpointIndex)) {
@@ -120,8 +117,11 @@
                         endpointsList.appendChild(item);
                       }
                     }
-                    issuersList.appendChild(endpointsList);
                   }
+                  item = document.createElement("li");
+                  item.textContent = `Issuer ID: ${issuer?.issuerId}`;
+                  item.appendChild(endpointsList);
+                  issuersList.appendChild(item);
                 }
               }
               component.appendChild(issuersList);
