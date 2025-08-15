@@ -1,15 +1,6 @@
-local path = os.getenv("HOME") .. "/.espressif/tools/esp-clang"
-local clang_version
-for file in io.popen("ls -a " .. path):lines() do
-	if file ~= "." and file ~= ".." then
-		clang_version = file
-		break
-	end
-end
-
 require("lspconfig").clangd.setup({
 	cmd = {
-		os.getenv("HOME") .. "/.espressif/tools/esp-clang/" .. clang_version .. "/esp-clang/bin/clangd",
+		os.getenv("HOME") .. "/.espressif/tools/esp-clang/esp-18.1.2_20240912/esp-clang/bin/clangd",
 		"--pretty",
 		"--header-insertion=iwyu",
 		"--query-driver="
