@@ -1,6 +1,6 @@
 require("lspconfig").clangd.setup({
 	cmd = {
-		os.getenv("HOME") .. "/.espressif/tools/esp-clang/esp-18.1.2_20240912/esp-clang/bin/clangd",
+		os.getenv("HOME") .. "/.espressif/tools/esp-clang/esp-19.1.2_20250312/esp-clang/bin/clangd",
 		"--pretty",
 		"--header-insertion=iwyu",
 		"--query-driver="
