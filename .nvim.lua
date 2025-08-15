@@ -1,17 +1,27 @@
+local path = os.getenv("HOME") .. "/.espressif/tools/esp-clang"
+local clang_version
+for file in io.popen("ls -a " .. path):lines() do
+	if file ~= "." and file ~= ".." then
+		clang_version = file
+		break
+	end
+end
+
 require("lspconfig").clangd.setup({
-	capabilities = require("cmp_nvim_lsp").default_capabilities(vim.lsp.protocol.make_client_capabilities()),
 	cmd = {
-		os.getenv("HOME") .. "/esp-clang/bin/clangd",
+		os.getenv("HOME") .. "/.espressif/tools/esp-clang/" .. clang_version .. "/esp-clang/bin/clangd",
+		"--pretty",
+		"--header-insertion=iwyu",
 		"--query-driver="
 			.. os.getenv("HOME")
 			.. "/.espressif/tools/xtensa-esp-elf/**/xtensa-esp-elf/bin/xtensa-*-elf-*,"
 			.. os.getenv("HOME")
-			.. "/tools/riscv32-esp-elf/**/riscv32-esp-elf/bin/riscv32-esp-elf-*",
+			.. "/.espressif/tools/riscv32-esp-elf/**/riscv32-esp-elf/bin/riscv32-esp-elf-*",
 		"--background-index",
-		"--import-insertions",
-		"--all-scopes-completion",
+		"--suggest-missing-includes",
+		"-j=40",
+		"--pch-storage=memory",
+		"--clang-tidy",
 	},
-	on_attach = require("cmp_nvim_lsp").on_attach,
-	lsp_flags = require("cmp_nvim_lsp").lsp_flags,
 	filetypes = { "c", "cpp", "objc", "objcpp", "cuda", "proto" },
 })
