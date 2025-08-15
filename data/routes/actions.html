@@ -200,7 +200,7 @@
           </div>
           <div class="input-group">
             <label for="gpioActionMomentaryEnabled">Momentary state</label>
-            <select name="gpioActionMomentaryEnabled" id="gpioActionMomentaryEnabled">
+            <select name="gpioActionMomentaryEnabled" id="gpioActionMomentaryEnabled" onchange="document.querySelector('.homekit-triggers-hidden-body #gpioActionMomentaryEnabled').value = this.value;">
               <option value="0">Disabled</option>
               <option value="1">Home App Only</option>
               <option value="2">Home Key Only</option>
@@ -209,7 +209,7 @@
           </div>
           <div class="input-group">
             <label for="gpioActionMomentaryTimeout">Momentary timeout (ms)</label>
-            <input type="number" name="gpioActionMomentaryTimeout" id="gpioActionMomentaryTimeout" placeholder="5000" required style="width: 4rem;">
+            <input type="number" name="gpioActionMomentaryTimeout" id="gpioActionMomentaryTimeout" placeholder="5000" required style="width: 4rem;" onchange="document.querySelector('.homekit-triggers-hidden-body #gpioActionMomentaryTimeout').value = this.value;">
           </div>
         </div>
       </div>
@@ -228,7 +228,7 @@
           </div>
           <div class="input-group">
             <label for="gpioActionMomentaryEnabled">Momentary state</label>
-            <select name="gpioActionMomentaryEnabled" id="gpioActionMomentaryEnabled">
+            <select name="gpioActionMomentaryEnabled" id="gpioActionMomentaryEnabled" onchange="document.querySelector('.homekit-triggers-hidden-body #gpioActionMomentaryEnabled').value = this.value;">
               <option value="0">Disabled</option>
               <option value="1">Home App Only</option>
               <option value="2">Home Key Only</option>
@@ -237,7 +237,7 @@
           </div>
           <div class="input-group">
             <label for="gpioActionMomentaryTimeout">Momentary timeout (ms)</label>
-            <input type="number" name="gpioActionMomentaryTimeout" id="gpioActionMomentaryTimeout" placeholder="5000" required style="width: 4rem;">
+            <input type="number" name="gpioActionMomentaryTimeout" id="gpioActionMomentaryTimeout" placeholder="5000" required style="width: 4rem;" onchange="document.querySelector('.homekit-triggers-hidden-body #gpioActionMomentaryTimeout').value = this.value;">
           </div>
         </div>
       </div>
