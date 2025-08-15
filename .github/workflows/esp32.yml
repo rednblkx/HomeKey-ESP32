@@ -37,7 +37,7 @@ jobs:
       - name: ESP32 Build
         uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: v5.3.2
+          esp_idf_version: v5.5
           target: esp32
           path: '.'
           extra_docker_args: -v ~/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
@@ -76,7 +76,7 @@ jobs:
       - name: ESP32C3 Build
         uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: v5.3.2
+          esp_idf_version: v5.5
           target: esp32c3
           path: '.'
           extra_docker_args: -v ~/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
@@ -115,7 +115,7 @@ jobs:
       - name: ESP32S3 Build
         uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: v5.3.2
+          esp_idf_version: v5.5
           target: esp32s3
           path: '.'
           extra_docker_args: -v ~/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
