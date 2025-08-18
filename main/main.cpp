@@ -11,7 +11,6 @@
 #include "HomeKey.h"
 #include "array"
 #include "logging.h"
-#include "HomeSpan.h"
 #include "PN532_SPI.h"
 #include "PN532.h"
 #include "chrono"
@@ -21,8 +20,7 @@
 #include "config.h"
 #include "mqtt_client.h"
 #include "esp_app_desc.h"
-#include "pins_arduino.h"
-#include "NFC_SERV_CHARS.h"
+#include "NFC_SERV_CHARS.hpp"
 #include <mbedtls/sha256.h>
 #include <esp_mac.h>
 
