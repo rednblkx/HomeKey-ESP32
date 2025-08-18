@@ -1493,14 +1493,6 @@ void setup() {
   homeSpan.setStatusAutoOff(15);
   homeSpan.setLogLevel(0);
   homeSpan.setSketchVersion(app_version.c_str());
-
-  LOG(I, "READER GROUP ID (%d): %s", readerData.getReaderGid().size(), red_log::bufToHexString(readerData.getReaderGid().data(), readerData.getReaderGid().size()).c_str());
-  LOG(I, "READER UNIQUE ID (%d): %s", readerData.getReaderId().size(), red_log::bufToHexString(readerData.getReaderId().data(), readerData.getReaderId().size()).c_str());
-
-  LOG(I, "HOMEKEY ISSUERS: %d", readerData.getReaderData().issuers.size());
-  for (auto&& issuer : readerData.getReaderData().issuers) {
-    LOG(D, "Issuer ID: %s, Public Key: %s", red_log::bufToHexString(issuer.issuer_id.data(), issuer.issuer_id.size()).c_str(), red_log::bufToHexString(issuer.issuer_pk.data(), issuer.issuer_pk.size()).c_str());
-  }
   homeSpan.enableAutoStartAP();
   homeSpan.enableOTA(configManager.getMiscConfig().otaPasswd.c_str());
   homeSpan.setPortNum(1201);
@@ -1547,6 +1539,15 @@ void setup() {
   if (configManager.getMiscConfig().proxBatEnabled) {
     new PhysicalLockBattery();
   }
+
+  LOG(I, "READER GROUP ID (%d): %s", readerData.getReaderGid().size(), red_log::bufToHexString(readerData.getReaderGid().data(), readerData.getReaderGid().size()).c_str());
+  LOG(I, "READER UNIQUE ID (%d): %s", readerData.getReaderId().size(), red_log::bufToHexString(readerData.getReaderId().data(), readerData.getReaderId().size()).c_str());
+
+  LOG(I, "HOMEKEY ISSUERS: %d", readerData.getReaderData().issuers.size());
+  for (auto&& issuer : readerData.getReaderData().issuers) {
+    LOG(D, "Issuer ID: %s, Public Key: %s", red_log::bufToHexString(issuer.issuer_id.data(), issuer.issuer_id.size()).c_str(), red_log::bufToHexString(issuer.issuer_pk.data(), issuer.issuer_pk.size()).c_str());
+  }
+
   homeSpan.setControllerCallback(pairCallback);
   homeSpan.setConnectionCallback(wifiCallback);
   if (configManager.getMiscConfig().nfcNeopixelPin != 255) {
