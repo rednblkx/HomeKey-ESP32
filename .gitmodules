@@ -5,7 +5,7 @@
 [submodule "HK-HomeKit-Lib"]
 	path = components/HK-HomeKit-Lib
 	url = https://github.com/rednblkx/HK-HomeKit-Lib.git
-	branch = esp-idf
+	branch = main
 [submodule "AsyncTCP"]
 	path = components/AsyncTCP
 	url = https://github.com/me-no-dev/AsyncTCP.git
