@@ -1,4 +1,5 @@
 #include "ReaderDataManager.hpp"
+#include "HomeKey.h"
 #include <nvs_flash.h>
 #include <esp_log.h>
 #include <nlohmann/json.hpp>
@@ -85,10 +86,10 @@ void ReaderDataManager::load() {
     ESP_LOGI(TAG, "Successfully loaded reader data from NVS.");
 }
 
-bool ReaderDataManager::save() {
+const readerData_t* ReaderDataManager::saveData() {
     if (!m_isInitialized) {
         ESP_LOGE(TAG, "Cannot save, not initialized.");
-        return false;
+        return nullptr;
     }
     
     std::vector<uint8_t> serialized_data = nlohmann::json::to_msgpack(m_readerData);
@@ -96,25 +97,25 @@ bool ReaderDataManager::save() {
     esp_err_t set_err = nvs_set_blob(m_nvsHandle, NVS_KEY, serialized_data.data(), serialized_data.size());
     if (set_err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to set blob in NVS: %s", esp_err_to_name(set_err));
-        return false;
+        return nullptr;
     }
 
     esp_err_t commit_err = nvs_commit(m_nvsHandle);
     if (commit_err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to commit NVS changes: %s", esp_err_to_name(commit_err));
-        return false;
+        return nullptr;
     }
 
     ESP_LOGI(TAG, "Reader data successfully saved to NVS.");
-    return true;
+    return &getReaderData();
 }
 
-bool ReaderDataManager::saveReaderData(const readerData_t& newData) {
+const readerData_t* ReaderDataManager::updateReaderData(const readerData_t& newData) {
     m_readerData = newData;
-    return save();
+    return saveData();
 }
 
-bool ReaderDataManager::deleteReaderKey() {
+bool ReaderDataManager::eraseReaderKey() {
     if (!m_isInitialized) {
         ESP_LOGE(TAG, "Cannot delete, not initialized.");
         return false;
@@ -125,9 +126,9 @@ bool ReaderDataManager::deleteReaderKey() {
     m_readerData.reader_pk = {};
     m_readerData.reader_pk_x = {};
     m_readerData.reader_sk = {};
-    ESP_LOGI(TAG, "In-memory reader data cleared.");
+    ESP_LOGI(TAG, "In-memory reader key cleared.");
 
-    save();
+    saveData();
 
     ESP_LOGI(TAG, "Reader key successfully erased from NVS.");
     return true;

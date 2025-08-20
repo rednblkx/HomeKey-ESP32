@@ -48,9 +48,6 @@ enum class gpioMomentaryStateStatus : uint8_t
   M_HOME_HK = (uint8_t)(M_HOME | M_HK)
 };
 
-extern const std::array<std::array<uint8_t, 6>, 4> hk_color_vals;
-extern const std::array<const char*, 6> pixelTypeMap;
-
 struct gpioLockAction
 {
   enum

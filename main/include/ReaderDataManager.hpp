@@ -43,16 +43,27 @@ public:
      */
     const std::vector<uint8_t>& getReaderGid() const;
 
+    /**
+     * @brief Provides convenient read-only access to the reader unique identifier.
+     * @return A constant reference to the reader ID vector.
+     */
     const std::vector<uint8_t>& getReaderId() const;
+
     /**
      * @brief Replaces the current reader data with a new version and saves it to NVS.
      * This is used by the NFCAccess service during provisioning.
      * @param newData The complete new readerData_t structure to save.
-     * @return True if the data was successfully saved to NVS, false otherwise.
+     * @return A constant pointer to the readerData_t object if successful
+     * otherwise a nullptr
      */
-    bool saveReaderData(const readerData_t& newData);
+    const readerData_t* updateReaderData(const readerData_t& newData);
 
-    bool deleteReaderKey();
+    /**
+     * @brief Erases reader's key and IDs from memory and NVS.
+     * Used when wuch request is received from the controller.
+     * @return True if the NVS key was successfully erased, false otherwise.
+     */
+    bool eraseReaderKey();
 
     /**
      * @brief Erases all reader data from memory and NVS.
@@ -72,9 +83,10 @@ public:
     
     /**
      * @brief Persists the current in-memory reader data to NVS.
-     * @return True on successful save, false on failure.
+     * @return A constant pointer to the readerData_t object if successful
+     * otherwise a nullptr
      */
-    bool save();
+    const readerData_t* saveData();
 
 private:
     /**

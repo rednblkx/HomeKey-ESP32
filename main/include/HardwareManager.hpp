@@ -1,0 +1,81 @@
+#ifndef HARDWARE_MANAGER_H
+#define HARDWARE_MANAGER_H
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
+#include <memory>
+
+class ConfigManager;
+class Pixel;
+namespace espConfig { struct misc_config_t; }
+
+/**
+ * @class HardwareManager
+ * @brief Manages all low-level hardware interactions (GPIO, NeoPixels, etc.).
+ *
+ * This class provides a high-level API for controlling physical hardware. It abstracts
+ * away pin numbers, active high/low logic, and the implementation details of
+ * providing user feedback (e.g., blinking an LED or lighting a NeoPixel).
+ */
+class HardwareManager {
+public:
+    /**
+     * @brief Constructs the HardwareManager.
+     * @param configManager Reference to the application configuration manager.
+     */
+    HardwareManager(const espConfig::misc_config_t &);
+
+    /**
+     * @brief Initializes all hardware pins and starts background tasks for feedback.
+     */
+    void begin();
+
+    /**
+     * @brief Sets the physical output for the lock mechanism (e.g., relay or motor driver).
+     * @param state The desired lock state (e.g., lockStates::LOCKED).
+     */
+    void setLockOutput(int state);
+
+    /**
+     * @brief Triggers a non-blocking visual/audible signal for a successful action.
+     */
+    void showSuccessFeedback();
+
+    /**
+     * @brief Triggers a non-blocking visual/audible signal for a failed action.
+     */
+    void showFailureFeedback();
+
+private:
+    /**
+     * @enum FeedbackType
+     * @brief Defines the types of feedback that can be requested.
+     */
+    enum class FeedbackType {
+        SUCCESS,
+        FAILURE
+    };
+
+    // --- FreeRTOS Task Management ---
+    static void feedbackTaskEntry(void* instance);
+    void feedbackTask();
+
+    static void lockControlTaskEntry(void* instance);
+    void lockControlTask();
+    
+    // --- Member Variables ---
+    const espConfig::misc_config_t& m_miscConfig;
+
+    std::shared_ptr<Pixel> m_pixel;
+
+    TaskHandle_t m_feedbackTaskHandle;
+    QueueHandle_t m_feedbackQueue;
+
+    TaskHandle_t m_lockControlTaskHandle;
+    QueueHandle_t m_lockControlQueue;
+    
+    static const char* TAG;
+};
+
+#endif // HARDWARE_MANAGER_H
