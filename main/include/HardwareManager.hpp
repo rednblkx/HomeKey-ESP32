@@ -4,7 +4,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
-#include <memory>
 
 class ConfigManager;
 class Pixel;
@@ -67,7 +66,7 @@ private:
     // --- Member Variables ---
     const espConfig::misc_config_t& m_miscConfig;
 
-    std::shared_ptr<Pixel> m_pixel;
+    Pixel* m_pixel = nullptr;
 
     TaskHandle_t m_feedbackTaskHandle;
     QueueHandle_t m_feedbackQueue;
