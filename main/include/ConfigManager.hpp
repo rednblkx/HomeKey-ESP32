@@ -1,10 +1,8 @@
 #ifndef CONFIG_MANAGER_H
 #define CONFIG_MANAGER_H
 
-#include <string>
-#include <vector>
 #include <nvs.h>
-#include "config.hpp"
+#include "structs.hpp"
 
 /**
  * @class ConfigManager
@@ -39,7 +37,7 @@ public:
      */
     const espConfig::mqttConfig_t& getMqttConfig() const;
 
-    void deleteMqttConfig();
+    bool deleteMqttConfig();
 
     /**
      * @brief Provides read-only access to the miscellaneous configuration.
@@ -47,7 +45,7 @@ public:
      */
     const espConfig::misc_config_t& getMiscConfig() const;
 
-    void deleteMiscConfig();
+    bool deleteMiscConfig();
 
     /**
      * @brief Saves a new MQTT configuration to NVS and updates the internal state.
