@@ -5,8 +5,8 @@
 #include <string>
 #include <cstdint>
 #include <mbedtls/sha256.h>
-#include "logging.h" // For red_log
 
+#define LOG(x, format, ...) ESP_LOG##x(TAG, "%s:%d > " format, __FUNCTION__ , __LINE__ __VA_OPT__(, ) __VA_ARGS__)
 namespace Utils {
 
 /**
