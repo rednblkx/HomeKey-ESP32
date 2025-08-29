@@ -1,35 +1,46 @@
+#include <event_manager.hpp>
 #include "NfcManager.hpp"
 #include "PN532.h"
 #include "PN532_SPI.h"
 #include "ReaderDataManager.hpp"
+#include "esp32-hal.h"
+#include "eventStructs.hpp"
 #include "hkAuthContext.h"
 #include "utils.hpp"
 
 #include <array>
 #include <esp_log.h>
 #include <chrono>
+#include <system_error>
+#include <serialization.hpp>
 
 const char* NfcManager::TAG = "NfcManager";
 
-NfcManager::NfcManager(ReaderDataManager& readerDataManager, void(*hk_cb)(const std::vector<uint8_t>& issuerId, const std::vector<uint8_t>& endpointId, const std::vector<uint8_t>& readerId),
-               void(*tag_cb)(const uint8_t* uid, uint8_t uidLen, const uint8_t* atqa, const uint8_t* sak),
-               void(*fail_cb)(),
-               const std::array<uint8_t, 4> &nfcGpioPins)
+NfcManager::NfcManager(ReaderDataManager& readerDataManager,const std::array<uint8_t, 4> &nfcGpioPins)
     : nfcGpioPins(nfcGpioPins),
       m_readerDataManager(readerDataManager),
       m_pollingTaskHandle(nullptr),
       m_retryTaskHandle(nullptr),
-      hk_cb(hk_cb),
-      tag_cb(tag_cb),
-      fail_cb(fail_cb),
       m_ecpData({ 0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0 })
-{}
+{
+  espp::EventManager::get().add_publisher("nfc/HomeKeyTap", "NfcManager");
+  espp::EventManager::get().add_subscriber("nfc/updateECP", "NfcManager", [&](const std::vector<uint8_t> &){
+    updateEcpData();
+  }, 3072);
+  espp::EventManager::get().add_subscriber("nfc/forceAuthFlow", "NfcManager", [&](const std::vector<uint8_t> &data){
+    std::error_code ec;
+    EventValueChanged s = alpaca::deserialize<EventValueChanged>(data, ec);
+    if(!ec){
+      authFlow = KeyFlow(s.newValue);
+    }
+  }, 3072);
+}
 
 bool NfcManager::begin() {
     m_pn532spi = new PN532_SPI(nfcGpioPins[0], nfcGpioPins[1], nfcGpioPins[2], nfcGpioPins[3]); 
-    m_nfc = new PN532(*m_pn532spi);
+    m_nfc = new PN532 (*m_pn532spi);
     ESP_LOGI(TAG, "Starting NFC polling task...");
-    xTaskCreate(pollingTaskEntry, "nfc_poll_task", 8192, this, 5, &m_pollingTaskHandle);
+    xTaskCreateUniversal(pollingTaskEntry, "nfc_poll_task", 8192, this, 1, &m_pollingTaskHandle, 1);
     return true;
 }
 
@@ -63,7 +74,7 @@ bool NfcManager::initializeReader() {
 void NfcManager::startRetryTask() {
     if (m_pollingTaskHandle) vTaskSuspend(m_pollingTaskHandle);
     if (m_retryTaskHandle == nullptr) {
-        xTaskCreate(retryTaskEntry, "nfc_retry_task", 4096, this, 5, &m_retryTaskHandle);
+        xTaskCreateUniversal(retryTaskEntry, "nfc_retry_task", 4096, this, 5, &m_retryTaskHandle, 1);
     }
 }
 
@@ -106,14 +117,21 @@ void NfcManager::pollingTask() {
         uint16_t resLen = 4;
         m_nfc->inCommunicateThru(m_ecpData.data(), m_ecpData.size(), res, &resLen, 100, true);
 
-        uint8_t uid[16], uidLen = 0, atqa[2], sak[1];
-        bool passiveTargetFound = m_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, atqa, sak, 500, true, true);
+        uint8_t *uid = new uint8_t[16];
+        uint8_t *uidLen = new uint8_t[1];
+        uint8_t *atqa = new uint8_t[2];
+        uint8_t *sak = new uint8_t[1];
+        bool passiveTargetFound = m_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, uidLen, atqa, sak, 200, true, true);
         
         if (passiveTargetFound) {
             ESP_LOGI(TAG, "NFC tag detected!");
             handleTagPresence();
             waitForTagRemoval();
         }
+        delete[] uid;
+        delete[] uidLen;
+        delete[] atqa;
+        delete[] sak;
 
         vTaskDelay(pdMS_TO_TICKS(50));
     }
@@ -159,19 +177,22 @@ void NfcManager::handleHomeKeyAuth() {
 
     auto readerData = m_readerDataManager.getReaderData();
     HKAuthenticationContext authCtx(transceiveLambda, readerData, save_cb);
-    auto authResult = authCtx.authenticate(KeyFlow::kFlowFAST);
+    auto authResult = authCtx.authenticate(authFlow);
 
     if (std::get<2>(authResult) != kFlowFailed) {
         ESP_LOGI(TAG, "HomeKey authentication successful!");
-        hk_cb(std::get<0>(authResult), std::get<1>(authResult), readerData.reader_id);
+        EventHKTap s{.issuerId = std::get<0>(authResult), .endpointId = std::get<1>(authResult), .readerId = readerData.reader_id };
+        std::vector<uint8_t> d;
+        alpaca::serialize(s, d);
+        espp::EventManager::get().publish("nfc/HomeKeyTap", d);
     } else {
         ESP_LOGW(TAG, "HomeKey authentication failed.");
-        fail_cb();
+        // fail_cb();
     }
 }
 
 void NfcManager::handleGenericTag(const uint8_t* uid, uint8_t uidLen, const uint8_t* atqa, const uint8_t* sak) {
-    tag_cb(uid, uidLen, atqa, sak);
+    // tag_cb(uid, uidLen, atqa, sak);
 }
 
 void NfcManager::waitForTagRemoval() {
@@ -181,10 +202,10 @@ void NfcManager::waitForTagRemoval() {
     uint8_t uid[16], uidLen = 0;
 
     while (deviceStillInField && counter > 0) {
-        vTaskDelay(pdMS_TO_TICKS(50));
-        m_nfc->inRelease();
         deviceStillInField = m_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
+        m_nfc->inRelease();
         counter--;
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
     
     if (deviceStillInField) {

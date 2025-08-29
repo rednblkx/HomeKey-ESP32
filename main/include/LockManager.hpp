@@ -1,13 +1,12 @@
 #ifndef LOCK_MANAGER_H
 #define LOCK_MANAGER_H
 
-#include "config.hpp"
-#include "esp_log.h"
-#include <functional>
-
+#include <cstdint>
 class HardwareManager;
 class ConfigManager;
 class LockApplication;
+
+namespace espConfig { struct misc_config_t; };
 
 /**
  * @class LockManager
@@ -24,12 +23,14 @@ public:
      * @brief Defines the origin of a lock command, allowing for different logic paths.
      * Not really used at the moment
      */
-    enum class Source {
+    enum Source {
         INTERNAL,
         HOMEKIT,
-        MQTT,
-        NFC
+        NFC,
+        MQTT = 4,
     };
+
+    enum lockStates { UNLOCKED, LOCKED, JAMMED, UNKNOWN, UNLOCKING, LOCKING };
 
     /**
      * @brief Constructs the LockManager.
@@ -37,7 +38,7 @@ public:
      * @param hardwareManager Reference to the manager that controls physical GPIOs.
      * @param configManager Reference to the application configuration manager.
      */
-    LockManager(void(*stateChanged)(int cstate, int tstate), HardwareManager& hardwareManager, ConfigManager& configManager);
+    LockManager(HardwareManager& hardwareManager, const espConfig::misc_config_t& miscConfig);
 
     /**
      * @brief Initializes the lock state to its default.
@@ -61,7 +62,7 @@ public:
      * @param state The desired state (e.g., lockStates::LOCKED).
      * @param source The origin of the command.
      */
-    void setTargetState(int state, Source source);
+    void setTargetState(uint8_t state, Source source);
 
     /**
      * @brief Processes a request originating from an NFC tap.
@@ -77,7 +78,7 @@ public:
      * @param command The integer value of the custom command.
      * TODO: Move to MqttManager and just use setTargetState or overrideState
      */
-    void processCustomMqttCommand(int command);
+    void processCustomMqttCommand(uint8_t command);
 
     /**
      * @brief Forces the manager's internal state to match an external report.
@@ -86,16 +87,14 @@ public:
      * @param state The new current state
      * @param tstate The new target state
      */
-    void overrideState(int cstate, int tstate);
+    void overrideState(uint8_t cstate, uint8_t tstate);
 
 private:
-    const std::function<void(int, int)> m_stateChanged = {};
     HardwareManager& m_hardwareManager;
     const espConfig::misc_config_t& m_miscConfig;
-    const std::map<std::string, int> &customLockActions;
 
-    int m_currentState;
-    int m_targetState;
+    uint8_t m_currentState;
+    uint8_t m_targetState;
 
     bool m_momentaryUnlockActive;
     unsigned long m_momentaryUnlockStartTime;

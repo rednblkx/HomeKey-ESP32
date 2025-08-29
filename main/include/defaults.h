@@ -21,6 +21,17 @@
 #define MQTT_PROX_BAT_TOPIC "homekit/set_battery_lvl" // MQTT Topic for publishing the HomeKit lock target state
 #define MQTT_HK_ALT_ACTION_TOPIC "alt_action" // MQTT Topic for publishing the Alt Action
 
+// MQTT Custom state
+
+#define C_UNLOCK 0
+#define C_LOCK 1
+#define C_LOCKED 1
+#define C_UNLOCKING 2
+#define C_UNLOCKED 3
+#define C_LOCKING 4
+#define C_JAMMED 254
+#define C_UNKNOWN 25
+
 // Miscellaneous
 #define HOMEKEY_COLOR TAN
 #define SETUP_CODE "46637726"  // HomeKit Setup Code (only for reference, has to be changed during WiFi Configuration or from WebUI)

@@ -22,7 +22,7 @@ namespace espConfig { struct misc_config_t; };
 
 class HomeKitLock {
 public:
-    HomeKitLock(void (&)(int), LockManager& lockManager, ConfigManager& configManager, ReaderDataManager& readerDataManager);
+    HomeKitLock(std::function<void(int)> &conn_cb, LockManager& lockManager, ConfigManager& configManager, ReaderDataManager& readerDataManager);
     void begin();
     void updateLockState(int currentState, int targetState);
     void updateBatteryStatus(uint8_t batteryLevel, bool isLow);
@@ -37,7 +37,9 @@ private:
     ConfigManager& m_configManager;
     ReaderDataManager& m_readerDataManager;
 
-    void (&connectionEstablished)(int);
+    std::function<void(int)> &conn_cb;
+
+    static void connectionEstablished(int status);
 
     static void staticControllerCallback();
     void controllerCallback();
@@ -54,6 +56,7 @@ private:
     struct LockMechanismService : Service::LockMechanism {
       LockManager& m_lockManager;
       SpanCharacteristic* m_lockTargetState;
+      SpanCharacteristic* m_lockCurrentState;
       LockMechanismService(HomeKitLock& bridge, LockManager& lockManager);
       boolean update() override;
     };

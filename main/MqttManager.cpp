@@ -1,25 +1,69 @@
+#include "event_manager.hpp"
 #include "MqttManager.hpp"
 #include "LockManager.hpp"
 #include "ConfigManager.hpp"
-#include "logging.h"
-#include <sodium/crypto_sign.h>
-#include <sodium/crypto_box.h>
-#include "HAP.h"
-
+#include <format.hpp>
 #include <esp_log.h>
-#include <nlohmann/json.hpp>
 #include <esp_app_desc.h>
+#include "eventStructs.hpp"
+#include <ArduinoJson.hpp>
 
 const char* MqttManager::TAG = "MqttManager";
 
-MqttManager::MqttManager(LockManager& lockManager, ConfigManager& configManager)
-    : m_lockManager(lockManager),
-      m_mqttConfig(configManager.getMqttConfig()),
+MqttManager::MqttManager(ConfigManager& configManager)
+    : m_mqttConfig(configManager.getMqttConfig()),
       m_client(nullptr),
       device_name(configManager.getMiscConfig().deviceName)
-{}
+{
+  espp::EventManager::get().add_subscriber(
+      "lock/stateChanged", "MqttManager",
+      [&](const std::vector<uint8_t> &data) {
+        std::error_code ec;
+        EventLockState s = alpaca::deserialize<EventLockState>(data, ec);
+        if(!ec) {
+          publishLockState(s.currentState, s.targetState);
+        }
+      },3072);
+  espp::EventManager::get().add_publisher("lock/targetStateChanged", "MqttManager");
+  espp::EventManager::get().add_publisher("lock/overrideState", "MqttManager");
+  espp::EventManager::get().add_subscriber("nfc/HomeKeyTap", "MqttManager", [&](const std::vector<uint8_t> &data){
+    std::error_code ec;
+    EventHKTap s = alpaca::deserialize<EventHKTap>(data, ec);
+    if(!ec){
+      publishHomeKeyTap(s.issuerId, s.endpointId, s.readerId);
+    }
+  }, 3072);
+  espp::EventManager::get().add_subscriber("mqtt/uidPublishChanged", "MqttManager", [&](const std::vector<uint8_t> &data){
+    std::error_code ec;
+    EventBinaryStatus s = alpaca::deserialize<EventBinaryStatus>(data, ec);
+    if(!ec){
+      if(s.status){
+        std::string rfidConfigTopic = "homeassistant/tag/" + m_mqttConfig.mqttClientId + "/rfid/config";
+        publish(rfidConfigTopic, "");
+      } else {
+        ArduinoJson::JsonDocument device;
+        device["identifiers"].to<ArduinoJson::JsonArray>().add(deviceID);
+        device["name"] = device_name;
+        device["manufacturer"] = "rednblkx";
+        device["model"] = "HomeKey-ESP32";
+        device["sw_version"] = esp_app_get_description()->version;
 
-bool MqttManager::begin() {
+        ArduinoJson::JsonDocument rfidPayload;
+        rfidPayload["name"] = "NFC Tag";
+        rfidPayload["unique_id"] = deviceID;
+        rfidPayload["device"] = device;
+        rfidPayload["topic"] = m_mqttConfig.hkTopic;
+        rfidPayload["value_template"] = "{{ value_json.uid }}";
+        std::string rfidConfigTopic = "homeassistant/tag/" + m_mqttConfig.mqttClientId + "/rfid/config";
+        std::string payload;
+        serializeJson(rfidPayload, payload);
+        publish(rfidConfigTopic, payload, 1, true);
+      }
+    }
+  }, 4096);
+}
+
+bool MqttManager::begin(std::string deviceID) {
     ESP_LOGI(TAG, "Initializing...");
 
     // Do not start if the broker configuration is invalid or default
@@ -27,6 +71,8 @@ bool MqttManager::begin() {
         ESP_LOGW(TAG, "MQTT broker host is not configured. MQTT client will not start.");
         return false;
     }
+
+    this->deviceID = deviceID;
 
     esp_mqtt_client_config_t mqtt_cfg = {};
     mqtt_cfg.broker.address.hostname = m_mqttConfig.mqttBroker.c_str();
@@ -110,15 +156,91 @@ void MqttManager::onConnected() {
 void MqttManager::onData(const std::string& topic, const std::string& data) {
     ESP_LOGI(TAG, "Received message on topic '%s': %s", topic.c_str(), data.c_str());
 
-    // Delegate the action to the LockManager
     if (topic == m_mqttConfig.lockStateCmd) {
-        m_lockManager.setTargetState(std::stoi(data), LockManager::Source::MQTT);
+      EventLockState s{
+        .currentState = static_cast<uint8_t>(std::stoi(data)),
+        .targetState = static_cast<uint8_t>(std::stoi(data)),
+        .source = LockManager::MQTT
+      };
+      std::vector<uint8_t> d;
+      alpaca::serialize(s, d);
+      espp::EventManager::get().publish("lock/overrideState", d);
     } else if (topic == m_mqttConfig.lockTStateCmd) {
-        m_lockManager.setTargetState(std::stoi(data), LockManager::Source::MQTT);
+      EventLockState s{
+        .currentState = static_cast<uint8_t>(std::stoi(data)),
+        .targetState = static_cast<uint8_t>(std::stoi(data)),
+        .source = LockManager::MQTT
+      };
+      std::vector<uint8_t> d;
+      alpaca::serialize(s, d);
+      espp::EventManager::get().publish("lock/targetStateChanged", d);
     } else if (topic == m_mqttConfig.lockCStateCmd) {
-        m_lockManager.overrideState(std::stoi(data), -1);
-    } else if (m_mqttConfig.lockEnableCustomState && topic == m_mqttConfig.lockCustomStateCmd) {
-        m_lockManager.processCustomMqttCommand(std::stoi(data));
+      EventLockState s{
+        .currentState = LockManager::UNKNOWN,
+        .targetState = static_cast<uint8_t>(std::stoi(data)),
+        .source = LockManager::MQTT
+      };
+      std::vector<uint8_t> d;
+      alpaca::serialize(s, d);
+      espp::EventManager::get().publish("lock/updateState", d);
+    } else if (m_mqttConfig.lockEnableCustomState &&
+               topic == m_mqttConfig.lockCustomStateCmd) {
+      int state = std::stoi(data);
+      if (m_mqttConfig.customLockStates.at("C_UNLOCKING") == state) {
+        EventLockState s{
+          .currentState = LockManager::UNKNOWN,
+          .targetState = LockManager::UNLOCKED,
+          .source = LockManager::MQTT
+        };
+        std::vector<uint8_t> d;
+        alpaca::serialize(s, d);
+        espp::EventManager::get().publish("lock/targetStateChanged", d);
+      } else if (m_mqttConfig.customLockStates.at("C_LOCKING") == state) {
+        EventLockState s{
+          .currentState = LockManager::UNKNOWN,
+          .targetState = LockManager::LOCKED,
+          .source = LockManager::MQTT
+        };
+        std::vector<uint8_t> d;
+        alpaca::serialize(s, d);
+        espp::EventManager::get().publish("lock/targetStateChanged", d);
+      } else if (m_mqttConfig.customLockStates.at("C_UNLOCKED") == state) {
+        EventLockState s{
+          .currentState = LockManager::UNLOCKED,
+          .targetState = LockManager::UNLOCKED,
+          .source = LockManager::MQTT
+        };
+        std::vector<uint8_t> d;
+        alpaca::serialize(s, d);
+        espp::EventManager::get().publish("lock/overrideState", d);
+      } else if (m_mqttConfig.customLockStates.at("C_LOCKED") == state) {
+        EventLockState s{
+          .currentState = LockManager::LOCKED,
+          .targetState = LockManager::LOCKED,
+          .source = LockManager::MQTT
+        };
+        std::vector<uint8_t> d;
+        alpaca::serialize(s, d);
+        espp::EventManager::get().publish("lock/overrideState", d);
+      } else if (m_mqttConfig.customLockStates.at("C_JAMMED") == state) {
+        EventLockState s{
+          .currentState = LockManager::JAMMED,
+          .targetState = LockManager::JAMMED,
+          .source = LockManager::MQTT
+        };
+        std::vector<uint8_t> d;
+        alpaca::serialize(s, d);
+        espp::EventManager::get().publish("lock/overrideState", d);
+      } else if (m_mqttConfig.customLockStates.at("C_UNKNOWN") == state) {
+        EventLockState s{
+          .currentState = LockManager::UNKNOWN,
+          .targetState = LockManager::UNKNOWN,
+          .source = LockManager::MQTT
+        };
+        std::vector<uint8_t> d;
+        alpaca::serialize(s, d);
+        espp::EventManager::get().publish("lock/overrideState", d);
+      }
     }
 }
 
@@ -127,74 +249,79 @@ void MqttManager::onData(const std::string& topic, const std::string& data) {
 void MqttManager::publishLockState(int currentState, int targetState) {
     std::string stateStr;
     if (currentState != targetState) {
-        stateStr = (targetState == lockStates::UNLOCKED) ? std::to_string(lockStates::UNLOCKING) : std::to_string(lockStates::LOCKING);
+        stateStr = (targetState == LockManager::UNLOCKED) ? std::to_string(LockManager::UNLOCKING) : std::to_string(LockManager::LOCKING);
     } else {
         stateStr = std::to_string(currentState);
     }
-    publish(m_mqttConfig.lockStateTopic, stateStr, 1, true);
+    publish(m_mqttConfig.lockStateTopic, stateStr, 0, true);
 }
 
 void MqttManager::publishHomeKeyTap(const std::vector<uint8_t>& issuerId, const std::vector<uint8_t>& endpointId, const std::vector<uint8_t>& readerId) {
-    m_lockManager.processNfcRequest(true);
-    nlohmann::json payload;
-    payload["issuerId"] = red_log::bufToHexString(issuerId.data(), issuerId.size());
-    payload["endpointId"] = red_log::bufToHexString(endpointId.data(), endpointId.size());
-    payload["readerId"] = red_log::bufToHexString(readerId.data(), readerId.size());
-    payload["homekey"] = true;
-    publish(m_mqttConfig.hkTopic, payload.dump());
+    ArduinoJson::JsonDocument doc;
+    doc["issuerId"] = fmt::format("{:02X}", fmt::join(issuerId, "")).c_str();
+    doc["endpointId"] = fmt::format("{:02X}", fmt::join(endpointId, "")).c_str();
+    doc["readerId"] = fmt::format("{:02X}", fmt::join(readerId, "")).c_str();
+    doc["homekey"] = true;
+    std::string payload;
+    serializeJson(doc, payload);
+    publish(m_mqttConfig.hkTopic, payload);
 }
 
 void MqttManager::publishUidTap(const uint8_t* uid, uint8_t uidLen, const uint8_t* atqa, const uint8_t* sak) {
     if(!m_mqttConfig.nfcTagNoPublish){
-      nlohmann::json payload;
-      payload["uid"] = red_log::bufToHexString(uid, uidLen);
-      payload["homekey"] = false;
-      if (atqa) payload["atqa"] = red_log::bufToHexString(atqa, 2);
-      if (sak) payload["sak"] = red_log::bufToHexString(sak, 1);
-      publish(m_mqttConfig.hkTopic, payload.dump());
+      ArduinoJson::JsonDocument doc;
+      doc["uid"] = fmt::format("{:02X}", fmt::join(uid, uid + uidLen, ""));
+      doc["homekey"] = false;
+      if (atqa) doc["atqa"] = fmt::format("{:02X}", fmt::join(atqa, atqa + 2, ""));
+      if (sak) doc["sak"] = fmt::format("{:02X}", fmt::join(sak, sak + 1, ""));
+      std::string payload;
+      serializeJson(doc, payload);
+      publish(m_mqttConfig.hkTopic, payload);
     } else ESP_LOGD(TAG, "Generic Tag UID publishing via MQTT not enabled, ignoring!");
 }
 
 void MqttManager::publishHassDiscovery() {
     ESP_LOGI(TAG, "Publishing Home Assistant discovery messages...");
 
-    nlohmann::json device;
-    char identifier[18];
-    sprintf(identifier, "%.2s%.2s%.2s%.2s%.2s%.2s", HAPClient::accessory.ID, HAPClient::accessory.ID + 3, HAPClient::accessory.ID + 6, HAPClient::accessory.ID + 9, HAPClient::accessory.ID + 12, HAPClient::accessory.ID + 15);
-    device["identifiers"] = { std::string(identifier) };
+    ArduinoJson::JsonDocument device;
+    device["identifiers"].to<ArduinoJson::JsonArray>().add(deviceID);
     device["name"] = device_name;
     device["manufacturer"] = "rednblkx";
     device["model"] = "HomeKey-ESP32";
     device["sw_version"] = esp_app_get_description()->version;
 
-    nlohmann::json lockPayload;
+    ArduinoJson::JsonDocument lockPayload;
     lockPayload["name"] = "Lock";
-    lockPayload["unique_id"] = std::string(identifier) + "_lock";
+    lockPayload["unique_id"] = deviceID;
     lockPayload["device"] = device;
     lockPayload["state_topic"] = m_mqttConfig.lockStateTopic;
     lockPayload["command_topic"] = m_mqttConfig.lockStateCmd;
-    lockPayload["payload_lock"] = std::to_string(lockStates::LOCKED);
-    lockPayload["payload_unlock"] = std::to_string(lockStates::UNLOCKED);
-    lockPayload["state_locked"] = std::to_string(lockStates::LOCKED);
-    lockPayload["state_unlocked"] = std::to_string(lockStates::UNLOCKED);
-    lockPayload["state_locking"] = std::to_string(lockStates::LOCKING);
-    lockPayload["state_unlocking"] = std::to_string(lockStates::UNLOCKING);
-    lockPayload["state_jammed"] = std::to_string(lockStates::JAMMED);
+    lockPayload["payload_lock"] = std::to_string(LockManager::LOCKED);
+    lockPayload["payload_unlock"] = std::to_string(LockManager::UNLOCKED);
+    lockPayload["state_locked"] = std::to_string(LockManager::LOCKED);
+    lockPayload["state_unlocked"] = std::to_string(LockManager::UNLOCKED);
+    lockPayload["state_locking"] = std::to_string(LockManager::LOCKING);
+    lockPayload["state_unlocking"] = std::to_string(LockManager::UNLOCKING);
+    lockPayload["state_jammed"] = std::to_string(LockManager::JAMMED);
     lockPayload["availability_topic"] = m_mqttConfig.lwtTopic;
-    
+
+    std::string payload;
+    serializeJson(lockPayload, payload);
     std::string lockConfigTopic = "homeassistant/lock/" + m_mqttConfig.mqttClientId + "/lock/config";
-    publish(lockConfigTopic, lockPayload.dump(), 1, true);
+    publish(lockConfigTopic, payload, 1, true);
 
     if (!m_mqttConfig.nfcTagNoPublish) {
-        nlohmann::json rfidPayload;
+        ArduinoJson::JsonDocument rfidPayload;
         rfidPayload["name"] = "NFC Tag";
-        rfidPayload["unique_id"] = std::string(identifier) + "_nfc_tag";
+        rfidPayload["unique_id"] = deviceID;
         rfidPayload["device"] = device;
         rfidPayload["topic"] = m_mqttConfig.hkTopic;
         rfidPayload["value_template"] = "{{ value_json.uid }}";
         std::string rfidConfigTopic = "homeassistant/tag/" + m_mqttConfig.mqttClientId + "/rfid/config";
-        publish(rfidConfigTopic, rfidPayload.dump(), 1, true);
+        std::string payload;
+        serializeJson(rfidPayload, payload);
+        publish(rfidConfigTopic, payload, 1, true);
     }
-    
+
     ESP_LOGI(TAG, "HASS discovery messages published.");
 }

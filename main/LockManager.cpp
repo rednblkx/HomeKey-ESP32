@@ -1,31 +1,82 @@
+#include "esp_log.h"
+#include "event_manager.hpp"
+#include "config.hpp"
 #include "LockManager.hpp"
 #include "HardwareManager.hpp"
-#include "ConfigManager.hpp"
-
-#include <esp_log.h>
-#include <functional>
+#include <cstdint>
+#include <serialization.hpp>
+#include <system_error>
+#include "eventStructs.hpp"
 
 const char* LockManager::TAG = "LockManager";
 
-LockManager::LockManager(void(*stateChanged)(int cstate, int tstate), HardwareManager& hardwareManager, ConfigManager& configManager)
-    : m_stateChanged(stateChanged),
-      m_hardwareManager(hardwareManager),
-      m_miscConfig(configManager.getMiscConfig()),
-      customLockActions(configManager.getMqttConfig().customLockActions),
+LockManager::LockManager(HardwareManager& hardwareManager, const espConfig::misc_config_t& miscConfig)
+    : m_hardwareManager(hardwareManager),
+      m_miscConfig(miscConfig),
       m_currentState(lockStates::LOCKED),
       m_targetState(lockStates::LOCKED),
       m_momentaryUnlockActive(false),
       m_momentaryUnlockStartTime(0)
-{}
+{
+  espp::EventManager::get().add_publisher("lock/stateChanged", "LockManager");
+  espp::EventManager::get().add_publisher("lock/feedback", "LockManager");
+  espp::EventManager::get().add_publisher("lock/action", "LockManager");
+  espp::EventManager::get().add_subscriber(
+      "lock/overrideState", "LockManager",
+      [&](const std::vector<uint8_t> &data) {
+        std::error_code ec;
+        EventLockState s = alpaca::deserialize<EventLockState>(data, ec);
+        if (!ec) {
+          overrideState(s.currentState, s.targetState);
+        }
+      }, 3072);
+  espp::EventManager::get().add_subscriber(
+      "lock/targetStateChanged", "LockManager",
+      [&](const std::vector<uint8_t> &data) {
+        std::error_code ec;
+        EventLockState s = alpaca::deserialize<EventLockState>(data, ec);
+        if (!ec) {
+          setTargetState(s.targetState, Source(s.source));
+        }
+      }, 3072);
+  espp::EventManager::get().add_subscriber(
+      "lock/updateState", "LockManager", [&](const std::vector<uint8_t> &data) {
+        std::error_code ec;
+        EventLockState s = alpaca::deserialize<EventLockState>(data, ec);
+        if (!ec) {
+          m_currentState = s.currentState;
+          s.currentState = m_currentState;
+          s.targetState = m_targetState;
+          EventLockState s{
+            .currentState = static_cast<uint8_t>(m_currentState),
+            .targetState = static_cast<uint8_t>(m_targetState),
+            .source = LockManager::INTERNAL
+          };
+          std::vector<uint8_t> d;
+          alpaca::serialize(s, d);
+          espp::EventManager::get().publish("lock/stateChanged", d);
+        }
+      }, 4096);
+  espp::EventManager::get().add_subscriber(
+      "nfc/HomeKeyTap", "LockManager",
+      [&](const std::vector<uint8_t> &data) { processNfcRequest(true); }, 3072);
+}
 
 void LockManager::begin() {
-    ESP_LOGI(TAG, "Initializing to default state: LOCKED");
-    m_hardwareManager.setLockOutput(m_currentState);
-    m_stateChanged(m_currentState, m_targetState);
+  ESP_LOGI(TAG, "Initializing to Default/NVS state");
+  EventLockState s{
+    .currentState = static_cast<uint8_t>(m_currentState),
+    .targetState = static_cast<uint8_t>(m_targetState),
+    .source = LockManager::INTERNAL
+  };
+  std::vector<uint8_t> d;
+  alpaca::serialize(s, d);
+  espp::EventManager::get().publish("lock/action", d);
+  espp::EventManager::get().publish("lock/stateChanged", d);
 }
 
 void LockManager::loop() {
-    if (m_momentaryUnlockActive && ((esp_timer_get_time()/1000) - m_momentaryUnlockStartTime > m_miscConfig.gpioActionMomentaryTimeout)) {
+    if (m_momentaryUnlockActive && ((unsigned long)(esp_timer_get_time()/1000ULL) - m_momentaryUnlockStartTime > m_miscConfig.gpioActionMomentaryTimeout)) {
         ESP_LOGI(TAG, "Momentary unlock timeout reached. Re-locking.");
         m_momentaryUnlockActive = false;
         setTargetState(lockStates::LOCKED, Source::INTERNAL);
@@ -44,22 +95,35 @@ int LockManager::getTargetState() const {
 
 // --- Command Methods ---
 
-void LockManager::setTargetState(int state, Source source) {
+void LockManager::setTargetState(uint8_t state, Source source) {
     if (state == m_targetState && m_currentState == m_targetState) {
         ESP_LOGD(TAG, "Requested state is already the current state. No action taken.");
         return;
     }
 
-    ESP_LOGI(TAG, "Setting target state to %d from source %d", state, static_cast<int>(source));
+    ESP_LOGI(TAG, "Setting target state to %d (c:%d,t:%d), from source %d", state, m_currentState, m_targetState, static_cast<int>(source));
 
     m_momentaryUnlockActive = false;
 
     m_targetState = state;
-    
-    m_hardwareManager.setLockOutput(m_targetState);
 
-    m_currentState = m_targetState;
-    m_stateChanged(m_currentState, m_targetState);
+    EventLockState s{
+      .currentState = m_currentState,
+      .targetState = m_targetState,
+      .source = LockManager::INTERNAL
+    };
+    std::vector<uint8_t> d;
+    alpaca::serialize(s, d);
+    if (m_miscConfig.hkDumbSwitchMode) {
+      ESP_LOGI(TAG, "Dummy Action is enabled!");
+      m_currentState = m_targetState;
+      s.currentState = m_targetState;
+      d.clear();
+      alpaca::serialize(s, d);
+    } else {
+      espp::EventManager::get().publish("lock/action", d);
+    }
+    espp::EventManager::get().publish("lock/stateChanged", d);
 
     uint8_t momentarySources = m_miscConfig.gpioActionMomentaryEnabled;
     bool isMomentarySource = ((static_cast<uint8_t>(source) & momentarySources) != 0);
@@ -74,7 +138,10 @@ void LockManager::setTargetState(int state, Source source) {
 void LockManager::processNfcRequest(bool status) {
     ESP_LOGI(TAG, "Processing NFC tap request...");
     if(status){
-      m_hardwareManager.showSuccessFeedback();
+      EventBinaryStatus s{false};
+      std::vector<uint8_t> d;
+      alpaca::serialize(s, d);
+      espp::EventManager::get().publish("lock/feedback", d);
       if (m_miscConfig.lockAlwaysUnlock) {
         setTargetState(lockStates::UNLOCKED, Source::NFC);
       } else if (m_miscConfig.lockAlwaysLock) {
@@ -84,29 +151,30 @@ void LockManager::processNfcRequest(bool status) {
         setTargetState(newState, Source::NFC);
       }
     } else {
-      m_hardwareManager.showFailureFeedback();
+      EventBinaryStatus s{false};
+      std::vector<uint8_t> d;
+      alpaca::serialize(s, d);
+      espp::EventManager::get().publish("lock/feedback", d);
     }
 }
 
-void LockManager::overrideState(int c_state, int t_state) {
+void LockManager::overrideState(uint8_t c_state, uint8_t t_state) {
     if (c_state == m_currentState && t_state == m_targetState) return;
 
     ESP_LOGI(TAG, "External source reported new c_state: %d t_state: %d. Overriding internal state.", c_state, t_state);
 
-    m_currentState = c_state != -1 ? c_state : m_currentState;
-    m_targetState = t_state != -1 ? t_state : m_targetState;
+    m_currentState = c_state != 255 ? c_state : m_currentState;
+    m_targetState = t_state != 255 ? t_state : m_targetState;
 
     m_momentaryUnlockActive = false;
+    EventLockState s{
+      .currentState = static_cast<uint8_t>(m_currentState),
+      .targetState = static_cast<uint8_t>(m_targetState),
+      .source = LockManager::INTERNAL
+    };
+    std::vector<uint8_t> d;
+    alpaca::serialize(s, d);
+    espp::EventManager::get().publish("lock/action", d);
+    espp::EventManager::get().publish("lock/stateChanged", d);
 }
 
-void LockManager::processCustomMqttCommand(int command) {
-    ESP_LOGI(TAG, "Processing custom MQTT command: %d", command);
-
-    if (customLockActions.count("UNLOCK") && customLockActions.at("UNLOCK") == command) {
-        setTargetState(lockStates::UNLOCKED, Source::MQTT);
-    } else if (customLockActions.count("LOCK") && customLockActions.at("LOCK") == command) {
-        setTargetState(lockStates::LOCKED, Source::MQTT);
-    } else {
-        ESP_LOGW(TAG, "Received unknown custom MQTT command: %d", command);
-    }
-}

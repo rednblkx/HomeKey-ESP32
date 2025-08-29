@@ -24,13 +24,13 @@ public:
      * @param lockManager Reference to the core lock logic manager.
      * @param configManager Reference to the application configuration manager.
      */
-    MqttManager(LockManager& lockManager, ConfigManager& configManager);
+    MqttManager(ConfigManager& configManager);
 
     /**
      * @brief Initializes and starts the MQTT client.
      * @return True if the client was started, false if the configuration was invalid.
      */
-    bool begin();
+    bool begin(std::string deviceID);
 
     /**
      * @brief Publishes the current state of the lock.
@@ -69,7 +69,7 @@ private:
     void publishHassDiscovery();
 
     // --- Member Variables ---
-    LockManager& m_lockManager;
+    std::string deviceID;
     const espConfig::mqttConfig_t& m_mqttConfig;
     esp_mqtt_client_handle_t m_client;
     const std::string &device_name;

@@ -1,8 +1,8 @@
 #include "ReaderDataManager.hpp"
-#include "HomeKey.h"
+#include "config.hpp"
+#include <ArduinoJson.hpp>
 #include <nvs_flash.h>
 #include <esp_log.h>
-#include <nlohmann/json.hpp>
 #include <algorithm>
 
 const char* ReaderDataManager::TAG = "ReaderDataManager";
@@ -76,13 +76,14 @@ void ReaderDataManager::load() {
         return;
     }
     
-    nlohmann::json data = nlohmann::json::from_msgpack(buffer, true, false);
-    if (data.is_discarded()) {
+    ArduinoJson::JsonDocument doc;
+    ArduinoJson::deserializeMsgPack(doc, buffer);
+    m_readerData = doc.as<readerData_t>();
+    if (doc.isNull()) {
         ESP_LOGE(TAG, "Failed to parse reader data msgpack. Data may be corrupt.");
         return;
     }
-
-    data.get_to<readerData_t>(m_readerData);
+    
     ESP_LOGI(TAG, "Successfully loaded reader data from NVS.");
 }
 
@@ -92,9 +93,12 @@ const readerData_t* ReaderDataManager::saveData() {
         return nullptr;
     }
     
-    std::vector<uint8_t> serialized_data = nlohmann::json::to_msgpack(m_readerData);
+    ByteWriter serialized_data;
+    ArduinoJson::JsonDocument doc;
+    doc = m_readerData;
+    serializeMsgPack(doc, serialized_data);
 
-    esp_err_t set_err = nvs_set_blob(m_nvsHandle, NVS_KEY, serialized_data.data(), serialized_data.size());
+    esp_err_t set_err = nvs_set_blob(m_nvsHandle, NVS_KEY, serialized_data, serialized_data);
     if (set_err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to set blob in NVS: %s", esp_err_to_name(set_err));
         return nullptr;

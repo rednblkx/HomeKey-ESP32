@@ -1,4 +1,6 @@
+#include "eventStructs.hpp"
 #include "HomeKitLock.hpp"
+#include <functional>
 #include <sodium/crypto_sign.h>
 #include <sodium/crypto_box.h>
 #include "HAP.h"
@@ -7,26 +9,50 @@
 #include "ConfigManager.hpp"
 #include "ReaderDataManager.hpp"
 #include "HK_HomeKit.h"
-#include "esp_system.h"
+#include "structs.hpp"
+#include "esp_mac.h"
 #include "utils.hpp"
-
-#include <esp_app_desc.h>
-#include <esp_mac.h>
 
 const char* HomeKitLock::TAG = "HomeKitBridge";
 static HomeKitLock* s_instance = nullptr;
-KeyFlow hkFlow = KeyFlow::kFlowFAST;
 
-HomeKitLock::HomeKitLock(void (&conn_cb)(int), LockManager& lockManager, ConfigManager& configManager, ReaderDataManager& readerDataManager)
+HomeKitLock::HomeKitLock(std::function<void(int)> &conn_cb, LockManager& lockManager, ConfigManager& configManager, ReaderDataManager& readerDataManager)
     : m_lockManager(lockManager),
       m_configManager(configManager),
       m_readerDataManager(readerDataManager),
-      connectionEstablished(conn_cb) {
+      conn_cb(conn_cb) {
     if (s_instance != nullptr) {
         ESP_LOGE(TAG, "ERROR: More than one instance of HomeKitBridge created!");
         esp_restart();
     }
     s_instance = this;
+    espp::EventManager::get().add_subscriber(
+        "lock/stateChanged", "HomeKitLock",
+        [&](const std::vector<uint8_t> &data) {
+          std::error_code ec;
+          EventLockState s = alpaca::deserialize<EventLockState>(data, ec);
+          if(!ec) {
+            updateLockState(s.currentState, s.targetState);
+          }
+        }, 3072); 
+    espp::EventManager::get().add_subscriber(
+        "homekit/setupCodeChanged", "HomeKitLock",
+        [&](const std::vector<uint8_t> &data) {
+          std::error_code ec;
+          EventValueChanged s = alpaca::deserialize<EventValueChanged>(data, ec);
+          if(!ec) {
+            homeSpan.setPairingCode(s.str.c_str(), false);
+          }
+        }, 3072); 
+    espp::EventManager::get().add_subscriber(
+        "homekit/btrLowThresholdChanged", "HomeKitLock",
+        [&](const std::vector<uint8_t> &data) {
+          std::error_code ec;
+          EventValueChanged s = alpaca::deserialize<EventValueChanged>(data, ec);
+          if(!ec) {
+            updateBatteryStatus(m_batteryLevel->getVal(), s.newValue);
+          }
+        }, 3072); 
 }
 
 void HomeKitLock::begin() {
@@ -80,22 +106,22 @@ void HomeKitLock::setupDebugCommands() {
       esp_log_level_t level = esp_log_level_get("*");
       if (strncmp(buf + 1, "E", 1) == 0) {
         level = ESP_LOG_ERROR;
-        LOG(I, "ERROR");
+         LOG(I, "ERROR");
       } else if (strncmp(buf + 1, "W", 1) == 0) {
         level = ESP_LOG_WARN;
-        LOG(I, "WARNING");
+         LOG(I, "WARNING");
       } else if (strncmp(buf + 1, "I", 1) == 0) {
         level = ESP_LOG_INFO;
-        LOG(I, "INFO");
+         LOG(I, "INFO");
       } else if (strncmp(buf + 1, "D", 1) == 0) {
         level = ESP_LOG_DEBUG;
-        LOG(I, "DEBUG");
+         LOG(I, "DEBUG");
       } else if (strncmp(buf + 1, "V", 1) == 0) {
         level = ESP_LOG_VERBOSE;
-        LOG(I, "VERBOSE");
+         LOG(I, "VERBOSE");
       } else if (strncmp(buf + 1, "N", 1) == 0) {
         level = ESP_LOG_NONE;
-        LOG(I, "NONE");
+         LOG(I, "NONE");
       }
 
       esp_log_level_set(TAG, level);
@@ -114,42 +140,44 @@ void HomeKitLock::setupDebugCommands() {
       esp_log_level_set("mqttconfig", level);
     });
     new SpanUserCommand('F', "Set HomeKey Flow", [](const char *buf){
+      KeyFlow hkFlow = KeyFlow::kFlowFAST;
       switch (buf[1]) {
       case '0':
         hkFlow = KeyFlow::kFlowFAST;
-        LOG(I, "FAST Flow");
+         LOG(I, "FAST Flow");
         break;
 
       case '1':
         hkFlow = KeyFlow::kFlowSTANDARD;
-        LOG(I, "STANDARD Flow");
+         LOG(I, "STANDARD Flow");
         break;
       case '2':
         hkFlow = KeyFlow::kFlowATTESTATION;
-        LOG(I, "ATTESTATION Flow");
+         LOG(I, "ATTESTATION Flow");
         break;
 
       default:
-        LOG(I, "0 = FAST flow, 1 = STANDARD Flow, 2 = ATTESTATION Flow");
+         LOG(I, "0 = FAST flow, 1 = STANDARD Flow, 2 = ATTESTATION Flow");
         break;
       }
+      EventValueChanged s{.newValue = (uint8_t)hkFlow};
+      std::vector<uint8_t> d;
+      alpaca::serialize(s, d);
+      espp::EventManager::get().publish("nfc/forceAuthFlow", d);
     });
     new SpanUserCommand('M', "Erase MQTT Config and restart", [](const char*){s_instance->m_configManager.deleteMqttConfig();});
     new SpanUserCommand('N', "Btr status low", [](const char* arg) {
       const char* TAG = "BTR_LOW";
       if (strncmp(arg + 1, "0", 1) == 0) {
-        // statusLowBtr->setVal(0);
         s_instance->m_statusLowBattery->setVal(0);
-        LOG(I, "Low status set to NORMAL");
+         LOG(I, "Low status set to NORMAL");
       } else if (strncmp(arg + 1, "1", 1) == 0) {
-        // statusLowBtr->setVal(1);
         s_instance->m_statusLowBattery->setVal(1);
-        LOG(I, "Low status set to LOW");
+         LOG(I, "Low status set to LOW");
       }
     });
     new SpanUserCommand('B', "Btr level", [](const char* arg) {
       uint8_t level = atoi(static_cast<const char *>(arg + 1));
-      // btrLevel->setVal(level);
       s_instance->m_batteryLevel->setVal(level);
     });
 
@@ -160,9 +188,9 @@ void HomeKitLock::setupDebugCommands() {
             ESP_LOGI(TAG, "None");
         }
         for(const auto& issuer : issuers) {
-            ESP_LOGI(TAG, "ID: %s, PK: %s",
-                red_log::bufToHexString(issuer.issuer_id.data(), issuer.issuer_id.size()).c_str(),
-                red_log::bufToHexString(issuer.issuer_pk.data(), issuer.issuer_pk.size()).c_str());
+             ESP_LOGI(TAG, "ID: %s, PK: %s",
+                 fmt::format("{:02X}", fmt::join(issuer.issuer_id, "")).c_str(),
+                 fmt::format("{:02X}", fmt::join(issuer.issuer_pk, "")).c_str());
         }
         ESP_LOGI(TAG, "------------------------------------");
     });
@@ -170,10 +198,10 @@ void HomeKitLock::setupDebugCommands() {
 
 
 void HomeKitLock::updateLockState(int currentState, int targetState) {
-    if (m_lockCurrentState && m_lockCurrentState->getNewVal() != currentState) {
+    if (m_lockCurrentState->getNewVal() != currentState) {
         m_lockCurrentState->setVal(currentState);
     }
-    if (m_lockTargetState && m_lockTargetState->getNewVal() != targetState) {
+    if (m_lockTargetState->getNewVal() != targetState) {
         m_lockTargetState->setVal(targetState);
     }
 }
@@ -189,6 +217,10 @@ void HomeKitLock::updateBatteryStatus(uint8_t batteryLevel, bool isLow) {
 
 void HomeKitLock::staticControllerCallback() {
     if (s_instance) s_instance->controllerCallback();
+}
+
+void HomeKitLock::connectionEstablished(int status) {
+    if (s_instance) s_instance->conn_cb(status);
 }
 
 void HomeKitLock::controllerCallback() {

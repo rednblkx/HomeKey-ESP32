@@ -1,12 +1,11 @@
+#include "eventStructs.hpp"
 #include <HomeSpan.h>
 #include "HomeKitLock.hpp"
 #include "LockManager.hpp"
 #include "ReaderDataManager.hpp"
-#include "config.hpp"
 #include "esp_mac.h"
 #include "HK_HomeKit.h"
-
-extern void onNFCCPFinish() __attribute__((weak));
+#include "structs.hpp"
 
 const std::array<std::array<uint8_t, 6>, 4> hk_color_vals = { {{0x01,0x04,0xce,0xd5,0xda,0x00}, {0x01,0x04,0xaa,0xd6,0xec,0x00}, {0x01,0x04,0xe3,0xe3,0xe3,0x00}, {0x01,0x04,0x00,0x00,0x00,0x00}} };
 
@@ -46,9 +45,9 @@ HomeKitLock::NFCAIS::NFCAIS(const espConfig::misc_config_t& config) {
         ESP_LOGW(HomeKitLock::TAG, "Invalid hk_key_color index %d. Defaulting to 0.", color_index);
         color_index = 0;
     }
-    std::array<uint8_t, 6> decB64 = hk_color_vals[color_index];
+    std::array<uint8_t, 6> color_buf = hk_color_vals[color_index];
     TLV8 hwfinish(nullptr, 0);
-    hwfinish.unpack(decB64.data(), decB64.size());
+    hwfinish.unpack(color_buf.data(), color_buf.size());
     new Characteristic::HardwareFinish(hwfinish);
 }
 
@@ -59,15 +58,30 @@ HomeKitLock::LockManagementService::LockManagementService() {
 };
 
 HomeKitLock::LockMechanismService::LockMechanismService(HomeKitLock& bridge, LockManager& lockManager) : m_lockManager(lockManager) {
+    espp::EventManager::get().add_publisher("lock/overrideState", "LockMechanismService");
+    espp::EventManager::get().add_publisher("lock/targetStateChanged", "LockMechanismService");
     ESP_LOGI(HomeKitLock::TAG, "Configuring LockMechanism");
-    bridge.m_lockCurrentState = new Characteristic::LockCurrentState(m_lockManager.getCurrentState(), true);
-    m_lockTargetState = new Characteristic::LockTargetState(m_lockManager.getTargetState(), true);
-    bridge.m_lockTargetState = m_lockTargetState;
-    m_lockManager.overrideState(bridge.m_lockCurrentState->getVal(), bridge.m_lockTargetState->getVal());
+    m_lockCurrentState = bridge.m_lockCurrentState = new Characteristic::LockCurrentState(m_lockManager.getCurrentState(), true);
+    m_lockTargetState = bridge.m_lockTargetState = new Characteristic::LockTargetState(m_lockManager.getTargetState(), true);
+    EventLockState s{
+      .currentState = static_cast<uint8_t>(m_lockCurrentState->getNewVal()),
+      .targetState = static_cast<uint8_t>(m_lockTargetState->getNewVal()),
+      .source = LockManager::HOMEKIT
+    };
+    std::vector<uint8_t> d;
+    alpaca::serialize(s, d);
+    espp::EventManager::get().publish("lock/overrideState", d);
 }
 boolean HomeKitLock::LockMechanismService::update() {
     if (m_lockTargetState->updated()) {
-        m_lockManager.setTargetState(m_lockTargetState->getNewVal(), LockManager::Source::HOMEKIT);
+      EventLockState s{
+        .currentState = static_cast<uint8_t>(m_lockCurrentState->getNewVal()),
+        .targetState = static_cast<uint8_t>(m_lockTargetState->getNewVal()),
+        .source = LockManager::HOMEKIT
+      };
+      std::vector<uint8_t> d;
+      alpaca::serialize(s, d);
+      espp::EventManager::get().publish("lock/targetStateChanged", d);
     }
     return true;
 }
@@ -79,6 +93,7 @@ HomeKitLock::NFCAccessService::NFCAccessService(ReaderDataManager& readerDataMan
     conf.add(0x01, 0x10); conf.add(0x02, 0x10);
     new Characteristic::NFCAccessSupportedConfiguration(conf);
     m_nfcControlPoint = new Characteristic::NFCAccessControlPoint();
+    espp::EventManager::get().add_publisher("nfc/updateECP", "NFCAccessService");
 }
 boolean HomeKitLock::NFCAccessService::update() {
     if (!m_nfcControlPoint->updated()) return true;
@@ -95,7 +110,7 @@ boolean HomeKitLock::NFCAccessService::update() {
     TLV8 res(nullptr, 0);
     res.unpack(result.data(), result.size());
     m_nfcControlPoint->setTLV(res, false);
-    if(onNFCCPFinish) onNFCCPFinish();
+    espp::EventManager::get().publish("nfc/updateECP", {});
     return true;
 }
 
