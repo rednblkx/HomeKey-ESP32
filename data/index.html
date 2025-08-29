@@ -236,10 +236,9 @@
       const formdata = new FormData(event.target);
       const data = Object.fromEntries(formdata.entries());
       const noIntConversion = ["setupCode"];
-      for (const key in data) {
-        const el = data[key];
-        if (!isNaN(el) && !noIntConversion.includes(key)) {
-          data[key] = Number(el);
+      for (const [key,value] of formdata) {
+        if (isNumeric(value) && !noIntConversion.includes(key)) {
+          data[key] = Number(value);
         }
         if (key.includes("!")) {
           const matchedString = key.split("!");
@@ -252,16 +251,16 @@
               matchedString[2] = Number(matchedString[2]);
               data[matchedString[0]][matchedString[1]] = [];
               data[matchedString[0]][matchedString[1]][0] = matchedString[1];
-              data[matchedString[0]][matchedString[1]][matchedString[2]] = isNaN(el) ? el : Number(el);
+              data[matchedString[0]][matchedString[1]][matchedString[2]] = isNaN(value) ? value : Number(value);
             } else {
-              data[matchedString[0]][matchedString[1]] = isNaN(el) ? el : Number(el);
+              data[matchedString[0]][matchedString[1]] = isNaN(value) ? value : Number(value);
             }
             delete data[key];
           } else if(matchedString) {
             if (!data.hasOwnProperty(matchedString[0])) {
               data[matchedString[0]] = {};
             }
-            data[matchedString[0]][matchedString[1]] = isNaN(el) ? el : Number(el);
+            data[matchedString[0]][matchedString[1]] = isNaN(value) ? value : Number(value);
             delete data[key];
           }
         }
