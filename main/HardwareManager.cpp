@@ -2,14 +2,8 @@
 #include "HardwareManager.hpp"
 #include "LockManager.hpp"
 #include "Pixel.h"
-#include "esp32-hal-gpio.h"
-#include "esp_timer.h"
-#include "soc/gpio_num.h"
 #include "structs.hpp"
-#include "driver/gpio.h"
 #include "eventStructs.hpp"
-
-#include <esp_log.h>
 
 const char* HardwareManager::TAG = "HardwareManager";
 

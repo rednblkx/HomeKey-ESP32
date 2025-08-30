@@ -1,12 +1,8 @@
-#include "esp_log.h"
 #include "esp_timer.h"
 #include "event_manager.hpp"
 #include "config.hpp"
 #include "LockManager.hpp"
 #include "HardwareManager.hpp"
-#include <cstdint>
-#include <serialization.hpp>
-#include <system_error>
 #include "eventStructs.hpp"
 
 const char* LockManager::TAG = "LockManager";
@@ -91,14 +87,6 @@ void LockManager::begin() {
 void LockManager::handleTimer(void* instance){
   static_cast<LockManager*>(instance)->setTargetState(LOCKED, INTERNAL);
 }
-
-// void LockManager::loop() {
-//     if (m_momentaryUnlockActive && ((unsigned long)(esp_timer_get_time()/1000ULL) - m_momentaryUnlockStartTime > m_miscConfig.gpioActionMomentaryTimeout)) {
-//         ESP_LOGI(TAG, "Momentary unlock timeout reached. Re-locking.");
-//         m_momentaryUnlockActive = false;
-//         setTargetState(lockStates::LOCKED, Source::INTERNAL);
-//     }
-// }
 
 // --- State Getters ---
 

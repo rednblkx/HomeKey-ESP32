@@ -2,7 +2,6 @@
 #define LOCK_MANAGER_H
 
 #include "esp_timer.h"
-#include <cstdint>
 class HardwareManager;
 class ConfigManager;
 class LockApplication;
@@ -66,14 +65,6 @@ public:
      * Probably should be moved somewhere else
      */
     void processNfcRequest(bool status);
-    
-    /**
-     * @brief Processes a custom command from MQTT.
-     * Translates custom MQTT states/commands into standard lock actions.
-     * @param command The integer value of the custom command.
-     * TODO: Move to MqttManager and just use setTargetState or overrideState
-     */
-    void processCustomMqttCommand(uint8_t command);
 
     /**
      * @brief Forces the manager's internal state to match an external report.
@@ -91,8 +82,6 @@ private:
     uint8_t m_currentState;
     uint8_t m_targetState;
 
-    // bool m_momentaryUnlockActive;
-    // unsigned long m_momentaryUnlockStartTime;
     esp_timer_handle_t momentaryStateTimer;
 
     static const char* TAG;

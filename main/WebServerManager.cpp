@@ -9,7 +9,6 @@
 #include <format.hpp>
 #include <LittleFS.h>
 #include <esp_app_desc.h>
-#include <string>
 
 const char* WebServerManager::TAG = "WebServerManager";
 

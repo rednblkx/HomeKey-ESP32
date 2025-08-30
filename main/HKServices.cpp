@@ -1,5 +1,4 @@
 #include "eventStructs.hpp"
-#include <HomeSpan.h>
 #include "HomeKitLock.hpp"
 #include "LockManager.hpp"
 #include "ReaderDataManager.hpp"
