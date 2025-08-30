@@ -5,6 +5,7 @@
 #include "ReaderDataManager.hpp"
 #include "eventStructs.hpp"
 #include "utils.hpp"
+#include "config.hpp"
 #include <format.hpp>
 #include <LittleFS.h>
 #include <esp_app_desc.h>
