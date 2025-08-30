@@ -137,7 +137,7 @@ void LockManager::setTargetState(uint8_t state, Source source) {
       s.currentState = m_targetState;
       d.clear();
       alpaca::serialize(s, d);
-    } else {
+    } else if((source == NFC && m_miscConfig.hkGpioControlledState) || source != NFC) {
       espp::EventManager::get().publish("lock/action", d);
     }
     espp::EventManager::get().publish("lock/stateChanged", d);
