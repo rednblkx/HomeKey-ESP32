@@ -332,9 +332,9 @@ void WebServerManager::processSaveConfigRequest(AsyncWebServerRequest *request) 
     bool rebootNeeded = false;
     std::string rebootMsg;
     
-    JsonObjectConst obj = static_cast<JsonDocument*>(request->_tempObject)->as<JsonObjectConst>();
+    JsonObject obj = static_cast<JsonDocument*>(request->_tempObject)->as<JsonObject>();
 
-    for (JsonPairConst it : obj) {
+    for (JsonPair it : obj) {
       if(it.value() == configSchema[it.key()]) continue;
       const char* keyStr = it.key().c_str();
       if(it.key() == "nfcTagNoPublish"){
@@ -371,6 +371,8 @@ void WebServerManager::processSaveConfigRequest(AsyncWebServerRequest *request) 
       } else if(it.key() == "neoPixelType") {
         rebootNeeded = true;
         rebootMsg = "Pixel Type was changed, reboot needed to apply! Rebooting...";
+      } else if(it.key() == "gpioActionPin" && it.value().as<uint8_t>() != 255){
+        obj["hkDumbSwitchMode"] = false;
       }
     }
 
