@@ -377,20 +377,12 @@ void WebServerManager::processSaveConfigRequest(AsyncWebServerRequest *request) 
     if (type == "mqtt") {
       merge(data.as<JsonObject>(), obj);
       espConfig::mqttConfig_t s = data.as<espConfig::mqttConfig_t>();
-      std::string t;
-      serializeJson(data, t);
-
-      ESP_LOGI(TAG, "CURRENT DATA: %s", t.c_str());
       success = m_configManager.saveMqttConfig(s);
       rebootNeeded = true; // Always reboot on MQTT config change
       rebootMsg = "MQTT config saved, reboot needed to apply! Rebooting...";
     } else if(type == "misc" || type == "actions") {
       merge(data.as<JsonObject>(), obj);
       espConfig::misc_config_t s = data.as<espConfig::misc_config_t>();
-      std::string t;
-      serializeJson(data, t);
-
-      ESP_LOGI(TAG, "CURRENT DATA: %s", t.c_str());
       success = m_configManager.saveMiscConfig(s);
       if(type == "misc"){
         rebootNeeded = true;
