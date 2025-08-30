@@ -377,15 +377,15 @@ namespace ArduinoJson {
     dst.neoPixelType = obj["neoPixelType"].isNull() ? 5 : obj["neoPixelType"].as<uint8_t>();
     dst.neopixelSuccessColor = obj["neopixelSuccessColor"].as<std::map<espConfig::misc_config_t::colorMap, int>>();
     dst.neopixelFailureColor = obj["neopixelFailureColor"].as<std::map<espConfig::misc_config_t::colorMap, int>>();
-    dst.neopixelSuccessTime = obj["neopixelSuccessTime"].isNull() ? 0 : obj["neopixelSuccessTime"].as<uint8_t>();
-    dst.neopixelFailTime = obj["neopixelFailTime"].isNull() ? 0 : obj["neopixelFailTime"].as<uint8_t>();
+    dst.neopixelSuccessTime = obj["neopixelSuccessTime"].isNull() ? 0 : obj["neopixelSuccessTime"].as<uint16_t>();
+    dst.neopixelFailTime = obj["neopixelFailTime"].isNull() ? 0 : obj["neopixelFailTime"].as<uint16_t>();
 
     // NFC Binary Status Pins
     dst.nfcSuccessPin = obj["nfcSuccessPin"].isNull() ? 0 : obj["nfcSuccessPin"].as<uint8_t>();
-    dst.nfcSuccessTime = obj["nfcSuccessTime"].isNull() ? 0 : obj["nfcSuccessTime"].as<uint8_t>();
+    dst.nfcSuccessTime = obj["nfcSuccessTime"].isNull() ? 0 : obj["nfcSuccessTime"].as<uint16_t>();
     dst.nfcSuccessHL = obj["nfcSuccessHL"].isNull() ? false : obj["nfcSuccessHL"].as<bool>();
     dst.nfcFailPin = obj["nfcFailPin"].isNull() ? 0 : obj["nfcFailPin"].as<uint8_t>();
-    dst.nfcFailTime = obj["nfcFailTime"].isNull() ? 0 : obj["nfcFailTime"].as<uint8_t>();
+    dst.nfcFailTime = obj["nfcFailTime"].isNull() ? 0 : obj["nfcFailTime"].as<uint16_t>();
     dst.nfcFailHL = obj["nfcFailHL"].isNull() ? false : obj["nfcFailHL"].as<bool>();
 
     // GPIO Actions
@@ -393,7 +393,7 @@ namespace ArduinoJson {
     dst.gpioActionLockState = obj["gpioActionLockState"].isNull() ? false : obj["gpioActionLockState"].as<bool>();
     dst.gpioActionUnlockState = obj["gpioActionUnlockState"].isNull() ? false : obj["gpioActionUnlockState"].as<bool>();
     dst.gpioActionMomentaryEnabled = obj["gpioActionMomentaryEnabled"].isNull() ? 0 : obj["gpioActionMomentaryEnabled"].as<uint8_t>();
-    dst.gpioActionMomentaryTimeout = obj["gpioActionMomentaryTimeout"].isNull() ? 0 : obj["gpioActionMomentaryTimeout"].as<uint8_t>();
+    dst.gpioActionMomentaryTimeout = obj["gpioActionMomentaryTimeout"].isNull() ? 0 : obj["gpioActionMomentaryTimeout"].as<uint16_t>();
 
     // Web/Auth
     dst.webAuthEnabled = obj["webAuthEnabled"].isNull() ? false : obj["webAuthEnabled"].as<bool>();
@@ -409,9 +409,9 @@ namespace ArduinoJson {
     // Alt Action
     dst.hkAltActionInitPin = obj["hkAltActionInitPin"].isNull() ? 0 : obj["hkAltActionInitPin"].as<uint8_t>();
     dst.hkAltActionInitLedPin = obj["hkAltActionInitLedPin"].isNull() ? 0 : obj["hkAltActionInitLedPin"].as<uint8_t>();
-    dst.hkAltActionInitTimeout = obj["hkAltActionInitTimeout"].isNull() ? 0 : obj["hkAltActionInitTimeout"].as<uint8_t>();
+    dst.hkAltActionInitTimeout = obj["hkAltActionInitTimeout"].isNull() ? 0 : obj["hkAltActionInitTimeout"].as<uint16_t>();
     dst.hkAltActionPin = obj["hkAltActionPin"].isNull() ? 0 : obj["hkAltActionPin"].as<uint8_t>();
-    dst.hkAltActionTimeout = obj["hkAltActionTimeout"].isNull() ? 0 : obj["hkAltActionTimeout"].as<uint8_t>();
+    dst.hkAltActionTimeout = obj["hkAltActionTimeout"].isNull() ? 0 : obj["hkAltActionTimeout"].as<uint16_t>();
     dst.hkAltActionGpioState = obj["hkAltActionGpioState"].isNull() ? 0 : obj["hkAltActionGpioState"].as<uint8_t>();
 
     // Ethernet
