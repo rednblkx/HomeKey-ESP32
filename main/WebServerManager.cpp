@@ -4,7 +4,7 @@
 #include "HomeSpan.h"
 #include "ReaderDataManager.hpp"
 #include "eventStructs.hpp"
-#include "config.hpp"
+#include "utils.hpp"
 #include <format.hpp>
 #include <LittleFS.h>
 #include <esp_app_desc.h>
@@ -170,7 +170,6 @@ void WebServerManager::handleSaveConfigBody(AsyncWebServerRequest *request, uint
     } else request->_tempObject = nullptr;
 }
 
-// A helper function to safely get the JSON value as a string for error messages.
 std::string getJsonValueAsString(JsonVariantConst value) {
   std::string valueStr;
   serializeJson(value, valueStr);
@@ -185,7 +184,7 @@ bool WebServerManager::validateRequest(AsyncWebServerRequest *req, JsonObjectCon
     std::string keyStr = it.key().c_str();
 
     if (currentData[keyStr].isNull()) {
-      // LOG(E, "\"%s\" does not exist in the current configuration!", keyStr.c_str());
+      LOG(E, "\"%s\" does not exist in the current configuration!", keyStr.c_str());
       std::string msg = "\"" + keyStr + "\" is not a valid configuration key.";
       req->send(400, "text/plain", msg.c_str());
       return false;
@@ -196,29 +195,29 @@ bool WebServerManager::validateRequest(AsyncWebServerRequest *req, JsonObjectCon
 
     bool typeOk = false;
     if (existingValue.is<JsonString>()) {
-      // LOG(I, "VALUE FOR %s IS String",keyStr.c_str());
+      LOG(D, "VALUE FOR %s IS String",keyStr.c_str());
       typeOk = incomingValue.is<JsonString>();
     } else if (existingValue.is<JsonObjectConst>()) {
-      // LOG(I, "VALUE FOR %s IS OBJECT",keyStr.c_str());
+      LOG(D, "VALUE FOR %s IS OBJECT",keyStr.c_str());
       typeOk = incomingValue.is<JsonObjectConst>();
     } else if (existingValue.is<JsonArrayConst>()) {
-      // LOG(I, "VALUE FOR %s IS ARRAY",keyStr.c_str());
+      LOG(D, "VALUE FOR %s IS ARRAY",keyStr.c_str());
       typeOk = incomingValue.is<JsonArrayConst>();
     } else if (existingValue.is<bool>()) {
-      // LOG(I, "VALUE FOR %s IS BOOL",keyStr.c_str());
+      LOG(D, "VALUE FOR %s IS BOOL",keyStr.c_str());
       typeOk = incomingValue.is<bool>() ||
                (incomingValue.is<int>() && (incomingValue.as<int>() == 0 || incomingValue.as<int>() == 1)) ||
                (incomingValue.is<unsigned int>() && (incomingValue.as<unsigned int>() <= 1));
     } else if (existingValue.is<unsigned int>()) {
-      // LOG(I, "VALUE FOR %s IS UINT",keyStr.c_str());
+      LOG(D, "VALUE FOR %s IS UINT",keyStr.c_str());
       typeOk = incomingValue.is<unsigned int>();
     } else {
-      // LOG(I, "RX VALUE NOT MATCH ANY EXPECTED TYPE");
+      LOG(D, "RX VALUE NOT MATCH ANY EXPECTED TYPE");
       typeOk = false;
     } 
 
     if (!typeOk) {
-      // LOG(E, "Type mismatch for key \"%s\"!", keyStr.c_str());
+      LOG(E, "Type mismatch for key \"%s\"!", keyStr.c_str());
       std::string valueStr;
       serializeJson(incomingValue, valueStr);
       std::string msg = "Invalid type for key \"" + std::string(keyStr) + "\". Received value: " + valueStr;
@@ -229,34 +228,34 @@ bool WebServerManager::validateRequest(AsyncWebServerRequest *req, JsonObjectCon
     // --- setupCode Validation ---
     if (it.key() == "setupCode") {
       if (!it.value().is<const char *>()) {
-        // LOG(E, "\"%s\" is not a string!", keyStr.c_str());
+        LOG(E, "\"%s\" is not a string!", keyStr.c_str());
         std::string msg = "Value for \"" + keyStr + "\" must be a string.";
         req->send(400, "text/plain", msg.c_str());
         return false;
       }
       std::string code = it.value().as<const char *>();
       if (code.length() != 8 || std::find_if(code.begin(), code.end(), [](unsigned char c) { return !std::isdigit(c); }) != code.end()) {
-        // LOG(E, "Invalid setupCode format for value: %s", code.c_str());
+        LOG(E, "Invalid setupCode format for value: %s", code.c_str());
         std::string msg = "\"" + code + "\" is not a valid value for \"setupCode\". It must be an 8-digit number.";
         req->send(400, "text/plain", msg.c_str());
         return false;
       }
       if (homeSpan.controllerListBegin() != homeSpan.controllerListEnd() && code.compare(currentData[keyStr].as<const char *>()) != 0) {
-        // LOG(E, "Attempted to change Setup Code while devices are paired.");
+        LOG(E, "Attempted to change Setup Code while devices are paired.");
         req->send(400, "text/plain", "The Setup Code can only be set if no devices are paired, reset if any issues!");
         return false;
       }
     // --- Pin Validation ---
     } else if (it.key().size() >= 3 && strcmp(keyStr.data() + (it.key().size() - 3), "Pin") == 0) {
       if (!it.value().is<uint8_t>() || (it.value().as<uint8_t>() == 0)) {
-        // LOG(E, "Invalid type or value for GPIO pin \"%s\"", keyStr.c_str());
+        LOG(E, "Invalid type or value for GPIO pin \"%s\"", keyStr.c_str());
         std::string msg = getJsonValueAsString(it.value()) + " is not a valid value for \"" + keyStr + "\".";
         req->send(400, "text/plain", msg.c_str());
         return false;
       }
       uint8_t pin = it.value().as<uint8_t>();
       if (pin != 255 && !GPIO_IS_VALID_GPIO(pin) && !GPIO_IS_VALID_OUTPUT_GPIO(pin)) {
-        // LOG(E, "GPIO pin %u for \"%s\" is not a valid pin.", pin, keyStr.c_str());
+        LOG(E, "GPIO pin %u for \"%s\" is not a valid pin.", pin, keyStr.c_str());
         std::string msg = std::to_string(pin) + " is not a valid GPIO Pin for \"" + keyStr + "\".";
         req->send(400, "text/plain", msg.c_str());
         return false;
@@ -277,7 +276,7 @@ bool WebServerManager::validateRequest(AsyncWebServerRequest *req, JsonObjectCon
       }
 
       if (!valueOk) {
-        // LOG(E, "\"%s\" could not validate! Expected a boolean (or 0/1).", keyStr.c_str());
+        LOG(E, "\"%s\" could not validate! Expected a boolean (or 0/1).", keyStr.c_str());
         std::string msg = getJsonValueAsString(it.value()) + " is not a valid value for \"" + keyStr + "\".";
         req->send(400, "text/plain", msg.c_str());
         return false;
@@ -290,7 +289,7 @@ bool WebServerManager::validateRequest(AsyncWebServerRequest *req, JsonObjectCon
   if (propertiesProcessed != obj.size()) {
     // This case should ideally not be reached if the loop returns on first error.
     // It's a fallback for unexpected issues.
-    // LOG(E, "Not all properties could be validated, cannot continue!");
+    LOG(E, "Not all properties could be validated, cannot continue!");
     if (!req->client()->disconnected()) {
       req->send(500, "text/plain", "Something went wrong during validation!");
     }
