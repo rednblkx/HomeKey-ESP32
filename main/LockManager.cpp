@@ -1,4 +1,5 @@
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "event_manager.hpp"
 #include "config.hpp"
 #include "LockManager.hpp"
@@ -14,9 +15,7 @@ LockManager::LockManager(HardwareManager& hardwareManager, const espConfig::misc
     : m_hardwareManager(hardwareManager),
       m_miscConfig(miscConfig),
       m_currentState(lockStates::LOCKED),
-      m_targetState(lockStates::LOCKED),
-      m_momentaryUnlockActive(false),
-      m_momentaryUnlockStartTime(0)
+      m_targetState(lockStates::LOCKED)
 {
   espp::EventManager::get().add_publisher("lock/stateChanged", "LockManager");
   espp::EventManager::get().add_publisher("lock/feedback", "LockManager");
@@ -60,6 +59,12 @@ LockManager::LockManager(HardwareManager& hardwareManager, const espConfig::misc
   espp::EventManager::get().add_subscriber(
       "nfc/HomeKeyTap", "LockManager",
       [&](const std::vector<uint8_t> &data) { processNfcRequest(true); }, 3072);
+  esp_timer_create_args_t momentaryStateTimer_arg = {
+    .callback = handleTimer,
+    .arg = this,
+    .name = "momentaryStateTimer"
+  };
+  esp_timer_create(&momentaryStateTimer_arg, &momentaryStateTimer);
 }
 
 void LockManager::begin() {
@@ -72,16 +77,20 @@ void LockManager::begin() {
   std::vector<uint8_t> d;
   alpaca::serialize(s, d);
   espp::EventManager::get().publish("lock/action", d);
-  espp::EventManager::get().publish("lock/stateChanged", d);
+  // espp::EventManager::get().publish("lock/stateChanged", d);
 }
 
-void LockManager::loop() {
-    if (m_momentaryUnlockActive && ((unsigned long)(esp_timer_get_time()/1000ULL) - m_momentaryUnlockStartTime > m_miscConfig.gpioActionMomentaryTimeout)) {
-        ESP_LOGI(TAG, "Momentary unlock timeout reached. Re-locking.");
-        m_momentaryUnlockActive = false;
-        setTargetState(lockStates::LOCKED, Source::INTERNAL);
-    }
+void LockManager::handleTimer(void* instance){
+  static_cast<LockManager*>(instance)->setTargetState(LOCKED, INTERNAL);
 }
+
+// void LockManager::loop() {
+//     if (m_momentaryUnlockActive && ((unsigned long)(esp_timer_get_time()/1000ULL) - m_momentaryUnlockStartTime > m_miscConfig.gpioActionMomentaryTimeout)) {
+//         ESP_LOGI(TAG, "Momentary unlock timeout reached. Re-locking.");
+//         m_momentaryUnlockActive = false;
+//         setTargetState(lockStates::LOCKED, Source::INTERNAL);
+//     }
+// }
 
 // --- State Getters ---
 
@@ -103,7 +112,7 @@ void LockManager::setTargetState(uint8_t state, Source source) {
 
     ESP_LOGI(TAG, "Setting target state to %d (c:%d,t:%d), from source %d", state, m_currentState, m_targetState, static_cast<int>(source));
 
-    m_momentaryUnlockActive = false;
+    if(esp_timer_is_active(momentaryStateTimer)) esp_timer_stop(momentaryStateTimer);
 
     m_targetState = state;
 
@@ -130,8 +139,7 @@ void LockManager::setTargetState(uint8_t state, Source source) {
 
     if (m_targetState == lockStates::UNLOCKED && isMomentarySource) {
         ESP_LOGI(TAG, "Starting momentary unlock timer for %d ms.", m_miscConfig.gpioActionMomentaryTimeout);
-        m_momentaryUnlockActive = true;
-        m_momentaryUnlockStartTime = (esp_timer_get_time()/1000);
+        esp_timer_start_once(momentaryStateTimer, m_miscConfig.gpioActionMomentaryTimeout * 1000);
     }
 }
 
@@ -166,7 +174,7 @@ void LockManager::overrideState(uint8_t c_state, uint8_t t_state) {
     m_currentState = c_state != 255 ? c_state : m_currentState;
     m_targetState = t_state != 255 ? t_state : m_targetState;
 
-    m_momentaryUnlockActive = false;
+    if(momentaryStateTimer && esp_timer_is_active(momentaryStateTimer)) esp_timer_stop(momentaryStateTimer);
     EventLockState s{
       .currentState = static_cast<uint8_t>(m_currentState),
       .targetState = static_cast<uint8_t>(m_targetState),

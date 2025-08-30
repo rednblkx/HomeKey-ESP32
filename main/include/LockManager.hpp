@@ -1,6 +1,7 @@
 #ifndef LOCK_MANAGER_H
 #define LOCK_MANAGER_H
 
+#include "esp_timer.h"
 #include <cstdint>
 class HardwareManager;
 class ConfigManager;
@@ -44,12 +45,6 @@ public:
      * @brief Initializes the lock state to its default.
      */
     void begin();
-
-    /**
-     * @brief A periodic function to be called from the main loop to handle time-based events.
-     * Manages the momentary unlock timeout at the moment.
-     */
-    void loop();
 
     // --- State Getters ---
     int getCurrentState() const;
@@ -96,10 +91,12 @@ private:
     uint8_t m_currentState;
     uint8_t m_targetState;
 
-    bool m_momentaryUnlockActive;
-    unsigned long m_momentaryUnlockStartTime;
+    // bool m_momentaryUnlockActive;
+    // unsigned long m_momentaryUnlockStartTime;
+    esp_timer_handle_t momentaryStateTimer;
 
     static const char* TAG;
+    static void handleTimer(void* instance);
 };
 
 #endif // LOCK_MANAGER_H

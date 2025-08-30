@@ -140,8 +140,8 @@ void setup() {
   webServerManager = new WebServerManager(*configManager, *readerDataManager);
   homekitLock = new HomeKitLock(lambda, *lockManager, *configManager, *readerDataManager);
   nfcManager = new NfcManager(*readerDataManager, configManager->getMiscConfig().nfcGpioPins);
-  hardwareManager->begin();
   homekitLock->begin();
+  hardwareManager->begin();
   lockManager->begin();
   nfcManager->begin();
 }
@@ -149,7 +149,6 @@ void setup() {
 //////////////////////////////////////
 
 void loop() {
-    lockManager->loop();
     homeSpan.poll();
-    vTaskDelay(pdMS_TO_TICKS(10));
+    vTaskDelay(pdMS_TO_TICKS(50));
 }
