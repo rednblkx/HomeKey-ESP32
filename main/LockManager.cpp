@@ -138,7 +138,7 @@ void LockManager::setTargetState(uint8_t state, Source source) {
 void LockManager::processNfcRequest(bool status) {
     ESP_LOGI(TAG, "Processing NFC tap request...");
     if(status){
-      EventBinaryStatus s{false};
+      EventBinaryStatus s{status};
       std::vector<uint8_t> d;
       alpaca::serialize(s, d);
       espp::EventManager::get().publish("lock/feedback", d);
