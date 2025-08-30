@@ -55,7 +55,7 @@ public:
      * @param atqa Pointer to the ATQA byte array (can be null).
      * @param sak Pointer to the SAK byte array (can be null).
      */
-    void publishUidTap(const uint8_t* uid, uint8_t uidLen, const uint8_t* atqa, const uint8_t* sak);
+    void publishUidTap(const std::vector<uint8_t>& uid, const std::vector<uint8_t> &atqa, const std::vector<uint8_t> &sak);
 
 private:
     // --- Event Handling ---

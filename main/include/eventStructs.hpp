@@ -21,6 +21,12 @@ struct EventHKTap {
   std::vector<uint8_t> readerId;
 };
 
+struct EventTagTap {
+  std::vector<uint8_t> uid;
+  std::vector<uint8_t> atqa;
+  std::vector<uint8_t> sak;
+};
+
 struct EventValueChanged {
   std::string name = "";
   uint8_t oldValue = 255;

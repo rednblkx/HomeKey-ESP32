@@ -26,6 +26,13 @@ MqttManager::MqttManager(ConfigManager& configManager)
       },3072);
   espp::EventManager::get().add_publisher("lock/targetStateChanged", "MqttManager");
   espp::EventManager::get().add_publisher("lock/overrideState", "MqttManager");
+  espp::EventManager::get().add_subscriber("nfc/TagTap", "MqttManager", [&](const std::vector<uint8_t> &data){
+    std::error_code ec;
+    EventTagTap s = alpaca::deserialize<EventTagTap>(data, ec);
+    if(!ec){
+      publishUidTap(s.uid, s.atqa, s.sak);
+    }
+  });
   espp::EventManager::get().add_subscriber("nfc/HomeKeyTap", "MqttManager", [&](const std::vector<uint8_t> &data){
     std::error_code ec;
     EventHKTap s = alpaca::deserialize<EventHKTap>(data, ec);
@@ -267,17 +274,17 @@ void MqttManager::publishHomeKeyTap(const std::vector<uint8_t>& issuerId, const 
     publish(m_mqttConfig.hkTopic, payload);
 }
 
-void MqttManager::publishUidTap(const uint8_t* uid, uint8_t uidLen, const uint8_t* atqa, const uint8_t* sak) {
+void MqttManager::publishUidTap(const std::vector<uint8_t>& uid, const std::vector<uint8_t> &atqa, const std::vector<uint8_t> &sak) {
     if(!m_mqttConfig.nfcTagNoPublish){
       ArduinoJson::JsonDocument doc;
-      doc["uid"] = fmt::format("{:02X}", fmt::join(uid, uid + uidLen, ""));
+      doc["uid"] = fmt::format("{:02X}", fmt::join(uid, ""));
       doc["homekey"] = false;
-      if (atqa) doc["atqa"] = fmt::format("{:02X}", fmt::join(atqa, atqa + 2, ""));
-      if (sak) doc["sak"] = fmt::format("{:02X}", fmt::join(sak, sak + 1, ""));
+      doc["atqa"] = fmt::format("{:02X}", fmt::join(atqa, ""));
+      doc["sak"] = fmt::format("{:02X}", fmt::join(sak, ""));
       std::string payload;
       serializeJson(doc, payload);
       publish(m_mqttConfig.hkTopic, payload);
-    } else ESP_LOGD(TAG, "Generic Tag UID publishing via MQTT not enabled, ignoring!");
+    } else ESP_LOGW(TAG, "MQTT publishing of Tag UID not enabled, ignoring!");
 }
 
 void MqttManager::publishHassDiscovery() {

@@ -24,6 +24,7 @@ NfcManager::NfcManager(ReaderDataManager& readerDataManager,const std::array<uin
       m_ecpData({ 0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0 })
 {
   espp::EventManager::get().add_publisher("nfc/HomeKeyTap", "NfcManager");
+  espp::EventManager::get().add_publisher("nfc/TagTap", "NfcManager");
   espp::EventManager::get().add_subscriber("nfc/updateECP", "NfcManager", [&](const std::vector<uint8_t> &){
     updateEcpData();
   }, 3072);
@@ -192,7 +193,10 @@ void NfcManager::handleHomeKeyAuth() {
 }
 
 void NfcManager::handleGenericTag(const uint8_t* uid, uint8_t uidLen, const uint8_t* atqa, const uint8_t* sak) {
-    // tag_cb(uid, uidLen, atqa, sak);
+    EventTagTap s{.uid = std::vector<uint8_t>(uid, uid+uidLen), .atqa = std::vector<uint8_t>(atqa, atqa + 2), .sak = std::vector<uint8_t>(sak, sak + 1)};
+    std::vector<uint8_t> d;
+    alpaca::serialize(s, d);
+    espp::EventManager::get().publish("nfc/TagTap", d);
 }
 
 void NfcManager::waitForTagRemoval() {
