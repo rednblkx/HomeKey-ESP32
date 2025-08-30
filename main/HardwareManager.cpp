@@ -2,7 +2,9 @@
 #include "HardwareManager.hpp"
 #include "LockManager.hpp"
 #include "Pixel.h"
+#include "esp32-hal-gpio.h"
 #include "esp32-hal.h"
+#include "soc/gpio_num.h"
 #include "structs.hpp"
 #include "driver/gpio.h"
 #include "eventStructs.hpp"
@@ -48,12 +50,16 @@ HardwareManager::HardwareManager(const espConfig::misc_config_t& miscConfig)
         std::error_code ec;
         EventValueChanged s = alpaca::deserialize<EventValueChanged>(data, ec);
         if(!ec) {
-          if(s.oldValue != 255){
+          uint8_t state = 0;
+          if(s.oldValue != 255 && s.oldValue < GPIO_NUM_MAX){
+            state = gpio_get_level(gpio_num_t(s.oldValue));
             gpio_reset_pin(gpio_num_t(s.oldValue));
             gpio_pullup_dis(gpio_num_t(s.oldValue));
           }
           if(s.newValue != 255){    
             pinMode(s.newValue, OUTPUT);
+            if(s.name == "gpioActionPin")
+              digitalWrite(s.newValue, state);
           }
         }
       }, 3072);
