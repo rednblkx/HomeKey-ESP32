@@ -3,7 +3,7 @@
 #include "LockManager.hpp"
 #include "Pixel.h"
 #include "esp32-hal-gpio.h"
-#include "esp32-hal.h"
+#include "esp_timer.h"
 #include "soc/gpio_num.h"
 #include "structs.hpp"
 #include "driver/gpio.h"
@@ -102,8 +102,39 @@ void HardwareManager::begin() {
         m_pixel->off(); // Ensure pixel is off at startup
         ESP_LOGI(TAG, "NeoPixel initialized on pin %d with type %s.", m_miscConfig.nfcNeopixelPin, pixelTypeMap[pixelTypeIndex]);
     }
+    const esp_timer_create_args_t gpioS_timer_args = {
+            .callback = &handleTimer,
+            .arg = (void*) this,
+            .name = "gpioSuccessTimer"
+    };
+    const esp_timer_create_args_t gpioF_timer_args = {
+            .callback = &handleTimer,
+            .arg = (void*) this,
+            .name = "gpioFailTimer"
+    };
+    const esp_timer_create_args_t pixelS_timer_args = {
+            .callback = &handleTimer,
+            .arg = (void*) this,
+            .name = "pixelSuccessTimer"
+    };
+    const esp_timer_create_args_t pixelF_timer_args = {
+            .callback = &handleTimer,
+            .arg = (void*) this,
+            .name = "pixelFailTimer"
+    };
+    const esp_timer_create_args_t altAction_timer_args = {
+            .callback = &handleTimer,
+            .arg = (void*) this,
+            .name = "altActionTimer"
+    };
+    esp_timer_create(&gpioS_timer_args, &m_gpioSuccessTimer);
+    esp_timer_create(&gpioF_timer_args, &m_gpioFailTimer);
+    esp_timer_create(&pixelS_timer_args, &m_pixelSuccessTimer);
+    esp_timer_create(&pixelF_timer_args, &m_pixelFailTimer);
+    esp_timer_create(&altAction_timer_args, &m_altActionTimer);
 
-    // --- Create Queues and Tasks ---
+    m_timerSources = xQueueCreate(6, sizeof(TimerSources));
+
     m_feedbackQueue = xQueueCreate(5, sizeof(FeedbackType));
     xTaskCreateUniversal(feedbackTaskEntry, "feedback_task", 4096, this, 2, &m_feedbackTaskHandle, 1);
 
@@ -135,7 +166,43 @@ void HardwareManager::showFailureFeedback() {
     }
 }
 
-// --- Private Task Implementations ---
+// --- Private Implementations ---
+
+void HardwareManager::handleTimer(void* instance){
+  HardwareManager *i = static_cast<HardwareManager*>(instance);
+  TimerSources t;
+  uint8_t n = uxQueueMessagesWaiting(i->m_timerSources);
+  ESP_LOGD(TAG, "Timer expired, %d messages waiting in queue!", n);
+  for (uint8_t x = 0; x<n; x++) {
+    if(xQueuePeek(i->m_timerSources, &t, 10)){
+      switch (t) {
+        case TimerSources::GPIO_S:
+          if(!esp_timer_is_active(i->m_gpioSuccessTimer)){
+            digitalWrite(i->m_miscConfig.nfcSuccessPin, !i->m_miscConfig.nfcSuccessHL);
+            ESP_LOGD(TAG, "GPIO_S");
+            xQueueReceive(i->m_timerSources, &t, 0);
+          }
+          break;
+        case TimerSources::GPIO_F:
+          if(!esp_timer_is_active(i->m_gpioFailTimer)){
+            digitalWrite(i->m_miscConfig.nfcFailPin, !i->m_miscConfig.nfcFailHL);
+            ESP_LOGD(TAG, "GPIO_F");
+            xQueueReceive(i->m_timerSources, &t, 0);
+          }
+          break;
+        case TimerSources::PIXEL:
+          if(!esp_timer_is_active(i->m_pixelSuccessTimer) || !esp_timer_is_active(i->m_pixelFailTimer)){
+            i->m_pixel->off();
+            ESP_LOGD(TAG, "PIXEL");
+            xQueueReceive(i->m_timerSources, &t, 0);
+          }
+          break;
+        case TimerSources::ALT_GPIO:
+          break;
+      }
+    } 
+  }
+}
 
 void HardwareManager::lockControlTaskEntry(void* instance) {
     static_cast<HardwareManager*>(instance)->lockControlTask();
@@ -179,34 +246,40 @@ void HardwareManager::feedbackTask() {
             switch (feedback) {
                 case FeedbackType::SUCCESS:
                     ESP_LOGD(TAG, "Executing SUCCESS feedback sequence.");
+                    if(esp_timer_is_active(m_gpioSuccessTimer)) esp_timer_stop(m_gpioSuccessTimer);
+                    if(esp_timer_is_active(m_pixelSuccessTimer)) esp_timer_stop(m_gpioFailTimer);
                     if (m_pixel != nullptr) {
                         auto color = m_miscConfig.neopixelSuccessColor;
                         m_pixel->set(m_pixel->RGB(color[espConfig::misc_config_t::R], color[espConfig::misc_config_t::G], color[espConfig::misc_config_t::B]));
+                        TimerSources t = TimerSources::PIXEL;
+                        xQueueSend(m_timerSources, &t, 0);
+                        esp_timer_start_once(m_pixelSuccessTimer, m_miscConfig.neopixelSuccessTime * 1000);
                     }
                     if (m_miscConfig.nfcSuccessPin != 255) {
                         digitalWrite(m_miscConfig.nfcSuccessPin, m_miscConfig.nfcSuccessHL);
+                        TimerSources t = TimerSources::GPIO_S;
+                        xQueueSend(m_timerSources, &t, 0);
+                        esp_timer_start_once(m_gpioSuccessTimer, m_miscConfig.nfcSuccessTime * 1000);
                     }
-                    
-                    delay(m_miscConfig.neopixelSuccessTime > m_miscConfig.nfcSuccessTime ? m_miscConfig.neopixelSuccessTime : m_miscConfig.nfcSuccessTime);
-                    
-                    if (m_pixel != nullptr) m_pixel->off();
-                    if (m_miscConfig.nfcSuccessPin != 255) digitalWrite(m_miscConfig.nfcSuccessPin, !m_miscConfig.nfcSuccessHL);
                     break;
 
                 case FeedbackType::FAILURE:
                     ESP_LOGD(TAG, "Executing FAILURE feedback sequence.");
+                    if(esp_timer_is_active(m_gpioFailTimer)) esp_timer_stop(m_gpioFailTimer);
+                    if(esp_timer_is_active(m_pixelFailTimer)) esp_timer_stop(m_pixelFailTimer);
                     if (m_pixel != nullptr) {
                         auto color = m_miscConfig.neopixelFailureColor;
                         m_pixel->set(m_pixel->RGB(color[espConfig::misc_config_t::R], color[espConfig::misc_config_t::G], color[espConfig::misc_config_t::B]));
+                        TimerSources t = TimerSources::PIXEL;
+                        xQueueSend(m_timerSources, &t, 0);
+                        esp_timer_start_once(m_pixelFailTimer, m_miscConfig.neopixelFailTime * 1000);
                     }
                     if (m_miscConfig.nfcFailPin != 255) {
                         digitalWrite(m_miscConfig.nfcFailPin, m_miscConfig.nfcFailHL);
+                        TimerSources t = TimerSources::GPIO_F;
+                        xQueueSend(m_timerSources, &t, 0);
+                        esp_timer_start_once(m_gpioFailTimer, m_miscConfig.nfcFailTime * 1000);
                     }
-
-                    delay(m_miscConfig.neopixelFailTime > m_miscConfig.nfcFailTime ? m_miscConfig.neopixelFailTime : m_miscConfig.nfcFailTime);
-
-                    if (m_pixel != nullptr) m_pixel->off();
-                    if (m_miscConfig.nfcFailPin != 255) digitalWrite(m_miscConfig.nfcFailPin, !m_miscConfig.nfcFailHL);
                     break;
             }
         }

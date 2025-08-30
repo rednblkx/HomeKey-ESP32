@@ -1,6 +1,7 @@
 #ifndef HARDWARE_MANAGER_H
 #define HARDWARE_MANAGER_H
 
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -56,23 +57,40 @@ private:
         FAILURE
     };
 
+    enum class TimerSources {
+      GPIO_S,
+      GPIO_F,
+      PIXEL,
+      ALT_GPIO
+    };
+
     // --- FreeRTOS Task Management ---
     static void feedbackTaskEntry(void* instance);
     void feedbackTask();
 
     static void lockControlTaskEntry(void* instance);
     void lockControlTask();
+
+    static void handleTimer(void *instance);
     
     // --- Member Variables ---
     const espConfig::misc_config_t& m_miscConfig;
 
     Pixel* m_pixel = nullptr;
+  
+    esp_timer_handle_t m_gpioSuccessTimer;
+    esp_timer_handle_t m_gpioFailTimer;
+    esp_timer_handle_t m_pixelSuccessTimer;
+    esp_timer_handle_t m_pixelFailTimer;
+    esp_timer_handle_t m_altActionTimer;
 
     TaskHandle_t m_feedbackTaskHandle;
     QueueHandle_t m_feedbackQueue;
 
     TaskHandle_t m_lockControlTaskHandle;
     QueueHandle_t m_lockControlQueue;
+
+    QueueHandle_t m_timerSources;
     
     static const char* TAG;
 };
