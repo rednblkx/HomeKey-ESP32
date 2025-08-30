@@ -58,7 +58,15 @@ LockManager::LockManager(HardwareManager& hardwareManager, const espConfig::misc
       }, 4096);
   espp::EventManager::get().add_subscriber(
       "nfc/HomeKeyTap", "LockManager",
-      [&](const std::vector<uint8_t> &data) { processNfcRequest(true); }, 3072);
+      [&](const std::vector<uint8_t> &data) {
+        std::error_code ec;
+        EventHKTap s = alpaca::deserialize<EventHKTap>(data, ec);
+        if (!ec && s.status) {
+          processNfcRequest(true);
+        } else
+          processNfcRequest(false);
+      },
+      3072);
   esp_timer_create_args_t momentaryStateTimer_arg = {
     .callback = handleTimer,
     .arg = this,

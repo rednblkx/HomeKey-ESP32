@@ -7,6 +7,7 @@
 #include <esp_app_desc.h>
 #include "eventStructs.hpp"
 #include <ArduinoJson.hpp>
+#include <vector>
 
 const char* MqttManager::TAG = "MqttManager";
 
@@ -36,7 +37,7 @@ MqttManager::MqttManager(ConfigManager& configManager)
   espp::EventManager::get().add_subscriber("nfc/HomeKeyTap", "MqttManager", [&](const std::vector<uint8_t> &data){
     std::error_code ec;
     EventHKTap s = alpaca::deserialize<EventHKTap>(data, ec);
-    if(!ec){
+    if(!ec && s.status){
       publishHomeKeyTap(s.issuerId, s.endpointId, s.readerId);
     }
   }, 3072);

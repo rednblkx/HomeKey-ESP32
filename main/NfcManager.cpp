@@ -182,13 +182,16 @@ void NfcManager::handleHomeKeyAuth() {
 
     if (std::get<2>(authResult) != kFlowFailed) {
         ESP_LOGI(TAG, "HomeKey authentication successful!");
-        EventHKTap s{.issuerId = std::get<0>(authResult), .endpointId = std::get<1>(authResult), .readerId = readerData.reader_id };
+        EventHKTap s{.status = true, .issuerId = std::get<0>(authResult), .endpointId = std::get<1>(authResult), .readerId = readerData.reader_id };
         std::vector<uint8_t> d;
         alpaca::serialize(s, d);
         espp::EventManager::get().publish("nfc/HomeKeyTap", d);
     } else {
         ESP_LOGW(TAG, "HomeKey authentication failed.");
-        // fail_cb();
+        EventHKTap s{.status = false, .issuerId = {}, .endpointId = {}, .readerId = {} };
+        std::vector<uint8_t> d;
+        alpaca::serialize(s, d);
+        espp::EventManager::get().publish("nfc/HomeKeyTap", d);
     }
 }
 

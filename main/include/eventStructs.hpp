@@ -16,6 +16,7 @@ struct EventBinaryStatus {
 };
 
 struct EventHKTap {
+  bool status;
   std::vector<uint8_t> issuerId;
   std::vector<uint8_t> endpointId;
   std::vector<uint8_t> readerId;
