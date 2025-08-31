@@ -20,7 +20,7 @@ WebServerManager::WebServerManager(ConfigManager& configManager, ReaderDataManag
       m_readerDataManager(readerDataManager)
 {
   espp::EventManager::get().add_publisher("homekit/setupCodeChanged", "WebServerManager");
-  espp::EventManager::get().add_publisher("homekit/btrLowThresholdChanged", "WebServerManager");
+  espp::EventManager::get().add_publisher("homekit/btrPropChanged", "WebServerManager");
   espp::EventManager::get().add_publisher("mqtt/uidPublishChanged", "WebServerManager");
   espp::EventManager::get().add_publisher("hardware/gpioPinChanged", "WebServerManager");
 }
@@ -361,11 +361,11 @@ void WebServerManager::processSaveConfigRequest(AsyncWebServerRequest *request) 
             "hardware/gpioPinChanged",
             d);
       } else if(it.key() == "btrLowStatusThreshold"){
-        EventValueChanged s{.newValue = it.value().as<uint8_t>()};
+        EventValueChanged s{.name = "btrLowThreshold", .newValue = it.value().as<uint8_t>()};
         std::vector<uint8_t> d;
         alpaca::serialize(s, d);
         espp::EventManager::get().publish(
-            "homekit/btrLowThresholdChanged",
+            "homekit/btrPropChanged",
             d);
       } else if(it.key() == "neoPixelType") {
         rebootNeeded = true;

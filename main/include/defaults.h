@@ -18,7 +18,7 @@
 #define MQTT_SET_TARGET_STATE_TOPIC "homekit/set_target_state" // MQTT Control Topic for the HomeKit lock target state
 #define MQTT_SET_CURRENT_STATE_TOPIC "homekit/set_current_state" // MQTT Control Topic for the HomeKit lock current state
 #define MQTT_STATE_TOPIC "homekit/state" // MQTT Topic for publishing the HomeKit lock target state
-#define MQTT_PROX_BAT_TOPIC "homekit/set_battery_lvl" // MQTT Topic for publishing the HomeKit lock target state
+#define MQTT_PROX_BAT_TOPIC "homekit/set_battery_lvl" // MQTT Control Topic for setting the battery level to be shown in HomeKit
 #define MQTT_HK_ALT_ACTION_TOPIC "alt_action" // MQTT Topic for publishing the Alt Action
 
 // MQTT Custom state

@@ -27,6 +27,7 @@ MqttManager::MqttManager(ConfigManager& configManager)
       },3072);
   espp::EventManager::get().add_publisher("lock/targetStateChanged", "MqttManager");
   espp::EventManager::get().add_publisher("lock/overrideState", "MqttManager");
+  espp::EventManager::get().add_publisher("homekit/btrPropChanged", "MqttManager");
   espp::EventManager::get().add_subscriber("nfc/TagTap", "MqttManager", [&](const std::vector<uint8_t> &data){
     std::error_code ec;
     EventTagTap s = alpaca::deserialize<EventTagTap>(data, ec);
@@ -152,6 +153,7 @@ void MqttManager::onConnected() {
     esp_mqtt_client_subscribe(m_client, m_mqttConfig.lockStateCmd.c_str(), 0);
     esp_mqtt_client_subscribe(m_client, m_mqttConfig.lockCStateCmd.c_str(), 0);
     esp_mqtt_client_subscribe(m_client, m_mqttConfig.lockTStateCmd.c_str(), 0);
+    esp_mqtt_client_subscribe(m_client, m_mqttConfig.btrLvlCmdTopic.c_str(), 0);
     if (m_mqttConfig.lockEnableCustomState) {
         esp_mqtt_client_subscribe(m_client, m_mqttConfig.lockCustomStateCmd.c_str(), 0);
     }
@@ -249,6 +251,15 @@ void MqttManager::onData(const std::string& topic, const std::string& data) {
         alpaca::serialize(s, d);
         espp::EventManager::get().publish("lock/overrideState", d);
       }
+    } else if (topic == m_mqttConfig.btrLvlCmdTopic) { 
+        EventValueChanged s{
+          .name = "btrLevel",
+          .oldValue = 0,
+          .newValue = static_cast<uint8_t>(std::stoi(data)),
+        };
+        std::vector<uint8_t> d;
+        alpaca::serialize(s, d);
+        espp::EventManager::get().publish("homekit/btrPropChanged", d);
     }
 }
 

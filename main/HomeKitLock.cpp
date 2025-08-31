@@ -45,12 +45,16 @@ HomeKitLock::HomeKitLock(std::function<void(int)> &conn_cb, LockManager& lockMan
           }
         }, 3072); 
     espp::EventManager::get().add_subscriber(
-        "homekit/btrLowThresholdChanged", "HomeKitLock",
+        "homekit/btrPropChanged", "HomeKitLock",
         [&](const std::vector<uint8_t> &data) {
           std::error_code ec;
           EventValueChanged s = alpaca::deserialize<EventValueChanged>(data, ec);
           if(!ec) {
-            updateBatteryStatus(m_batteryLevel->getVal(), s.newValue);
+            if(s.name == "btrLevel") {
+              updateBatteryStatus(s.newValue, m_statusLowBattery->getVal());
+            } else if(s.name == "btrLowThreshold"){
+              updateBatteryStatus(m_batteryLevel->getVal(), s.newValue);
+            }
           }
         }, 3072); 
 }
