@@ -1,6 +1,4 @@
-#ifndef NFC_MANAGER_HPP
-#define NFC_MANAGER_HPP
-
+#pragma once
 #include "HomeKey.h"
 #include "PN532.h"
 #include "PN532_SPI.h"
@@ -52,4 +50,3 @@ private:
     static const char* TAG;
 };
 
-#endif // NFC_MANAGER_HPP

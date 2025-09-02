@@ -1,6 +1,4 @@
-#ifndef LOCK_MANAGER_H
-#define LOCK_MANAGER_H
-
+#pragma once
 #include "esp_timer.h"
 class HardwareManager;
 class ConfigManager;
@@ -88,4 +86,3 @@ private:
     static void handleTimer(void* instance);
 };
 
-#endif // LOCK_MANAGER_H

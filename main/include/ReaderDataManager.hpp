@@ -1,6 +1,4 @@
-#ifndef READER_DATA_MANAGER_H
-#define READER_DATA_MANAGER_H
-
+#pragma once
 #include <vector>
 #include <nvs.h>
 #include "HomeKey.h"
@@ -102,4 +100,3 @@ private:
     static const char* NVS_KEY;
 };
 
-#endif // READER_DATA_MANAGER_H

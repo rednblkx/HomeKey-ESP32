@@ -1,6 +1,4 @@
-#ifndef HARDWARE_MANAGER_H
-#define HARDWARE_MANAGER_H
-
+#pragma once
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -95,4 +93,3 @@ private:
     static const char* TAG;
 };
 
-#endif // HARDWARE_MANAGER_H

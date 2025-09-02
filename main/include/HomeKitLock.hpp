@@ -1,6 +1,4 @@
-#ifndef HOMEKIT_BRIDGE_HPP
-#define HOMEKIT_BRIDGE_HPP
-
+#pragma once
 #include "HomeSpan.h"
 
 namespace Service
@@ -71,4 +69,3 @@ private:
     };
 };
 
-#endif // HOMEKIT_BRIDGE_HPP

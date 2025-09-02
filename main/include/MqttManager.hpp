@@ -1,6 +1,4 @@
-#ifndef MQTT_MANAGER_H
-#define MQTT_MANAGER_H
-
+#pragma once
 #include "mqtt_client.h"
 #include <string>
 #include <vector>
@@ -77,4 +75,3 @@ private:
     static const char* TAG;
 };
 
-#endif // MQTT_MANAGER_H

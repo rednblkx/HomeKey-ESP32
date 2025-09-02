@@ -1,6 +1,4 @@
-#ifndef UTILS_HPP
-#define UTILS_HPP
-
+#pragma once
 #include <vector>
 #include <string>
 #include <cstdint>
@@ -49,4 +47,3 @@ inline std::vector<uint8_t> getHashIdentifier(const uint8_t* key, size_t len) {
 
 } // namespace Utils
 
-#endif // UTILS_HPP
