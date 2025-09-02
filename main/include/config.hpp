@@ -1,176 +1,127 @@
 #pragma once
-#include "ETH.h"
-#include "HomeKey.h"
-#include "structs.hpp"
-#include <ArduinoJson.hpp>
+#include <cstdint>
+#include <string>
+#include <map>
+#include <array>
+#include "defaults.h"
+#include "pins_arduino.h"
+#include "esp_mac.h"
 
-using namespace ArduinoJson;
-
+enum HK_COLOR { TAN, GOLD, SILVER, BLACK };
+enum class gpioMomentaryStateStatus : uint8_t {
+  M_DISABLED = 0,
+  M_HOME = 1 << 0,
+  M_HK = 1 << 1,
+  M_HOME_HK = (uint8_t)(M_HOME | M_HK)
+};
 struct gpioLockAction {
   enum { HOMEKIT = 1, HOMEKEY = 2, OTHER = 3 };
   uint8_t source;
   uint8_t action;
 };
 
-// --- ArduinoJSON Converter Specializations ---
-
-namespace ArduinoJson {
-
-  template <typename T>
-  struct Converter<std::vector<T> > {
-    static void toJson(const std::vector<T>& src, JsonVariant dst) {
-      JsonArray array = dst.to<JsonArray>();
-      for (T item : src)
-        array.add(item);
-    }
-
-    static std::vector<T> fromJson(JsonVariantConst src) {
-      std::vector<T> dst;
-      for (T item : src.as<JsonArrayConst>())
-        dst.push_back(item);
-      return dst;
-    }
-
-    static bool checkJson(JsonVariantConst src) {
-      JsonArrayConst array = src;
-      bool result = array;
-      for (JsonVariantConst item : array)
-        result &= item.is<T>();
-      return result;
-    }
+static const std::string platform_create_id_string(void) {
+  uint8_t mac[6];
+  char id_string[13];
+  esp_read_mac(mac, ESP_MAC_BT);
+  sprintf(id_string, "ESP32_%02x%02X%02X", mac[3], mac[4], mac[5]);
+  return std::string(id_string);
+}
+namespace espConfig
+{
+  struct mqttConfig_t
+  {
+    mqttConfig_t(){
+      std::string id = platform_create_id_string();
+      mqttClientId = id;
+      lwtTopic.append(id).append("/" MQTT_LWT_TOPIC);
+      hkTopic.append(id).append("/" MQTT_AUTH_TOPIC);
+      lockStateTopic.append(id).append("/" MQTT_STATE_TOPIC);
+      lockStateCmd.append(id).append("/" MQTT_SET_STATE_TOPIC);
+      lockCStateCmd.append(id).append("/" MQTT_SET_CURRENT_STATE_TOPIC);
+      lockTStateCmd.append(id).append("/" MQTT_SET_TARGET_STATE_TOPIC);
+      lockCustomStateTopic.append(id).append("/" MQTT_CUSTOM_STATE_TOPIC);
+      lockCustomStateCmd.append(id).append("/" MQTT_CUSTOM_STATE_CTRL_TOPIC);
+      btrLvlCmdTopic.append(id).append("/" MQTT_PROX_BAT_TOPIC);
+      hkAltActionTopic.append(id).append("/" MQTT_HK_ALT_ACTION_TOPIC);
+    };
+    /* MQTT Broker */
+    std::string mqttBroker = MQTT_HOST;
+    uint16_t mqttPort = MQTT_PORT;
+    std::string mqttUsername = MQTT_USERNAME;
+    std::string mqttPassword = MQTT_PASSWORD;
+    std::string mqttClientId;
+    /* MQTT Topics */
+    std::string lwtTopic;
+    std::string hkTopic;
+    std::string lockStateTopic;
+    std::string lockStateCmd;
+    std::string lockCStateCmd;
+    std::string lockTStateCmd;
+    std::string btrLvlCmdTopic;
+    std::string hkAltActionTopic;
+    /* MQTT Custom State */
+    std::string lockCustomStateTopic;
+    std::string lockCustomStateCmd;
+    /* Flags */
+    bool lockEnableCustomState = MQTT_CUSTOM_STATE_ENABLED;
+    bool hassMqttDiscoveryEnabled = MQTT_DISCOVERY;
+    bool nfcTagNoPublish = false;
+    std::map<std::string, uint8_t> customLockStates = { {"C_LOCKED", C_LOCKED}, {"C_UNLOCKING", C_UNLOCKING}, {"C_UNLOCKED", C_UNLOCKED}, {"C_LOCKING", C_LOCKING}, {"C_JAMMED", C_JAMMED}, {"C_UNKNOWN", C_UNKNOWN} };
+    std::map<std::string, uint8_t> customLockActions = { {"UNLOCK", C_UNLOCK}, {"LOCK", C_LOCK} };
   };
 
-  template <typename T>
-  struct Converter<std::map<std::string, T> > {
-    static void toJson(const std::map<std::string, T>& src, JsonVariant dst) {
-      JsonObject obj = dst.to<JsonObject>();
-      for (const auto& item : src)
-        obj[item.first] = item.second;
-    }
-
-    static std::map<std::string, T> fromJson(JsonVariantConst src) {
-      std::map<std::string, T> dst;
-      for (JsonPairConst item : src.as<JsonObjectConst>())
-        dst[item.key().c_str()] = item.value().as<T>();
-      return dst;
-    }
-
-    static bool checkJson(JsonVariantConst src) {
-      JsonObjectConst obj = src;
-      bool result = obj;
-      for (JsonPairConst item : obj)
-        result &= item.value().is<T>();
-      return result;
-    }
+  struct misc_config_t
+  {
+    enum colorMap
+    {
+      R,
+      G,
+      B
+    };
+    std::string deviceName = DEVICE_NAME;
+    std::string otaPasswd = OTA_PWD;
+    uint8_t hk_key_color = HOMEKEY_COLOR;
+    std::string setupCode = SETUP_CODE;
+    bool lockAlwaysUnlock = HOMEKEY_ALWAYS_UNLOCK;
+    bool lockAlwaysLock = HOMEKEY_ALWAYS_LOCK;
+    uint8_t controlPin = HS_PIN;
+    uint8_t hsStatusPin = HS_STATUS_LED;
+    uint8_t nfcNeopixelPin = NFC_NEOPIXEL_PIN;
+    uint8_t neoPixelType = 5;
+    std::map<colorMap, uint8_t> neopixelSuccessColor = { {R, NEOPIXEL_SUCCESS_R}, {G, NEOPIXEL_SUCCESS_G}, {B, NEOPIXEL_SUCCESS_B} };
+    std::map<colorMap, uint8_t> neopixelFailureColor = { {R, NEOPIXEL_FAIL_R}, {G, NEOPIXEL_FAIL_G}, {B, NEOPIXEL_FAIL_B} };
+    uint16_t neopixelSuccessTime = NEOPIXEL_SUCCESS_TIME;
+    uint16_t neopixelFailTime = NEOPIXEL_FAIL_TIME;
+    uint8_t nfcSuccessPin = NFC_SUCCESS_PIN;
+    uint16_t nfcSuccessTime = NFC_SUCCESS_TIME;
+    bool nfcSuccessHL = NFC_SUCCESS_HL;
+    uint8_t nfcFailPin = NFC_FAIL_PIN;
+    uint16_t nfcFailTime = NFC_FAIL_TIME;
+    bool nfcFailHL = NFC_FAIL_HL;
+    uint8_t gpioActionPin = GPIO_ACTION_PIN;
+    bool gpioActionLockState = GPIO_ACTION_LOCK_STATE;
+    bool gpioActionUnlockState = GPIO_ACTION_UNLOCK_STATE;
+    uint8_t gpioActionMomentaryEnabled = GPIO_ACTION_MOMENTARY_STATE;
+    bool hkGpioControlledState = true;
+    uint16_t gpioActionMomentaryTimeout = GPIO_ACTION_MOMENTARY_TIMEOUT;
+    bool webAuthEnabled = WEB_AUTH_ENABLED;
+    std::string webUsername = WEB_AUTH_USERNAME;
+    std::string webPassword = WEB_AUTH_PASSWORD;
+    std::array<uint8_t, 4> nfcGpioPins{SS, SCK, MISO, MOSI};
+    uint8_t btrLowStatusThreshold = 10;
+    bool proxBatEnabled = false;
+    bool hkDumbSwitchMode = false;
+    uint8_t hkAltActionInitPin = GPIO_HK_ALT_ACTION_INIT_PIN;
+    uint8_t hkAltActionInitLedPin = GPIO_HK_ALT_ACTION_INIT_LED_PIN;
+    uint16_t hkAltActionInitTimeout = GPIO_HK_ALT_ACTION_INIT_TIMEOUT;
+    uint8_t hkAltActionPin = GPIO_HK_ALT_ACTION_PIN;
+    uint16_t hkAltActionTimeout = GPIO_HK_ALT_ACTION_TIMEOUT;
+    uint8_t hkAltActionGpioState = GPIO_HK_ALT_ACTION_GPIO_STATE;
+    bool ethernetEnabled = false;
+    uint8_t ethActivePreset = 255; // 255 for custom pins
+    uint8_t ethPhyType = 1;
+    std::array<uint8_t, 5> ethRmiiConfig = {0, 255, 255, 255, 0};
+    std::array<uint8_t, 7> ethSpiConfig = {20, 255, 255, 255, 255, 255, 255};
   };
-
-  template <typename T, size_t N>
-  struct Converter<std::array<T, N> > {
-    static void toJson(const std::array<T, N>& src, JsonVariant dst) {
-      JsonArray array = dst.to<JsonArray>();
-      for (T item : src)
-        array.add(item);
-    }
-
-    static std::array<T, N> fromJson(JsonVariantConst src) {
-      std::array<T, N> dst;
-      size_t idx = 0;
-      for (T item : src.as<JsonArrayConst>())
-        dst[idx++] = item;
-      return dst;
-    }
-
-    static bool checkJson(JsonVariantConst src) {
-      JsonArrayConst array = src;
-      bool result = array;
-      size_t size = 0;
-      for (JsonVariantConst item : array) {
-        result &= item.is<T>();
-        size++;
-      }
-      return result && size == N;
-    }
-  };
-
- // hkEndpoint_t
-  void convertToJson(const hkEndpoint_t& src, JsonVariant dst);
-
-  void convertFromJson(JsonVariantConst src, hkEndpoint_t& dst);
-
-  // hkIssuer_t
-  void convertToJson(const hkIssuer_t& src, JsonVariant dst);
-
-  void convertFromJson(JsonVariantConst src, hkIssuer_t& dst);
-
-  // readerData_t
-  void convertToJson(const readerData_t& src, JsonVariant dst);
-
-  void convertFromJson(JsonVariantConst src, readerData_t& dst);
-
-  // eth_chip_desc_t
-  void convertToJson(const eth_chip_desc_t& src, JsonVariant dst);
-
-  void convertFromJson(JsonVariantConst src, eth_chip_desc_t& dst);
-
-#if CONFIG_ETH_USE_ESP32_EMAC
-  // rmii_conf_t
-  void convertToJson(const eth_board_presets_t::rmii_conf_t& src, JsonVariant dst);
-
-  void convertFromJson(JsonVariantConst src, eth_board_presets_t::rmii_conf_t& dst);
-#endif
-
-  // eth_board_presets_t::spi_conf_t
-  void convertToJson(const eth_board_presets_t::spi_conf_t& src, JsonVariant dst);
-
-  void convertFromJson(JsonVariantConst src, eth_board_presets_t::spi_conf_t& dst);
-
-  // eth_board_presets_t
-  void convertToJson(const eth_board_presets_t& src, JsonVariant dst);
-
-  void convertFromJson(JsonVariantConst src, eth_board_presets_t& dst);
-
-  // espConfig::mqttConfig_t
-  void convertToJson(const espConfig::mqttConfig_t& src, JsonVariant dst);
-
-  void convertFromJson(JsonVariantConst src, espConfig::mqttConfig_t& dst);
-
-  // std::map<espConfig::misc_config_t::colorMap, int>
-  void convertToJson(const std::map<espConfig::misc_config_t::colorMap, int>& src, JsonVariant dst);
-
-  void convertFromJson(JsonVariantConst src, std::map<espConfig::misc_config_t::colorMap, int>& dst);
-
-  // espConfig::misc_config_t
-  void convertToJson(const espConfig::misc_config_t& src, JsonVariant dst);
-
-  void convertFromJson(JsonVariantConst src, espConfig::misc_config_t& dst);
-} // namespace ARDUINOJSON_NAMESPACE
-
-struct ByteWriter {
-  public:
-    // Writes one byte, returns the number of bytes written (0 or 1)
-    size_t write(uint8_t c);
-    // Writes several bytes, returns the number of bytes written
-    size_t write(const uint8_t *buffer, size_t length);
-    void clear(){data.clear();};
-    operator std::vector<uint8_t>&(){
-      return data;
-    }
-    operator uint8_t*(){
-      return data.data();
-    }
-    operator size_t(){
-      return data.size();
-    }
-  private:
-    std::vector<uint8_t> data;
-};
-
-struct ByteReader {
-public:
-  ByteReader(const uint8_t* buf, size_t len);
-  int read();
-  size_t readBytes(char* buffer, size_t length);
-private:
-  std::vector<uint8_t>::iterator it;
-  std::vector<uint8_t> data;
-};
+} // namespace espConfig

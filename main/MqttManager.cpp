@@ -1,3 +1,4 @@
+#include "config.hpp"
 #include "event_manager.hpp"
 #include "MqttManager.hpp"
 #include "LockManager.hpp"
@@ -12,9 +13,9 @@
 const char* MqttManager::TAG = "MqttManager";
 
 MqttManager::MqttManager(ConfigManager& configManager)
-    : m_mqttConfig(configManager.getMqttConfig()),
+    : m_mqttConfig(configManager.getConfig<espConfig::mqttConfig_t>()),
       m_client(nullptr),
-      device_name(configManager.getMiscConfig().deviceName)
+      device_name(configManager.getConfig<espConfig::misc_config_t>().deviceName)
 {
   espp::EventManager::get().add_subscriber(
       "lock/stateChanged", "MqttManager",

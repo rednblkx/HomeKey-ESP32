@@ -1,8 +1,6 @@
-#ifndef WEBSERVER_MANAGER_HPP
-#define WEBSERVER_MANAGER_HPP
-#include "ArduinoJson.hpp"
 #pragma once
 #include "ESPAsyncWebServer.h"
+#include "cJSON.h"
 
 class ConfigManager;
 class ReaderDataManager;
@@ -50,17 +48,14 @@ private:
 
     // --- Helper Methods ---
     String indexProcessor(const String& var);
-    bool validateRequest(AsyncWebServerRequest *request, ArduinoJson::JsonObjectConst &currentData);
+    bool validateRequest(AsyncWebServerRequest *request, cJSON *currentData);
     
     // --- Member Variables ---
     AsyncWebServer m_server;
     ConfigManager& m_configManager;
     ReaderDataManager& m_readerDataManager;
 
-    // To temporarily store the body during multipart uploads
-    // ArduinoJson::JsonDocument m_requestBodyJson;
-
     static const char* TAG;
 };
 
-#endif // WEBSERVER_MANAGER_HPP
+

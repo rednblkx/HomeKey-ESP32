@@ -2,7 +2,7 @@
 #include "HardwareManager.hpp"
 #include "LockManager.hpp"
 #include "Pixel.h"
-#include "structs.hpp"
+#include "config.hpp"
 #include "eventStructs.hpp"
 
 const char* HardwareManager::TAG = "HardwareManager";

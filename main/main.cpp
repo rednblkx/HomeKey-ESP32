@@ -1,5 +1,6 @@
+#include "config.hpp"
 #include "logger.hpp"
-#include "structs.hpp"
+#include "eth_structs.hpp"
 #include "HomeKitLock.hpp"
 #include "LockManager.hpp"
 #include "NfcManager.hpp"
@@ -52,7 +53,7 @@ HomeKitLock *homekitLock;
 NfcManager *nfcManager;
 
 void initializeETH(){
-  const auto& miscConfig = configManager->getMiscConfig();
+  const auto& miscConfig = configManager->getConfig<espConfig::misc_config_t>();
 
 
     if (!miscConfig.ethernetEnabled) {
@@ -134,12 +135,12 @@ void setup() {
   configManager = new ConfigManager;
   configManager->begin();
   initializeETH();
-  hardwareManager = new HardwareManager(configManager->getMiscConfig());
-  lockManager = new LockManager(*hardwareManager, configManager->getMiscConfig());
+  hardwareManager = new HardwareManager(configManager->getConfig<espConfig::misc_config_t>());
+  lockManager = new LockManager(*hardwareManager, configManager->getConfig<espConfig::misc_config_t>());
   mqttManager = new MqttManager(*configManager);
   webServerManager = new WebServerManager(*configManager, *readerDataManager);
   homekitLock = new HomeKitLock(lambda, *lockManager, *configManager, *readerDataManager);
-  nfcManager = new NfcManager(*readerDataManager, configManager->getMiscConfig().nfcGpioPins);
+  nfcManager = new NfcManager(*readerDataManager, configManager->getConfig<espConfig::misc_config_t>().nfcGpioPins);
   homekitLock->begin();
   hardwareManager->begin();
   lockManager->begin();

@@ -19,4 +19,4 @@
 [submodule "components/msgpack-c/upstream"]
 	path = components/msgpack-c/upstream
 	url = https://github.com/msgpack/msgpack-c.git
-	branch = cpp_master
+	branch = c_master

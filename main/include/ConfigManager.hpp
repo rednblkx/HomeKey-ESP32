@@ -1,87 +1,51 @@
-#ifndef CONFIG_MANAGER_H
-#define CONFIG_MANAGER_H
-
+#pragma once
 #include <nvs.h>
-#include "structs.hpp"
+#include <variant>
+#include <vector>
+#include "msgpack/object.h"
+#include "config.hpp"
 
-/**
- * @class ConfigManager
- * @brief Manages loading, saving, and accessing application configuration from NVS.
- *
- * This class is responsible for all interactions with Non-Volatile Storage (NVS)
- * for configuration data. It loads settings on startup, provides read-only access
- * to the current configuration, and handles saving updated settings back to flash.
- */
 class ConfigManager {
 public:
-    /**
-     * @brief Constructor for the ConfigManager.
-     */
     ConfigManager();
-
-    /**
-     * @brief Destructor. Ensures NVS handle is closed properly.
-     */
     ~ConfigManager();
 
-    /**
-     * @brief Initializes the manager by opening NVS and loading all configurations.
-     * This must be called before any other methods.
-     * @return True if initialization was successful, false otherwise.
-     */
     bool begin();
 
-    /**
-     * @brief Provides read-only access to the MQTT configuration.
-     * @return A constant reference to the current MQTT configuration.
-     */
-    const espConfig::mqttConfig_t& getMqttConfig() const;
+    template <typename ConfigType>
+    const ConfigType& getConfig() const;
 
-    bool deleteMqttConfig();
+    template <typename ConfigType>
+    bool deleteConfig();
 
-    /**
-     * @brief Provides read-only access to the miscellaneous configuration.
-     * @return A constant reference to the current miscellaneous configuration.
-     */
-    const espConfig::misc_config_t& getMiscConfig() const;
+    template <typename ConfigType>
+    bool saveConfig();
 
-    bool deleteMiscConfig();
+    template <typename ConfigType>
+    bool deserializeFromJson(const std::string& json_string);
 
-    /**
-     * @brief Saves a new MQTT configuration to NVS and updates the internal state.
-     * @param newConfig The new MQTT configuration to save.
-     * @return True on success, false on failure.
-     */
-    bool saveMqttConfig(const espConfig::mqttConfig_t& newConfig);
+    template <typename ConfigType>
+    std::string serializeToJson();
 
-    /**
-     * @brief Saves a new miscellaneous configuration to NVS and updates the internal state.
-     * @param newConfig The new miscellaneous configuration to save.
-     * @return True on success, false on failure.
-     */
-    bool saveMiscConfig(const espConfig::misc_config_t& newConfig);
 
-private:
-    /**
-     * @brief Generic templated function to load a configuration structure from NVS.
-     * @tparam T The type of the configuration structure (e.g., mqttConfig_t).
-     * @param key The NVS key where the data is stored.
-     * @param configStruct The configuration structure to populate.
-     */
-    template <typename T>
-    void loadConfigFromNvs(const char* key, T& configStruct);
+  private:
+    using ConfigMapType = std::map<std::string,
+                      std::variant<
+                          std::string *, uint16_t *, uint8_t *, bool *,
+                          std::map<std::string, uint8_t> *,
+                          std::map<espConfig::misc_config_t::colorMap, uint8_t> *,
+                          std::array<uint8_t, 4> *, std::array<uint8_t, 5> *,
+                          std::array<uint8_t, 7> *>>;
+    void deserialize(msgpack_object obj, std::string key);
 
-    /**
-     * @brief Generic templated function to save a configuration structure to NVS.
-     * @tparam T The type of the configuration structure (e.g., mqttConfig_t).
-     * @param key The NVS key to save the data under.
-     * @param configStruct The configuration structure to save.
-     * @return True on success, false on failure.
-     */
-    template <typename T>
-    bool saveConfigToNvs(const char* key, const T& configStruct);
+    template <typename ConfigType>
+    std::vector<uint8_t> serialize();
 
-    // Member variables
+    void loadConfigFromNvs(const char* key);
+
+    bool saveConfigToNvs(const char* key);
+
+    std::map<std::string, ConfigMapType> m_configMap;
     espConfig::mqttConfig_t m_mqttConfig;
     espConfig::misc_config_t m_miscConfig;
     nvs_handle m_nvsHandle;
@@ -89,4 +53,3 @@ private:
     static const char* TAG;
 };
 
-#endif // CONFIG_MANAGER_H

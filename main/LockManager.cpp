@@ -1,3 +1,4 @@
+#include "esp_log.h"
 #include "esp_timer.h"
 #include "event_manager.hpp"
 #include "config.hpp"

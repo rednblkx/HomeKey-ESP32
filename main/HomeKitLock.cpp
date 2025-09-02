@@ -1,3 +1,4 @@
+#include "config.hpp"
 #include "eventStructs.hpp"
 #include "HomeKitLock.hpp"
 #include <functional>
@@ -9,7 +10,6 @@
 #include "ConfigManager.hpp"
 #include "ReaderDataManager.hpp"
 #include "HK_HomeKit.h"
-#include "structs.hpp"
 #include "esp_mac.h"
 #include "utils.hpp"
 
@@ -60,7 +60,7 @@ HomeKitLock::HomeKitLock(std::function<void(int)> &conn_cb, LockManager& lockMan
 }
 
 void HomeKitLock::begin() {
-    const auto& miscConfig = m_configManager.getMiscConfig();
+    const auto& miscConfig = m_configManager.getConfig<espConfig::misc_config_t>();
     const auto& app_version = esp_app_get_description()->version;
     ESP_LOGI(TAG, "Starting HomeSpan setup...");
 
@@ -169,7 +169,7 @@ void HomeKitLock::setupDebugCommands() {
       alpaca::serialize(s, d);
       espp::EventManager::get().publish("nfc/forceAuthFlow", d);
     });
-    new SpanUserCommand('M', "Erase MQTT Config and restart", [](const char*){s_instance->m_configManager.deleteMqttConfig();});
+    new SpanUserCommand('M', "Erase MQTT Config and restart", [](const char*){s_instance->m_configManager.deleteConfig<espConfig::mqttConfig_t>();});
     new SpanUserCommand('N', "Btr status low", [](const char* arg) {
       const char* TAG = "BTR_LOW";
       if (strncmp(arg + 1, "0", 1) == 0) {
