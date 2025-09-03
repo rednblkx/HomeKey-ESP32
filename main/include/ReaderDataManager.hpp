@@ -2,6 +2,8 @@
 #include <vector>
 #include <nvs.h>
 #include "HomeKey.h"
+#include "msgpack/object.h"
+#include "msgpack/pack.h"
 
 /**
  * @class ReaderDataManager
@@ -92,6 +94,12 @@ private:
      */
     void load();
 
+    void unpack_readerData_t(msgpack_object obj, readerData_t& reader_data);
+    void pack_readerData_t(msgpack_packer* pk, const readerData_t& reader_data);
+    void unpack_hkIssuer_t(msgpack_object obj, hkIssuer_t& issuer);
+    void pack_hkIssuer_t(msgpack_packer* pk, const hkIssuer_t& issuer);
+    void unpack_hkEndpoint_t(msgpack_object obj, hkEndpoint_t& endpoint);
+    void pack_hkEndpoint_t(msgpack_packer* pk, const hkEndpoint_t& endpoint);
     readerData_t m_readerData;
     nvs_handle m_nvsHandle;
     bool m_isInitialized;

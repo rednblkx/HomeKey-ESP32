@@ -3,5 +3,5 @@ idf_component_register(SRCS "main.cpp" "ConfigManager.cpp" "ReaderDataManager.cp
                     "MqttManager.cpp" "HKServices.cpp" "NfcManager.cpp" "WebServerManager.cpp"
                     INCLUDE_DIRS "include"
                     PRIV_REQUIRES HomeSpan PN532 HK-HomeKit-Lib ESPAsyncWebServer mqtt libsodium
-                    msgpack-c json)
+                    msgpack-c json format)
 littlefs_create_partition_image(spiffs ../data FLASH_IN_PROJECT)
