@@ -8,7 +8,8 @@
 #include "utils.hpp"
 #include "config.hpp"
 #include "eth_structs.hpp"
-#include <format.hpp>
+#include "fmt/base.h"
+#include "fmt/ranges.h"
 #include <LittleFS.h>
 #include <esp_app_desc.h>
 #include <string>

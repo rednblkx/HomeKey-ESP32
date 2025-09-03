@@ -1,3 +1,4 @@
+#define FMT_HEADER_ONLY
 #include "config.hpp"
 #include "logger.hpp"
 #include "eth_structs.hpp"

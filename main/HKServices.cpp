@@ -35,9 +35,8 @@ HomeKitLock::NFCAIS::NFCAIS(const espConfig::misc_config_t& config) {
     new Characteristic::FirmwareRevision(app_desc->version);
     uint8_t mac[6];
     esp_read_mac(mac, ESP_MAC_BT);
-    char macStr[13] = {0};
-    sprintf(macStr, "HK-%02X%02X%02X%02X", mac[2], mac[3], mac[4], mac[5]);
-    new Characteristic::SerialNumber(macStr);
+    std::string macStr = fmt::format("{:02X}{:02X}{:02X}{:02X}", mac[0], mac[1], mac[2], mac[3]);
+    new Characteristic::SerialNumber(macStr.c_str());
 
     size_t color_index = config.hk_key_color;
     if (color_index >= hk_color_vals.size()) {

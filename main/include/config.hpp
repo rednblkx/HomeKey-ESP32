@@ -4,6 +4,7 @@
 #include <map>
 #include <array>
 #include "defaults.h"
+#include "fmt/format.h"
 #include "pins_arduino.h"
 #include "esp_mac.h"
 
@@ -22,10 +23,9 @@ struct gpioLockAction {
 
 static const std::string platform_create_id_string(void) {
   uint8_t mac[6];
-  char id_string[13];
   esp_read_mac(mac, ESP_MAC_BT);
-  sprintf(id_string, "ESP32_%02x%02X%02X", mac[3], mac[4], mac[5]);
-  return std::string(id_string);
+  const std::string macStr = fmt::format("{:02X}{:02X}{:02X}{:02X}", mac[0], mac[1], mac[2], mac[3]);
+  return macStr;
 }
 namespace espConfig
 {

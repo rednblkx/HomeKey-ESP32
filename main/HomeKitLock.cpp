@@ -74,9 +74,8 @@ void HomeKitLock::begin() {
     homeSpan.setPortNum(1201);
     uint8_t mac[6];
     esp_read_mac(mac, ESP_MAC_BT);
-    char macStr[9] = { 0 };
-    sprintf(macStr, "%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3]);
-    homeSpan.setHostNameSuffix(macStr);
+    std::string macStr = fmt::format("{:02X}{:02X}{:02X}{:02X}", mac[0], mac[1], mac[2], mac[3]);
+    homeSpan.setHostNameSuffix(macStr.c_str());
 
     m_readerDataManager.begin();
 
