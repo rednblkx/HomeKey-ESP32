@@ -169,10 +169,13 @@ void HomeKitLock::setupDebugCommands() {
          LOG(I, "0 = FAST flow, 1 = STANDARD Flow, 2 = ATTESTATION Flow");
         break;
       }
-      EventValueChanged s{.newValue = (uint8_t)hkFlow};
-      std::vector<uint8_t> d;
-      alpaca::serialize(s, d);
-      espp::EventManager::get().publish("nfc/forceAuthFlow", d);
+    EventValueChanged s{.newValue = static_cast<uint8_t>(hkFlow)};
+    std::vector<uint8_t> d;
+    alpaca::serialize(s, d);
+    NfcEvent event{.type=FORCE_AUTH_FLOW, .data=d};
+    std::vector<uint8_t> event_data;
+    alpaca::serialize(event, event_data);
+    espp::EventManager::get().publish("nfc/event", event_data);
     });
     new SpanUserCommand('M', "Erase MQTT Config and restart", [](const char*){s_instance->m_configManager.deleteConfig<espConfig::mqttConfig_t>();});
     new SpanUserCommand('N', "Btr status low", [](const char* arg) {
