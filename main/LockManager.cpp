@@ -170,7 +170,5 @@ void LockManager::overrideState(uint8_t c_state, uint8_t t_state) {
     };
     std::vector<uint8_t> d;
     alpaca::serialize(s, d);
-    espp::EventManager::get().publish("lock/action", d);
-    espp::EventManager::get().publish("lock/stateChanged", d);
 }
 

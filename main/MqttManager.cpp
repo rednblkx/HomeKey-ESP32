@@ -330,7 +330,7 @@ void MqttManager::publishHassDiscovery() {
     lockPayload["unique_id"] = deviceID;
     lockPayload["device"] = device;
     lockPayload["state_topic"] = m_mqttConfig.lockStateTopic;
-    lockPayload["command_topic"] = m_mqttConfig.lockStateCmd;
+    lockPayload["command_topic"] = m_mqttConfig.lockTStateCmd;
     lockPayload["payload_lock"] = std::to_string(LockManager::LOCKED);
     lockPayload["payload_unlock"] = std::to_string(LockManager::UNLOCKED);
     lockPayload["state_locked"] = std::to_string(LockManager::LOCKED);
