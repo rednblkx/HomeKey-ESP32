@@ -131,7 +131,11 @@ void LockManager::setTargetState(uint8_t state, Source source) {
     }
     espp::EventManager::get().publish("lock/stateChanged", d);
 
-    uint8_t momentarySources = m_miscConfig.gpioActionMomentaryEnabled;
+    uint8_t momentarySources = (((m_miscConfig.gpioActionMomentaryEnabled |
+                                  m_miscConfig.gpioActionPin) == 255) &
+                                !m_miscConfig.hkDumbSwitchMode)
+                                   ? 0
+                                   : m_miscConfig.gpioActionMomentaryEnabled;
     bool isMomentarySource = ((static_cast<uint8_t>(source) & momentarySources) != 0);
 
     if (m_targetState == lockStates::UNLOCKED && isMomentarySource) {
