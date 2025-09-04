@@ -74,7 +74,6 @@ bool NfcManager::initializeReader() {
 }
 
 void NfcManager::startRetryTask() {
-    if (m_pollingTaskHandle) vTaskSuspend(m_pollingTaskHandle);
     if (m_retryTaskHandle == nullptr) {
         xTaskCreateUniversal(retryTaskEntry, "nfc_retry_task", 4096, this, 5, &m_retryTaskHandle, 1);
     }
@@ -104,7 +103,8 @@ void NfcManager::retryTask() {
 
 void NfcManager::pollingTask() {
     if (!initializeReader()) {
-        startRetryTask();
+      startRetryTask();
+      vTaskSuspend(NULL);
     }
 
     while (true) {
@@ -112,6 +112,7 @@ void NfcManager::pollingTask() {
             ESP_LOGE(TAG, "PN532 is unresponsive. Attempting to reconnect...");
             m_nfc->stop();
             startRetryTask();
+            vTaskSuspend(NULL);
             continue;
         }
 
