@@ -98,7 +98,7 @@ When shopping for a PN532, check boards with blueish components instead, those a
 
 **Note:** These boards might still not be at peak performance but should have a range of about 3-4cm and be more reliable.
 
-You can also buy from Elechouse for higher quality but they are typically more expensive. They are the original designer of those red boards. You can find their PN532 NFC RFID MODULE V4 on their [official website here](https://www.elechouse.com/product/pn532-nfc-rfid-module-v4/).
+You can also buy from Elechouse for best quality but they are typically more expensive. They are the original designer of those red boards. You can find their PN532 NFC RFID MODULE V4 on their [official website here](https://www.elechouse.com/product/pn532-nfc-rfid-module-v4/).
 
 ### 2.2. Option B - Integrated PCB Boards
 
