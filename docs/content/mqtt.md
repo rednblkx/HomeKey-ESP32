@@ -118,6 +118,11 @@ If **HASS MQTT Discovery** is enabled in your device's [MQTT Configuration](../c
 
 Once discovered, you can control your lock directly from Home Assistant's UI, just like any other lock entity.
 
+> [!NOTE]
+> In order to simplify things, interacting with the lock entity within Home Assistant will override the internal state of HomeKey-ESP32 through the `set_state` MQTT Topic.
+>
+> You can control the current and target state separately through their respective MQTT Topics.
+
 ### 5.3. NFC Tag Integration: Automate All the Things!
 
 This is where the real fun begins! Your HomeKey-ESP32 can integrate with Home Assistant's powerful Tag functionality, letting you trigger automations by simply scanning an NFC tag.
