@@ -91,7 +91,7 @@ HomeKitLock::NFCAccessService::NFCAccessService(ReaderDataManager& readerDataMan
     conf.add(0x01, 0x10); conf.add(0x02, 0x10);
     new Characteristic::NFCAccessSupportedConfiguration(conf);
     m_nfcControlPoint = new Characteristic::NFCAccessControlPoint();
-    espp::EventManager::get().add_publisher("nfc/updateECP", "NFCAccessService");
+    espp::EventManager::get().add_publisher("nfc/event", "NFCAccessService");
 }
 boolean HomeKitLock::NFCAccessService::update() {
     if (!m_nfcControlPoint->updated()) return true;
@@ -108,7 +108,10 @@ boolean HomeKitLock::NFCAccessService::update() {
     TLV8 res(nullptr, 0);
     res.unpack(result.data(), result.size());
     m_nfcControlPoint->setTLV(res, false);
-    espp::EventManager::get().publish("nfc/updateECP", {});
+    NfcEvent event{.type=UPDATE_ECP, .data={}};
+    std::vector<uint8_t> event_data;
+    alpaca::serialize(event, event_data);
+    espp::EventManager::get().publish("nfc/event", event_data);
     return true;
 }
 

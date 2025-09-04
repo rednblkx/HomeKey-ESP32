@@ -34,3 +34,16 @@ struct EventValueChanged {
   uint8_t newValue = 255;
   std::string str = "";
 };
+
+enum NfcEventType : uint8_t {
+    HOMEKEY_TAP,
+    TAG_TAP,
+    ALT_ACTION,
+    UPDATE_ECP,
+    FORCE_AUTH_FLOW
+};
+
+struct NfcEvent {
+    NfcEventType type;
+    std::vector<uint8_t> data;
+};

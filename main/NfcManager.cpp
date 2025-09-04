@@ -23,17 +23,24 @@ NfcManager::NfcManager(ReaderDataManager& readerDataManager,const std::array<uin
       m_retryTaskHandle(nullptr),
       m_ecpData({ 0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0 })
 {
-  espp::EventManager::get().add_publisher("nfc/HomeKeyTap", "NfcManager");
-  espp::EventManager::get().add_publisher("nfc/TagTap", "NfcManager");
-  espp::EventManager::get().add_publisher("nfc/AltAction", "NfcManager");
-  espp::EventManager::get().add_subscriber("nfc/updateECP", "NfcManager", [&](const std::vector<uint8_t> &){
-    updateEcpData();
-  }, 3072);
-  espp::EventManager::get().add_subscriber("nfc/forceAuthFlow", "NfcManager", [&](const std::vector<uint8_t> &data){
+  espp::EventManager::get().add_publisher("nfc/event", "NfcManager");
+  espp::EventManager::get().add_subscriber("nfc/event", "NfcManager", [&](const std::vector<uint8_t> &data){
     std::error_code ec;
-    EventValueChanged s = alpaca::deserialize<EventValueChanged>(data, ec);
-    if(!ec){
-      authFlow = KeyFlow(s.newValue);
+    NfcEvent event = alpaca::deserialize<NfcEvent>(data, ec);
+    if(ec) return;
+    switch(event.type) {
+      case UPDATE_ECP:
+        updateEcpData();
+        break;
+      case FORCE_AUTH_FLOW: {
+        EventValueChanged s = alpaca::deserialize<EventValueChanged>(event.data, ec);
+        if(!ec){
+          authFlow = KeyFlow(s.newValue);
+        }
+        break;
+      }
+      default:
+        break;
     }
   }, 3072);
 }
@@ -187,14 +194,19 @@ void NfcManager::handleHomeKeyAuth() {
         EventHKTap s{.status = true, .issuerId = std::get<0>(authResult), .endpointId = std::get<1>(authResult), .readerId = readerData.reader_id };
         std::vector<uint8_t> d;
         alpaca::serialize(s, d);
-        espp::EventManager::get().publish("nfc/HomeKeyTap", d);
-        espp::EventManager::get().publish("nfc/AltAction", {});
+        NfcEvent event{.type=HOMEKEY_TAP, .data=d};
+        std::vector<uint8_t> event_data;
+        alpaca::serialize(event, event_data);
+        espp::EventManager::get().publish("nfc/event", event_data);
     } else {
         ESP_LOGW(TAG, "HomeKey authentication failed.");
         EventHKTap s{.status = false, .issuerId = {}, .endpointId = {}, .readerId = {} };
         std::vector<uint8_t> d;
         alpaca::serialize(s, d);
-        espp::EventManager::get().publish("nfc/HomeKeyTap", d);
+        NfcEvent event{.type=HOMEKEY_TAP, .data=d};
+        std::vector<uint8_t> event_data;
+        alpaca::serialize(event, event_data);
+        espp::EventManager::get().publish("nfc/event", event_data);
     }
 }
 
@@ -202,7 +214,10 @@ void NfcManager::handleGenericTag(const uint8_t* uid, uint8_t uidLen, const uint
     EventTagTap s{.uid = std::vector<uint8_t>(uid, uid+uidLen), .atqa = std::vector<uint8_t>(atqa, atqa + 2), .sak = std::vector<uint8_t>(sak, sak + 1)};
     std::vector<uint8_t> d;
     alpaca::serialize(s, d);
-    espp::EventManager::get().publish("nfc/TagTap", d);
+    NfcEvent event{.type=TAG_TAP, .data=d};
+    std::vector<uint8_t> event_data;
+    alpaca::serialize(event, event_data);
+    espp::EventManager::get().publish("nfc/event", event_data);
 }
 
 void NfcManager::waitForTagRemoval() {

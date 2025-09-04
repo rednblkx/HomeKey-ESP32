@@ -28,18 +28,27 @@ MqttManager::MqttManager(ConfigManager& configManager)
   espp::EventManager::get().add_publisher("lock/targetStateChanged", "MqttManager");
   espp::EventManager::get().add_publisher("lock/overrideState", "MqttManager");
   espp::EventManager::get().add_publisher("homekit/btrPropChanged", "MqttManager");
-  espp::EventManager::get().add_subscriber("nfc/TagTap", "MqttManager", [&](const std::vector<uint8_t> &data){
+  espp::EventManager::get().add_subscriber("nfc/event", "MqttManager", [&](const std::vector<uint8_t> &data){
     std::error_code ec;
-    EventTagTap s = alpaca::deserialize<EventTagTap>(data, ec);
-    if(!ec){
-      publishUidTap(s.uid, s.atqa, s.sak);
-    }
-  });
-  espp::EventManager::get().add_subscriber("nfc/HomeKeyTap", "MqttManager", [&](const std::vector<uint8_t> &data){
-    std::error_code ec;
-    EventHKTap s = alpaca::deserialize<EventHKTap>(data, ec);
-    if(!ec && s.status){
-      publishHomeKeyTap(s.issuerId, s.endpointId, s.readerId);
+    NfcEvent event = alpaca::deserialize<NfcEvent>(data, ec);
+    if(ec) return;
+    switch(event.type) {
+      case HOMEKEY_TAP: {
+        EventHKTap s = alpaca::deserialize<EventHKTap>(event.data, ec);
+        if(!ec && s.status){
+          publishHomeKeyTap(s.issuerId, s.endpointId, s.readerId);
+        }
+        break;
+      }
+      case TAG_TAP: {
+        EventTagTap s = alpaca::deserialize<EventTagTap>(event.data, ec);
+        if(!ec){
+          publishUidTap(s.uid, s.atqa, s.sak);
+        }
+        break;
+      }
+      default:
+        break;
     }
   }, 3072);
   espp::EventManager::get().add_subscriber("mqtt/uidPublishChanged", "MqttManager", [&](const std::vector<uint8_t> &data){

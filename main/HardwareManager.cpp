@@ -59,9 +59,14 @@ HardwareManager::HardwareManager(const espConfig::misc_config_t& miscConfig)
       }, 3072);
   espp::EventManager::get().add_publisher("lock/updateState", "HardwareManager");
   espp::EventManager::get().add_subscriber(
-      "nfc/AltAction", "HardwareManager",
+      "nfc/event", "HardwareManager",
       [&](const std::vector<uint8_t> &data) {
-        triggerAltAction();
+        std::error_code ec;
+        NfcEvent event = alpaca::deserialize<NfcEvent>(data, ec);
+        if(ec) return;
+        if(event.type == ALT_ACTION) {
+          triggerAltAction();
+        }
       }, 3072);
 }
 
