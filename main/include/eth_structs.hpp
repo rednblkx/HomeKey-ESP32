@@ -62,16 +62,16 @@ namespace eth_config_ns {
                           .spi_conf{20, 9, 13, 14, 10, 11, 12}},
   #if CONFIG_ETH_USE_ESP32_EMAC
       eth_board_presets_t{.name = "WT32-ETH01",
-                          .ethChip = supportedChips[ETH_PHY_LAN8720],
+                          .ethChip = supportedChips.at(ETH_PHY_LAN8720),
                           .rmii_conf{1, 23, 18, 16, ETH_CLOCK_GPIO0_IN}},
       eth_board_presets_t{.name = "Olimex ESP32-POE",
-                          .ethChip = supportedChips[ETH_PHY_LAN8720],
+                          .ethChip = supportedChips.at(ETH_PHY_LAN8720),
                           .rmii_conf{0, 23, 18, 12, ETH_CLOCK_GPIO17_OUT}},
       eth_board_presets_t{.name = "EST-PoE-32",
-                          .ethChip = supportedChips[ETH_PHY_LAN8720],
+                          .ethChip = supportedChips.at(ETH_PHY_LAN8720),
                           .rmii_conf{0, 23, 18, 12, ETH_CLOCK_GPIO17_OUT}},
       eth_board_presets_t{.name = "T-ETH-Lite-ESP32",
-                          .ethChip = supportedChips[ETH_PHY_RTL8201],
+                          .ethChip = supportedChips.at(ETH_PHY_RTL8201),
                           .rmii_conf{0, 23, 18, 12, ETH_CLOCK_GPIO0_IN}}
   #endif
   };
