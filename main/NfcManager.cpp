@@ -131,12 +131,14 @@ void NfcManager::pollingTask() {
         uint8_t *uidLen = new uint8_t[1];
         uint8_t *atqa = new uint8_t[2];
         uint8_t *sak = new uint8_t[1];
-        bool passiveTargetFound = m_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, uidLen, atqa, sak, 200, true, true);
+        bool passiveTargetFound = m_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, uidLen, atqa, sak, 500, true, true);
         
         if (passiveTargetFound) {
             ESP_LOGI(TAG, "NFC tag detected!");
+            m_nfc->setPassiveActivationRetries(5);
             handleTagPresence();
             waitForTagRemoval();
+            m_nfc->setPassiveActivationRetries(0);
         }
         delete[] uid;
         delete[] uidLen;
@@ -223,14 +225,13 @@ void NfcManager::handleGenericTag(const uint8_t* uid, uint8_t uidLen, const uint
 void NfcManager::waitForTagRemoval() {
     ESP_LOGD(TAG, "Waiting for tag to be removed from field...");
     int counter = 50;
-    bool deviceStillInField = true;
-    uint8_t uid[16], uidLen = 0;
+    bool deviceStillInField = m_nfc->inListPassiveTarget();
 
     while (deviceStillInField && counter > 0) {
-        deviceStillInField = m_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen);
-        m_nfc->inRelease();
-        counter--;
-        vTaskDelay(pdMS_TO_TICKS(50));
+      vTaskDelay(pdMS_TO_TICKS(50));
+      m_nfc->inRelease();
+      deviceStillInField = m_nfc->inListPassiveTarget();
+      counter--;
     }
     
     if (deviceStillInField) {
@@ -241,4 +242,5 @@ void NfcManager::waitForTagRemoval() {
     } else {
         ESP_LOGD(TAG, "Tag removed.");
     }
+    m_nfc->inRelease();
 }
