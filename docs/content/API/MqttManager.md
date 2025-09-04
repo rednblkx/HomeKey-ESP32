@@ -33,5 +33,3 @@ title: "MqttManager"
         *   `uidLen` (`uint8_t`): Length of the UID.
         *   `atqa` (`const std::vector<uint8_t>&`): Pointer to the ATQA byte array (can be null).
         *   `sak` (`const std::vector<uint8_t>&`): Pointer to the SAK byte array (can be null).
-
----

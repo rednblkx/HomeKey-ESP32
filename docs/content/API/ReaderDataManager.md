@@ -42,5 +42,3 @@ title: "ReaderDataManager"
 *   **`const readerData_t* saveData()`**
     *   **Description:** Persists the current in-memory reader data to NVS.
     *   **Returns:** `const readerData_t*` - A constant pointer to the `readerData_t` object if successful, otherwise a `nullptr`.
-
----
