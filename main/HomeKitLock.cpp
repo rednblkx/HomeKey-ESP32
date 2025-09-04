@@ -141,6 +141,12 @@ void HomeKitLock::setupDebugCommands() {
       esp_log_level_set("actions-config", level);
       esp_log_level_set("misc-config", level);
       esp_log_level_set("mqttconfig", level);
+      esp_log_level_set("HardwareManager", level);
+      esp_log_level_set("ReaderDataManager", level);
+      esp_log_level_set("LockManager", level);
+      esp_log_level_set("WebServerManager", level);
+      esp_log_level_set("ConfigManager", level);
+      esp_log_level_set("NfcManager", level);
     });
     new SpanUserCommand('F', "Set HomeKey Flow", [](const char *buf){
       KeyFlow hkFlow = KeyFlow::kFlowFAST;
