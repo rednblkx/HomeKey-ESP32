@@ -1,0 +1,53 @@
+baseURL: https://rednblkx.github.io/HomeKey-ESP32
+languageCode: en-us
+title: HomeKey-ESP32 Wiki
+enableRobotsTXT: true
+enableGitInfo: true
+
+module:
+  imports:
+    - path: github.com/imfing/hextra
+
+menu:
+  main:
+    - identifier: github
+      name: GitHub
+      url: "https://github.com/rednblkx/HomeKey-ESP32"
+      weight: 1
+      params:
+        icon: github
+    - identifier: discord
+      name: Discord
+      url: "https://discord.com/invite/VWpZ5YyUcm"
+      weight: 2
+      params:
+        icon: discord
+    - name: Search
+      weight: 3
+      params:
+        type: search
+
+params:
+  navbar:
+    displayTitle: true
+    displayLogo: true
+    logo:
+      path: homekey-logo.svg
+      dark: homekey-logo-white.svg
+      width: 40
+      height: 20
+    width: 'full'
+  description: "Documentation for HomeKey-ESP32"
+  page:
+    width: 'full'
+  displayUpdatedDate: true
+  dateFormat: "January 2, 2006"
+  footer:
+    enable: false
+  theme:
+    default: system
+    displayToggle: true
+  editURL:
+    enable: true
+    base: "https://github.com/rednblkx/HomeKey-ESP32/edit/main/docs/content"
+

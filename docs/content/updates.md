@@ -1,15 +1,9 @@
-# Updates Guide: Keeping Your HomeKey-ESP32 Fresh! ⬆️
+---
+title: "Updates"
+weight: 5
+---
 
-<!--toc:start-->
-- [Updates Guide: Keeping Your HomeKey-ESP32 Fresh! ⬆️](#updates-guide-keeping-your-homekey-esp32-fresh-️)
-  - [1. Over-The-Air (OTA) Updates](#1-over-the-air-ota-updates)
-    - [1.2. Requirements](#12-requirements)
-    - [1.3. Update](#13-update)
-  - [2. Manual Update via USB (`esptool.py`)](#2-manual-update-via-usb-esptoolpy)
-    - [2.1 Requirements](#21-requirements)
-    - [2.2. Update](#22-update)
-  - [3. Important Notes on Updates](#3-important-notes-on-updates)
-<!--toc:end-->
+# Keeping Your HomeKey-ESP32 Fresh!
 
 This document outlines different methods for updating the firmware on your HomeKey-ESP32 device. Keeping your device up-to-date ensures you have the latest features, bug fixes, and security enhancements.
 
@@ -30,7 +24,7 @@ The primary method for Over-The-Air (OTA) updates is using the `espota` tool. Th
 *   The `*-firmware.bin` file for your ESP32 chip (e.g., `esp32-firmware.bin`, `esp32c3-firmware.bin`, or `esp32s3-firmware.bin`) from the [GitHub Releases page](https://github.com/rednblkx/HomeKey-ESP32/releases).
 *   The `littlefs.bin` file from the [GitHub Releases page](https://github.com/rednblkx/HomeKey-ESP32/releases).
 *   The IP address of your HomeKey-ESP32 device.
-*   (Optional) The OTA password, if you've set one in the [Configuration Guide](configuration.md#homespan).
+*   (Optional) The OTA password, if you've set one in the [Configuration Guide](../configuration#homespan).
     *   The default OTA password is `homespan-ota`
 
 ### 1.3. Update
@@ -66,13 +60,13 @@ If OTA updates aren't working, or if you prefer a wired connection, you can alwa
 
 *   Your HomeKey-ESP32 device.
 *   A USB cable to connect your ESP32 to your computer.
-*   `esptool.py` installed on your computer (see [Prerequisites Guide](prerequisites.md#option-1-command-line-flashing-with-esptoolpy-recommended-for-advanced-users)).
+*   `esptool.py` installed on your computer (see [Prerequisites Guide](../prerequisites#option-1-command-line-flashing-with-esptoolpy-recommended-for-advanced-users)).
 *   The `esp32XX-firmware.bin` and `littlefs.bin` files.
 
 ### 2.2. Update
 
 1.  **Connect ESP32:** Connect your ESP32 development board to your computer using a USB cable.
-2.  **Identify Serial Port:** Find the serial port your ESP32 is connected to (refer to [Setup Guide](setup.md#option-a-flashing-with-esptoolpy-command-line) for details).
+2.  **Identify Serial Port:** Find the serial port your ESP32 is connected to (refer to [Setup Guide](../setup#option-a-flashing-with-esptoolpy-command-line) for details).
 3.  **Open Terminal/Command Prompt:** Navigate to the directory where you downloaded the `esptool.py` script and your firmware files.
 
 4.  **Flash Firmware and LittleFS Separately (Advanced):**
@@ -85,7 +79,7 @@ If OTA updates aren't working, or if you prefer a wired connection, you can alwa
     *   `0x20000`: Address for the application firmware.
     *   `0x3e0000`: Address for the LittleFS filesystem.
 
-5.  **Initiate Flash Mode:** If the flashing doesn't start automatically, you might need to manually put your ESP32 into flash mode (refer to [Setup Guide](setup.md#option-a-flashing-with-esptoolpy-command-line) for details).
+5.  **Initiate Flash Mode:** If the flashing doesn't start automatically, you might need to manually put your ESP32 into flash mode (refer to [Setup Guide](../setup#option-a-flashing-with-esptoolpy-command-line) for details).
 6.  **Wait for Completion:** The flashing process will take a few moments. Once complete, you'll see a "Hash of data verified" message.
 7.  **Reboot:** Disconnect and reconnect your ESP32 from USB to reboot the device.
 

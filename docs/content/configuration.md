@@ -1,43 +1,21 @@
-# Configuration Guide: Making HomeKey-ESP32 Yours (via the Web Interface) ⚙️
+---
+title: "Configuration"
+weight: 3
+---
 
-<!--toc:start-->
-- [Configuration Guide: Making HomeKey-ESP32 Yours (via the Web Interface) ⚙️](#configuration-guide-making-homekey-esp32-yours-via-the-web-interface-️)
-  - [Accessing the Web Interface](#accessing-the-web-interface)
-  - [HK Info (Informational)](#hk-info-informational)
-  - [MQTT (MQTT Configuration)](#mqtt-mqtt-configuration)
-    - [Broker Connection](#broker-connection)
-    - [MQTT Topics](#mqtt-topics)
-      - [Core Topics](#core-topics)
-      - [Custom Topics](#custom-topics)
-  - [Actions (Hardware Actions)](#actions-hardware-actions)
-    - [NFC Triggers](#nfc-triggers)
-      - [Neopixel](#neopixel)
-      - [Simple GPIO](#simple-gpio)
-    - [State Triggers](#state-triggers)
-      - [Simple GPIO](#simple-gpio)
-      - [Dummy](#dummy)
-  - [Misc (Miscellaneous)](#misc-miscellaneous)
-    - [General settings](#general-settings)
-      - [HomeKit](#homekit)
-      - [HomeKey](#homekey)
-      - [PN532](#pn532)
-      - [HomeSpan](#homespan)
-      - [Ethernet](#ethernet)
-    - [WebUI (Web Interface Security)](#webui-web-interface-security)
-      - [Authentication](#authentication)
-<!--toc:end-->
+# Making HomeKey-ESP32 Yours (via the Web Interface)
 
 Welcome to the control center of your HomeKey-ESP32! This guide will walk you through all the settings you can tweak to make your device work exactly how you want it to. All these configurations are easily managed through the device's intuitive web interface.
 
-## Accessing the Web Interface
+## 1. Accessing the Web Interface
 
-After you've successfully flashed the firmware and completed the initial setup (connecting to the `HomeSpan-Setup` Wi-Fi and configuring your home network), you can access the web interface by navigating to your device's IP address in your web browser. If you're unsure of the IP address, check your router's connected devices list.
+After you've successfully flashed the firmware and completed the initial setup (connecting to the `HomeSpan-Setup` Wi-Fi and configuring your home network), you can access the web interface by navigating to your device's IP address in your web browser. If you're unsure of the IP address, check your router's connected devices list, or try accessing using the following hostname format `<Serial Number>.local` (replace `<Serial Number>` with the Serial Number seen in the Home App, e.g. `HK-A1B2C3D4.local`)
 
 The web interface is organized into several sections, accessible via the main navigation buttons: **HK Info**, **MQTT**, **Actions**, and **Misc**.
 
 ---
 
-## HK Info (Informational)
+## 2. HK Info
 
 This section provides read-only information about your HomeKey reader, including its Group Identifier (GID), Unique Identifier (ID), and details about any configured issuers and their endpoints. This is useful for debugging and verifying HomeKey functionality.
 
@@ -47,11 +25,11 @@ This section provides read-only information about your HomeKey reader, including
 
 ---
 
-## MQTT (MQTT Configuration)
+## 3. MQTT
 
 This section allows you to configure how your HomeKey-ESP32 device communicates with your MQTT broker. MQTT is a lightweight messaging protocol that enables seamless integration with home automation platforms like Home Assistant. Changes in this section will reboot the device.
 
-### Broker Connection
+### 3.1. Broker Connection
 
 These settings define how your device connects to your MQTT broker.
 
@@ -67,11 +45,11 @@ These settings define how your device connects to your MQTT broker.
 *   **HASS MQTT Discovery:** Enable or disable Home Assistant MQTT Discovery. 
     * If enabled, Home Assistant can automatically discover and configure your device's MQTT entities (like NFC tag readers).
 
-### MQTT Topics
+### 3.2. MQTT Topics
 
 This section is organized into two tabs: **Core Topics** and **Custom Topics**.
 
-#### Core Topics
+#### 3.2.1. Core Topics
 
 These are the essential MQTT topics used by the HomeKey-ESP32.
 
@@ -80,33 +58,33 @@ These are the essential MQTT topics used by the HomeKey-ESP32.
 *   **Secondary action Topic:** The MQTT topic for publishing the Alternate Action status.
 *   **Lock State Topic:** The MQTT topic for publishing the internal state.
 *   **Lock State Cmd Topic:** The MQTT control topic for the HomeKit lock state (current and target).
-*   **Lock Current State Cmd Topic:** The MQTT control topic for the HomeKit lock current state.
-*   **Lock Target State Cmd Topic:** The MQTT control topic for the HomeKit lock target state.
+*   **Lock Current State Cmd Topic:** The MQTT control topic for the HomeKey-ESP32 lock current state.
+*   **Lock Target State Cmd Topic:** The MQTT control topic for the HomeKey-ESP32 lock target state.
 *   **SmartLock battery level Cmd Topic:** The MQTT control topic for setting the battery level to be shown in HomeKit.
 
-#### Custom Topics
+#### 3.2.2. Custom Topics
 
 These settings allow for more advanced customization of MQTT topics and states.
 
 *   **Status (for Custom States):** Toggle to enable or disable the use of custom lock states via MQTT.
 *   **Custom State Topic:** The MQTT topic where the device will publish its custom lock state.
 *   **Custom State Cmd Topic:** The MQTT topic where you can send commands to change the device's custom lock state.
-*   **Custom Lock Actions:** Define custom MQTT actions for "Unlock" and "Lock" commands.
-*   **Custom Lock States:** Define custom MQTT states for various lock conditions (e.g., "Unlocking", "Locking", "Unlocked", "Locked", "Jammed", "Unknown").
+*   **Custom Lock Actions:** Define custom MQTT actions for "Unlock" and "Lock" commands published by HomeKey-ESP32 on the Custom State Topic.
+*   **Custom Lock States:** Define custom MQTT states for various lock conditions (e.g., "Unlocking", "Locking", "Unlocked", "Locked", "Jammed", "Unknown") received on the Custom State Command topic.
 
 ---
 
-## Actions (Hardware Actions)
+## 4. Actions (Hardware Actions)
 
 This section allows you to configure how your HomeKey-ESP32 interacts with physical components like relays, LEDs, and NeoPixels, providing visual and physical feedback for HomeKey events.
 
-### NFC Triggers
+### 4.1. NFC Triggers
 
-These actions are executed on successful/failed HomeKey authentications and on NFC Tag detection (treated as a failed event). Both Neopixel and Simple GPIO have a momentary state. 
+These actions are executed on successful/failed HomeKey authentications and on NFC Tag detection. Both Neopixel and Simple GPIO have a momentary state.
 
 This section is organized into two tabs: **Neopixel** and **Simple GPIO**.
 
-#### Neopixel
+#### 4.1.1. Neopixel
 
 Configure a Pixel LED for visual feedback.
 
@@ -117,7 +95,7 @@ Configure a Pixel LED for visual feedback.
 *   **Auth Success Color (R, G, B):** RGB color for Pixel on successful HomeKey authentication.
 *   **Auth Failure Color (R, G, B):** RGB color for Pixel on failed HomeKey authentication.
 
-#### Simple GPIO
+#### 4.1.2. Simple GPIO
 
 Configure a simple GPIO pin for visual or physical feedback.
 
@@ -134,13 +112,13 @@ Configure a simple GPIO pin for visual or physical feedback.
     *   **Timeout (ms):** Timeout for the alternate action.
     *   **GPIO State:** GPIO state for the alternate action.
 
-### State Triggers
+### 4.2. State Triggers
 
 These actions are executed upon interaction in the Home app and optionally on successful HomeKey Authentication (enabled by default). 
 
 This section is organized into two tabs: **Simple GPIO** and **Dummy**.
 
-#### Simple GPIO
+#### 4.2.1. Simple GPIO
 
 Configure a simple GPIO pin to trigger for lock/unlock actions. This follows the "Always Lock/Unlock on HomeKey" option. Momentary state applies only if the initial state is "LOCKED".
 
@@ -151,42 +129,46 @@ Configure a simple GPIO pin to trigger for lock/unlock actions. This follows the
 *   **Momentary state:** Enables momentary state for the action pin. Options: `Disabled`, `Home App Only`, `Home Key Only`, `Home App + Home Key`.
 *   **Momentary timeout (ms):** Duration (in milliseconds) for the momentary pulse.
 
-#### Dummy
+#### 4.2.2. Dummy
 
 This option follows the "Always Lock/Unlock on HomeKey" option. Momentary state applies only if the initial state is "LOCKED".
 
 *   **Status:** Enable or disable "Dumb Switch" mode for HomeKit.
-*   **Momentary state:** Enables momentary state for the action pin. Options: `Disabled`, `Home App Only`, `Home Key Only`, `Home App + Home Key`.
+*   **Momentary state:** Enables momentary state. Options: `Disabled`, `Home App Only`, `Home Key Only`, `Home App + Home Key`.
 *   **Momentary timeout (ms):** Duration (in milliseconds) for the momentary pulse.
 
 ---
 
-## Misc (Miscellaneous)
+## 5. Misc (Miscellaneous)
 
 This section covers general device behavior, HomeKit parameters, GPIO pin assignments, and web interface authentication. Changes in this section will reboot the device.
 
-### General settings
+### 5.1. General settings
 
 This section is organized into several tabs: **HomeKit**, **HomeKey**, **PN532**, **HomeSpan**, and **Ethernet**.
 
-#### HomeKit
+#### 5.1.1. HomeKit
 
 *   **Device Name:** The name your HomeKey-ESP32 will display in your Home app and on your network.
 *   **Setup Code:** The 8-digit code used to pair your device with the Apple Home app. **Important: This code is for reference and can be changed during Wi-Fi configuration or from the WebUI.**
-*   **Always Lock on HomeKey:** If enabled, a successful HomeKey authentication will always trigger a "locked" state, regardless of the physical lock's current position.
-*   **Always Unlock on HomeKey:** If enabled, a successful HomeKey authentication will always trigger an "unlocked" state, regardless of the physical lock's current position.
+*   **Always Lock on HomeKey:** If enabled, a successful HomeKey authentication will always trigger a "locked" state, regardless of the current state.
+*   **Always Unlock on HomeKey:** If enabled, a successful HomeKey authentication will always trigger an "unlocked" state, regardless of the current state.
 *   **SmartLock battery reporting:** Enable this if you want HomeKey-ESP32 to report the battery level of an *external* smart lock or similar device to HomeKit. This requires your external device to send battery level updates to HomeKey-ESP32 via MQTT.
 *   **Battery low status Threshold:** The percentage below which HomeKit will report a "low battery" status for the device.
 
-#### HomeKey
+> [!IMPORTANT]
+> If using `Always Lock/Unlock on HomeKey`, HomeKit might not react if the new state is the same as the current
+> and if you are using HomeKit Automations those will not get triggered
+
+#### 5.1.2. HomeKey
 
 *   **Alt action Initiator Button:**
-    *   **GPIO Pin:** GPIO Pin to initialize an alternate action.
+    *   **GPIO Pin:** GPIO Pin to initialize an alternate action after successful HomeKey authentication.
     *   **Timeout (ms):** Timeout for alternate action initialization.
     *   **Feedback LED Pin:** GPIO Pin for an LED indicating alternate action initialization.
 *   **HomeKey Card Finish:** Choose the color of the HomeKey icon that appears in Apple Wallet when you add a HomeKey pass. Options: `Tan`, `Gold`, `Silver`, `Black`.
 
-#### PN532
+#### 5.1.3. PN532
 
 This section allows you to manually assign the GPIO pins for the PN532 NFC module's SPI communication. You typically only need to adjust these if you're using a custom wiring setup or a non-standard ESP32 board.
 
@@ -195,13 +177,13 @@ This section allows you to manually assign the GPIO pins for the PN532 NFC modul
 *   **MISO Pin:** Master In, Slave Out Pin for PN532 SPI communication.
 *   **MOSI Pin:** Master Out, Slave In Pin for PN532 SPI communication.
 
-#### HomeSpan
+#### 5.1.4. HomeSpan
 
 *   **OTA Password:** The password required for Over-The-Air (OTA) firmware updates.
 *   **Control GPIO Pin:** GPIO Pin for a Configuration Mode button. Refer to HomeSpan documentation for more details.
 *   **Status LED GPIO Pin:** GPIO Pin for an LED that indicates the HomeSpan status.
 
-#### Ethernet
+#### 5.1.5. Ethernet
 
 *   **Status:** Enable or disable Ethernet connectivity.
 *   **Board Preset:** Choose from predefined Ethernet configurations for various boards, or select "Custom" if you have specific pin assignments.
@@ -223,11 +205,11 @@ Rest of the fields are shown depending on the selected PHY chip as there are two
     *   **Power Pin:** Power Pin for RMII Ethernet.
     *   **RMII Clock Mode:** RMII Clock Mode for Ethernet.
 
-### WebUI (Web Interface Security)
+### 5.2. WebUI
 
 Protect your device's configuration by setting up authentication for the web interface. This section is organized into one tab: **Authentication**.
 
-#### Authentication
+#### 5.2.1. Authentication
 
 *   **Status:** Toggle to enable or disable a username and password for accessing the web interface.
 *   **Username:** The username for accessing the web interface.
@@ -235,4 +217,4 @@ Protect your device's configuration by setting up authentication for the web int
 
 ---
 
-Remember to save your changes after modifying any settings in the web interface. Your device will typically reboot after saving to apply the new configurations.
+Remember to save your changes after modifying any settings in the web interface. Your device will typically reboot after saving to apply the new configurations unless stated otherwise.
