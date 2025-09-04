@@ -29,5 +29,3 @@ title: "LockManager"
     *   **Parameters:**
         *   `cstate` (`uint8_t`): The new current state.
         *   `tstate` (`uint8_t`): The new target state.
-
----

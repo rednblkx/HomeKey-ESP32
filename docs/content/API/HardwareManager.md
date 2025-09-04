@@ -22,5 +22,3 @@ title: "HardwareManager"
     *   **Description:** Triggers a non-blocking visual/audible signal for a failed action.
 *   **`void triggerAltAction()`**
     *   **Description:** Triggers the alternative GPIO pin action.
-
----

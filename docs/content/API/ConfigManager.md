@@ -30,5 +30,3 @@ title: "ConfigManager"
 *   **`template <typename ConfigType> std::string serializeToJson()`**
     *   **Description:** Serializes the specified configuration type to a JSON string.
     *   **Returns:** `std::string` - The JSON string representation of the configuration.
-
----

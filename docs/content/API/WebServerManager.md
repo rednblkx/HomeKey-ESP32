@@ -13,4 +13,3 @@ title: "WebServerManager"
         *   `readerDataManager` (`ReaderDataManager&`): Reference to the HomeKey reader data manager.
 *   **`void begin()`**
     *   **Description:** Initializes the web server and attaches all handlers.
-

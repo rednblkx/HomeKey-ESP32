@@ -25,5 +25,3 @@ title: "HomeKitLock"
     *   **Parameters:**
         *   `batteryLevel` (`uint8_t`): The current battery level (0-100).
         *   `isLow` (`bool`): `true` if the battery is low, `false` otherwise.
-
----

@@ -16,5 +16,3 @@ title: "NfcManager"
     *   **Returns:** `bool` - `true` on success, `false` otherwise.
 *   **`void updateEcpData()`**
     *   **Description:** Updates the ECP data.
-
----
