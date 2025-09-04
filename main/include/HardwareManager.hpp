@@ -3,6 +3,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
+#include <cstdint>
 
 class ConfigManager;
 class Pixel;
@@ -60,12 +61,18 @@ private:
         FAILURE
     };
 
-    enum class TimerSources {
+    enum class TimerSources : uint8_t {
       GPIO_S,
       GPIO_F,
-      PIXEL,
+      PIXEL_S,
+      PIXEL_F,
       ALT_GPIO,
       ALT_GPIO_INIT
+    };
+
+    struct TimerContext {
+        HardwareManager* hw_manager;
+        TimerSources timer_source;
     };
 
     // --- FreeRTOS Task Management ---
@@ -102,7 +109,7 @@ private:
     TaskHandle_t m_initiatorTaskHandle;
     QueueHandle_t m_initiatorQueue;
 
-    QueueHandle_t m_timerSources;
+
 
     bool m_altActionArmed = false;
     

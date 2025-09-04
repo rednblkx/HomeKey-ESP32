@@ -38,7 +38,6 @@ struct EventValueChanged {
 enum NfcEventType : uint8_t {
     HOMEKEY_TAP,
     TAG_TAP,
-    ALT_ACTION,
     UPDATE_ECP,
     FORCE_AUTH_FLOW
 };

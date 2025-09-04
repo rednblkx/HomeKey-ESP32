@@ -3,6 +3,7 @@
 #include "LockManager.hpp"
 #include "Pixel.h"
 #include "config.hpp"
+#include "esp_timer.h"
 #include "eventStructs.hpp"
 
 const char* HardwareManager::TAG = "HardwareManager";
@@ -25,19 +26,30 @@ HardwareManager::HardwareManager(const espConfig::misc_config_t& miscConfig)
           setLockOutput(s.targetState);
         }
       }, 3072);
-  espp::EventManager::get().add_subscriber(
-      "lock/feedback", "HardwareManager",
-      [&](const std::vector<uint8_t> &data) {
-        std::error_code ec;
-        EventBinaryStatus s = alpaca::deserialize<EventBinaryStatus>(data, ec);
-        if(!ec) {
-          if(s.status == true){
-            showSuccessFeedback();
-          } else {
-            showFailureFeedback();
-          }
+  espp::EventManager::get().add_subscriber("nfc/event", "MqttManager", [&](const std::vector<uint8_t> &data){
+    std::error_code ec;
+    NfcEvent event = alpaca::deserialize<NfcEvent>(data, ec);
+    if(ec) return;
+    switch(event.type) {
+      case HOMEKEY_TAP: {
+        EventHKTap s = alpaca::deserialize<EventHKTap>(event.data, ec);
+        if(!ec){
+          if(s.status) {showSuccessFeedback();triggerAltAction();} else showFailureFeedback();
         }
-      }, 3072);
+        break;
+      }
+      case TAG_TAP: {
+        EventTagTap s = alpaca::deserialize<EventTagTap>(event.data, ec);
+        if(!ec){
+          showSuccessFeedback();
+        }
+        break;
+      }
+      break;
+      default:
+        break;
+    }
+  }, 3072);
   espp::EventManager::get().add_subscriber(
       "hardware/gpioPinChanged", "HardwareManager",
       [&](const std::vector<uint8_t> &data) {
@@ -58,16 +70,6 @@ HardwareManager::HardwareManager(const espConfig::misc_config_t& miscConfig)
         }
       }, 3072);
   espp::EventManager::get().add_publisher("lock/updateState", "HardwareManager");
-  espp::EventManager::get().add_subscriber(
-      "nfc/event", "HardwareManager",
-      [&](const std::vector<uint8_t> &data) {
-        std::error_code ec;
-        NfcEvent event = alpaca::deserialize<NfcEvent>(data, ec);
-        if(ec) return;
-        if(event.type == ALT_ACTION) {
-          triggerAltAction();
-        }
-      }, 3072);
 }
 
 void HardwareManager::begin() {
@@ -111,44 +113,55 @@ void HardwareManager::begin() {
         m_pixel->off(); // Ensure pixel is off at startup
         ESP_LOGI(TAG, "NeoPixel initialized on pin %d with type %s.", m_miscConfig.nfcNeopixelPin, pixelTypeMap[pixelTypeIndex]);
     }
+
+    static TimerContext gpioS_context = {this, TimerSources::GPIO_S};
     const esp_timer_create_args_t gpioS_timer_args = {
             .callback = &handleTimer,
-            .arg = (void*) this,
+            .arg = (void*) &gpioS_context,
             .name = "gpioSuccessTimer"
     };
+
+    static TimerContext gpioF_context = {this, TimerSources::GPIO_F};
     const esp_timer_create_args_t gpioF_timer_args = {
             .callback = &handleTimer,
-            .arg = (void*) this,
+            .arg = (void*) &gpioF_context,
             .name = "gpioFailTimer"
     };
+
+    static TimerContext pixelS_context = {this, TimerSources::PIXEL_S};
     const esp_timer_create_args_t pixelS_timer_args = {
             .callback = &handleTimer,
-            .arg = (void*) this,
+            .arg = (void*) &pixelS_context,
             .name = "pixelSuccessTimer"
     };
+
+    static TimerContext pixelF_context = {this, TimerSources::PIXEL_F};
     const esp_timer_create_args_t pixelF_timer_args = {
             .callback = &handleTimer,
-            .arg = (void*) this,
+            .arg = (void*) &pixelF_context,
             .name = "pixelFailTimer"
     };
+
+    static TimerContext altAction_context = {this, TimerSources::ALT_GPIO};
     const esp_timer_create_args_t altAction_timer_args = {
             .callback = &handleTimer,
-            .arg = (void*) this,
+            .arg = (void*) &altAction_context,
             .name = "altActionTimer"
     };
+  
+    static TimerContext altActionInit_context = {this, TimerSources::ALT_GPIO_INIT};
     const esp_timer_create_args_t altActionInit_timer_args = {
             .callback = &handleTimer,
-            .arg = (void*) this,
+            .arg = (void*) &altActionInit_context,
             .name = "altActionInitTimer"
     };
+
     esp_timer_create(&gpioS_timer_args, &m_gpioSuccessTimer);
     esp_timer_create(&gpioF_timer_args, &m_gpioFailTimer);
     esp_timer_create(&pixelS_timer_args, &m_pixelSuccessTimer);
     esp_timer_create(&pixelF_timer_args, &m_pixelFailTimer);
     esp_timer_create(&altAction_timer_args, &m_altActionTimer);
     esp_timer_create(&altActionInit_timer_args, &m_altActionInitTimer);
-
-    m_timerSources = xQueueCreate(6, sizeof(TimerSources));
 
     m_feedbackQueue = xQueueCreate(5, sizeof(FeedbackType));
     xTaskCreateUniversal(feedbackTaskEntry, "feedback_task", 4096, this, 2, &m_feedbackTaskHandle, 1);
@@ -182,54 +195,36 @@ void HardwareManager::showFailureFeedback() {
 
 // --- Private Implementations ---
 
-void HardwareManager::handleTimer(void* instance){
-  HardwareManager *i = static_cast<HardwareManager*>(instance);
-  TimerSources t;
-  uint8_t n = uxQueueMessagesWaiting(i->m_timerSources);
-  ESP_LOGD(TAG, "Timer expired, %d messages waiting in queue!", n);
-  for (uint8_t x = 0; x<n; x++) {
-    if(xQueuePeek(i->m_timerSources, &t, 10)){
-      switch (t) {
-        case TimerSources::GPIO_S:
-          if(!esp_timer_is_active(i->m_gpioSuccessTimer)){
-            digitalWrite(i->m_miscConfig.nfcSuccessPin, !i->m_miscConfig.nfcSuccessHL);
-            ESP_LOGD(TAG, "GPIO_S");
-            xQueueReceive(i->m_timerSources, &t, 0);
-          }
-          break;
-        case TimerSources::GPIO_F:
-          if(!esp_timer_is_active(i->m_gpioFailTimer)){
-            digitalWrite(i->m_miscConfig.nfcFailPin, !i->m_miscConfig.nfcFailHL);
-            ESP_LOGD(TAG, "GPIO_F");
-            xQueueReceive(i->m_timerSources, &t, 0);
-          }
-          break;
-        case TimerSources::PIXEL:
-          if(!esp_timer_is_active(i->m_pixelSuccessTimer) || !esp_timer_is_active(i->m_pixelFailTimer)){
-            i->m_pixel->off();
-            ESP_LOGD(TAG, "PIXEL");
-            xQueueReceive(i->m_timerSources, &t, 0);
-          }
-          break;
-        case TimerSources::ALT_GPIO:
-          if(!esp_timer_is_active(i->m_altActionTimer)){
-            digitalWrite(i->m_miscConfig.hkAltActionPin, !i->m_miscConfig.hkAltActionGpioState);
-            ESP_LOGD(TAG, "ALT_GPIO");
-            xQueueReceive(i->m_timerSources, &t, 0);
-          }
-          break;
-        case TimerSources::ALT_GPIO_INIT:
-          if(!esp_timer_is_active(i->m_altActionInitTimer)){
-            i->m_altActionArmed = false;
-            if (i->m_miscConfig.hkAltActionInitLedPin != 255) {
-              digitalWrite(i->m_miscConfig.hkAltActionInitLedPin, LOW);
-            }
-            ESP_LOGD(TAG, "ALT_GPIO_INIT");
-            xQueueReceive(i->m_timerSources, &t, 0);
-          }
-          break;
+void HardwareManager::handleTimer(void* arg){
+  TimerContext* context = static_cast<TimerContext*>(arg);
+  HardwareManager *i = context->hw_manager;
+  TimerSources t = context->timer_source;
+
+  switch (t) {
+    case TimerSources::GPIO_S:
+      digitalWrite(i->m_miscConfig.nfcSuccessPin, !i->m_miscConfig.nfcSuccessHL);
+      ESP_LOGD(TAG, "GPIO_S");
+      break;
+    case TimerSources::GPIO_F:
+      digitalWrite(i->m_miscConfig.nfcFailPin, !i->m_miscConfig.nfcFailHL);
+      ESP_LOGD(TAG, "GPIO_F");
+      break;
+    case TimerSources::PIXEL_S:
+    case TimerSources::PIXEL_F:
+      i->m_pixel->off();
+      ESP_LOGD(TAG, "PIXEL");
+      break;
+    case TimerSources::ALT_GPIO:
+      digitalWrite(i->m_miscConfig.hkAltActionPin, !i->m_miscConfig.hkAltActionGpioState);
+      ESP_LOGD(TAG, "ALT_GPIO");
+      break;
+    case TimerSources::ALT_GPIO_INIT:
+      i->m_altActionArmed = false;
+      if (i->m_miscConfig.hkAltActionInitLedPin != 255) {
+        digitalWrite(i->m_miscConfig.hkAltActionInitLedPin, LOW);
       }
-    } 
+      ESP_LOGD(TAG, "ALT_GPIO_INIT");
+      break;
   }
 }
 
@@ -252,8 +247,7 @@ void HardwareManager::initiator_task() {
                 if (m_miscConfig.hkAltActionInitLedPin != 255) {
                     digitalWrite(m_miscConfig.hkAltActionInitLedPin, HIGH);
                 }
-                TimerSources t = TimerSources::ALT_GPIO_INIT;
-                xQueueSend(m_timerSources, &t, 0);
+
                 esp_timer_start_once(m_altActionInitTimer, m_miscConfig.hkAltActionInitTimeout * 1000);
             }
         }
@@ -296,8 +290,6 @@ void HardwareManager::triggerAltAction() {
       if (m_miscConfig.hkAltActionPin != 255) {
           ESP_LOGI(TAG, "Triggering alt action on pin %d for %dms", m_miscConfig.hkAltActionPin, m_miscConfig.hkAltActionTimeout);
           digitalWrite(m_miscConfig.hkAltActionPin, m_miscConfig.hkAltActionGpioState);
-          TimerSources t = TimerSources::ALT_GPIO;
-          xQueueSend(m_timerSources, &t, 0);
           esp_timer_start_once(m_altActionTimer, m_miscConfig.hkAltActionTimeout * 1000);
       }
   }
@@ -319,14 +311,12 @@ void HardwareManager::feedbackTask() {
                     if (m_pixel != nullptr) {
                         auto color = m_miscConfig.neopixelSuccessColor;
                         m_pixel->set(m_pixel->RGB(color[espConfig::misc_config_t::R], color[espConfig::misc_config_t::G], color[espConfig::misc_config_t::B]));
-                        TimerSources t = TimerSources::PIXEL;
-                        xQueueSend(m_timerSources, &t, 0);
+
                         esp_timer_start_once(m_pixelSuccessTimer, m_miscConfig.neopixelSuccessTime * 1000);
                     }
                     if (m_miscConfig.nfcSuccessPin != 255) {
                         digitalWrite(m_miscConfig.nfcSuccessPin, m_miscConfig.nfcSuccessHL);
-                        TimerSources t = TimerSources::GPIO_S;
-                        xQueueSend(m_timerSources, &t, 0);
+
                         esp_timer_start_once(m_gpioSuccessTimer, m_miscConfig.nfcSuccessTime * 1000);
                     }
                     break;
@@ -338,14 +328,12 @@ void HardwareManager::feedbackTask() {
                     if (m_pixel != nullptr) {
                         auto color = m_miscConfig.neopixelFailureColor;
                         m_pixel->set(m_pixel->RGB(color[espConfig::misc_config_t::R], color[espConfig::misc_config_t::G], color[espConfig::misc_config_t::B]));
-                        TimerSources t = TimerSources::PIXEL;
-                        xQueueSend(m_timerSources, &t, 0);
+
                         esp_timer_start_once(m_pixelFailTimer, m_miscConfig.neopixelFailTime * 1000);
                     }
                     if (m_miscConfig.nfcFailPin != 255) {
                         digitalWrite(m_miscConfig.nfcFailPin, m_miscConfig.nfcFailHL);
-                        TimerSources t = TimerSources::GPIO_F;
-                        xQueueSend(m_timerSources, &t, 0);
+
                         esp_timer_start_once(m_gpioFailTimer, m_miscConfig.nfcFailTime * 1000);
                     }
                     break;
