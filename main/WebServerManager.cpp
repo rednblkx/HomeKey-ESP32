@@ -22,8 +22,7 @@ WebServerManager::WebServerManager(ConfigManager& configManager, ReaderDataManag
       m_configManager(configManager),
       m_readerDataManager(readerDataManager)
 {
-  espp::EventManager::get().add_publisher("homekit/setupCodeChanged", "WebServerManager");
-  espp::EventManager::get().add_publisher("homekit/btrPropChanged", "WebServerManager");
+  espp::EventManager::get().add_publisher("homekit/event", "WebServerManager");
   espp::EventManager::get().add_publisher("mqtt/uidPublishChanged", "WebServerManager");
   espp::EventManager::get().add_publisher("hardware/gpioPinChanged", "WebServerManager");
 }
@@ -398,9 +397,10 @@ void WebServerManager::processSaveConfigRequest(AsyncWebServerRequest *request) 
         EventValueChanged s{.name = keyStr, .str = it->valuestring};
         std::vector<uint8_t> d;
         alpaca::serialize(s, d);
-        espp::EventManager::get().publish(
-            "homekit/setupCodeChanged",
-            d);
+        HomekitEvent event{.type = HomekitEventType::SETUP_CODE_CHANGED, .data = d};
+        std::vector<uint8_t> event_data;
+        alpaca::serialize(event, event_data);
+        espp::EventManager::get().publish("homekit/event", event_data);
       } else if(strcmp(keyStr, "nfcNeopixelPin") == 0){
         rebootNeeded = true;
         rebootMsg = "Pixel GPIO pin was changed, reboot needed to apply! Rebooting...";
@@ -415,9 +415,10 @@ void WebServerManager::processSaveConfigRequest(AsyncWebServerRequest *request) 
         EventValueChanged s{.name = "btrLowThreshold", .newValue = static_cast<uint8_t>(it->valueint)};
         std::vector<uint8_t> d;
         alpaca::serialize(s, d);
-        espp::EventManager::get().publish(
-            "homekit/btrPropChanged",
-            d);
+        HomekitEvent event{.type = HomekitEventType::BTR_PROP_CHANGED, .data = d};
+        std::vector<uint8_t> event_data;
+        alpaca::serialize(event, event_data);
+        espp::EventManager::get().publish("homekit/event", event_data);
       } else if(strcmp(keyStr, "neoPixelType") == 0) {
         rebootNeeded = true;
         rebootMsg = "Pixel Type was changed, reboot needed to apply! Rebooting...";

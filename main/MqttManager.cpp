@@ -27,7 +27,7 @@ MqttManager::MqttManager(ConfigManager& configManager)
       },3072);
   espp::EventManager::get().add_publisher("lock/targetStateChanged", "MqttManager");
   espp::EventManager::get().add_publisher("lock/overrideState", "MqttManager");
-  espp::EventManager::get().add_publisher("homekit/btrPropChanged", "MqttManager");
+  espp::EventManager::get().add_publisher("homekit/event", "MqttManager");
   espp::EventManager::get().add_subscriber("nfc/event", "MqttManager", [&](const std::vector<uint8_t> &data){
     std::error_code ec;
     NfcEvent event = alpaca::deserialize<NfcEvent>(data, ec);
@@ -268,7 +268,10 @@ void MqttManager::onData(const std::string& topic, const std::string& data) {
         };
         std::vector<uint8_t> d;
         alpaca::serialize(s, d);
-        espp::EventManager::get().publish("homekit/btrPropChanged", d);
+        HomekitEvent event{.type = HomekitEventType::BTR_PROP_CHANGED, .data = d};
+        std::vector<uint8_t> event_data;
+        alpaca::serialize(event, event_data);
+        espp::EventManager::get().publish("homekit/event", event_data);
     }
 }
 
