@@ -87,13 +87,13 @@ Generally, any board should be fine. However, some may have non-genuine modules 
 > Boards costing around 4-5€ or less are likely using non-genuine ICs.
 > These boards will still work but expect worse performance
 
-You’ll mostly find boards with two black components (ferrite beads). These are not suited for impedance matching, resulting in an inefficient antenna.
+You’ll mostly find boards with two black components parallel to each other near the edge, those are SMD Multilayer RF Inductors. Those are used for the antenna impedance matching which ensure the maximum power is being transferred to the antenna and those are not exactly the best for this, resulting in a less efficient power transfer to the antenna but they are being used as they are typically cheaper.
 
-When shopping for a PN532, check pictures for two blueish components (wire-wound inductors), those are what should be used for impedance matching, which is essential for efficient power transfer to the antenna.
+When shopping for a PN532, check boards with blueish components instead, those are Wire-wound RF inductors that are much superior and assure the antenna gets the power it needs.
 
 {{< cards cols="2" >}}
-  {{< card title="Multilayer Ferrite Inductors or Beads" subtitle="You’ll mostly find boards with these two black components. These are not suited for impedance matching, resulting in a less efficient antenna." image="/images/black_components.jpeg" tag="Bad" tagColor="red" tagIcon="exclamation" >}}
-  {{< card title="Wire-wound inductors" subtitle="Check for those two blueish components, this is what should be used for impedance matching, which is essential for efficient power transfer to the antenna." image="/images/blue_components.jpeg" tag="Good" tagColor="green" tagIcon="check" >}}
+  {{< card title="SMD Multilayer RF Inductors" subtitle="You’ll mostly find boards with these two black components. They do the job, just not as much as you'd want them to, but they are cheap." image="/images/black_components.jpeg" tag="Meh" tagColor="red" tagIcon="exclamation" >}}
+  {{< card title="Wire-wound RF inductors" subtitle="Check for those two blueish components, this is what should be used for impedance matching, which is essential for efficient power transfer to the antenna." image="/images/blue_components.jpeg" tag="Best" tagColor="green" tagIcon="check" >}}
 {{< /cards >}}
 
 **Note:** These boards might still not be at peak performance but should have a range of about 3-4cm and be more reliable.
