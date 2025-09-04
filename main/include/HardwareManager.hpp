@@ -45,6 +45,11 @@ public:
      */
     void showFailureFeedback();
 
+    /**
+     * @brief Triggers the alternative GPIO pin action.
+     */
+    void triggerAltAction();
+
 private:
     /**
      * @enum FeedbackType
@@ -59,7 +64,8 @@ private:
       GPIO_S,
       GPIO_F,
       PIXEL,
-      ALT_GPIO
+      ALT_GPIO,
+      ALT_GPIO_INIT
     };
 
     // --- FreeRTOS Task Management ---
@@ -68,6 +74,10 @@ private:
 
     static void lockControlTaskEntry(void* instance);
     void lockControlTask();
+
+    static void initiator_task_entry(void* arg);
+    void initiator_task();
+    static void IRAM_ATTR initiator_isr_handler(void* arg);
 
     static void handleTimer(void *instance);
     
@@ -81,6 +91,7 @@ private:
     esp_timer_handle_t m_pixelSuccessTimer;
     esp_timer_handle_t m_pixelFailTimer;
     esp_timer_handle_t m_altActionTimer;
+    esp_timer_handle_t m_altActionInitTimer;
 
     TaskHandle_t m_feedbackTaskHandle;
     QueueHandle_t m_feedbackQueue;
@@ -88,7 +99,12 @@ private:
     TaskHandle_t m_lockControlTaskHandle;
     QueueHandle_t m_lockControlQueue;
 
+    TaskHandle_t m_initiatorTaskHandle;
+    QueueHandle_t m_initiatorQueue;
+
     QueueHandle_t m_timerSources;
+
+    bool m_altActionArmed = false;
     
     static const char* TAG;
 };

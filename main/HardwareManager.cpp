@@ -58,6 +58,11 @@ HardwareManager::HardwareManager(const espConfig::misc_config_t& miscConfig)
         }
       }, 3072);
   espp::EventManager::get().add_publisher("lock/updateState", "HardwareManager");
+  espp::EventManager::get().add_subscriber(
+      "nfc/AltAction", "HardwareManager",
+      [&](const std::vector<uint8_t> &data) {
+        triggerAltAction();
+      }, 3072);
 }
 
 void HardwareManager::begin() {
@@ -76,13 +81,18 @@ void HardwareManager::begin() {
         pinMode(m_miscConfig.gpioActionPin, OUTPUT);
     }
     if (m_miscConfig.hkAltActionInitPin != 255) {
-      pinMode(m_miscConfig.hkAltActionInitPin, INPUT);
+      pinMode(m_miscConfig.hkAltActionInitPin, INPUT_PULLUP);
       if (m_miscConfig.hkAltActionPin != 255) {
         pinMode(m_miscConfig.hkAltActionPin, OUTPUT);
       }
       if (m_miscConfig.hkAltActionInitLedPin != 255) {
         pinMode(m_miscConfig.hkAltActionInitLedPin, OUTPUT);
       }
+      m_initiatorQueue = xQueueCreate(1, sizeof(uint8_t));
+      xTaskCreateUniversal(initiator_task_entry, "initiator_task", 2048, this, 1, &m_initiatorTaskHandle, 1);
+      gpio_install_isr_service(0);
+      gpio_set_intr_type((gpio_num_t)m_miscConfig.hkAltActionInitPin, GPIO_INTR_NEGEDGE);
+      gpio_isr_handler_add((gpio_num_t)m_miscConfig.hkAltActionInitPin, initiator_isr_handler, (void*) this);
     }
 
     // --- Initialize NeoPixel ---
@@ -121,11 +131,17 @@ void HardwareManager::begin() {
             .arg = (void*) this,
             .name = "altActionTimer"
     };
+    const esp_timer_create_args_t altActionInit_timer_args = {
+            .callback = &handleTimer,
+            .arg = (void*) this,
+            .name = "altActionInitTimer"
+    };
     esp_timer_create(&gpioS_timer_args, &m_gpioSuccessTimer);
     esp_timer_create(&gpioF_timer_args, &m_gpioFailTimer);
     esp_timer_create(&pixelS_timer_args, &m_pixelSuccessTimer);
     esp_timer_create(&pixelF_timer_args, &m_pixelFailTimer);
     esp_timer_create(&altAction_timer_args, &m_altActionTimer);
+    esp_timer_create(&altActionInit_timer_args, &m_altActionInitTimer);
 
     m_timerSources = xQueueCreate(6, sizeof(TimerSources));
 
@@ -134,7 +150,6 @@ void HardwareManager::begin() {
 
     m_lockControlQueue = xQueueCreate(5, sizeof(int));
     xTaskCreateUniversal(lockControlTaskEntry, "lock_control_task", 4096, this, 2, &m_lockControlTaskHandle, 1);
-    
     ESP_LOGI(TAG, "Hardware initialization complete.");
 }
 
@@ -192,10 +207,52 @@ void HardwareManager::handleTimer(void* instance){
           }
           break;
         case TimerSources::ALT_GPIO:
+          if(!esp_timer_is_active(i->m_altActionTimer)){
+            digitalWrite(i->m_miscConfig.hkAltActionPin, !i->m_miscConfig.hkAltActionGpioState);
+            ESP_LOGD(TAG, "ALT_GPIO");
+            xQueueReceive(i->m_timerSources, &t, 0);
+          }
+          break;
+        case TimerSources::ALT_GPIO_INIT:
+          if(!esp_timer_is_active(i->m_altActionInitTimer)){
+            i->m_altActionArmed = false;
+            if (i->m_miscConfig.hkAltActionInitLedPin != 255) {
+              digitalWrite(i->m_miscConfig.hkAltActionInitLedPin, LOW);
+            }
+            ESP_LOGD(TAG, "ALT_GPIO_INIT");
+            xQueueReceive(i->m_timerSources, &t, 0);
+          }
           break;
       }
     } 
   }
+}
+
+void HardwareManager::initiator_task_entry(void* arg) {
+    static_cast<HardwareManager*>(arg)->initiator_task();
+}
+
+void IRAM_ATTR HardwareManager::initiator_isr_handler(void* arg) {
+    uint8_t dummy = 0;
+    xQueueSendFromISR(static_cast<HardwareManager*>(arg)->m_initiatorQueue, &dummy, NULL);
+}
+
+void HardwareManager::initiator_task() {
+    uint8_t dummy;
+    while (true) {
+        if (xQueueReceive(m_initiatorQueue, &dummy, portMAX_DELAY)) {
+            if (!m_altActionArmed) {
+                ESP_LOGI(TAG, "Alt action armed for %dms", m_miscConfig.hkAltActionInitTimeout);
+                m_altActionArmed = true;
+                if (m_miscConfig.hkAltActionInitLedPin != 255) {
+                    digitalWrite(m_miscConfig.hkAltActionInitLedPin, HIGH);
+                }
+                TimerSources t = TimerSources::ALT_GPIO_INIT;
+                xQueueSend(m_timerSources, &t, 0);
+                esp_timer_start_once(m_altActionInitTimer, m_miscConfig.hkAltActionInitTimeout * 1000);
+            }
+        }
+    }
 }
 
 void HardwareManager::lockControlTaskEntry(void* instance) {
@@ -227,6 +284,18 @@ void HardwareManager::lockControlTask() {
           espp::EventManager::get().publish("lock/updateState", d);
         }
     }
+}
+
+void HardwareManager::triggerAltAction() {
+  if (m_altActionArmed) {
+      if (m_miscConfig.hkAltActionPin != 255) {
+          ESP_LOGI(TAG, "Triggering alt action on pin %d for %dms", m_miscConfig.hkAltActionPin, m_miscConfig.hkAltActionTimeout);
+          digitalWrite(m_miscConfig.hkAltActionPin, m_miscConfig.hkAltActionGpioState);
+          TimerSources t = TimerSources::ALT_GPIO;
+          xQueueSend(m_timerSources, &t, 0);
+          esp_timer_start_once(m_altActionTimer, m_miscConfig.hkAltActionTimeout * 1000);
+      }
+  }
 }
 
 void HardwareManager::feedbackTaskEntry(void* instance) {

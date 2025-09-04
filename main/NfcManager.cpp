@@ -25,6 +25,7 @@ NfcManager::NfcManager(ReaderDataManager& readerDataManager,const std::array<uin
 {
   espp::EventManager::get().add_publisher("nfc/HomeKeyTap", "NfcManager");
   espp::EventManager::get().add_publisher("nfc/TagTap", "NfcManager");
+  espp::EventManager::get().add_publisher("nfc/AltAction", "NfcManager");
   espp::EventManager::get().add_subscriber("nfc/updateECP", "NfcManager", [&](const std::vector<uint8_t> &){
     updateEcpData();
   }, 3072);
@@ -186,6 +187,7 @@ void NfcManager::handleHomeKeyAuth() {
         std::vector<uint8_t> d;
         alpaca::serialize(s, d);
         espp::EventManager::get().publish("nfc/HomeKeyTap", d);
+        espp::EventManager::get().publish("nfc/AltAction", {});
     } else {
         ESP_LOGW(TAG, "HomeKey authentication failed.");
         EventHKTap s{.status = false, .issuerId = {}, .endpointId = {}, .readerId = {} };
