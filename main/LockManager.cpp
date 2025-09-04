@@ -15,7 +15,6 @@ LockManager::LockManager(HardwareManager& hardwareManager, const espConfig::misc
       m_targetState(lockStates::LOCKED)
 {
   espp::EventManager::get().add_publisher("lock/stateChanged", "LockManager");
-  espp::EventManager::get().add_publisher("lock/feedback", "LockManager");
   espp::EventManager::get().add_publisher("lock/action", "LockManager");
   espp::EventManager::get().add_subscriber(
       "lock/overrideState", "LockManager",
@@ -60,9 +59,17 @@ LockManager::LockManager(HardwareManager& hardwareManager, const espConfig::misc
         NfcEvent event = alpaca::deserialize<NfcEvent>(data, ec);
         if(ec) return;
         if(event.type == HOMEKEY_TAP) {
+          ESP_LOGI(TAG, "Processing NFC tap request...");
           EventHKTap s = alpaca::deserialize<EventHKTap>(event.data, ec);
-          if (!ec) {
-            processNfcRequest(s.status);
+          if (!ec && s.status) {
+            if (m_miscConfig.lockAlwaysUnlock) {
+              setTargetState(lockStates::UNLOCKED, Source::NFC);
+            } else if (m_miscConfig.lockAlwaysLock) {
+              setTargetState(lockStates::LOCKED, Source::NFC);
+            } else {
+              int newState = (m_currentState == lockStates::LOCKED) ? lockStates::UNLOCKED : lockStates::LOCKED;
+              setTargetState(newState, Source::NFC);
+            }
           }
         }
       },
@@ -144,29 +151,6 @@ void LockManager::setTargetState(uint8_t state, Source source) {
     if (m_targetState == lockStates::UNLOCKED && isMomentarySource) {
         ESP_LOGI(TAG, "Starting momentary unlock timer for %d ms.", m_miscConfig.gpioActionMomentaryTimeout);
         esp_timer_start_once(momentaryStateTimer, m_miscConfig.gpioActionMomentaryTimeout * 1000);
-    }
-}
-
-void LockManager::processNfcRequest(bool status) {
-    ESP_LOGI(TAG, "Processing NFC tap request...");
-    if(status){
-      EventBinaryStatus s{status};
-      std::vector<uint8_t> d;
-      alpaca::serialize(s, d);
-      espp::EventManager::get().publish("lock/feedback", d);
-      if (m_miscConfig.lockAlwaysUnlock) {
-        setTargetState(lockStates::UNLOCKED, Source::NFC);
-      } else if (m_miscConfig.lockAlwaysLock) {
-        setTargetState(lockStates::LOCKED, Source::NFC);
-      } else {
-        int newState = (m_currentState == lockStates::LOCKED) ? lockStates::UNLOCKED : lockStates::LOCKED;
-        setTargetState(newState, Source::NFC);
-      }
-    } else {
-      EventBinaryStatus s{false};
-      std::vector<uint8_t> d;
-      alpaca::serialize(s, d);
-      espp::EventManager::get().publish("lock/feedback", d);
     }
 }
 

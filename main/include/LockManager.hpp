@@ -57,14 +57,6 @@ public:
     void setTargetState(uint8_t state, Source source);
 
     /**
-     * @brief Processes a request originating from an NFC tap.
-     * @param status NFC Interaction result
-     * This method contains the specific business logic for NFC (always unlock, toggle, etc.).
-     * Probably should be moved somewhere else
-     */
-    void processNfcRequest(bool status);
-
-    /**
      * @brief Forces the manager's internal state to match an external report.
      * This method updates the state WITHOUT triggering a physical action.
      * Useful for syncing with external state changes reported via MQTT.
