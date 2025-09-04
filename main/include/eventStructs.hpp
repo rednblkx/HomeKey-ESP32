@@ -47,3 +47,13 @@ struct NfcEvent {
     NfcEventType type;
     std::vector<uint8_t> data;
 };
+
+enum HomekitEventType : uint8_t {
+    SETUP_CODE_CHANGED,
+    BTR_PROP_CHANGED,
+};
+
+struct HomekitEvent {
+    HomekitEventType type;
+    std::vector<uint8_t> data;
+};
