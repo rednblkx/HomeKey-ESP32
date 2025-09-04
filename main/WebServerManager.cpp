@@ -1,3 +1,4 @@
+#include <cstring>
 #include <event_manager.hpp>
 #include "WebServerManager.hpp"
 #include "ConfigManager.hpp"
@@ -385,15 +386,15 @@ void WebServerManager::processSaveConfigRequest(AsyncWebServerRequest *request) 
         it = it->next;
         continue;
       }
-      const char* keyStr = it->string;
-      if(strcmp(keyStr, "nfcTagNoPublish") == 0){
+      const std::string keyStr = it->string;
+      if(keyStr == "nfcTagNoPublish"){
         EventBinaryStatus s{.status = (bool)cJSON_IsTrue(it)};
         std::vector<uint8_t> d;
         alpaca::serialize(s, d);
         espp::EventManager::get().publish(
             "mqtt/uidPublishChanged",
             d);
-      } else if(strcmp(keyStr, "setupCode") == 0){
+      } else if(keyStr == "setupCode"){
         EventValueChanged s{.name = keyStr, .str = it->valuestring};
         std::vector<uint8_t> d;
         alpaca::serialize(s, d);
@@ -401,17 +402,17 @@ void WebServerManager::processSaveConfigRequest(AsyncWebServerRequest *request) 
         std::vector<uint8_t> event_data;
         alpaca::serialize(event, event_data);
         espp::EventManager::get().publish("homekit/event", event_data);
-      } else if(strcmp(keyStr, "nfcNeopixelPin") == 0){
+      } else if(keyStr == "nfcNeopixelPin"){
         rebootNeeded = true;
         rebootMsg = "Pixel GPIO pin was changed, reboot needed to apply! Rebooting...";
-      } else if(strcmp(keyStr, "nfcSuccessPin") == 0 || strcmp(keyStr, "nfcFailPin") == 0 || strcmp(keyStr, "gpioActionPin") == 0){
+      } else if(keyStr == "nfcSuccessPin" || keyStr == "nfcFailPin" || keyStr == "gpioActionPin"){
         EventValueChanged s{.name = keyStr, .oldValue = static_cast<uint8_t>(configSchemaItem->valueint), .newValue = static_cast<uint8_t>(it->valueint)};
         std::vector<uint8_t> d;
         alpaca::serialize(s, d);
         espp::EventManager::get().publish(
             "hardware/gpioPinChanged",
             d);
-      } else if(strcmp(keyStr, "btrLowStatusThreshold") == 0){
+      } else if(keyStr == "btrLowStatusThreshold"){
         EventValueChanged s{.name = "btrLowThreshold", .newValue = static_cast<uint8_t>(it->valueint)};
         std::vector<uint8_t> d;
         alpaca::serialize(s, d);
@@ -419,11 +420,11 @@ void WebServerManager::processSaveConfigRequest(AsyncWebServerRequest *request) 
         std::vector<uint8_t> event_data;
         alpaca::serialize(event, event_data);
         espp::EventManager::get().publish("homekit/event", event_data);
-      } else if(strcmp(keyStr, "neoPixelType") == 0) {
+      } else if(keyStr == "neoPixelType") {
         rebootNeeded = true;
         rebootMsg = "Pixel Type was changed, reboot needed to apply! Rebooting...";
-      } else if(strcmp(keyStr, "gpioActionPin") == 0 && it->valueint != 255){
-        cJSON_SetBoolValue(cJSON_GetObjectItem(obj, "hkDumbSwitchMode"), false);
+      } else if(keyStr == "gpioActionPin" && it->valueint != 255){
+        cJSON_AddFalseToObject(obj, "hkDumbSwitchMode");
       }
       it = it->next;
     }
