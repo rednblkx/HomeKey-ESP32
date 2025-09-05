@@ -97,7 +97,7 @@ void HardwareManager::begin() {
         pinMode(m_miscConfig.hkAltActionInitLedPin, OUTPUT);
       }
       m_initiatorQueue = xQueueCreate(1, sizeof(uint8_t));
-      xTaskCreateUniversal(initiator_task_entry, "initiator_task", 2048, this, 1, &m_initiatorTaskHandle, 1);
+      xTaskCreateUniversal(initiator_task_entry, "initiator_task", 2048, this, 3, &m_initiatorTaskHandle, 1);
       gpio_install_isr_service(0);
       gpio_set_intr_type((gpio_num_t)m_miscConfig.hkAltActionInitPin, GPIO_INTR_NEGEDGE);
       gpio_isr_handler_add((gpio_num_t)m_miscConfig.hkAltActionInitPin, initiator_isr_handler, (void*) this);
@@ -165,10 +165,10 @@ void HardwareManager::begin() {
     esp_timer_create(&altActionInit_timer_args, &m_altActionInitTimer);
 
     m_feedbackQueue = xQueueCreate(5, sizeof(FeedbackType));
-    xTaskCreateUniversal(feedbackTaskEntry, "feedback_task", 4096, this, 2, &m_feedbackTaskHandle, 1);
+    xTaskCreateUniversal(feedbackTaskEntry, "feedback_task", 4096, this, 3, &m_feedbackTaskHandle, 1);
 
     m_lockControlQueue = xQueueCreate(5, sizeof(int));
-    xTaskCreateUniversal(lockControlTaskEntry, "lock_control_task", 4096, this, 2, &m_lockControlTaskHandle, 1);
+    xTaskCreateUniversal(lockControlTaskEntry, "lock_control_task", 4096, this, 3, &m_lockControlTaskHandle, 1);
     ESP_LOGI(TAG, "Hardware initialization complete.");
 }
 
