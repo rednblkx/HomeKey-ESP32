@@ -50,6 +50,8 @@ struct NfcEvent {
 enum HomekitEventType : uint8_t {
     SETUP_CODE_CHANGED,
     BTR_PROP_CHANGED,
+    ACCESSDATA_CHANGED,
+    DEBUG_AUTH_FLOW
 };
 
 struct HomekitEvent {
