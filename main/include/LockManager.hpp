@@ -36,7 +36,7 @@ public:
      * @param hardwareManager Reference to the manager that controls physical GPIOs.
      * @param configManager Reference to the application configuration manager.
      */
-    LockManager(HardwareManager& hardwareManager, const espConfig::misc_config_t& miscConfig);
+    LockManager(const espConfig::misc_config_t& miscConfig);
 
     /**
      * @brief Initializes the lock state to its default.
@@ -66,7 +66,6 @@ public:
     void overrideState(uint8_t cstate, uint8_t tstate);
 
 private:
-    HardwareManager& m_hardwareManager;
     const espConfig::misc_config_t& m_miscConfig;
 
     uint8_t m_currentState;
