@@ -26,7 +26,7 @@ HardwareManager::HardwareManager(const espConfig::misc_config_t& miscConfig)
           setLockOutput(s.targetState);
         }
       }, 3072);
-  espp::EventManager::get().add_subscriber("nfc/event", "MqttManager", [&](const std::vector<uint8_t> &data){
+  espp::EventManager::get().add_subscriber("nfc/event", "HardwareManager", [&](const std::vector<uint8_t> &data){
     std::error_code ec;
     NfcEvent event = alpaca::deserialize<NfcEvent>(data, ec);
     if(ec) return;
