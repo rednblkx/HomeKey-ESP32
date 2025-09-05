@@ -11,7 +11,7 @@
 
 const char* MqttManager::TAG = "MqttManager";
 
-MqttManager::MqttManager(ConfigManager& configManager)
+MqttManager::MqttManager(const ConfigManager& configManager)
     : m_mqttConfig(configManager.getConfig<espConfig::mqttConfig_t>()),
       m_client(nullptr),
       device_name(configManager.getConfig<espConfig::misc_config_t>().deviceName)

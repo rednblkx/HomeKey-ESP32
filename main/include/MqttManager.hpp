@@ -22,7 +22,7 @@ public:
      * @param lockManager Reference to the core lock logic manager.
      * @param configManager Reference to the application configuration manager.
      */
-    MqttManager(ConfigManager& configManager);
+    MqttManager(const ConfigManager& configManager);
 
     /**
      * @brief Initializes and starts the MQTT client.
