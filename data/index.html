@@ -66,7 +66,6 @@
       }
       let loaderEl = document.createElement("span");
       loaderEl.className = "loader";
-      loaderEl.style="margin-top: .5rem;";
       document.querySelector("#main > span").insertAdjacentElement("afterend",loaderEl);
       let element = document.querySelector("#component");
       if(element){
@@ -79,7 +78,6 @@
       let main = document.querySelector("#main");
       let el = document.createElement("div");
       el.id = "component";
-      el.style = "display: flex;flex-direction: column;margin-bottom: 1rem;";
       let string;
       if(!sessionStorage.getItem(`htmlCache-${name}`) || dev){
         let data = await fetch(`fragment/${name}.html`);
@@ -322,55 +320,51 @@
   </script>
 </head>
 
-<body style="display: flex; flex-direction: column;">
-  <div id="top-bar" style="display: flex;justify-content: space-between;margin-bottom: 1rem;">
-    <div style="display: inline-flex;align-items: center;gap: 8px;">
+<body class="d-flex flex-col">
+  <div id="top-bar">
+    <div id="top-bar-logo">
       <img src="assets/logo-white.webp" width="64px">
       <div>
-        <h2 style="text-align: center;margin-bottom: 0;margin-top: 0;background: none;padding: 0!important;margin: 0!important;">HomeKey-ESP32</h1>
-        <p style="text-align: center;margin-top: 0;margin-bottom: 0;">WiFi RSSI: <span id="wifi-rssi-signal"></span></p>
-        <p style="text-align: center;margin-top: 0;margin-bottom: 0;">version: %VERSION%</p>
+        <h2 class="my-0">HomeKey-ESP32</h2>
+        <p class="my-0">WiFi RSSI: <span id="wifi-rssi-signal"></span></p>
+        <p class="my-0">version: %VERSION%</p>
       </div>
     </div>
-    <div id="top-btns" style="display: flex;gap: 8px;align-items: center;">
-      <button title="Start AP" type="button" id="restart-btn"
-        style="background-color: #ffffff2e;border: 1px solid white;padding: 0.5rem;cursor: pointer;gap: 8px;"
-        onclick="start_ap()" ontouchstart="this.style['background-color']='#4040402e'"
-        ontouchend="this.style['background-color']='#ffffff2e'">
-        <img src="assets/ap-icon.webp" width="25px" style="object-fit: contain;">
-        <p style="margin: 0;">Start AP</p>
+    <div id="top-btns">
+      <button title="Start AP" type="button" class="top-btn"
+        onclick="start_ap()" ontouchstart="this.classList.add('active-touch')"
+        ontouchend="this.classList.remove('active-touch')">
+        <img src="assets/ap-icon.webp" width="25px">
+        <p>Start AP</p>
       </button>
-      <button title="Reboot" type="button" id="restart-btn"
-        style="background-color: #ffffff2e;border: 1px solid white;padding: 0.5rem;cursor: pointer;gap: 8px;"
-        onclick="reboot()" ontouchstart="this.style['background-color']='#4040402e'"
-        ontouchend="this.style['background-color']='#ffffff2e'">
-        <img src="assets/restart-R.webp" width="25px" style="object-fit: contain;">
-        <p style="margin: 0;">Reboot</p>
+      <button title="Reboot" type="button" class="top-btn restart-btn"
+        onclick="reboot()" ontouchstart="this.classList.add('active-touch')"
+        ontouchend="this.classList.remove('active-touch')">
+        <img src="assets/restart-R.webp" width="25px">
+        <p>Reboot</p>
       </button>
-      <button title="Reset HomeKit pairings" type="button"
-        style="background-color: #ffffff2e;border: 1px solid white;padding: 0.5rem;cursor: pointer;gap: 8px;"
-        onclick="f_reset_hk()" ontouchstart="this.style['background-color']='#4040402e'"
-        ontouchend="this.style['background-color']='#ffffff2e'">
-        <img src="assets/trashcan.webp" width="25px" style="object-fit: contain;">
-        <p style="margin: 0;">Reset HomeKit</p>
+      <button title="Reset HomeKit pairings" type="button" class="top-btn"
+        onclick="f_reset_hk()" ontouchstart="this.classList.add('active-touch')"
+        ontouchend="this.classList.remove('active-touch')">
+        <img src="assets/trashcan.webp" width="25px">
+        <p>Reset HomeKit</p>
       </button>
-      <button title="Reset WiFi credentials" type="button"
-        style="background-color: #ffffff2e;border: 1px solid white;padding: 0.5rem;cursor: pointer;gap: 8px;"
-        onclick="reset_wifi()" ontouchstart="this.style['background-color']='#4040402e'"
-        ontouchend="this.style['background-color']='#ffffff2e'">
-        <img src="assets/trashcan.webp" width="25px" style="object-fit: contain;">
-        <p style="margin: 0;">Reset WiFi</p>
+      <button title="Reset WiFi credentials" type="button" class="top-btn"
+        onclick="reset_wifi()" ontouchstart="this.classList.add('active-touch')"
+        ontouchend="this.classList.remove('active-touch')">
+        <img src="assets/trashcan.webp" width="25px">
+        <p>Reset WiFi</p>
       </button>
     </div>
   </div>
-  <div id="main" style="border: 2px groove #8e8271;padding: 1rem;background-color: #003232;margin-bottom: 1rem;align-self: center;">
-    <div style="gap: 1rem; display: flex;justify-content: center;">
-      <button data-type="hkinfo" onclick='addComponent(this, false)' style="padding: .6rem;cursor: pointer;" rel="noopener noreferrer">HK Info</a>
-      <button data-type="mqtt" onclick='addComponent(this, false)' style="padding: .6rem;cursor: pointer;" rel="noopener noreferrer">MQTT</a>
-      <button data-type="actions" onclick='addComponent(this, false)' style="padding: .6rem;cursor: pointer;" rel="noopener noreferrer">Actions</a>
-      <button data-type="misc" onclick='addComponent(this, false)' style="padding: .6rem;cursor: pointer;" rel="noopener noreferrer">Misc</a>
+  <div id="main">
+    <div id="main-nav">
+      <button data-type="hkinfo" onclick='addComponent(this, false)' rel="noopener noreferrer">HK Info</a>
+      <button data-type="mqtt" onclick='addComponent(this, false)' rel="noopener noreferrer">MQTT</a>
+      <button data-type="actions" onclick='addComponent(this, false)' rel="noopener noreferrer">Actions</a>
+      <button data-type="misc" onclick='addComponent(this, false)' rel="noopener noreferrer">Misc</a>
     </div>
-    <span style="margin-top: 1rem;border: 1px dashed #8e8271;box-sizing: border-box;width: 100%;height: 1px;display: inline-block;"></span>
+    <span id="main-divider"></span>
   </div>
 </body>
 
