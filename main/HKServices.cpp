@@ -31,8 +31,8 @@ HomeKitLock::NFCAIS::NFCAIS(const espConfig::misc_config_t& config) {
     new Characteristic::Manufacturer("rednblkx");
     new Characteristic::Model("HomeKey-ESP32");
     new Characteristic::Name(config.deviceName.c_str());
-    const esp_app_desc_t* app_desc = esp_app_get_description();
-    new Characteristic::FirmwareRevision(app_desc->version);
+    std::string app_desc = esp_app_get_description()->version;
+    new Characteristic::FirmwareRevision(app_desc.erase(app_desc.erase(0,1).find_first_of("-")).c_str());
     uint8_t mac[6];
     esp_read_mac(mac, ESP_MAC_BT);
     const std::string macStr = fmt::format("HK-{:02X}{:02X}{:02X}{:02X}", mac[2], mac[3], mac[4], mac[5]);
