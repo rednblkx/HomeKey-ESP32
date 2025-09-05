@@ -24,7 +24,6 @@ WebServerManager::WebServerManager(ConfigManager& configManager, ReaderDataManag
       m_readerDataManager(readerDataManager)
 {
   espp::EventManager::get().add_publisher("homekit/event", "WebServerManager");
-  espp::EventManager::get().add_publisher("mqtt/uidPublishChanged", "WebServerManager");
   espp::EventManager::get().add_publisher("hardware/gpioPinChanged", "WebServerManager");
 }
 
@@ -387,14 +386,7 @@ void WebServerManager::processSaveConfigRequest(AsyncWebServerRequest *request) 
         continue;
       }
       const std::string keyStr = it->string;
-      if(keyStr == "nfcTagNoPublish"){
-        EventBinaryStatus s{.status = (bool)cJSON_IsTrue(it)};
-        std::vector<uint8_t> d;
-        alpaca::serialize(s, d);
-        espp::EventManager::get().publish(
-            "mqtt/uidPublishChanged",
-            d);
-      } else if(keyStr == "setupCode"){
+      if(keyStr == "setupCode"){
         EventValueChanged s{.name = keyStr, .str = it->valuestring};
         std::vector<uint8_t> d;
         alpaca::serialize(s, d);

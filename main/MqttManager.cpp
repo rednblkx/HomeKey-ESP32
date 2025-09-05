@@ -51,42 +51,6 @@ MqttManager::MqttManager(ConfigManager& configManager)
         break;
     }
   }, 3072);
-  espp::EventManager::get().add_subscriber("mqtt/uidPublishChanged", "MqttManager", [&](const std::vector<uint8_t> &data){
-    std::error_code ec;
-    EventBinaryStatus s = alpaca::deserialize<EventBinaryStatus>(data, ec);
-    if(!ec){
-      if(s.status){
-        std::string rfidConfigTopic = "homeassistant/tag/" + m_mqttConfig.mqttClientId + "/rfid/config";
-        publish(rfidConfigTopic, "");
-      } else {
-        cJSON *device = cJSON_CreateObject();
-        cJSON *identifiers = cJSON_CreateArray();
-        cJSON_AddItemToArray(identifiers, cJSON_CreateString(deviceID.c_str()));
-        cJSON_AddItemToObject(device, "identifiers", identifiers);
-        cJSON_AddStringToObject(device, "name", device_name.c_str());
-        cJSON_AddStringToObject(device, "manufacturer", "rednblkx");
-        cJSON_AddStringToObject(device, "model", "HomeKey-ESP32");
-        cJSON_AddStringToObject(device, "sw_version", esp_app_get_description()->version);
-        uint8_t mac[6];
-        esp_read_mac(mac, ESP_MAC_BT);
-        const std::string macStr = fmt::format("HK-{:02X}{:02X}{:02X}{:02X}", mac[2], mac[3], mac[4], mac[5]);
-        cJSON_AddStringToObject(device, "serial_number", macStr.c_str());
-        cJSON *rfidPayload = cJSON_CreateObject();
-        cJSON_AddStringToObject(rfidPayload, "name", "NFC Tag");
-        cJSON_AddStringToObject(rfidPayload, "unique_id", deviceID.c_str());
-        cJSON_AddItemToObject(rfidPayload, "device", device);
-        cJSON_AddStringToObject(rfidPayload, "topic", m_mqttConfig.hkTopic.c_str());
-        cJSON_AddStringToObject(rfidPayload, "value_template", "{{ value_json.uid }}");
-        char *payload_cstr = cJSON_Print(rfidPayload);
-        std::string payload(payload_cstr);
-        free(payload_cstr);
-        std::string rfidConfigTopic = "homeassistant/tag/" + m_mqttConfig.mqttClientId + "/rfid/config";
-        publish(rfidConfigTopic, payload, 1, true);
-        cJSON_Delete(rfidPayload);
-        cJSON_Delete(device);
-      }
-    }
-  }, 4096);
 }
 
 bool MqttManager::begin(std::string deviceID) {
