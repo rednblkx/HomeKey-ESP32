@@ -26,6 +26,7 @@ HomeKitLock::HomeKitLock(std::function<void(int)> &conn_cb, LockManager& lockMan
         esp_restart();
     }
     s_instance = this;
+    espp::EventManager::get().add_publisher("homekit/internal", "HomeKitLock");
     espp::EventManager::get().add_subscriber(
         "lock/stateChanged", "HomeKitLock",
         [&](const std::vector<uint8_t> &data) {
@@ -54,6 +55,8 @@ HomeKitLock::HomeKitLock(std::function<void(int)> &conn_cb, LockManager& lockMan
                 updateBatteryStatus(m_batteryLevel->getVal(), s.newValue);
               }
               break;
+            default:
+            break;
           }
         }, 3072); 
 }
@@ -172,10 +175,10 @@ void HomeKitLock::setupDebugCommands() {
     EventValueChanged s{.newValue = static_cast<uint8_t>(hkFlow)};
     std::vector<uint8_t> d;
     alpaca::serialize(s, d);
-    NfcEvent event{.type=FORCE_AUTH_FLOW, .data=d};
+    HomekitEvent event{.type=DEBUG_AUTH_FLOW, .data=d};
     std::vector<uint8_t> event_data;
     alpaca::serialize(event, event_data);
-    espp::EventManager::get().publish("nfc/event", event_data);
+    espp::EventManager::get().publish("homekit/internal", event_data);
     });
     new SpanUserCommand('M', "Erase MQTT Config and restart", [](const char*){s_instance->m_configManager.deleteConfig<espConfig::mqttConfig_t>();});
     new SpanUserCommand('N', "Btr status low", [](const char* arg) {

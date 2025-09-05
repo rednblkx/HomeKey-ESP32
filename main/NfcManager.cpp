@@ -24,15 +24,15 @@ NfcManager::NfcManager(ReaderDataManager& readerDataManager,const std::array<uin
       m_ecpData({ 0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0 })
 {
   espp::EventManager::get().add_publisher("nfc/event", "NfcManager");
-  espp::EventManager::get().add_subscriber("nfc/event", "NfcManager", [&](const std::vector<uint8_t> &data){
+  espp::EventManager::get().add_subscriber("homekit/internal", "NfcManager", [&](const std::vector<uint8_t> &data){
     std::error_code ec;
-    NfcEvent event = alpaca::deserialize<NfcEvent>(data, ec);
+    HomekitEvent event = alpaca::deserialize<HomekitEvent>(data, ec);
     if(ec) return;
     switch(event.type) {
-      case UPDATE_ECP:
+      case ACCESSDATA_CHANGED:
         updateEcpData();
         break;
-      case FORCE_AUTH_FLOW: {
+      case DEBUG_AUTH_FLOW: {
         EventValueChanged s = alpaca::deserialize<EventValueChanged>(event.data, ec);
         if(!ec){
           authFlow = KeyFlow(s.newValue);
