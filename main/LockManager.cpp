@@ -8,9 +8,8 @@
 
 const char* LockManager::TAG = "LockManager";
 
-LockManager::LockManager(HardwareManager& hardwareManager, const espConfig::misc_config_t& miscConfig)
-    : m_hardwareManager(hardwareManager),
-      m_miscConfig(miscConfig),
+LockManager::LockManager(const espConfig::misc_config_t& miscConfig)
+    : m_miscConfig(miscConfig),
       m_currentState(lockStates::LOCKED),
       m_targetState(lockStates::LOCKED)
 {
