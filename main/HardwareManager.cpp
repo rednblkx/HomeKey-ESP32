@@ -70,6 +70,7 @@ HardwareManager::HardwareManager(const espConfig::misc_config_t& miscConfig)
         }
       }, 3072);
   espp::EventManager::get().add_publisher("lock/updateState", "HardwareManager");
+  espp::EventManager::get().add_publisher("lock/altAction", "HardwareManager");
 }
 
 void HardwareManager::begin() {
@@ -286,7 +287,8 @@ void HardwareManager::lockControlTask() {
 }
 
 void HardwareManager::triggerAltAction() {
-  if (m_altActionArmed) {
+  if (m_altActionArmed) { 
+      espp::EventManager::get().publish("lock/altAction", {});
       if (m_miscConfig.hkAltActionPin != 255) {
           ESP_LOGI(TAG, "Triggering alt action on pin %d for %dms", m_miscConfig.hkAltActionPin, m_miscConfig.hkAltActionTimeout);
           digitalWrite(m_miscConfig.hkAltActionPin, m_miscConfig.hkAltActionGpioState);
