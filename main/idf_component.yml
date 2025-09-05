@@ -4,5 +4,4 @@ dependencies:
   espressif/arduino-esp32: ^3.3.0~1
   joltwallet/littlefs: ^1.20.1
   espp/event_manager: ^1.0.21
-  bblanchon/arduinojson: ^7.4.2
   espp/serialization: ^1.0.22

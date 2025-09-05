@@ -6,7 +6,7 @@
 #include <esp_log.h>
 #include <esp_app_desc.h>
 #include "eventStructs.hpp"
-#include <ArduinoJson.hpp>
+#include <cJSON.h>
 #include <vector>
 
 const char* MqttManager::TAG = "MqttManager";
@@ -59,23 +59,27 @@ MqttManager::MqttManager(ConfigManager& configManager)
         std::string rfidConfigTopic = "homeassistant/tag/" + m_mqttConfig.mqttClientId + "/rfid/config";
         publish(rfidConfigTopic, "");
       } else {
-        ArduinoJson::JsonDocument device;
-        device["identifiers"].to<ArduinoJson::JsonArray>().add(deviceID);
-        device["name"] = device_name;
-        device["manufacturer"] = "rednblkx";
-        device["model"] = "HomeKey-ESP32";
-        device["sw_version"] = esp_app_get_description()->version;
-
-        ArduinoJson::JsonDocument rfidPayload;
-        rfidPayload["name"] = "NFC Tag";
-        rfidPayload["unique_id"] = deviceID;
-        rfidPayload["device"] = device;
-        rfidPayload["topic"] = m_mqttConfig.hkTopic;
-        rfidPayload["value_template"] = "{{ value_json.uid }}";
+        cJSON *device = cJSON_CreateObject();
+        cJSON *identifiers = cJSON_CreateArray();
+        cJSON_AddItemToArray(identifiers, cJSON_CreateString(deviceID.c_str()));
+        cJSON_AddItemToObject(device, "identifiers", identifiers);
+        cJSON_AddStringToObject(device, "name", device_name.c_str());
+        cJSON_AddStringToObject(device, "manufacturer", "rednblkx");
+        cJSON_AddStringToObject(device, "model", "HomeKey-ESP32");
+        cJSON_AddStringToObject(device, "sw_version", esp_app_get_description()->version);
+        cJSON *rfidPayload = cJSON_CreateObject();
+        cJSON_AddStringToObject(rfidPayload, "name", "NFC Tag");
+        cJSON_AddStringToObject(rfidPayload, "unique_id", deviceID.c_str());
+        cJSON_AddItemToObject(rfidPayload, "device", device);
+        cJSON_AddStringToObject(rfidPayload, "topic", m_mqttConfig.hkTopic.c_str());
+        cJSON_AddStringToObject(rfidPayload, "value_template", "{{ value_json.uid }}");
+        char *payload_cstr = cJSON_Print(rfidPayload);
+        std::string payload(payload_cstr);
+        free(payload_cstr);
         std::string rfidConfigTopic = "homeassistant/tag/" + m_mqttConfig.mqttClientId + "/rfid/config";
-        std::string payload;
-        serializeJson(rfidPayload, payload);
         publish(rfidConfigTopic, payload, 1, true);
+        cJSON_Delete(rfidPayload);
+        cJSON_Delete(device);
       }
     }
   }, 4096);
@@ -186,7 +190,7 @@ void MqttManager::onData(const std::string& topic, const std::string& data) {
       espp::EventManager::get().publish("lock/overrideState", d);
     } else if (topic == m_mqttConfig.lockTStateCmd) {
       EventLockState s{
-        .currentState = static_cast<uint8_t>(std::stoi(data)),
+        .currentState = LockManager::UNKNOWN,
         .targetState = static_cast<uint8_t>(std::stoi(data)),
         .source = LockManager::MQTT
       };
@@ -195,8 +199,8 @@ void MqttManager::onData(const std::string& topic, const std::string& data) {
       espp::EventManager::get().publish("lock/targetStateChanged", d);
     } else if (topic == m_mqttConfig.lockCStateCmd) {
       EventLockState s{
-        .currentState = LockManager::UNKNOWN,
-        .targetState = static_cast<uint8_t>(std::stoi(data)),
+        .currentState = static_cast<uint8_t>(std::stoi(data)),
+        .targetState = LockManager::UNKNOWN,
         .source = LockManager::MQTT
       };
       std::vector<uint8_t> d;
@@ -288,75 +292,87 @@ void MqttManager::publishLockState(int currentState, int targetState) {
 }
 
 void MqttManager::publishHomeKeyTap(const std::vector<uint8_t>& issuerId, const std::vector<uint8_t>& endpointId, const std::vector<uint8_t>& readerId) {
-    ArduinoJson::JsonDocument doc;
-    doc["issuerId"] = fmt::format("{:02X}", fmt::join(issuerId, "")).c_str();
-    doc["endpointId"] = fmt::format("{:02X}", fmt::join(endpointId, "")).c_str();
-    doc["readerId"] = fmt::format("{:02X}", fmt::join(readerId, "")).c_str();
-    doc["homekey"] = true;
-    std::string payload;
-    serializeJson(doc, payload);
+    cJSON *doc = cJSON_CreateObject();
+    cJSON_AddStringToObject(doc, "issuerId", fmt::format("{:02X}", fmt::join(issuerId, "")).c_str());
+    cJSON_AddStringToObject(doc, "endpointId", fmt::format("{:02X}", fmt::join(endpointId, "")).c_str());
+    cJSON_AddStringToObject(doc, "readerId", fmt::format("{:02X}", fmt::join(readerId, "")).c_str());
+    cJSON_AddBoolToObject(doc, "homekey", true);
+    char *payload_cstr = cJSON_Print(doc);
+    std::string payload(payload_cstr);
+    free(payload_cstr);
     publish(m_mqttConfig.hkTopic, payload);
+    cJSON_Delete(doc);
 }
 
 void MqttManager::publishUidTap(const std::vector<uint8_t>& uid, const std::vector<uint8_t> &atqa, const std::vector<uint8_t> &sak) {
     if(!m_mqttConfig.nfcTagNoPublish){
-      ArduinoJson::JsonDocument doc;
-      doc["uid"] = fmt::format("{:02X}", fmt::join(uid, ""));
-      doc["homekey"] = false;
-      doc["atqa"] = fmt::format("{:02X}", fmt::join(atqa, ""));
-      doc["sak"] = fmt::format("{:02X}", fmt::join(sak, ""));
-      std::string payload;
-      serializeJson(doc, payload);
+      cJSON *doc = cJSON_CreateObject();
+      cJSON_AddStringToObject(doc, "uid", fmt::format("{:02X}", fmt::join(uid, "")).c_str());
+      cJSON_AddBoolToObject(doc, "homekey", false);
+      cJSON_AddStringToObject(doc, "atqa", fmt::format("{:02X}", fmt::join(atqa, "")).c_str());
+      cJSON_AddStringToObject(doc, "sak", fmt::format("{:02X}", fmt::join(sak, "")).c_str());
+      char *payload_cstr = cJSON_Print(doc);
+      std::string payload(payload_cstr);
+      free(payload_cstr);
       publish(m_mqttConfig.hkTopic, payload);
+      cJSON_Delete(doc);
     } else ESP_LOGW(TAG, "MQTT publishing of Tag UID not enabled, ignoring!");
 }
 
 void MqttManager::publishHassDiscovery() {
     ESP_LOGI(TAG, "Publishing Home Assistant discovery messages...");
 
-    ArduinoJson::JsonDocument device;
-    device["identifiers"].to<ArduinoJson::JsonArray>().add(deviceID);
-    device["name"] = device_name;
-    device["manufacturer"] = "rednblkx";
-    device["model"] = "HomeKey-ESP32";
-    device["sw_version"] = esp_app_get_description()->version;
+    cJSON *device = cJSON_CreateObject();
+    cJSON *identifiers = cJSON_CreateArray();
+    cJSON_AddItemToArray(identifiers, cJSON_CreateString(deviceID.c_str()));
+    cJSON_AddItemToObject(device, "identifiers", identifiers);
+    cJSON_AddStringToObject(device, "name", device_name.c_str());
+    cJSON_AddStringToObject(device, "manufacturer", "rednblkx");
+    cJSON_AddStringToObject(device, "model", "HomeKey-ESP32");
+    cJSON_AddStringToObject(device, "sw_version", esp_app_get_description()->version);
     uint8_t mac[6];
     esp_read_mac(mac, ESP_MAC_BT);
     std::string macStr = fmt::format("{:02X}{:02X}{:02X}{:02X}", mac[0], mac[1], mac[2], mac[3]);
-    device["serial_number"] = macStr;
+    cJSON_AddStringToObject(device, "serial_number", macStr.c_str());
 
-    ArduinoJson::JsonDocument lockPayload;
-    lockPayload["name"] = "Lock";
-    lockPayload["unique_id"] = deviceID;
-    lockPayload["device"] = device;
-    lockPayload["state_topic"] = m_mqttConfig.lockStateTopic;
-    lockPayload["command_topic"] = m_mqttConfig.lockTStateCmd;
-    lockPayload["payload_lock"] = std::to_string(LockManager::LOCKED);
-    lockPayload["payload_unlock"] = std::to_string(LockManager::UNLOCKED);
-    lockPayload["state_locked"] = std::to_string(LockManager::LOCKED);
-    lockPayload["state_unlocked"] = std::to_string(LockManager::UNLOCKED);
-    lockPayload["state_locking"] = std::to_string(LockManager::LOCKING);
-    lockPayload["state_unlocking"] = std::to_string(LockManager::UNLOCKING);
-    lockPayload["state_jammed"] = std::to_string(LockManager::JAMMED);
-    lockPayload["availability_topic"] = m_mqttConfig.lwtTopic;
+    cJSON *lockPayload = cJSON_CreateObject();
+    cJSON_AddStringToObject(lockPayload, "name", "Lock");
+    cJSON_AddStringToObject(lockPayload, "unique_id", deviceID.c_str());
+    cJSON_AddItemToObject(lockPayload, "device", cJSON_Duplicate(device, true));
+    cJSON_AddStringToObject(lockPayload, "state_topic", m_mqttConfig.lockStateTopic.c_str());
+    cJSON_AddStringToObject(lockPayload, "command_topic", m_mqttConfig.lockTStateCmd.c_str());
+    cJSON_AddStringToObject(lockPayload, "payload_lock", std::to_string(LockManager::LOCKED).c_str());
+    cJSON_AddStringToObject(lockPayload, "payload_unlock", std::to_string(LockManager::UNLOCKED).c_str());
+    cJSON_AddStringToObject(lockPayload, "state_locked", std::to_string(LockManager::LOCKED).c_str());
+    cJSON_AddStringToObject(lockPayload, "state_unlocked", std::to_string(LockManager::UNLOCKED).c_str());
+    cJSON_AddStringToObject(lockPayload, "state_locking", std::to_string(LockManager::LOCKING).c_str());
+    cJSON_AddStringToObject(lockPayload, "state_unlocking", std::to_string(LockManager::UNLOCKING).c_str());
+    cJSON_AddStringToObject(lockPayload, "state_jammed", std::to_string(LockManager::JAMMED).c_str());
+    cJSON_AddStringToObject(lockPayload, "availability_topic", m_mqttConfig.lwtTopic.c_str());
 
-    std::string payload;
-    serializeJson(lockPayload, payload);
+    char *payload_cstr = cJSON_Print(lockPayload);
+    std::string payload(payload_cstr);
+    free(payload_cstr);
     std::string lockConfigTopic = "homeassistant/lock/" + m_mqttConfig.mqttClientId + "/lock/config";
     publish(lockConfigTopic, payload, 1, true);
+    cJSON_Delete(lockPayload);
 
     if (!m_mqttConfig.nfcTagNoPublish) {
-        ArduinoJson::JsonDocument rfidPayload;
-        rfidPayload["name"] = "NFC Tag";
-        rfidPayload["unique_id"] = deviceID;
-        rfidPayload["device"] = device;
-        rfidPayload["topic"] = m_mqttConfig.hkTopic;
-        rfidPayload["value_template"] = "{{ value_json.uid }}";
+        cJSON *rfidPayload = cJSON_CreateObject();
+        cJSON_AddStringToObject(rfidPayload, "name", "NFC Tag");
+        cJSON_AddStringToObject(rfidPayload, "unique_id", deviceID.c_str());
+        cJSON_AddItemToObject(rfidPayload, "device", cJSON_Duplicate(device, true));
+        cJSON_AddStringToObject(rfidPayload, "topic", m_mqttConfig.hkTopic.c_str());
+        cJSON_AddStringToObject(rfidPayload, "value_template", "{{ value_json.uid }}");
+        char *payload_cstr = cJSON_Print(rfidPayload);
+        std::string payload(payload_cstr);
+        free(payload_cstr);
         std::string rfidConfigTopic = "homeassistant/tag/" + m_mqttConfig.mqttClientId + "/rfid/config";
-        std::string payload;
-        serializeJson(rfidPayload, payload);
         publish(rfidConfigTopic, payload, 1, true);
+        cJSON_Delete(rfidPayload);
     }
+
+    cJSON_Delete(device);
 
     ESP_LOGI(TAG, "HASS discovery messages published.");
 }
