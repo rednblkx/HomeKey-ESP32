@@ -1,28 +1,28 @@
-<h2 style="text-align: center;">Miscellaneous</h2>
-<h5 style="text-align:center;margin-top: 0;">Changes in this section will reboot the device</h5>
-<form id="config-form" data-type="misc" style="display: inline-flex; flex-direction: column; margin-bottom: 0">
-    <div class="cards-container" style="display: flex;gap: 16px;">
-        <div class="card-content" style="max-width: 26rem;">
-            <h3 style="margin-top: 0;text-align: center;">General settings</h3>
-            <div style="display:flex;flex-direction: column;gap: 8px;">
+<h2 class="text-center">Miscellaneous</h2>
+<h5 class="text-center mt-0">Changes in this section will reboot the device</h5>
+<form id="config-form" data-type="misc">
+    <div class="cards-container gap-16px">
+        <div class="card-content max-w-26rem">
+            <h3 class="mt-0 text-center">General settings</h3>
+            <div class="d-flex flex-col gap-8px">
                 <div class="tabs-container">
-                    <div id="custom-tabs" class="tabs-list" style="justify-content: safe center;">
+                    <div id="custom-tabs" class="tabs-list justify-safe-center">
                         <p class="tab-btn custom-tabs-selected-tab" onclick="switchTab(this)" data-tab-index="0">HomeKit</p>
                         <p class="tab-btn" onclick="switchTab(this)" data-tab-index="1">HomeKey</p>
                         <p class="tab-btn" onclick="switchTab(this)" data-tab-index="2">PN532</p>
                         <p class="tab-btn" onclick="switchTab(this)" data-tab-index="3">HomeSpan</p>
                         <p class="tab-btn" onclick="switchTab(this)" data-tab-index="4">Ethernet</p>
                     </div>
-                    <span style="height: 1px;border-top: 1px #424242 solid;display: block;margin: 0;padding: 0;"></span>
+                    <span class="divider-dark"></span>
                 </div>
                 <div class="custom-tabs-selected-body" data-custom-tabs-body="0">
                     <div class="input-group">
                         <label for="deviceName">Device Name</label>
-                        <input type="text" name="deviceName" id="deviceName" placeholder="HK" required style="width: fit-content;" />
+                        <input type="text" name="deviceName" id="deviceName" placeholder="HK" required class="w-fit-content" />
                     </div>
                     <div class="input-group">
                         <label for="setupCode">Setup Code</label>
-                        <input type="number" name="setupCode" id="setupCode" placeholder="46637726" maxlength="8" required style="width: fit-content;" />
+                        <input type="number" name="setupCode" id="setupCode" placeholder="46637726" maxlength="8" required class="w-fit-content" />
                     </div>
                     <div class="input-group">
                         <label for="lockAlwaysLock">Always Lock on HomeKey</label>
@@ -47,35 +47,35 @@
                     </div>
                     <div class="input-group">
                         <label for="btrLowStatusThreshold">Battery low status Threshold</label>
-                        <input type="number" name="btrLowStatusThreshold" id="btrLowStatusThreshold" placeholder="10" min="0" max="100" style="width: 4rem;" />
+                        <input type="number" name="btrLowStatusThreshold" id="btrLowStatusThreshold" placeholder="10" min="0" max="100" class="w-4rem" />
                     </div>
                 </div>
                 <div class="custom-tabs-hidden-body" data-custom-tabs-body="1">
-                    <div style="display: flex;flex-direction: column;gap: 16px;">
+                    <div class="d-flex flex-col gap-16px">
                         <fieldset>
                             <legend>Alt action Initiator Button</legend>
-                            <div style="display: flex;gap: 16px;flex-direction: column;padding: .5rem;">
+                            <div class="d-flex flex-col gap-16px p-half-rem">
                                 <div class="input-group">
                                     <label for="hkAltActionInitPin">GPIO Pin</label>
-                                    <input type="number" name="hkAltActionInitPin" id="hkAltActionInitPin" placeholder="255" min="0" max="255" style="width: 4rem;" />
+                                    <input type="number" name="hkAltActionInitPin" id="hkAltActionInitPin" placeholder="255" min="0" max="255" class="w-4rem" />
                                 </div>
                                 <div class="input-group">
                                     <label for="hkAltActionInitTimeout">Timeout (ms)</label>
-                                    <input type="number" name="hkAltActionInitTimeout" id="hkAltActionInitTimeout" placeholder="5000" min="0" max="10000" style="width: 4rem;" />
+                                    <input type="number" name="hkAltActionInitTimeout" id="hkAltActionInitTimeout" placeholder="5000" min="0" max="10000" class="w-4rem" />
                                 </div>
                                 <div class="input-group">
                                     <label for="hkAltActionInitLedPin">Feedback LED Pin</label>
-                                    <input type="number" name="hkAltActionInitLedPin" id="hkAltActionInitLedPin" placeholder="255" min="0" max="255" style="width: 4rem;" />
+                                    <input type="number" name="hkAltActionInitLedPin" id="hkAltActionInitLedPin" placeholder="255" min="0" max="255" class="w-4rem" />
                                 </div>
                             </div>
                         </fieldset>
                         <fieldset>
                             <legend>HomeKey Card Finish:</legend>
-                            <div style="display: flex;justify-content: space-evenly;margin-bottom: 0;padding-bottom: 0;">
+                            <div class="d-flex justify-evenly mb-0 pb-0">
                                 <div id="hkfinish"
                                     style="background-image: url(assets/hk-finish-0.webp);background-size: contain;background-repeat: no-repeat;width: 9rem;">
                                 </div>
-                                <div style="display: flex;flex-direction: column;align-items: flex-end;">
+                                <div class="d-flex flex-col items-end">
                                     <div>
                                         <label id="hk-tan" for="hk_key_color-0">Tan</label>
                                         <input type="radio" id="hk_key_color-0"
@@ -106,31 +106,31 @@
                     </div>
                 </div>
                 <div class="custom-tabs-hidden-body" data-custom-tabs-body="2">
-                    <div style="display: flex;flex-wrap: wrap;justify-content: center;gap: 16px;">
-                        <div style="display: flex;flex-direction: column;">
+                    <div class="d-flex flex-wrap justify-center gap-16px">
+                        <div class="flex-col">
                             <label for="nfcGpioPins!0">SS Pin</label>
                             <input type="number" name="nfcGpioPins!0" id="nfcGpioPins!0" placeholder="5" required min="0" max="255"
-                                style="width: 4rem;" />
+                                class="w-4rem" />
                         </div>
-                        <div style="display: flex;flex-direction: column;">
+                        <div class="flex-col">
                             <label for="nfcGpioPins!1">SCK Pin</label>
                             <input type="number" name="nfcGpioPins!1" id="nfcGpioPins!1" placeholder="18" required min="0" max="255"
-                                style="width: 4rem;" />
+                                class="w-4rem" />
                         </div>
-                        <div style="display: flex;flex-direction: column;">
+                        <div class="flex-col">
                             <label for="nfcGpioPins!2">MISO Pin</label>
                             <input type="number" name="nfcGpioPins!2" id="nfcGpioPins!2" placeholder="19" required min="0" max="255"
-                                style="width: 4rem;" />
+                                class="w-4rem" />
                         </div>
-                        <div style="display: flex;flex-direction: column;">
+                        <div class="flex-col">
                             <label for="nfcGpioPins!3">MOSI Pin</label>
                             <input type="number" name="nfcGpioPins!3" id="nfcGpioPins!3" placeholder="23" required min="0" max="255"
-                                style="width: 4rem;" />
+                                class="w-4rem" />
                         </div>
                     </div>
                 </div>
                 <div class="custom-tabs-hidden-body" data-custom-tabs-body="3">
-                    <a href="https://github.com/HomeSpan/HomeSpan/blob/master/docs/GettingStarted.md#adding-a-control-button-and-status-led-optional" style="margin-bottom: 1rem;color: white;">HomeSpan Documentation</a>
+                    <a href="https://github.com/HomeSpan/HomeSpan/blob/master/docs/GettingStarted.md#adding-a-control-button-and-status-led-optional" class="mb-1" style="color: white;">HomeSpan Documentation</a>
                     <div class="input-group">
                         <label for="otaPasswd">OTA Password</label>
                         <input type="password" name="otaPasswd" id="otaPasswd" placeholder="homespan-ota" required
@@ -139,11 +139,11 @@
                     <div class="input-group">
                         <label for="controlPin">Control GPIO Pin</label>
                         <input type="number" name="controlPin" id="controlPin" placeholder="26" required
-                            style="width: 4rem;" />
+                            class="w-4rem" />
                     </div>
                     <div class="input-group">
                         <label for="hsStatusPin">Status LED GPIO Pin</label>
-                        <input type="number" name="hsStatusPin" id="hsStatusPin" placeholder="2" required style="width: 4rem;" />
+                        <input type="number" name="hsStatusPin" id="hsStatusPin" placeholder="2" required class="w-4rem" />
                     </div>
                 </div>
                 <div class="custom-tabs-hidden-body" data-custom-tabs-body="4">
@@ -165,65 +165,65 @@
                         <select disabled name="ethPhyType" id="ethPhyType" onchange="handleEthChipChange(this)">
                         </select>
                     </div>
-                    <div id="eth_spi_container" style="display: flex;flex-wrap: wrap;justify-content: space-between;gap: 16px;">
-                        <div style="display: flex;flex-direction: column;">
+                    <div id="eth_spi_container" class="d-flex flex-wrap justify-between gap-16px">
+                        <div class="flex-col">
                             <label for="ethSpiConfig!0">SPI Frequency</label>
                             <input disabled type="number" name="ethSpiConfig!0" id="ethSpiConfig!0" placeholder="20" min="0" max="80"
-                                style="width: 4rem;" />
+                                class="w-4rem" />
                         </div>
-                        <div style="display: flex;flex-direction: column;">
+                        <div class="flex-col">
                             <label for="ethSpiConfig!1">SS Pin</label>
                             <input disabled type="number" name="ethSpiConfig!1" id="ethSpiConfig!1" placeholder="-1" min="-1" max="255"
-                                style="width: 4rem;" />
+                                class="w-4rem" />
                         </div>
-                        <div style="display: flex;flex-direction: column;">
+                        <div class="flex-col">
                             <label for="ethSpiConfig!2">IRQ Pin</label>
                             <input disabled type="number" name="ethSpiConfig!2" id="ethSpiConfig!2" placeholder="-1" min="-1" max="255"
-                                style="width: 4rem;" />
+                                class="w-4rem" />
                         </div>
-                        <div style="display: flex;flex-direction: column;">
+                        <div class="flex-col">
                             <label for="ethSpiConfig!3">RST Pin</label>
                             <input disabled type="number" name="ethSpiConfig!3" id="ethSpiConfig!3" placeholder="-1" min="-1" max="255"
-                                style="width: 4rem;" />
+                                class="w-4rem" />
                         </div>
-                        <div style="display: flex;flex-direction: column;">
+                        <div class="flex-col">
                             <label for="ethSpiConfig!4">SCK Pin</label>
                             <input disabled type="number" name="ethSpiConfig!4" id="ethSpiConfig!4" placeholder="-1" min="-1" max="255"
-                                style="width: 4rem;" />
+                                class="w-4rem" />
                         </div>
-                        <div style="display: flex;flex-direction: column;">
+                        <div class="flex-col">
                             <label for="ethSpiConfig!5">MISO Pin</label>
                             <input disabled type="number" name="ethSpiConfig!5" id="ethSpiConfig!5" placeholder="-1" min="-1" max="255"
-                                style="width: 4rem;" />
+                                class="w-4rem" />
                         </div>
-                        <div style="display: flex;flex-direction: column;">
+                        <div class="flex-col">
                             <label for="ethSpiConfig!6">MOSI Pin</label>
                             <input disabled type="number" name="ethSpiConfig!6" id="ethSpiConfig!6" placeholder="-1" min="-1" max="255"
-                                style="width: 4rem;" />
+                                class="w-4rem" />
                         </div>
                     </div>
-                    <div id="eth_rmii_container" style="display: flex;flex-wrap: wrap;justify-content: space-between;gap: 16px;">
-                        <div style="display: flex;flex-direction: column;">
+                    <div id="eth_rmii_container" class="d-flex flex-wrap justify-between gap-16px">
+                        <div class="flex-col">
                             <label for="ethRmiiConfig!0">PHY Address</label>
                             <input disabled type="number" name="ethRmiiConfig!0" id="ethRmiiConfig!0" placeholder="1" min="0" max="255"
-                                style="width: 4rem;" />
+                                class="w-4rem" />
                         </div>
-                        <div style="display: flex;flex-direction: column;">
+                        <div class="flex-col">
                             <label for="ethRmiiConfig!1">MCD Pin</label>
                             <input disabled type="number" name="ethRmiiConfig!1" id="ethRmiiConfig!1" placeholder="23" min="-1" max="255"
-                                style="width: 4rem;" />
+                                class="w-4rem" />
                         </div>
-                        <div style="display: flex;flex-direction: column;">
+                        <div class="flex-col">
                             <label for="ethRmiiConfig!2">MDIO Pin</label>
                             <input disabled type="number" name="ethRmiiConfig!2" id="ethRmiiConfig!2" placeholder="18" min="-1" max="255"
-                                style="width: 4rem;" />
+                                class="w-4rem" />
                         </div>
-                        <div style="display: flex;flex-direction: column;">
+                        <div class="flex-col">
                             <label for="ethRmiiConfig!3">Power Pin</label>
                             <input disabled type="number" name="ethRmiiConfig!3" id="ethRmiiConfig!3" placeholder="255" min="-1" max="255"
-                                style="width: 4rem;" />
+                                class="w-4rem" />
                         </div>
-                        <div style="display: flex;flex-direction: column;">
+                        <div class="flex-col">
                             <label for="ethRmiiConfig!4">RMII Clock Mode</label>
                             <select disabled name="ethRmiiConfig!4" id="ethRmiiConfig!4">
                                 <option value="0">ETH_CLOCK_GPIO0_IN</option>
@@ -236,33 +236,33 @@
                 </div>
             </div>
         </div>
-        <div class="card-content" style="max-width: 14rem;">
-            <h3 style="margin-top: 0;text-align: center;">WebUI</h3>
+        <div class="card-content max-w-14rem">
+            <h3 class="mt-0 text-center">WebUI</h3>
             <div
-                style="display:flex;flex-direction: column;margin-bottom: 1rem;gap: 8px;">
-                <div style="margin-bottom: 1rem;">
+                class="d-flex flex-col mb-1 gap-8px">
+                <div class="mb-1">
                     <div id="webui-tabs" class="tabs-list">
                         <p class="tab-btn webui-tabs-selected-tab" data-tab-index="0" onclick='switchTab(this)'>Authentication</p>
                     </div>
-                    <span style="height: 1px;border-top: 1px #424242 solid;display: block;margin: 0;padding: 0;"></span>
+                    <span class="divider-dark"></span>
                 </div>
-                <div class="webui-tabs-selected-body" style="display: flex;flex-direction: column;gap: 8px;padding-inline: 1rem;" data-webui-tabs-body="0">
-                    <div style="display: flex;flex-direction: column;">
+                <div class="webui-tabs-selected-body d-flex flex-col gap-8px p-1rem" data-webui-tabs-body="0">
+                    <div class="flex-col">
                         <label for="webAuthEnabled">Status</label>
-                        <select name="webAuthEnabled" id="webAuthEnabled" style="width: fit-content;">
+                        <select name="webAuthEnabled" id="webAuthEnabled" class="w-fit-content">
                           <option value="0">Disabled</option>
                           <option value="1">Enabled</option>
                         </select>
                     </div>
-                    <div style="display: flex;flex-direction: column;">
+                    <div class="flex-col">
                         <label for="webUsername">Username</label>
                         <input type="text" name="webUsername" id="webUsername" placeholder="admin" required
-                            style="width: fit-content;" />
+                            class="w-fit-content" />
                     </div>
-                    <div style="display: flex;flex-direction: column;">
+                    <div class="flex-col">
                         <label for="webPassword">Password</label>
                         <input type="password" name="webPassword" id="webPassword" placeholder="password" required
-                            style="width: fit-content;" />
+                            class="w-fit-content" />
                     </div>
                 </div>
             </div>
@@ -270,11 +270,10 @@
     </div>
 
     <div id="buttons-group">
-        <button type="submit" style="cursor: pointer; padding-inline: 1rem; padding-block: 0.5rem">
+        <button type="submit" class="cursor-pointer px-1rem py-half-rem">
             Submit
         </button>
-        <button type="reset" style="cursor: pointer; padding-inline: 1rem; padding-block: 0.5rem"
-            class="destructive-btn">
+        <button type="reset" class="cursor-pointer px-1rem py-half-rem destructive-btn">
             Reset
         </button>
     </div>

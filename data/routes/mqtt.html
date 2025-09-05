@@ -1,37 +1,37 @@
-<h2 style="text-align: center; margin-bottom: 0;">MQTT Configuration</h2>
-<h5 style="text-align:center;margin-top: 0;">Changes in this section will reboot the device</h5>
-<form id="config-form" data-type="mqtt" style="display: inline-flex; flex-direction: column;margin-bottom: 0;align-items: center;">
-  <div class="cards-container" style="display: flex;gap: 16px;">
+<h2 class="text-center mb-0">MQTT Configuration</h2>
+<h5 class="text-center mt-0">Changes in this section will reboot the device</h5>
+<form id="config-form" data-type="mqtt" class="items-center">
+  <div class="cards-container gap-16px">
     <div id="mqtt-broker-con" class="card-content">
-      <h3 style="margin-top: 0;text-align: center;margin-bottom: .5rem;">Broker Connection</h3>
-      <h5 style="text-align: center;margin-top: 0;margin-bottom: .5rem;">TCP - Without TLS</h5>
-      <div class="flex-col-lg" style="padding: .5rem;gap: 32px;">
+      <h3 class="mt-0 text-center" style="margin-bottom: .5rem;">Broker Connection</h3>
+      <h5 class="text-center mt-0" style="margin-bottom: .5rem;">TCP - Without TLS</h5>
+      <div class="flex-col-lg p-half-rem gap-32px">
         <div class="flex-col-lg">
-          <div style="display: flex;gap: 8px;">
-            <div style="display: flex; flex-direction: column;flex: 2;">
+          <div class="d-flex gap-8px">
+            <div class="flex-col" style="flex: 2;">
               <label for="mqttBroker">Address</label>
               <input type="text" name="mqttBroker" id="mqttBroker" placeholder="0.0.0.0" required>
             </div>
-            <div style="display: flex; flex-direction: column;flex: .5;">
+            <div class="flex-col" style="flex: .5;">
               <label for="mqttPort">Port</label>
               <input type="number" name="mqttPort" id="mqttPort" placeholder="1883" required inputmode="numeric" min="0" max="65535">
             </div>
           </div>
-          <div style="display: flex; flex-direction: column;">
+          <div class="flex-col">
             <label for="mqttClientId">Client ID</label>
             <input type="text" name="mqttClientId" id="mqttClientId" placeholder="homekey_mqtt" required>
           </div>
-          <div style="display:flex;flex-direction: column;">
+          <div class="flex-col">
             <label for="lwtTopic">LWT Topic</label>
             <input type="text" name="lwtTopic" id="lwtTopic" placeholder="homekey_mqtt/status" required>
           </div>
         </div>
         <div class="flex-col-lg">
-          <div style="display: flex; flex-direction: column;">
+          <div class="flex-col">
             <label for="mqttUsername">Username</label>
             <input type="text" name="mqttUsername" id="mqttUsername" placeholder="username">
           </div>
-          <div style="display: flex; flex-direction: column;">
+          <div class="flex-col">
             <label for="mqttPassword">Password</label>
             <input type="password" name="mqttPassword" id="mqttPassword" placeholder="password">
           </div>
@@ -46,13 +46,13 @@
       </div>
     </div>
     <div id="mqtt-topics-container" class="card-content">
-      <h3 style="text-align: center;margin-top: 0;">MQTT Topics</h3>
+      <h3 class="text-center mt-0">MQTT Topics</h3>
       <div class="tabs-container">
         <div id="mqtt-topics" class="tabs-list">
           <p class="tab-btn mqtt-topics-selected-tab" onclick="switchTab(this)" data-tab-index="0">Core Topics</p>
           <p class="tab-btn" onclick="switchTab(this)" data-tab-index="1">Custom Topics</p>
         </div>
-        <span style="height: 1px;border-top: 1px #424242 solid;display: block;margin: 0;padding: 0;"></span>
+        <span class="divider-dark"></span>
       </div>
       <div class="mqtt-topics-selected-body" data-mqtt-topics-body="0">
         <div class="flex-col-lg">
@@ -95,18 +95,18 @@
       </div>
       <div class="mqtt-topics-hidden-body" data-mqtt-topics-body="1">
         <div class="flex-col-lg">
-          <div style="display: flex;flex-direction: column;">
+          <div class="flex-col">
             <label for="lockEnableCustomState">Status</label>
             <select name="lockEnableCustomState" id="lockEnableCustomState">
               <option value="0">Disabled</option>
               <option value="1">Enabled</option>
             </select>
           </div>
-          <div style="display: flex;flex-direction: column;">
+          <div class="flex-col">
             <label for="lockCustomStateTopic">Custom State Topic</label>
             <input type="text" name="lockCustomStateTopic" id="lockCustomStateTopic" placeholder="topic/set_target_state" required>
           </div>
-          <div style="display: flex;flex-direction: column;">
+          <div class="flex-col">
             <label for="lockCustomStateCmd">Custom State Cmd Topic</label>
             <input type="text" name="lockCustomStateCmd" id="lockCustomStateCmd" placeholder="topic/set_target_state" required>
           </div>
@@ -115,12 +115,12 @@
           <fieldset>
             <legend>Custom Lock Actions </legend>
             <div
-              style="display: flex; gap: 16px;justify-content: center;flex-wrap: wrap;padding: .5rem;">
-              <div style="display: flex; flex-direction: column; max-width: 70px;">
+              class="d-flex gap-16px justify-center flex-wrap p-half-rem">
+              <div class="flex-col" style="max-width: 70px;">
                 <label for="customLockActions!UNLOCK">Unlock</label>
                 <input type="number" name="customLockActions!UNLOCK" id="customLockActions!UNLOCK" placeholder="255" min="0" max="255">
               </div>
-              <div style="display: flex; flex-direction: column; max-width: 70px;">
+              <div class="flex-col" style="max-width: 70px;">
                 <label for="customLockActions!LOCK">Lock</label>
                 <input type="number" name="customLockActions!LOCK" id="customLockActions!LOCK" placeholder="255" min="0" max="255">
               </div>
@@ -129,28 +129,28 @@
           <fieldset>
             <legend>Custom Lock States </legend>
             <div
-              style="display: flex; gap: 16px;flex-wrap: wrap;justify-content: center;padding: .5rem;">
-              <div style="display: flex; flex-direction: column; max-width: 70px;">
+              class="d-flex gap-16px flex-wrap justify-center p-half-rem">
+              <div class="flex-col" style="max-width: 70px;">
                 <label for="customLockStates!C_UNLOCKING">Unlocking</label>
                 <input type="number" name="customLockStates!C_UNLOCKING" id="customLockStates!C_UNLOCKING" placeholder="255" min="0" max="255">
               </div>
-              <div style="display: flex; flex-direction: column; max-width: 70px;">
+              <div class="flex-col" style="max-width: 70px;">
                 <label for="customLockStates!C_LOCKING">Locking</label>
                 <input type="number" name="customLockStates!C_LOCKING" id="customLockStates!C_LOCKING" placeholder="255" min="0" max="255">
               </div>
-              <div style="display: flex; flex-direction: column; max-width: 70px;">
+              <div class="flex-col" style="max-width: 70px;">
                 <label for="customLockStates!C_UNLOCKED">Unlocked</label>
                 <input type="number" name="customLockStates!C_UNLOCKED" id="customLockStates!C_UNLOCKED" placeholder="255" min="0" max="255">
               </div>
-              <div style="display: flex; flex-direction: column; max-width: 70px;">
+              <div class="flex-col" style="max-width: 70px;">
                 <label for="customLockStates!C_LOCKED">Locked</label>
                 <input type="number" name="customLockStates!C_LOCKED" id="customLockStates!C_LOCKED" placeholder="255" min="0" max="255">
               </div>
-              <div style="display: flex; flex-direction: column; max-width: 70px;">
+              <div class="flex-col" style="max-width: 70px;">
                 <label for="customLockStates!C_JAMMED">Jammed</label>
                 <input type="number" name="customLockStates!C_JAMMED" id="customLockStates!C_JAMMED" placeholder="255" min="0" max="255">
               </div>
-              <div style="display: flex; flex-direction: column; max-width: 70px;">
+              <div class="flex-col" style="max-width: 70px;">
                 <label for="customLockStates!C_UNKNOWN">Unknown</label>
                 <input type="number" name="customLockStates!C_UNKNOWN" id="customLockStates!C_UNKNOWN" placeholder="255" min="0" max="255">
               </div>
@@ -161,8 +161,7 @@
     </div>
   </div>
   <div id="buttons-group">
-    <button type="submit" style="cursor: pointer;padding-inline: 1rem;padding-block: .5rem;">Submit</button>
-    <button type="reset" style="cursor: pointer;padding-inline: 1rem;padding-block: .5rem;"
-      class="destructive-btn">Reset</button>
+    <button type="submit" class="cursor-pointer px-1rem py-half-rem">Submit</button>
+    <button type="reset" class="cursor-pointer px-1rem py-half-rem destructive-btn">Reset</button>
   </div>
 </form>
