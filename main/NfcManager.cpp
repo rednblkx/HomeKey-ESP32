@@ -125,7 +125,7 @@ void NfcManager::pollingTask() {
 
         uint8_t res[4];
         uint16_t resLen = 4;
-        m_nfc->inCommunicateThru(m_ecpData.data(), m_ecpData.size(), res, &resLen, 100, true);
+        m_nfc->inCommunicateThru(m_ecpData.data(), m_ecpData.size(), res, &resLen, 0, true);
 
         uint8_t *uid = new uint8_t[16];
         uint8_t *uidLen = new uint8_t[1];
