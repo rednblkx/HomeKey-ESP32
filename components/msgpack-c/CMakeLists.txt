@@ -1,21 +1,17 @@
-SET(MSGPACK_ENDIAN_BIG_BYTE 0)
-SET(MSGPACK_ENDIAN_LITTLE_BYTE 1)
-CONFIGURE_FILE (
-  ${CMAKE_CURRENT_LIST_DIR}/upstream/cmake/sysdep.h.in
-  ${CMAKE_CURRENT_BINARY_DIR}/msgpack/sysdep.h
-  @ONLY
-)
+set(BUILD_SHARED_LIBS OFF)
+set(MSGPACK_BUILD_EXAMPLES OFF CACHE BOOL "Disable msgpack examples")
+set(MSGPACK_BUILD_TESTS OFF CACHE BOOL "Disable msgpack tests")
+# Create dummy functions to override the problematic commands in the upstream CMakeLists.txt.
+# This is the key to resolving the "not in any export set" errors.
+function(install)
+    # This empty function will be called instead of the real 'install' command.
+endfunction()
 
-CONFIGURE_FILE (
-  ${CMAKE_CURRENT_LIST_DIR}/upstream/cmake/pack_template.h.in
-  ${CMAKE_CURRENT_BINARY_DIR}/msgpack/pack_template.h
-  @ONLY
-)
-idf_component_register(SRCS
-      "upstream/src/objectc.c"
-      "upstream/src/unpack.c"
-      "upstream/src/version.c"
-      "upstream/src/vrefbuffer.c"
-      "upstream/src/zone.c" INCLUDE_DIRS "upstream/include")
-target_include_directories(${COMPONENT_LIB} PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/msgpack")
-target_include_directories(${COMPONENT_LIB} PUBLIC "${CMAKE_CURRENT_BINARY_DIR}")
+function(export)
+    # This empty function will be called instead of the real 'export' command.
+endfunction()
+idf_component_register(INCLUDE_DIRS "upstream/include")
+add_subdirectory(upstream)
+target_include_directories(${COMPONENT_LIB} INTERFACE "${CMAKE_CURRENT_BINARY_DIR}/upstream/include")
+target_include_directories(${COMPONENT_LIB} INTERFACE "${CMAKE_CURRENT_BINARY_DIR}/upstream/include/msgpack")
+target_link_libraries(${COMPONENT_LIB} INTERFACE msgpack-c)
