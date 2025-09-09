@@ -54,6 +54,7 @@ private:
     AsyncWebServer m_server;
     ConfigManager& m_configManager;
     ReaderDataManager& m_readerDataManager;
+    std::vector<uint8_t> chunkedBody;
 
     static const char* TAG;
 };
