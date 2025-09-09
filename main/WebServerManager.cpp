@@ -196,14 +196,26 @@ void WebServerManager::handleGetEthConfig(AsyncWebServerRequest *request) {
 }
 
 void WebServerManager::handleSaveConfigBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-    if (len > 0) {
-        cJSON *parsed = cJSON_ParseWithLength((const char*)data, len);
+    if (len > 0 && len == total) {
+        cJSON *parsed = cJSON_ParseWithLength(chunkedBody.size() > 0 ? (const char*)chunkedBody.data() : (const char*)data, chunkedBody.size() > 0 ? chunkedBody.size() : len);
         if (!parsed) {
             ESP_LOGE(TAG, "Failed to parse JSON chunk.");
             request->_tempObject = nullptr;
             return;
         }
         request->_tempObject = parsed;
+    } else if(len > 0){
+      chunkedBody.insert(chunkedBody.end(), data, data + len);
+      if(chunkedBody.size() == total){
+        cJSON *parsed = cJSON_ParseWithLength(chunkedBody.size() > 0 ? (const char*)chunkedBody.data() : (const char*)data, chunkedBody.size() > 0 ? chunkedBody.size() : len);
+        chunkedBody.clear();
+        if (!parsed) {
+            ESP_LOGE(TAG, "Failed to parse JSON chunk.");
+            request->_tempObject = nullptr;
+            return;
+        }
+        request->_tempObject = parsed;
+      }
     } else request->_tempObject = nullptr;
 }
 
