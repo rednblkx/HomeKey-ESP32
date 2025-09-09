@@ -51,6 +51,7 @@ String WebServerManager::indexProcessor(const String& var) {
 void WebServerManager::setupRoutes() {
     const espConfig::misc_config_t& miscConfig = m_configManager.getConfig<const espConfig::misc_config_t>();
 
+    m_server.serveStatic("/static", LittleFS, "/static/").setFilter([](AsyncWebServerRequest* req){req->addInterestingHeader("ANY"); return true;});
     m_server.serveStatic("/assets", LittleFS, "/assets/").setFilter([](AsyncWebServerRequest* req){req->addInterestingHeader("ANY"); return true;});
     m_server.serveStatic("/fragment", LittleFS, "/routes").setFilter([](AsyncWebServerRequest* req){req->addInterestingHeader("ANY"); return true;});
 
