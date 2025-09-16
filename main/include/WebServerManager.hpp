@@ -1,6 +1,7 @@
 #pragma once
-#include "ESPAsyncWebServer.h"
+#include "esp_http_server.h"
 #include "cJSON.h"
+#include <string>
 
 class ConfigManager;
 class ReaderDataManager;
@@ -33,28 +34,28 @@ private:
     void setupRoutes();
 
     // --- Request Handlers ---
-    void handleGetConfig(AsyncWebServerRequest *request);
-    void handleGetEthConfig(AsyncWebServerRequest *request);
-    void handleClearConfig(AsyncWebServerRequest *request);
-    void handleSaveConfigBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total);
-    void processSaveConfigRequest(AsyncWebServerRequest *request);
-    void handleReboot(AsyncWebServerRequest *request);
-    void handleHKReset(AsyncWebServerRequest *request);
-    void handleWifiReset(AsyncWebServerRequest *request);
-    void handleStartConfigAP(AsyncWebServerRequest *request);
-    void handleGetWifiRssi(AsyncWebServerRequest *request);
-    void handleRootOrHash(AsyncWebServerRequest *request);
-    void handleNotFound(AsyncWebServerRequest *request);
+    static esp_err_t handleGetConfig(httpd_req_t *req);
+    static esp_err_t handleGetEthConfig(httpd_req_t *req);
+    static esp_err_t handleClearConfig(httpd_req_t *req);
+    static esp_err_t handleSaveConfig(httpd_req_t *req);
+    static esp_err_t handleReboot(httpd_req_t *req);
+    static esp_err_t handleHKReset(httpd_req_t *req);
+    static esp_err_t handleWifiReset(httpd_req_t *req);
+    static esp_err_t handleStartConfigAP(httpd_req_t *req);
+    static esp_err_t handleGetWifiRssi(httpd_req_t *req);
+    static esp_err_t handleRootOrHash(httpd_req_t *req);
+    static esp_err_t handleStaticFiles(httpd_req_t *req);
+    static esp_err_t handleNotFound(httpd_req_t *req);
 
     // --- Helper Methods ---
-    String indexProcessor(const String& var);
-    bool validateRequest(AsyncWebServerRequest *request, cJSON *currentData);
+    static std::string indexProcessor(const std::string& var);
+    static bool validateRequest(httpd_req_t *req, cJSON *currentData, const char* body);
+    static WebServerManager* getInstance(httpd_req_t *req);
     
     // --- Member Variables ---
-    AsyncWebServer m_server;
+    httpd_handle_t m_server;
     ConfigManager& m_configManager;
     ReaderDataManager& m_readerDataManager;
-    std::vector<uint8_t> chunkedBody;
 
     static const char* TAG;
 };

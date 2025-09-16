@@ -5,21 +5,25 @@
 #include "HomeSpan.h"
 #include "ReaderDataManager.hpp"
 #include "esp_log.h"
-#include "eventStructs.hpp"
-#include "utils.hpp"
 #include "config.hpp"
 #include "eth_structs.hpp"
+#include "eventStructs.hpp"
 #include "fmt/base.h"
 #include "fmt/ranges.h"
 #include <LittleFS.h>
 #include <esp_app_desc.h>
 #include <string>
 #include "cJSON.h"
+#include "esp_http_server.h"
+#include "alpaca/alpaca.h"
 
 const char* WebServerManager::TAG = "WebServerManager";
 
+// Forward declaration
+static void mergeJson(cJSON *target, cJSON *source);
+
 WebServerManager::WebServerManager(ConfigManager& configManager, ReaderDataManager& readerDataManager)
-    : m_server(80),
+    : m_server(nullptr),
       m_configManager(configManager),
       m_readerDataManager(readerDataManager)
 {
@@ -35,99 +39,303 @@ void WebServerManager::begin() {
         return;
     }
 
-    setupRoutes();
+    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config.server_port = 80;
+    config.max_uri_handlers = 20;
+    config.max_resp_headers = 8;
+    config.max_open_sockets = 7;
+    config.stack_size = 8192;
+    config.uri_match_fn = httpd_uri_match_wildcard;
 
-    m_server.begin();
-    ESP_LOGI(TAG, "Web server started.");
+    esp_err_t ret = httpd_start(&m_server, &config);
+    if (ret == ESP_OK) {
+        ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
+        setupRoutes();
+        ESP_LOGI(TAG, "Web server started.");
+    } else {
+        ESP_LOGE(TAG, "Error starting server: %s", esp_err_to_name(ret));
+    }
 }
 
-String WebServerManager::indexProcessor(const String& var) {
+std::string WebServerManager::indexProcessor(const std::string& var) {
     if (var == "VERSION") {
         return esp_app_get_description()->version;
     }
     return "";
 }
 
-void WebServerManager::setupRoutes() {
-    const espConfig::misc_config_t& miscConfig = m_configManager.getConfig<const espConfig::misc_config_t>();
+WebServerManager* WebServerManager::getInstance(httpd_req_t *req) {
+    return static_cast<WebServerManager*>(req->user_ctx);
+}
 
-    m_server.serveStatic("/static", LittleFS, "/static/").setFilter([](AsyncWebServerRequest* req){req->addInterestingHeader("ANY"); return true;});
-    m_server.serveStatic("/assets", LittleFS, "/assets/").setFilter([](AsyncWebServerRequest* req){req->addInterestingHeader("ANY"); return true;});
-    m_server.serveStatic("/fragment", LittleFS, "/routes").setFilter([](AsyncWebServerRequest* req){req->addInterestingHeader("ANY"); return true;});
+void WebServerManager::setupRoutes() {
+    // Static file handlers
+    httpd_uri_t static_uri = {
+        .uri       = "/static/*",
+        .method    = HTTP_GET,
+        .handler   = handleStaticFiles,
+        .user_ctx  = (void*)"/static"
+    };
+    httpd_register_uri_handler(m_server, &static_uri);
+
+    httpd_uri_t assets_uri = {
+        .uri       = "/assets/*",
+        .method    = HTTP_GET,
+        .handler   = handleStaticFiles,
+        .user_ctx  = (void*)"/assets"
+    };
+    httpd_register_uri_handler(m_server, &assets_uri);
+
+    httpd_uri_t fragment_uri = {
+        .uri       = "/fragment/*",
+        .method    = HTTP_GET,
+        .handler   = handleStaticFiles,
+        .user_ctx  = (void*)"/routes"
+    };
+    httpd_register_uri_handler(m_server, &fragment_uri);
 
     // Main web routes
-    m_server.on("/", HTTP_GET, std::bind(&WebServerManager::handleRootOrHash, this, std::placeholders::_1));
-    m_server.on("/#*", HTTP_GET, std::bind(&WebServerManager::handleRootOrHash, this, std::placeholders::_1));
+    httpd_uri_t root_uri = {
+        .uri       = "/",
+        .method    = HTTP_GET,
+        .handler   = handleRootOrHash,
+        .user_ctx  = this
+    };
+    httpd_register_uri_handler(m_server, &root_uri);
 
     // API endpoints
-    m_server.on("/config", HTTP_GET, std::bind(&WebServerManager::handleGetConfig, this, std::placeholders::_1));
-    m_server.on("/config/clear", HTTP_POST, std::bind(&WebServerManager::handleClearConfig, this, std::placeholders::_1));
-    m_server.on("/eth_get_config", HTTP_GET, std::bind(&WebServerManager::handleGetEthConfig, this, std::placeholders::_1));
-    m_server.on("/reboot_device", HTTP_GET, std::bind(&WebServerManager::handleReboot, this, std::placeholders::_1));
-    m_server.on("/reset_hk_pair", HTTP_GET, std::bind(&WebServerManager::handleHKReset, this, std::placeholders::_1));
-    m_server.on("/reset_wifi_cred", HTTP_GET, std::bind(&WebServerManager::handleWifiReset, this, std::placeholders::_1));
-    m_server.on("/start_config_ap", HTTP_GET, std::bind(&WebServerManager::handleStartConfigAP, this, std::placeholders::_1));
-    m_server.on("/get_wifi_rssi", HTTP_GET, std::bind(&WebServerManager::handleGetWifiRssi, this, std::placeholders::_1));
+    httpd_uri_t config_get_uri = {
+        .uri       = "/config",
+        .method    = HTTP_GET,
+        .handler   = handleGetConfig,
+        .user_ctx  = this
+    };
+    httpd_register_uri_handler(m_server, &config_get_uri);
 
-    // Complex POST handler for saving config
-    AsyncCallbackWebHandler* saveHandler = new AsyncCallbackWebHandler();
-    saveHandler->setUri("/config/save");
-    saveHandler->setMethod(HTTP_POST);
-    saveHandler->onBody(std::bind(&WebServerManager::handleSaveConfigBody, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, std::placeholders::_5));
-    saveHandler->onRequest(std::bind(&WebServerManager::processSaveConfigRequest, this, std::placeholders::_1));
-    m_server.addHandler(saveHandler);
+    httpd_uri_t config_clear_uri = {
+        .uri       = "/config/clear",
+        .method    = HTTP_POST,
+        .handler   = handleClearConfig,
+        .user_ctx  = this
+    };
+    httpd_register_uri_handler(m_server, &config_clear_uri);
 
-    m_server.onNotFound(std::bind(&WebServerManager::handleNotFound, this, std::placeholders::_1));
+    httpd_uri_t config_save_uri = {
+        .uri       = "/config/save",
+        .method    = HTTP_POST,
+        .handler   = handleSaveConfig,
+        .user_ctx  = this
+    };
+    httpd_register_uri_handler(m_server, &config_save_uri);
 
-    if (miscConfig.webAuthEnabled) {
-        ESP_LOGI(TAG, "Web authentication is enabled.");
-        const char* user = miscConfig.webUsername.c_str();
-        const char* pass = miscConfig.webPassword.c_str();
-        // Protect all handlers except static assets
-        m_server.on("/", HTTP_GET, std::bind(&WebServerManager::handleRootOrHash, this, std::placeholders::_1)).setAuthentication(user, pass);
-        m_server.on("/#*", HTTP_GET, std::bind(&WebServerManager::handleRootOrHash, this, std::placeholders::_1)).setAuthentication(user, pass);
-        m_server.on("/config", HTTP_GET, std::bind(&WebServerManager::handleGetConfig, this, std::placeholders::_1)).setAuthentication(user, pass);
-        m_server.on("/config/clear", HTTP_POST, std::bind(&WebServerManager::handleClearConfig, this, std::placeholders::_1)).setAuthentication(user, pass);
-        m_server.on("/reboot_device", HTTP_GET, std::bind(&WebServerManager::handleReboot, this, std::placeholders::_1)).setAuthentication(user, pass);
-        m_server.on("/reset_hk_pair", HTTP_GET, std::bind(&WebServerManager::handleHKReset, this, std::placeholders::_1)).setAuthentication(user, pass);
-        m_server.on("/reset_wifi_cred", HTTP_GET, std::bind(&WebServerManager::handleWifiReset, this, std::placeholders::_1)).setAuthentication(user, pass);
-        m_server.on("/start_config_ap", HTTP_GET, std::bind(&WebServerManager::handleStartConfigAP, this, std::placeholders::_1)).setAuthentication(user, pass);
-        m_server.on("/get_wifi_rssi", HTTP_GET, std::bind(&WebServerManager::handleGetWifiRssi, this, std::placeholders::_1)).setAuthentication(user, pass);
-        saveHandler->setAuthentication(user, pass);
+    httpd_uri_t eth_config_uri = {
+        .uri       = "/eth_get_config",
+        .method    = HTTP_GET,
+        .handler   = handleGetEthConfig,
+        .user_ctx  = this
+    };
+    httpd_register_uri_handler(m_server, &eth_config_uri);
+
+    httpd_uri_t reboot_uri = {
+        .uri       = "/reboot_device",
+        .method    = HTTP_GET,
+        .handler   = handleReboot,
+        .user_ctx  = this
+    };
+    httpd_register_uri_handler(m_server, &reboot_uri);
+
+    httpd_uri_t hk_reset_uri = {
+        .uri       = "/reset_hk_pair",
+        .method    = HTTP_GET,
+        .handler   = handleHKReset,
+        .user_ctx  = this
+    };
+    httpd_register_uri_handler(m_server, &hk_reset_uri);
+
+    httpd_uri_t wifi_reset_uri = {
+        .uri       = "/reset_wifi_cred",
+        .method    = HTTP_GET,
+        .handler   = handleWifiReset,
+        .user_ctx  = this
+    };
+    httpd_register_uri_handler(m_server, &wifi_reset_uri);
+
+    httpd_uri_t config_ap_uri = {
+        .uri       = "/start_config_ap",
+        .method    = HTTP_GET,
+        .handler   = handleStartConfigAP,
+        .user_ctx  = this
+    };
+    httpd_register_uri_handler(m_server, &config_ap_uri);
+
+    httpd_uri_t wifi_rssi_uri = {
+        .uri       = "/get_wifi_rssi",
+        .method    = HTTP_GET,
+        .handler   = handleGetWifiRssi,
+        .user_ctx  = this
+    };
+    httpd_register_uri_handler(m_server, &wifi_rssi_uri);
+}
+
+// Static file handler implementation
+esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
+    const char* base_path = (const char*)req->user_ctx;
+    char filepath[256];
+    char compressed_filepath[260];
+    
+    // Get the file path from URI
+    const char* filename = req->uri + strlen(base_path);
+    if (strlen(filename) == 0) {
+        filename = "/index.html";
     }
+    
+    snprintf(filepath, sizeof(filepath), "%s%s", base_path, filename);
+    
+    // Check for compressed version first for .js and .css files
+    bool use_compressed = false;
+    const char* actual_filepath = filepath;
+    
+    if (strstr(filename, ".js") || strstr(filename, ".css")) {
+        // Check if client accepts gzip encoding
+        size_t accept_encoding_len = httpd_req_get_hdr_value_len(req, "Accept-Encoding");
+        if (accept_encoding_len > 0) {
+            char* accept_encoding = (char*)malloc(accept_encoding_len + 1);
+            if (accept_encoding && httpd_req_get_hdr_value_str(req, "Accept-Encoding", accept_encoding, accept_encoding_len + 1) == ESP_OK) {
+                if (strstr(accept_encoding, "gzip")) {
+                    snprintf(compressed_filepath, sizeof(compressed_filepath), "%s.gz", filepath);
+                    if (LittleFS.exists(compressed_filepath)) {
+                        use_compressed = true;
+                        actual_filepath = compressed_filepath;
+                    }
+                }
+                free(accept_encoding);
+            }
+        }
+    }
+    
+    // Check if file exists
+    if (!LittleFS.exists(actual_filepath)) {
+        httpd_resp_send_404(req);
+        return ESP_FAIL;
+    }
+    
+    File file = LittleFS.open(actual_filepath, "r");
+    if (!file) {
+        httpd_resp_send_404(req);
+        return ESP_FAIL;
+    }
+    
+    // Determine content type based on original filename (not compressed)
+    const char* content_type = "text/plain";
+    if (strstr(filename, ".html")) content_type = "text/html";
+    else if (strstr(filename, ".css")) content_type = "text/css";
+    else if (strstr(filename, ".js")) content_type = "application/javascript";
+    else if (strstr(filename, ".json")) content_type = "application/json";
+    else if (strstr(filename, ".png")) content_type = "image/png";
+    else if (strstr(filename, ".jpg") || strstr(filename, ".jpeg")) content_type = "image/jpeg";
+    else if (strstr(filename, ".ico")) content_type = "image/x-icon";
+    else if (strstr(filename, ".webp")) content_type = "image/webp";
+    
+    httpd_resp_set_type(req, content_type);
+    
+    // Set compression header if using compressed file
+    if (use_compressed) {
+        httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
+    }
+    
+    char buffer[1024];
+    size_t bytes_read;
+    while ((bytes_read = file.read((uint8_t*)buffer, sizeof(buffer))) > 0) {
+        if (httpd_resp_send_chunk(req, buffer, bytes_read) != ESP_OK) {
+            file.close();
+            return ESP_FAIL;
+        }
+    }
+    
+    file.close();
+    httpd_resp_send_chunk(req, NULL, 0);
+    return ESP_OK;
 }
 
-// --- Request Handler Implementations ---
-void WebServerManager::handleGetWifiRssi(AsyncWebServerRequest *request){
+// Root/Index handler
+esp_err_t WebServerManager::handleRootOrHash(httpd_req_t *req) {
+    File file = LittleFS.open("/index.html", "r");
+    if (!file) {
+        httpd_resp_send_404(req);
+        return ESP_FAIL;
+    }
+    
+    httpd_resp_set_type(req, "text/html");
+    
+    char buffer[1024];
+    size_t bytes_read;
+    while ((bytes_read = file.read((uint8_t*)buffer, sizeof(buffer))) > 0) {
+        // Simple template processing for VERSION
+        std::string content(buffer, bytes_read);
+        size_t pos = content.find("{{VERSION}}");
+        if (pos != std::string::npos) {
+            content.replace(pos, 11, esp_app_get_description()->version);
+        }
+        
+        if (httpd_resp_send_chunk(req, content.c_str(), content.length()) != ESP_OK) {
+            file.close();
+            return ESP_FAIL;
+        }
+    }
+    
+    file.close();
+    httpd_resp_send_chunk(req, NULL, 0);
+    return ESP_OK;
+}
+
+// WiFi RSSI handler
+esp_err_t WebServerManager::handleGetWifiRssi(httpd_req_t *req) {
     std::string rssi_val = std::to_string(WiFi.RSSI());
-    request->send(200, "text/plain", rssi_val.c_str());
-}
-void WebServerManager::handleRootOrHash(AsyncWebServerRequest *request) {
-    request->send(LittleFS, "/index.html", "text/html", false, std::bind(&WebServerManager::indexProcessor, this, std::placeholders::_1));
+    httpd_resp_set_type(req, "text/plain");
+    httpd_resp_send(req, rssi_val.c_str(), rssi_val.length());
+    return ESP_OK;
 }
 
-void WebServerManager::handleGetConfig(AsyncWebServerRequest *request) {
-  if (!request->hasParam("type")) {
-      request->send(400, "text/plain", "Missing 'type' parameter");
-      return;
-  }
-  std::string type = request->getParam("type")->value().c_str();
-  std::string responseJson;
+// Get configuration handler
+esp_err_t WebServerManager::handleGetConfig(httpd_req_t *req) {
+    WebServerManager* instance = getInstance(req);
+    if (!instance) {
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
 
-  if (type == "mqtt") {
-      responseJson = m_configManager.serializeToJson<espConfig::mqttConfig_t>();
-  } else if (type == "misc" || type == "actions") {
-      responseJson = m_configManager.serializeToJson<espConfig::misc_config_t>();
-  } else if (type == "hkinfo") {
-      const auto& readerData = m_readerDataManager.getReaderData();
-      cJSON *hkInfo = cJSON_CreateObject();
-      cJSON_AddStringToObject(hkInfo, "group_identifier", fmt::format("{:02X}", fmt::join(readerData.reader_gid, "")).c_str());
-      cJSON_AddStringToObject(hkInfo, "unique_identifier", fmt::format("{:02X}", fmt::join(readerData.reader_id, "")).c_str());
-      cJSON *issuersArray = cJSON_CreateArray();
-      for(const auto& issuer : readerData.issuers) {
-          cJSON *issuerJson = cJSON_CreateObject();
-          cJSON_AddStringToObject(issuerJson, "issuerId", fmt::format("{:02X}", fmt::join(issuer.issuer_id, "")).c_str());
-          cJSON *endpointsArray = cJSON_CreateArray();
+    // Parse query parameters
+    char query[256];
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK) {
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, "Missing 'type' parameter", HTTPD_RESP_USE_STRLEN);
+        return ESP_FAIL;
+    }
+
+    char type_param[64];
+    if (httpd_query_key_value(query, "type", type_param, sizeof(type_param)) != ESP_OK) {
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, "Missing 'type' parameter", HTTPD_RESP_USE_STRLEN);
+        return ESP_FAIL;
+    }
+
+    std::string type = type_param;
+    std::string responseJson;
+
+    if (type == "mqtt") {
+        responseJson = instance->m_configManager.serializeToJson<espConfig::mqttConfig_t>();
+    } else if (type == "misc" || type == "actions") {
+        responseJson = instance->m_configManager.serializeToJson<espConfig::misc_config_t>();
+    } else if (type == "hkinfo") {
+        const auto& readerData = instance->m_readerDataManager.getReaderData();
+        cJSON *hkInfo = cJSON_CreateObject();
+        cJSON_AddStringToObject(hkInfo, "group_identifier", fmt::format("{:02X}", fmt::join(readerData.reader_gid, "")).c_str());
+        cJSON_AddStringToObject(hkInfo, "unique_identifier", fmt::format("{:02X}", fmt::join(readerData.reader_id, "")).c_str());
+        cJSON *issuersArray = cJSON_CreateArray();
+        for(const auto& issuer : readerData.issuers) {
+            cJSON *issuerJson = cJSON_CreateObject();
+            cJSON_AddStringToObject(issuerJson, "issuerId", fmt::format("{:02X}", fmt::join(issuer.issuer_id, "")).c_str());
+            cJSON *endpointsArray = cJSON_CreateArray();
           for (const auto& endpoint : issuer.endpoints) {
             cJSON *ep = cJSON_CreateObject();
             cJSON_AddStringToObject(ep, "endpointId", fmt::format("{:02X}", fmt::join(endpoint.endpoint_id, "")).c_str()); 
@@ -136,25 +344,35 @@ void WebServerManager::handleGetConfig(AsyncWebServerRequest *request) {
           cJSON_AddItemToObject(issuerJson, "endpoints", endpointsArray);
           cJSON_AddItemToArray(issuersArray, issuerJson);
       }
-      cJSON_AddItemToObject(hkInfo, "issuers", issuersArray);
-      responseJson = cJSON_PrintUnformatted(hkInfo);
-      cJSON_Delete(hkInfo);
-  } else {
-    request->send(400, "text/plain", "Invalid 'type' parameter");
-    return;
-  }
-  
-  request->send(200, "application/json", responseJson.c_str());
+        cJSON_AddItemToObject(hkInfo, "issuers", issuersArray);
+        responseJson = cJSON_PrintUnformatted(hkInfo);
+        cJSON_Delete(hkInfo);
+    } else {
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, "Invalid 'type' parameter", HTTPD_RESP_USE_STRLEN);
+        return ESP_FAIL;
+    }
+    
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, responseJson.c_str(), responseJson.length());
+    return ESP_OK;
 }
 
-void WebServerManager::handleGetEthConfig(AsyncWebServerRequest *request) {
+// Get Ethernet configuration handler
+esp_err_t WebServerManager::handleGetEthConfig(httpd_req_t *req) {
+    WebServerManager* instance = getInstance(req);
+    if (!instance) {
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
     cJSON *eth_config = cJSON_CreateObject();
     cJSON *chipsArray = cJSON_CreateArray();
     for (auto &&v : eth_config_ns::supportedChips) {
-      cJSON *chip = cJSON_CreateObject();
-      cJSON_AddStringToObject(chip, "name", v.second.name.c_str());
-      cJSON_AddBoolToObject(chip, "emac", v.second.emac);
-      cJSON_AddNumberToObject(chip, "phy_type", v.second.phy_type);
+        cJSON *chip = cJSON_CreateObject();
+        cJSON_AddStringToObject(chip, "name", v.second.name.c_str());
+        cJSON_AddBoolToObject(chip, "emac", v.second.emac);
+        cJSON_AddNumberToObject(chip, "phy_type", v.second.phy_type);
       cJSON_AddItemToArray(chipsArray, chip);
     }
     cJSON_AddItemToObject(eth_config, "supportedChips", chipsArray);
@@ -189,208 +407,89 @@ void WebServerManager::handleGetEthConfig(AsyncWebServerRequest *request) {
         cJSON_AddItemToArray(boardPresetsArray, preset);
     }
     cJSON_AddItemToObject(eth_config, "boardPresets", boardPresetsArray);
-    cJSON_AddBoolToObject(eth_config, "ethEnabled", m_configManager.getConfig<espConfig::misc_config_t>().ethernetEnabled);
+    cJSON_AddBoolToObject(eth_config, "ethEnabled", instance->m_configManager.getConfig<espConfig::misc_config_t>().ethernetEnabled);
     char *payload = cJSON_PrintUnformatted(eth_config);
     cJSON_Delete(eth_config);
-    request->send(200, "application/json", payload);
-    free(payload);
-}
-
-void WebServerManager::handleSaveConfigBody(AsyncWebServerRequest *request, uint8_t *data, size_t len, size_t index, size_t total) {
-    if (len > 0 && len == total) {
-        cJSON *parsed = cJSON_ParseWithLength(chunkedBody.size() > 0 ? (const char*)chunkedBody.data() : (const char*)data, chunkedBody.size() > 0 ? chunkedBody.size() : len);
-        if (!parsed) {
-            ESP_LOGE(TAG, "Failed to parse JSON chunk.");
-            request->_tempObject = nullptr;
-            return;
-        }
-        request->_tempObject = parsed;
-    } else if(len > 0){
-      chunkedBody.insert(chunkedBody.end(), data, data + len);
-      if(chunkedBody.size() == total){
-        cJSON *parsed = cJSON_ParseWithLength(chunkedBody.size() > 0 ? (const char*)chunkedBody.data() : (const char*)data, chunkedBody.size() > 0 ? chunkedBody.size() : len);
-        chunkedBody.clear();
-        if (!parsed) {
-            ESP_LOGE(TAG, "Failed to parse JSON chunk.");
-            request->_tempObject = nullptr;
-            return;
-        }
-        request->_tempObject = parsed;
-      }
-    } else request->_tempObject = nullptr;
-}
-
-std::string getJsonValueAsString(cJSON* value) {
-  char *str = cJSON_PrintUnformatted(value);
-  std::string s(str);
-  free(str);
-  return s;
-}
-
-bool WebServerManager::validateRequest(AsyncWebServerRequest *req, cJSON *currentData) {
-  uint8_t propertiesProcessed = 0;
-  cJSON *obj = (cJSON*)req->_tempObject;
-
-  cJSON *it = obj->child;
-  while(it) {
-    std::string keyStr = it->string;
-
-    cJSON *existingValue = cJSON_GetObjectItem(currentData, keyStr.c_str());
-    if (!existingValue) {
-      LOG(E, "\"%s\" does not exist in the current configuration!", keyStr.c_str());
-      std::string msg = "\"" + std::string(keyStr) + "\" is not a valid configuration key.";
-      req->send(400, "text/plain", msg.c_str());
-      return false;
-    }
-
-    cJSON *incomingValue = it;
-
-    bool typeOk = false;
-    if (cJSON_IsString(existingValue)) {
-      LOG(D, "VALUE FOR %s IS String",keyStr.c_str());
-      typeOk = cJSON_IsString(incomingValue);
-    } else if (cJSON_IsObject(existingValue)) {
-      LOG(D, "VALUE FOR %s IS OBJECT",keyStr.c_str());
-      typeOk = cJSON_IsObject(incomingValue);
-    } else if (cJSON_IsArray(existingValue)) {
-      LOG(D, "VALUE FOR %s IS ARRAY",keyStr.c_str());
-      typeOk = cJSON_IsArray(incomingValue);
-    } else if (cJSON_IsBool(existingValue)) {
-      LOG(D, "VALUE FOR %s IS BOOL",keyStr.c_str());
-      typeOk = cJSON_IsBool(incomingValue) ||
-               (cJSON_IsNumber(incomingValue) && (incomingValue->valueint == 0 || incomingValue->valueint == 1));
-    } else if (cJSON_IsNumber(existingValue)) {
-      LOG(D, "VALUE FOR %s IS UINT",keyStr.c_str());
-      typeOk = cJSON_IsNumber(incomingValue);
-    } else {
-      LOG(D, "RX VALUE NOT MATCH ANY EXPECTED TYPE");
-      typeOk = false;
-    } 
-
-    if (!typeOk) {
-      LOG(E, "Type mismatch for key \"%s\"!", keyStr.c_str());
-      std::string valueStr = getJsonValueAsString(incomingValue);
-      std::string msg = "Invalid type for key \"" + std::string(keyStr) + "\". Received value: " + valueStr;
-      req->send(400, "text/plain", msg.c_str());
-      return false;
-    }
-
-    // --- setupCode Validation ---
-    if (keyStr == "setupCode") {
-      if (!cJSON_IsString(incomingValue)) {
-        LOG(E, "\"%s\" is not a string!", keyStr.c_str());
-        std::string msg = "Value for \"" + std::string(keyStr) + "\" must be a string.";
-        req->send(400, "text/plain", msg.c_str());
-        return false;
-      }
-      std::string code = incomingValue->valuestring;
-      if (code.length() != 8 || std::find_if(code.begin(), code.end(), [](unsigned char c) { return !std::isdigit(c); }) != code.end()) {
-        LOG(E, "Invalid setupCode format for value: %s", code.c_str());
-        std::string msg = "\"" + code + "\" is not a valid value for \"" + keyStr + "\". It must be an 8-digit number.";
-        req->send(400, "text/plain", msg.c_str());
-        return false;
-      }
-      if (homeSpan.controllerListBegin() != homeSpan.controllerListEnd() && code.compare(cJSON_GetStringValue(existingValue)) != 0) {
-        LOG(E, "Attempted to change Setup Code while devices are paired.");
-        req->send(400, "text/plain", "The Setup Code can only be set if no devices are paired, reset if any issues!");
-        return false;
-      }
-    // --- Pin Validation ---
-    } else if (keyStr.size() >= 3 && strcmp(keyStr.data() + (keyStr.size() - 3), "Pin") == 0) {
-      if (!cJSON_IsNumber(incomingValue) || (incomingValue->valueint == 0)) {
-        LOG(E, "Invalid type or value for GPIO pin \"%s\"", keyStr.c_str());
-        std::string msg = getJsonValueAsString(incomingValue) + " is not a valid value for \"" + keyStr + "\".";
-        req->send(400, "text/plain", msg.c_str());
-        return false;
-      }
-      uint8_t pin = incomingValue->valueint;
-      if (pin != 255 && !GPIO_IS_VALID_GPIO(pin) && !GPIO_IS_VALID_OUTPUT_GPIO(pin)) {
-        LOG(E, "GPIO pin %u for \"%s\" is not a valid pin.", pin, keyStr.c_str());
-        std::string msg = std::to_string(pin) + " is not a valid GPIO Pin for \"" + keyStr + "\".";
-        req->send(400, "text/plain", msg.c_str());
-        return false;
-      }
-    }
-
-    // --- Boolean Validation ---
-    if (cJSON_IsBool(existingValue)) {
-      bool valueOk = false;
-      if (cJSON_IsBool(incomingValue)) {
-        valueOk = true;
-      } else if (cJSON_IsNumber(incomingValue)) {
-        int val = incomingValue->valueint;
-        if (val == 0 || val == 1) {
-          cJSON_SetBoolValue(incomingValue, val);
-          valueOk = true;
-        }
-      }
-
-      if (!valueOk) {
-        LOG(E, "\"%s\" could not validate! Expected a boolean (or 0/1).\n", keyStr.c_str());
-        std::string msg = getJsonValueAsString(incomingValue) + " is not a valid value for \"" + keyStr + "\".";
-        req->send(400, "text/plain", msg.c_str());
-        return false;
-      }
-    }
-
-    propertiesProcessed++;
-    it = it->next;
-  }
-
-  if (propertiesProcessed != cJSON_GetArraySize(obj)) {
-    // This case should ideally not be reached if the loop returns on first error.
-    // It's a fallback for unexpected issues.
-    LOG(E, "Not all properties could be validated, cannot continue!");
-    if (!req->client()->disconnected()) {
-      req->send(500, "text/plain", "Something went wrong during validation!");
-    }
-    return false;
-  }
-
-  return true;
-}
-
-void merge(cJSON *dest, cJSON *src)
-{
-   cJSON *item = src->child;
-   while(item) {
-     cJSON_ReplaceItemInObject(dest, item->string, cJSON_Duplicate(item, true));
-     item = item->next;
-   }
-}
-
-void WebServerManager::processSaveConfigRequest(AsyncWebServerRequest *request) {
-    if ((request->_tempObject == nullptr) || !request->hasParam("type")) {
-        request->send(400, "text/plain", "Invalid request or missing type.");
-        return;
-    }
-    String type = request->getParam("type")->value();
     
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, payload, strlen(payload));
+    free(payload);
+    return ESP_OK;
+}
+
+// Save configuration handler
+esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
+    WebServerManager* instance = getInstance(req);
+    if (!instance) {
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
+    // Parse query parameters for type
+    char query[256];
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK) {
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, "Missing 'type' parameter", HTTPD_RESP_USE_STRLEN);
+        return ESP_FAIL;
+    }
+
+    char type_param[64];
+    if (httpd_query_key_value(query, "type", type_param, sizeof(type_param)) != ESP_OK) {
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, "Missing 'type' parameter", HTTPD_RESP_USE_STRLEN);
+        return ESP_FAIL;
+    }
+
+    // Read request body
+    char content[2048];
+    int ret = httpd_req_recv(req, content, sizeof(content) - 1);
+    if (ret <= 0) {
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, "Invalid request body", HTTPD_RESP_USE_STRLEN);
+        return ESP_FAIL;
+    }
+    content[ret] = '\0';
+
+    cJSON *obj = cJSON_Parse(content);
+    if (!obj) {
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, "Invalid JSON", HTTPD_RESP_USE_STRLEN);
+        return ESP_FAIL;
+    }
+
+    std::string type = type_param;
+    
+    // Get current configuration for validation
     cJSON *data = nullptr;
     cJSON *configSchema = nullptr;
     if (type == "mqtt") {
-        std::string s = m_configManager.serializeToJson<espConfig::mqttConfig_t>();
+        std::string s = instance->m_configManager.serializeToJson<espConfig::mqttConfig_t>();
         data = cJSON_Parse(s.c_str());
         configSchema = cJSON_Duplicate(data, true);
     } else if(type == "misc" || type == "actions") {
-        std::string s = m_configManager.serializeToJson<espConfig::misc_config_t>();
+        std::string s = instance->m_configManager.serializeToJson<espConfig::misc_config_t>();
         data = cJSON_Parse(s.c_str());
         configSchema = cJSON_Duplicate(data, true);
     } else {
-      request->send(400, "text/plain", "Invalid type!");
-    }
-    if(!validateRequest(request, configSchema)){
-      cJSON_Delete(data);
-      cJSON_Delete(configSchema);
-      return;
+        cJSON_Delete(obj);
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, "Invalid type!", HTTPD_RESP_USE_STRLEN);
+        return ESP_FAIL;
     }
 
+    if (!validateRequest(req, configSchema, content)) {
+        cJSON_Delete(data);
+        cJSON_Delete(configSchema);
+        cJSON_Delete(obj);
+        return ESP_FAIL;
+    }
+
+    // Process configuration changes and save
     bool success = false;
     bool rebootNeeded = false;
     std::string rebootMsg;
-    
-    cJSON *obj = (cJSON*)request->_tempObject;
 
+    // Process individual field changes and publish events
     cJSON *it = obj->child;
     while(it) {
       cJSON *configSchemaItem = cJSON_GetObjectItem(configSchema, it->string);
@@ -434,19 +533,20 @@ void WebServerManager::processSaveConfigRequest(AsyncWebServerRequest *request) 
       it = it->next;
     }
 
+    // Merge changes and save configuration
     if (type == "mqtt") {
-      merge(data, obj);
-      success = m_configManager.deserializeFromJson<espConfig::mqttConfig_t>(cJSON_PrintUnformatted(data));
+      mergeJson(data, obj);
+      success = instance->m_configManager.deserializeFromJson<espConfig::mqttConfig_t>(cJSON_PrintUnformatted(data));
       if(success){
-        success = m_configManager.saveConfig<espConfig::mqttConfig_t>();
+        success = instance->m_configManager.saveConfig<espConfig::mqttConfig_t>();
         rebootNeeded = true; // Always reboot on MQTT config change
         rebootMsg = "MQTT config saved, reboot needed to apply! Rebooting...";
       } else ESP_LOGE(TAG, "Could not deserialize from JSON!");
     } else if(type == "misc" || type == "actions") {
-      merge(data, obj);
-      success = m_configManager.deserializeFromJson<espConfig::misc_config_t>(cJSON_PrintUnformatted(data));
+      mergeJson(data, obj);
+      success = instance->m_configManager.deserializeFromJson<espConfig::misc_config_t>(cJSON_PrintUnformatted(data));
       if(success){
-        success = m_configManager.saveConfig<espConfig::misc_config_t>();
+        success = instance->m_configManager.saveConfig<espConfig::misc_config_t>();
         if(type == "misc"){
           rebootNeeded = true;
           rebootMsg = "Misc config saved, reboot needed to apply! Rebooting...";
@@ -456,62 +556,268 @@ void WebServerManager::processSaveConfigRequest(AsyncWebServerRequest *request) 
 
     cJSON_Delete(data);
     cJSON_Delete(configSchema);
+    cJSON_Delete(obj);
 
     if (success) {
-      request->send(200, "text/plain", rebootNeeded ? rebootMsg.c_str() : "Saved and applied!");
-      if (rebootNeeded) {
-          delay(1000);
-          ESP.restart();
-      }
+        const char* response = rebootNeeded ? rebootMsg.c_str() : "Saved and applied!";
+        httpd_resp_send(req, response, strlen(response));
+        if (rebootNeeded) {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            esp_restart();
+        }
+        return ESP_OK;
     } else {
-      request->send(500, "text/plain", "Failed to save configuration to NVS.");
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
     }
 }
-void WebServerManager::handleClearConfig(AsyncWebServerRequest *request) {
-    if (!request->hasParam("type")) {
-        request->send(400, "text/plain", "Missing 'type' parameter");
-        return;
+
+std::string getJsonValueAsString(cJSON* value) {
+  char *str = cJSON_PrintUnformatted(value);
+  std::string s(str);
+  free(str);
+  return s;
+}
+
+static void mergeJson(cJSON *target, cJSON *source) {
+    cJSON *item = source->child;
+    while (item) {
+        cJSON *existing = cJSON_GetObjectItem(target, item->string);
+        if (existing) {
+            cJSON_ReplaceItemInObject(target, item->string, cJSON_Duplicate(item, true));
+        } else {
+            cJSON_AddItemToObject(target, item->string, cJSON_Duplicate(item, true));
+        }
+        item = item->next;
     }
-    String type = request->getParam("type")->value();
+}
+
+bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData, const char* body) {
+  uint8_t propertiesProcessed = 0;
+  cJSON *obj = cJSON_Parse(body);
+  if (!obj) {
+    httpd_resp_set_status(req, "400 Bad Request");
+    httpd_resp_send(req, "Invalid JSON", HTTPD_RESP_USE_STRLEN);
+    return false;
+  }
+
+  cJSON *it = obj->child;
+  while(it) {
+    std::string keyStr = it->string;
+
+    cJSON *existingValue = cJSON_GetObjectItem(currentData, keyStr.c_str());
+    if (!existingValue) {
+      ESP_LOGE(TAG, "\"%s\" does not exist in the current configuration!", keyStr.c_str());
+      std::string msg = "\"" + std::string(keyStr) + "\" is not a valid configuration key.";
+      httpd_resp_set_status(req, "400 Bad Request");
+      httpd_resp_send(req, msg.c_str(), msg.length());
+      cJSON_Delete(obj);
+      return false;
+    }
+
+    cJSON *incomingValue = it;
+
+    bool typeOk = false;
+    if (cJSON_IsString(existingValue)) {
+      ESP_LOGD(TAG, "VALUE FOR %s IS String",keyStr.c_str());
+      typeOk = cJSON_IsString(incomingValue);
+    } else if (cJSON_IsObject(existingValue)) {
+      ESP_LOGD(TAG, "VALUE FOR %s IS OBJECT",keyStr.c_str());
+      typeOk = cJSON_IsObject(incomingValue);
+    } else if (cJSON_IsArray(existingValue)) {
+      ESP_LOGD(TAG, "VALUE FOR %s IS ARRAY",keyStr.c_str());
+      typeOk = cJSON_IsArray(incomingValue);
+    } else if (cJSON_IsBool(existingValue)) {
+      ESP_LOGD(TAG, "VALUE FOR %s IS BOOL",keyStr.c_str());
+      typeOk = cJSON_IsBool(incomingValue) ||
+               (cJSON_IsNumber(incomingValue) && (incomingValue->valueint == 0 || incomingValue->valueint == 1));
+    } else if (cJSON_IsNumber(existingValue)) {
+      ESP_LOGD(TAG, "VALUE FOR %s IS UINT",keyStr.c_str());
+      typeOk = cJSON_IsNumber(incomingValue);
+    } else {
+      ESP_LOGD(TAG, "RX VALUE NOT MATCH ANY EXPECTED TYPE");
+      typeOk = false;
+    } 
+
+    if (!typeOk) {
+      ESP_LOGE(TAG, "Type mismatch for key \"%s\"!", keyStr.c_str());
+      std::string valueStr = getJsonValueAsString(incomingValue);
+      std::string msg = "Invalid type for key \"" + std::string(keyStr) + "\". Received value: " + valueStr;
+      httpd_resp_set_status(req, "400 Bad Request");
+      httpd_resp_send(req, msg.c_str(), msg.length());
+      cJSON_Delete(obj);
+      return false;
+    }
+
+    // --- setupCode Validation ---
+    if (keyStr == "setupCode") {
+      if (!cJSON_IsString(incomingValue)) {
+        ESP_LOGE(TAG, "\"%s\" is not a string!", keyStr.c_str());
+        std::string msg = "Value for \"" + std::string(keyStr) + "\" must be a string.";
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, msg.c_str(), msg.length());
+        cJSON_Delete(obj);
+        return false;
+      }
+      std::string code = incomingValue->valuestring;
+      if (code.length() != 8 || std::find_if(code.begin(), code.end(), [](unsigned char c) { return !std::isdigit(c); }) != code.end()) {
+        ESP_LOGE(TAG, "Invalid setupCode format for value: %s", code.c_str());
+        std::string msg = "\"" + code + "\" is not a valid value for \"" + keyStr + "\". It must be an 8-digit number.";
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, msg.c_str(), msg.length());
+        cJSON_Delete(obj);
+        return false;
+      }
+      if (homeSpan.controllerListBegin() != homeSpan.controllerListEnd() && code.compare(cJSON_GetStringValue(existingValue)) != 0) {
+        ESP_LOGE(TAG, "Attempted to change Setup Code while devices are paired.");
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, "The Setup Code can only be set if no devices are paired, reset if any issues!", HTTPD_RESP_USE_STRLEN);
+        cJSON_Delete(obj);
+        return false;
+      }
+    // --- Pin Validation ---
+    } else if (keyStr.size() >= 3 && strcmp(keyStr.data() + (keyStr.size() - 3), "Pin") == 0) {
+      if (!cJSON_IsNumber(incomingValue) || (incomingValue->valueint == 0)) {
+        ESP_LOGE(TAG, "Invalid type or value for GPIO pin \"%s\"", keyStr.c_str());
+        std::string msg = getJsonValueAsString(incomingValue) + " is not a valid value for \"" + keyStr + "\".";
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, msg.c_str(), msg.length());
+        cJSON_Delete(obj);
+        return false;
+      }
+      uint8_t pin = incomingValue->valueint;
+      if (pin != 255 && !GPIO_IS_VALID_GPIO(pin) && !GPIO_IS_VALID_OUTPUT_GPIO(pin)) {
+        ESP_LOGE(TAG, "GPIO pin %u for \"%s\" is not a valid pin.", pin, keyStr.c_str());
+        std::string msg = std::to_string(pin) + " is not a valid GPIO Pin for \"" + keyStr + "\".";
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, msg.c_str(), msg.length());
+        cJSON_Delete(obj);
+        return false;
+      }
+    }
+
+    // --- Boolean Validation ---
+    if (cJSON_IsBool(existingValue)) {
+      bool valueOk = false;
+      if (cJSON_IsBool(incomingValue)) {
+        valueOk = true;
+      } else if (cJSON_IsNumber(incomingValue)) {
+        int val = incomingValue->valueint;
+        if (val == 0 || val == 1) {
+          cJSON_SetBoolValue(incomingValue, val);
+          valueOk = true;
+        }
+      }
+
+      if (!valueOk) {
+        ESP_LOGE(TAG, "\"%s\" could not validate! Expected a boolean (or 0/1).\n", keyStr.c_str());
+        std::string msg = getJsonValueAsString(incomingValue) + " is not a valid value for \"" + keyStr + "\".";
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, msg.c_str(), msg.length());
+        cJSON_Delete(obj);
+        return false;
+      }
+    }
+
+    propertiesProcessed++;
+    it = it->next;
+  }
+
+  if (propertiesProcessed != cJSON_GetArraySize(obj)) {
+    // This case should ideally not be reached if the loop returns on first error.
+    // It's a fallback for unexpected issues.
+    ESP_LOGE(TAG, "Not all properties could be validated, cannot continue!");
+    httpd_resp_set_status(req, "500 Internal Server Error");
+    httpd_resp_send(req, "Something went wrong during validation!", HTTPD_RESP_USE_STRLEN);
+    cJSON_Delete(obj);
+    return false;
+  }
+
+  cJSON_Delete(obj);
+  return true;
+}
+
+// Clear configuration handler
+esp_err_t WebServerManager::handleClearConfig(httpd_req_t *req) {
+    WebServerManager* instance = getInstance(req);
+    if (!instance) {
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
+
+    // Parse query parameters for type
+    char query[256];
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK) {
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, "Missing 'type' parameter", HTTPD_RESP_USE_STRLEN);
+        return ESP_FAIL;
+    }
+
+    char type_param[64];
+    if (httpd_query_key_value(query, "type", type_param, sizeof(type_param)) != ESP_OK) {
+        httpd_resp_set_status(req, "400 Bad Request");
+        httpd_resp_send(req, "Missing 'type' parameter", HTTPD_RESP_USE_STRLEN);
+        return ESP_FAIL;
+    }
+
+    std::string type = type_param;
     bool success = false;
     if (type == "mqtt") {
-        success = m_configManager.deleteConfig<espConfig::mqttConfig_t>();
+        success = instance->m_configManager.deleteConfig<espConfig::mqttConfig_t>();
     } else if (type == "misc" || type == "actions") {
-        success = m_configManager.deleteConfig<espConfig::misc_config_t>();
+        success = instance->m_configManager.deleteConfig<espConfig::misc_config_t>();
     }
 
     if (success) {
-        request->send(200, "text/plain", "Cleared! Rebooting...");
-        delay(1000);
-        ESP.restart();
+        httpd_resp_send(req, "Cleared! Rebooting...", HTTPD_RESP_USE_STRLEN);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        esp_restart();
+        return ESP_OK;
     } else {
-        request->send(500, "text/plain", "Failed to clear configuration.");
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
     }
 }
 
-void WebServerManager::handleStartConfigAP(AsyncWebServerRequest *request) {
-    request->send(200, "text/plain", "Starting AP mode...");
-    delay(1000);
-    homeSpan.processSerialCommand("A");
+// Reboot handler
+esp_err_t WebServerManager::handleReboot(httpd_req_t *req) {
+    httpd_resp_send(req, "Rebooting...", HTTPD_RESP_USE_STRLEN);
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    esp_restart();
+    return ESP_OK;
 }
 
-void WebServerManager::handleReboot(AsyncWebServerRequest *request) {
-    request->send(200, "text/plain", "Rebooting...");
-    delay(1000);
-    ESP.restart();
-}
+// HomeKit reset handler
+esp_err_t WebServerManager::handleHKReset(httpd_req_t *req) {
+    WebServerManager* instance = getInstance(req);
+    if (!instance) {
+        httpd_resp_send_500(req);
+        return ESP_FAIL;
+    }
 
-void WebServerManager::handleHKReset(AsyncWebServerRequest *request) {
-    request->send(200, "text/plain", "Erasing HomeKit pairings and rebooting...");
-    m_readerDataManager.deleteAllReaderData();
+    httpd_resp_send(req, "Erasing HomeKit pairings and rebooting...", HTTPD_RESP_USE_STRLEN);
+    instance->m_readerDataManager.deleteAllReaderData();
     homeSpan.processSerialCommand("H");
+    return ESP_OK;
 }
 
-void WebServerManager::handleWifiReset(AsyncWebServerRequest *request) {
-    request->send(200, "text/plain", "Erasing WiFi credentials and rebooting...");
+// WiFi reset handler
+esp_err_t WebServerManager::handleWifiReset(httpd_req_t *req) {
+    httpd_resp_send(req, "Erasing WiFi credentials and rebooting...", HTTPD_RESP_USE_STRLEN);
     homeSpan.processSerialCommand("X");
+    return ESP_OK;
 }
 
-void WebServerManager::handleNotFound(AsyncWebServerRequest *request) {
-    request->send(404, "text/plain", "Not found");
+// Start config AP handler
+esp_err_t WebServerManager::handleStartConfigAP(httpd_req_t *req) {
+    httpd_resp_send(req, "Starting AP mode...", HTTPD_RESP_USE_STRLEN);
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    homeSpan.processSerialCommand("A");
+    return ESP_OK;
+}
+
+// Not found handler
+esp_err_t WebServerManager::handleNotFound(httpd_req_t *req) {
+    httpd_resp_send_404(req);
+    return ESP_FAIL;
 }
