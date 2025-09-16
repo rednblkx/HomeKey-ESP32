@@ -142,8 +142,19 @@ jobs:
           python-version: '3.11'
       - name: Install LittleFS Tool
         run: pip install littlefs-python
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install dependencies
+        run: bun install
+        working-directory: data
+      - name: Build
+        run: bun run build
+        working-directory: data
       - name: Create LittleFS Image
-        run: littlefs-python create $(pwd)/data littlefs.bin -v --fs-size=0x20000 --name-max=64 --block-size=4096
+        run: littlefs-python create $(pwd)/dist littlefs.bin -v --fs-size=0x20000 --name-max=64 --block-size=4096
+        working-directory: data
       - name: Archive LittleFS image
         uses: actions/upload-artifact@v4
         with:
