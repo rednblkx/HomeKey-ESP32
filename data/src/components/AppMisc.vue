@@ -180,12 +180,12 @@
                 <div class="form-control">
                   <label class="label cursor-pointer">
                     <span class="label-text">Ethernet Enabled</span>
-                    <input type="checkbox" v-model="miscConfig.ethEnabled" :true-value="1" :false-value="0"
+                    <input type="checkbox" v-model="miscConfig.ethernetEnabled" :true-value="1" :false-value="0"
                       class="toggle toggle-primary" />
                   </label>
                 </div>
 
-                <div v-if="miscConfig.ethEnabled" class="flex flex-col gap-4">
+                <div v-if="miscConfig.ethernetEnabled" class="flex flex-col gap-4">
                   <div class="form-control">
                     <label class="label">
                       <span class="label-text">Active Ethernet Preset</span>
@@ -373,7 +373,7 @@ export default {
       otaPasswd: '',
       controlPin: 26,
       hsStatusPin: 2,
-      ethEnabled: 0,
+      ethernetEnabled: 0,
       ethActivePreset: 0,
       ethPhyType: 0,
       ethSpiConfig: {
