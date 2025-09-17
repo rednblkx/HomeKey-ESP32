@@ -41,7 +41,7 @@ jobs:
           target: esp32
           path: '.'
           extra_docker_args: -v ~/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
-          command: idf.py --ccache build && idf.py merge-bin
+          command: CI=true idf.py --ccache build && idf.py merge-bin
       - name: Archive firmware
         uses: actions/upload-artifact@v4
         with:
@@ -80,7 +80,7 @@ jobs:
           target: esp32c3
           path: '.'
           extra_docker_args: -v ~/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
-          command: idf.py --ccache build && idf.py merge-bin
+          command: CI=true idf.py --ccache build && idf.py merge-bin
       - name: Archive firmware
         uses: actions/upload-artifact@v4
         with:
@@ -119,7 +119,7 @@ jobs:
           target: esp32c6
           path: '.'
           extra_docker_args: -v ~/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
-          command: idf.py --ccache build && idf.py merge-bin
+          command: CI=true idf.py --ccache build && idf.py merge-bin
       - name: Archive firmware
         uses: actions/upload-artifact@v4
         with:
