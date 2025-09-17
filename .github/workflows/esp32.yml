@@ -91,6 +91,45 @@ jobs:
         with:
           name: esp32c3-firmware-merged
           path: build/merged-binary.bin
+  esp32c6:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          submodules: 'recursive'
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.ccache
+            build
+            managed_components
+            sdkconfig
+          key: ${{ runner.os }}-esp32c6-build
+      - name: Cache Docker images.
+        uses: ScribeMD/docker-cache@0.5.0
+        with:
+          key: docker-${{ runner.os }}-espidf
+      - name: ESP32C6 Build
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.5
+          target: esp32c6
+          path: '.'
+          extra_docker_args: -v ~/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
+          command: idf.py --ccache build && idf.py merge-bin
+      - name: Archive firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32c6-firmware
+          path: build/HomeKey-ESP32.bin
+      - name: Archive merged binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32c6-firmware-merged
+          path: build/merged-binary.bin
   esp32s3:
     runs-on: ubuntu-latest
     steps:
