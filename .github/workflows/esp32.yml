@@ -166,4 +166,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: littlefs-binary
-          path: littlefs.bin
+          path: data/littlefs.bin
