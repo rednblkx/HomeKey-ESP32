@@ -112,6 +112,13 @@ jobs:
         uses: ScribeMD/docker-cache@0.5.0
         with:
           key: docker-${{ runner.os }}-espidf
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install WebUI dependencies
+        run: bun install
+        working-directory: data
       - name: ESP32S3 Build
         uses: espressif/esp-idf-ci-action@v1
         with:
