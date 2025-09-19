@@ -6,6 +6,7 @@
 #include "ReaderDataManager.hpp"
 #include "esp_log.h"
 #include "config.hpp"
+#include "esp_timer.h"
 #include "eth_structs.hpp"
 #include "eventStructs.hpp"
 #include "fmt/base.h"
@@ -55,13 +56,12 @@ void WebServerManager::begin() {
     } else {
         ESP_LOGE(TAG, "Error starting server: %s", esp_err_to_name(ret));
     }
-}
-
-std::string WebServerManager::indexProcessor(const std::string& var) {
-    if (var == "VERSION") {
-        return esp_app_get_description()->version;
-    }
-    return "";
+    esp_timer_create_args_t statusTimerArgs = {
+        .callback = &WebServerManager::statusTimerCallback,
+        .arg = this,
+        .name = "statusTimer"
+    };
+    esp_timer_create(&statusTimerArgs, &m_statusTimer);
 }
 
 WebServerManager* WebServerManager::getInstance(httpd_req_t *req) {
@@ -168,13 +168,17 @@ void WebServerManager::setupRoutes() {
     };
     httpd_register_uri_handler(m_server, &config_ap_uri);
 
-    httpd_uri_t wifi_rssi_uri = {
-        .uri       = "/get_wifi_rssi",
+    // WebSocket endpoint
+    httpd_uri_t ws_uri = {
+        .uri       = "/ws",
         .method    = HTTP_GET,
-        .handler   = handleGetWifiRssi,
-        .user_ctx  = this
+        .handler   = handleWebSocket,
+        .user_ctx  = this,
     };
-    httpd_register_uri_handler(m_server, &wifi_rssi_uri);
+#ifdef CONFIG_HTTPD_WS_SUPPORT
+    ws_uri.is_websocket = true;
+#endif
+    httpd_register_uri_handler(m_server, &ws_uri);
 }
 
 // Static file handler implementation
@@ -257,6 +261,95 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
     return ESP_OK;
 }
 
+// Helper to send text frame to a connected client
+esp_err_t WebServerManager::ws_send_text(httpd_handle_t server, int fd, const char* msg, size_t len) {
+#ifdef CONFIG_HTTPD_WS_SUPPORT
+    httpd_ws_frame_t ws_pkt = {};
+    ws_pkt.final = true;
+    ws_pkt.fragmented = false;
+    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
+    ws_pkt.payload = (uint8_t*)msg;
+    ws_pkt.len = len;
+    return httpd_ws_send_frame_async(server, fd, &ws_pkt);
+#else
+    return ESP_ERR_NOT_SUPPORTED;
+#endif
+}
+
+// WebSocket handler
+esp_err_t WebServerManager::handleWebSocket(httpd_req_t *req) {
+#ifndef CONFIG_HTTPD_WS_SUPPORT
+    httpd_resp_set_status(req, "501 Not Implemented");
+    httpd_resp_send(req, "WebSocket not enabled in HTTPD", HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+#else
+    WebServerManager* instance = getInstance(req);
+    if (!instance) {
+        ESP_LOGE(TAG, "Failed to get WebServerManager instance");
+        return ESP_FAIL;
+    }
+
+    if (req->method == HTTP_GET) {
+        // WebSocket handshake - add client to our list
+        int sockfd = httpd_req_to_sockfd(req);
+        instance->addWebSocketClient(sockfd);
+        ESP_LOGI(TAG, "WebSocket client connected: fd=%d", sockfd);
+        
+        // Send system info 
+        std::string sysinfo = instance->getDeviceInfo();
+        ws_send_text(req->handle, sockfd, sysinfo.c_str(), sysinfo.size());
+        
+        // Send device metrics
+        std::string metrics = instance->getDeviceMetrics();
+        ws_send_text(req->handle, sockfd, metrics.c_str(), metrics.size());
+
+        if(!esp_timer_is_active(instance->m_statusTimer)) esp_timer_start_periodic(instance->m_statusTimer, 5000 * 1000);
+        return ESP_OK;
+    }
+
+    httpd_ws_frame_t ws_pkt;
+    memset(&ws_pkt, 0, sizeof(ws_pkt));
+    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
+
+    // First get frame length
+    esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 0);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "ws recv frame len failed: %s", esp_err_to_name(ret));
+        // Remove client on error
+        int sockfd = httpd_req_to_sockfd(req);
+        instance->removeWebSocketClient(sockfd);
+        return ret;
+    }
+
+    std::string payload;
+    if (ws_pkt.len) {
+        payload.resize(ws_pkt.len);
+        ws_pkt.payload = (uint8_t*)payload.data();
+        ret = httpd_ws_recv_frame(req, &ws_pkt, ws_pkt.len);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "ws recv frame failed: %s", esp_err_to_name(ret));
+            // Remove client on error
+            int sockfd = httpd_req_to_sockfd(req);
+            instance->removeWebSocketClient(sockfd);
+            return ret;
+        }
+    }
+
+    // Handle different frame types
+    if (ws_pkt.type == HTTPD_WS_TYPE_TEXT) {
+        ESP_LOGI(TAG, "Received WebSocket message: %s", payload.c_str());
+        return instance->handleWebSocketMessage(req, payload);
+    } else if (ws_pkt.type == HTTPD_WS_TYPE_CLOSE) {
+        ESP_LOGI(TAG, "WebSocket close frame received");
+        int sockfd = httpd_req_to_sockfd(req);
+        instance->removeWebSocketClient(sockfd);
+        return ESP_OK;
+    }
+
+    return ESP_OK;
+#endif
+}
+
 // Root/Index handler
 esp_err_t WebServerManager::handleRootOrHash(httpd_req_t *req) {
     File file = LittleFS.open("/index.html", "r");
@@ -285,14 +378,6 @@ esp_err_t WebServerManager::handleRootOrHash(httpd_req_t *req) {
     
     file.close();
     httpd_resp_send_chunk(req, NULL, 0);
-    return ESP_OK;
-}
-
-// WiFi RSSI handler
-esp_err_t WebServerManager::handleGetWifiRssi(httpd_req_t *req) {
-    std::string rssi_val = std::to_string(WiFi.RSSI());
-    httpd_resp_set_type(req, "text/plain");
-    httpd_resp_send(req, rssi_val.c_str(), rssi_val.length());
     return ESP_OK;
 }
 
@@ -813,6 +898,163 @@ esp_err_t WebServerManager::handleStartConfigAP(httpd_req_t *req) {
     httpd_resp_send(req, "Starting AP mode...", HTTPD_RESP_USE_STRLEN);
     vTaskDelay(pdMS_TO_TICKS(1000));
     homeSpan.processSerialCommand("A");
+    return ESP_OK;
+}
+
+// WebSocket client management methods
+void WebServerManager::addWebSocketClient(int fd) {
+    std::lock_guard<std::mutex> lock(m_wsClientsMutex);
+    // Check if client already exists
+    auto it = std::find(m_wsClients.begin(), m_wsClients.end(), fd);
+    if (it == m_wsClients.end()) {
+        m_wsClients.push_back(fd);
+        ESP_LOGI(TAG, "Added WebSocket client fd=%d, total clients: %d", fd, m_wsClients.size());
+    }
+}
+
+void WebServerManager::removeWebSocketClient(int fd) {
+    std::lock_guard<std::mutex> lock(m_wsClientsMutex);
+    auto it = std::find(m_wsClients.begin(), m_wsClients.end(), fd);
+    if (it != m_wsClients.end()) {
+        m_wsClients.erase(it);
+        ESP_LOGI(TAG, "Removed WebSocket client fd=%d, remaining clients: %d", fd, m_wsClients.size());
+        if (m_wsClients.empty()) {
+            esp_timer_stop(m_statusTimer);
+        }
+    }
+}
+
+void WebServerManager::broadcastToWebSocketClients(const char* message) {
+    std::lock_guard<std::mutex> lock(m_wsClientsMutex);
+    if (m_wsClients.empty()) {
+        return;
+    }
+    
+    ESP_LOGI(TAG, "Broadcasting to %d WebSocket clients: %s", m_wsClients.size(), message);
+    
+    // Create a copy of the client list to avoid holding the lock during send operations
+    std::vector<int> clients_copy = m_wsClients;
+    
+    // Release the lock before sending
+    m_wsClientsMutex.unlock();
+    
+    for (auto it = clients_copy.begin(); it != clients_copy.end(); ) {
+        int fd = *it;
+        esp_err_t ret = ws_send_text(m_server, fd, message, strlen(message));
+        if (ret != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to send to WebSocket client fd=%d: %s", fd, esp_err_to_name(ret));
+            // Remove failed client from our list
+            std::lock_guard<std::mutex> lock_again(m_wsClientsMutex);
+            auto remove_it = std::find(m_wsClients.begin(), m_wsClients.end(), fd);
+            if (remove_it != m_wsClients.end()) {
+                m_wsClients.erase(remove_it);
+            }
+            it = clients_copy.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    
+    // Re-acquire the lock
+    m_wsClientsMutex.lock();
+}
+
+std::string WebServerManager::getDeviceMetrics(){
+  cJSON *status = cJSON_CreateObject();
+  cJSON_AddStringToObject(status, "type", "metrics");
+  cJSON_AddNumberToObject(status, "uptime", esp_timer_get_time() / 1000000); // seconds
+  cJSON_AddNumberToObject(status, "free_heap", esp_get_free_heap_size());
+  cJSON_AddNumberToObject(status, "wifi_rssi", WiFi.RSSI());
+  std::string str = cJSON_PrintUnformatted(status);
+  cJSON_Delete(status);
+  return str;
+}
+
+std::string WebServerManager::getDeviceInfo(){
+  cJSON *info = cJSON_CreateObject();
+  cJSON_AddStringToObject(info, "type", "sysinfo");
+  cJSON_AddStringToObject(info, "version", esp_app_get_description()->version);
+  cJSON_AddBoolToObject(info, "eth_enabled", m_configManager.getConfig<espConfig::misc_config_t>().ethernetEnabled);
+  cJSON_AddStringToObject(info, "wifi_ssid", WiFi.SSID().c_str());
+  std::string str = cJSON_PrintUnformatted(info);
+  cJSON_Delete(info);
+  return str;
+}
+
+esp_err_t WebServerManager::handleWebSocketMessage(httpd_req_t *req, const std::string& message) {
+    // Parse JSON message
+    cJSON *json = cJSON_Parse(message.c_str());
+    if (!json) {
+        ESP_LOGE(TAG, "Invalid JSON in WebSocket message: %s", message.c_str());
+        
+        // Send error response
+        cJSON *error = cJSON_CreateObject();
+        cJSON_AddStringToObject(error, "type", "error");
+        cJSON_AddStringToObject(error, "message", "Invalid JSON format");
+        char *error_str = cJSON_PrintUnformatted(error);
+        
+        int sockfd = httpd_req_to_sockfd(req);
+        ws_send_text(req->handle, sockfd, error_str, strlen(error_str));
+        
+        free(error_str);
+        cJSON_Delete(error);
+        return ESP_OK;
+    }
+    
+    cJSON *type_item = cJSON_GetObjectItem(json, "type");
+    if (!type_item || !cJSON_IsString(type_item)) {
+        ESP_LOGE(TAG, "WebSocket message missing 'type' field");
+        cJSON_Delete(json);
+        return ESP_OK;
+    }
+    
+    std::string msg_type = type_item->valuestring;
+    int sockfd = httpd_req_to_sockfd(req);
+    
+    // Handle different message types
+    if (msg_type == "ping") {
+      // Respond with pong
+      cJSON *pong = cJSON_CreateObject();
+      cJSON_AddStringToObject(pong, "type", "pong");
+      cJSON_AddNumberToObject(pong, "timestamp", esp_timer_get_time() / 1000);
+      std::string pong_str = cJSON_PrintUnformatted(pong);
+      cJSON_Delete(pong);
+      ws_send_text(req->handle, sockfd, pong_str.c_str(), pong_str.size());
+    } else if (msg_type == "metrics") {
+      // Send system status
+      std::string status = getDeviceMetrics();
+      ws_send_text(req->handle, sockfd, status.c_str(), status.size());
+    } else if (msg_type == "sysinfo") {
+      // Send system info
+      std::string status = getDeviceInfo();
+      ws_send_text(req->handle, sockfd, status.c_str(), status.size());
+    } else if (msg_type == "echo") {
+      // Echo the message back
+      cJSON *echo = cJSON_CreateObject();
+      cJSON_AddStringToObject(echo, "type", "echo");
+      cJSON *data_item = cJSON_GetObjectItem(json, "data");
+      if (data_item) {
+        cJSON_AddItemToObject(echo, "data", cJSON_Duplicate(data_item, true));
+      }
+      cJSON_AddNumberToObject(echo, "timestamp", esp_timer_get_time() / 1000);
+      std::string echo_str = cJSON_PrintUnformatted(echo);
+      cJSON_Delete(echo);
+      ws_send_text(req->handle, sockfd, echo_str.c_str(), echo_str.size());
+    } else {
+      ESP_LOGW(TAG, "Unknown WebSocket message type: %s", msg_type.c_str());
+
+      // Send unknown type response
+      cJSON *unknown = cJSON_CreateObject();
+      cJSON_AddStringToObject(unknown, "type", "error");
+      cJSON_AddStringToObject(unknown, "message", "Unknown message type");
+      cJSON_AddStringToObject(unknown, "received_type", msg_type.c_str());
+      std::string unknown_str = cJSON_PrintUnformatted(unknown);
+      cJSON_Delete(unknown);
+      ws_send_text(req->handle, sockfd, unknown_str.c_str(),
+                   unknown_str.size());
+    }
+
+    cJSON_Delete(json);
     return ESP_OK;
 }
 
