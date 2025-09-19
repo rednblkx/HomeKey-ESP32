@@ -60,6 +60,7 @@ private:
     static esp_err_t handleWebSocket(httpd_req_t *req);
     // OTA endpoint handlers
     static esp_err_t handleOTAUpload(httpd_req_t *req);
+    static esp_err_t handleOTAReboot(httpd_req_t *req);
 
     // --- Helper Methods ---
     static bool validateRequest(httpd_req_t *req, cJSON *currentData, const char* body);
@@ -87,13 +88,22 @@ private:
     std::vector<int> m_wsClients;
     std::mutex m_wsClientsMutex;
     
+    // OTA upload types
+    enum class OTAUploadType {
+        FIRMWARE,
+        LITTLEFS
+    };
+    
     // OTA update management
     esp_ota_handle_t m_otaHandle = 0;
     const esp_partition_t* m_updatePartition = nullptr;
+    const esp_partition_t* m_littlefsPartition = nullptr;
     size_t m_otaWrittenBytes = 0;
     size_t m_otaTotalBytes = 0;
     bool m_otaInProgress = false;
     std::string m_otaError = "";
+    OTAUploadType m_currentUploadType = OTAUploadType::FIRMWARE;
+    bool m_skipReboot = false;
     std::mutex m_otaMutex;
     
     // Async OTA support
@@ -109,6 +119,8 @@ private:
     struct OTAAsyncRequest {
         httpd_req_t* req;
         size_t contentLength;
+        OTAUploadType uploadType;
+        bool skipReboot = false; // For sequential uploads
     };
 
     static const char* TAG;

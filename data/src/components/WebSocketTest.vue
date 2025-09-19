@@ -78,6 +78,7 @@
 </template>
 
 <script>
+import ws from '@/services/ws'
 export default {
   name: 'WebSocketTest',
   data() {
@@ -105,10 +106,10 @@ export default {
   },
   methods: {
     updateWebSocketInfo() {
-      if (this.$ws && typeof this.$ws.getConnectionInfo === 'function') {
-        this.wsInfo = this.$ws.getConnectionInfo();
+      if (ws && typeof ws.getConnectionInfo === 'function') {
+        this.wsInfo = ws.getConnectionInfo();
         this.wsConnected = this.wsInfo.connected || false;
-        this.wsState = this.$ws.state() || 'unknown';
+        this.wsState = ws.state() || 'unknown';
       }
     },
 
@@ -126,13 +127,13 @@ export default {
     },
 
     sendPing() {
-      if (this.$ws && this.$ws.ping()) {
+      if (ws && ws.ping()) {
         this.addMessage('sent', { type: 'ping', timestamp: Date.now() });
       }
     },
 
     requestStatus() {
-      if (this.$ws && this.$ws.requestStatus()) {
+      if (ws && ws.requestStatus()) {
         this.addMessage('sent', { type: 'metrics' });
       }
     },
@@ -143,7 +144,7 @@ export default {
         timestamp: Date.now(),
         random: Math.random()
       };
-      if (this.$ws && this.$ws.echo(data)) {
+      if (ws && ws.echo(data)) {
         this.addMessage('sent', { type: 'echo', data });
       }
     },
@@ -153,13 +154,13 @@ export default {
 
       try {
         const parsed = JSON.parse(this.customMessage);
-        if (this.$ws && this.$ws.send(parsed)) {
+        if (ws && ws.send(parsed)) {
           this.addMessage('sent', parsed);
           this.customMessage = '';
         }
       } catch (error) {
         // Try sending as plain text
-        if (this.$ws && this.$ws.send(this.customMessage)) {
+        if (ws && ws.send(this.customMessage)) {
           this.addMessage('sent', this.customMessage);
           this.customMessage = '';
         }
@@ -167,11 +168,11 @@ export default {
     },
 
     reconnect() {
-      if (this.$ws) {
+      if (ws) {
         this.addMessage('sent', 'Reconnecting...');
-        this.$ws.disconnect();
+        ws.disconnect();
         setTimeout(() => {
-          this.$ws.connect();
+          ws.connect();
         }, 1000);
       }
     },
@@ -189,7 +190,7 @@ export default {
     this.updateWebSocketInfo();
 
     // Listen for WebSocket events
-    this._wsOff = this.$ws?.on((evt) => {
+    this._wsOff = ws?.on((evt) => {
       if (evt.type === 'status') {
         this.updateWebSocketInfo();
       } else if (evt.type === 'message') {

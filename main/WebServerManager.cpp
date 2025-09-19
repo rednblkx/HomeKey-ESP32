@@ -223,6 +223,24 @@ void WebServerManager::setupRoutes() {
         .is_websocket = false
     };
     httpd_register_uri_handler(m_server, &ota_upload_uri);
+
+    httpd_uri_t ota_littlefs_uri = {
+        .uri       = "/ota/littlefs",
+        .method    = HTTP_POST,
+        .handler   = handleOTAUpload, // Same handler, different endpoint
+        .user_ctx  = this,
+        .is_websocket = false
+    };
+    httpd_register_uri_handler(m_server, &ota_littlefs_uri);
+
+    httpd_uri_t ota_reboot_uri = {
+        .uri       = "/ota/reboot",
+        .method    = HTTP_POST,
+        .handler   = handleOTAReboot,
+        .user_ctx  = this,
+        .is_websocket = false
+    };
+    httpd_register_uri_handler(m_server, &ota_reboot_uri);
 }
 
 // Static file handler implementation
@@ -1166,7 +1184,12 @@ void WebServerManager::otaWorkerTask(void* parameter) {
         // Wait for OTA request
         OTAAsyncRequest otaReq;
         if (xQueueReceive(instance->m_otaRequestQueue, &otaReq, portMAX_DELAY) == pdTRUE) {
-            ESP_LOGI(TAG, "Processing OTA request for %s", otaReq.req->uri);
+            const char* uploadTypeStr = (otaReq.uploadType == WebServerManager::OTAUploadType::LITTLEFS) ? "LittleFS" : "Firmware";
+            ESP_LOGI(TAG, "Processing %s upload request for %s", uploadTypeStr, otaReq.req->uri);
+            
+            // Set the current upload type and reboot flag in the instance
+            instance->m_currentUploadType = otaReq.uploadType;
+            instance->m_skipReboot = otaReq.skipReboot;
             
             // Process the OTA upload
             esp_err_t result = instance->otaUploadAsync(otaReq.req);
@@ -1216,11 +1239,28 @@ esp_err_t WebServerManager::queueOTARequest(httpd_req_t *req) {
         return ESP_FAIL;
     }
     
+    // Determine upload type based on endpoint
+    WebServerManager::OTAUploadType uploadType = WebServerManager::OTAUploadType::FIRMWARE;
+    if (strcmp(req->uri, "/ota/littlefs") == 0) {
+        uploadType = WebServerManager::OTAUploadType::LITTLEFS;
+    }
+    
+    // Check for skipReboot parameter in query string
+    bool skipReboot = false;
+    char query[256];
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK) {
+        char param[32];
+        if (httpd_query_key_value(query, "skipReboot", param, sizeof(param)) == ESP_OK) {
+            skipReboot = (strcmp(param, "true") == 0);
+        }
+    }
+    
     // Create OTA request
-    OTAAsyncRequest otaReq = {
-        .req = reqCopy,
-        .contentLength = req->content_len
-    };
+    OTAAsyncRequest otaReq;
+    otaReq.req = reqCopy;
+    otaReq.contentLength = req->content_len;
+    otaReq.uploadType = uploadType;
+    otaReq.skipReboot = skipReboot;
     
     // Queue the request
     if (xQueueSend(instance->m_otaRequestQueue, &otaReq, pdMS_TO_TICKS(100)) == pdFALSE) {
@@ -1253,41 +1293,78 @@ esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
     
     size_t content_len = req->content_len;
     if (content_len == 0) {
-        ESP_LOGE(TAG, "No firmware data received");
-        m_otaError = "No firmware data received";
+        ESP_LOGE(TAG, "No upload data received");
+        m_otaError = "No upload data received";
         esp_task_wdt_delete(NULL); // Remove from watchdog
         return ESP_FAIL;
     }
     
-    ESP_LOGI(TAG, "OTA firmware size: %d bytes", content_len);
+    const char* uploadTypeStr = (m_currentUploadType == OTAUploadType::LITTLEFS) ? "LittleFS" : "Firmware";
+    ESP_LOGI(TAG, "%s upload size: %d bytes", uploadTypeStr, content_len);
     
     // Check if we have enough free heap for the operation
     size_t free_heap = esp_get_free_heap_size();
     if (free_heap < 50000) { // Need at least 50KB free
         ESP_LOGE(TAG, "Insufficient heap memory: %d bytes free", free_heap);
-        m_otaError = "Insufficient memory for OTA";
+        m_otaError = "Insufficient memory for upload";
         esp_task_wdt_delete(NULL); // Remove from watchdog
         return ESP_FAIL;
     }
     
-    // Initialize OTA
-    m_updatePartition = esp_ota_get_next_update_partition(NULL);
-    if (m_updatePartition == NULL) {
-        ESP_LOGE(TAG, "No OTA partition found");
-        m_otaError = "No OTA partition found";
-        esp_task_wdt_delete(NULL); // Remove from watchdog
-        return ESP_FAIL;
-    }
+    esp_err_t err = ESP_OK;
     
-    ESP_LOGI(TAG, "Writing to partition subtype %d at offset 0x%lx", 
-             m_updatePartition->subtype, m_updatePartition->address);
-    
-    esp_err_t err = esp_ota_begin(m_updatePartition, content_len, &m_otaHandle);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "esp_ota_begin failed: %s", esp_err_to_name(err));
-        m_otaError = "Failed to begin OTA: " + std::string(esp_err_to_name(err));
-        esp_task_wdt_delete(NULL); // Remove from watchdog
-        return ESP_FAIL;
+    if (m_currentUploadType == OTAUploadType::FIRMWARE) {
+        // Initialize firmware OTA
+        m_updatePartition = esp_ota_get_next_update_partition(NULL);
+        if (m_updatePartition == NULL) {
+            ESP_LOGE(TAG, "No OTA partition found");
+            m_otaError = "No OTA partition found";
+            esp_task_wdt_delete(NULL); // Remove from watchdog
+            return ESP_FAIL;
+        }
+        
+        ESP_LOGI(TAG, "Writing firmware to partition subtype %d at offset 0x%lx", 
+                 m_updatePartition->subtype, m_updatePartition->address);
+        
+        err = esp_ota_begin(m_updatePartition, content_len, &m_otaHandle);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "esp_ota_begin failed: %s", esp_err_to_name(err));
+            m_otaError = "Failed to begin firmware OTA: " + std::string(esp_err_to_name(err));
+            esp_task_wdt_delete(NULL); // Remove from watchdog
+            return ESP_FAIL;
+        }
+    } else {
+        // Initialize LittleFS upload
+        m_littlefsPartition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_SPIFFS, "spiffs");
+        if (m_littlefsPartition == NULL) {
+            ESP_LOGE(TAG, "No LittleFS partition found");
+            m_otaError = "No LittleFS partition found";
+            esp_task_wdt_delete(NULL); // Remove from watchdog
+            return ESP_FAIL;
+        }
+        
+        ESP_LOGI(TAG, "Writing LittleFS to partition subtype %d at offset 0x%lx (size: %d bytes)", 
+                 m_littlefsPartition->subtype, m_littlefsPartition->address, m_littlefsPartition->size);
+        
+        // Check if content fits in partition
+        if (content_len > m_littlefsPartition->size) {
+            ESP_LOGE(TAG, "LittleFS image too large: %d bytes, partition size: %d bytes", 
+                     content_len, m_littlefsPartition->size);
+            m_otaError = "LittleFS image too large for partition";
+            esp_task_wdt_delete(NULL); // Remove from watchdog
+            return ESP_FAIL;
+        }
+        
+        // Erase the partition before writing
+        ESP_LOGI(TAG, "Erasing LittleFS partition...");
+        err = esp_partition_erase_range(m_littlefsPartition, 0, m_littlefsPartition->size);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to erase LittleFS partition: %s", esp_err_to_name(err));
+            m_otaError = "Failed to erase LittleFS partition: " + std::string(esp_err_to_name(err));
+            esp_task_wdt_delete(NULL); // Remove from watchdog
+            return ESP_FAIL;
+        }
+        ESP_LOGI(TAG, "LittleFS partition erased successfully");
     }
     
     m_otaInProgress = true;
@@ -1399,19 +1476,36 @@ esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
         consecutive_failures = 0; // Reset failure counter on success
         last_progress_time = xTaskGetTickCount(); // Update progress time
         
-        err = esp_ota_write(m_otaHandle, buffer, received);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "esp_ota_write failed: %s", esp_err_to_name(err));
-            esp_ota_abort(m_otaHandle);
-            m_otaInProgress = false;
-            m_otaError = "Failed to write firmware: " + std::string(esp_err_to_name(err));
-            
-            // Broadcast error status
-            broadcastOTAStatus();
-            
-            free(buffer);
-            esp_task_wdt_delete(NULL); // Remove from watchdog
-            return ESP_FAIL;
+        if (m_currentUploadType == OTAUploadType::FIRMWARE) {
+            err = esp_ota_write(m_otaHandle, buffer, received);
+            if (err != ESP_OK) {
+                ESP_LOGE(TAG, "esp_ota_write failed: %s", esp_err_to_name(err));
+                esp_ota_abort(m_otaHandle);
+                m_otaInProgress = false;
+                m_otaError = "Failed to write firmware: " + std::string(esp_err_to_name(err));
+                
+                // Broadcast error status
+                broadcastOTAStatus();
+                
+                free(buffer);
+                esp_task_wdt_delete(NULL); // Remove from watchdog
+                return ESP_FAIL;
+            }
+        } else {
+            // Write to LittleFS partition
+            err = esp_partition_write(m_littlefsPartition, m_otaWrittenBytes, buffer, received);
+            if (err != ESP_OK) {
+                ESP_LOGE(TAG, "esp_partition_write failed: %s", esp_err_to_name(err));
+                m_otaInProgress = false;
+                m_otaError = "Failed to write LittleFS: " + std::string(esp_err_to_name(err));
+                
+                // Broadcast error status
+                broadcastOTAStatus();
+                
+                free(buffer);
+                esp_task_wdt_delete(NULL); // Remove from watchdog
+                return ESP_FAIL;
+            }
         }
         
         m_otaWrittenBytes += received;
@@ -1447,41 +1541,59 @@ esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
     // Remove task from watchdog before finalizing
     esp_task_wdt_delete(NULL);
     
-    // Finalize OTA
-    err = esp_ota_end(m_otaHandle);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "esp_ota_end failed: %s", esp_err_to_name(err));
-        m_otaInProgress = false;
-        m_otaError = "Failed to finalize OTA: " + std::string(esp_err_to_name(err));
+    if (m_currentUploadType == OTAUploadType::FIRMWARE) {
+        // Finalize firmware OTA
+        err = esp_ota_end(m_otaHandle);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "esp_ota_end failed: %s", esp_err_to_name(err));
+            m_otaInProgress = false;
+            m_otaError = "Failed to finalize firmware OTA: " + std::string(esp_err_to_name(err));
+            
+            // Broadcast error status
+            broadcastOTAStatus();
+            
+            return ESP_FAIL;
+        }
         
-        // Broadcast error status
+        // Set boot partition
+        err = esp_ota_set_boot_partition(m_updatePartition);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "esp_ota_set_boot_partition failed: %s", esp_err_to_name(err));
+            m_otaInProgress = false;
+            m_otaError = "Failed to set boot partition: " + std::string(esp_err_to_name(err));
+            
+            // Broadcast error status
+            broadcastOTAStatus();
+            
+            return ESP_FAIL;
+        }
+        
+        m_otaInProgress = false;
+        
+        if (m_skipReboot) {
+            ESP_LOGI(TAG, "Firmware OTA update completed successfully. Reboot skipped for sequential upload.");
+        } else {
+            ESP_LOGI(TAG, "Firmware OTA update completed successfully. Rebooting...");
+        }
+        
+        // Broadcast completion status
         broadcastOTAStatus();
         
-        return ESP_FAIL;
-    }
-    
-    // Set boot partition
-    err = esp_ota_set_boot_partition(m_updatePartition);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "esp_ota_set_boot_partition failed: %s", esp_err_to_name(err));
+        if (!m_skipReboot) {
+            // Reboot after a short delay
+            vTaskDelay(pdMS_TO_TICKS(2000));
+            esp_restart();
+        }
+    } else {
+        // Finalize LittleFS upload
         m_otaInProgress = false;
-        m_otaError = "Failed to set boot partition: " + std::string(esp_err_to_name(err));
+        ESP_LOGI(TAG, "LittleFS upload completed successfully. %d bytes written.", m_otaWrittenBytes);
         
-        // Broadcast error status
+        // Broadcast completion status
         broadcastOTAStatus();
         
-        return ESP_FAIL;
+        // Note: No reboot needed for LittleFS, filesystem will be available on next mount
     }
-    
-    m_otaInProgress = false;
-    ESP_LOGI(TAG, "OTA update completed successfully. Rebooting...");
-    
-    // Broadcast completion status
-    broadcastOTAStatus();
-    
-    // Reboot after a short delay
-    vTaskDelay(pdMS_TO_TICKS(2000));
-    esp_restart();
     
     return ESP_OK;
 }
@@ -1516,12 +1628,31 @@ esp_err_t WebServerManager::handleOTAUpload(httpd_req_t *req) {
     return queueOTARequest(req);
 }
 
+// OTA Reboot handler
+esp_err_t WebServerManager::handleOTAReboot(httpd_req_t *req) {
+    ESP_LOGI(TAG, "OTA reboot request received");
+    
+    // Send response before rebooting
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, "{\"message\":\"Rebooting device...\"}", HTTPD_RESP_USE_STRLEN);
+    
+    // Reboot after a short delay
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    esp_restart();
+    
+    return ESP_OK;
+}
+
 // Get OTA status as JSON string
 std::string WebServerManager::getOTAStatus() {
     cJSON *status = cJSON_CreateObject();
     cJSON_AddStringToObject(status, "type", "ota_status");
     cJSON_AddBoolToObject(status, "in_progress", m_otaInProgress);
     cJSON_AddNumberToObject(status, "bytes_written", m_otaWrittenBytes);
+    
+    // Add upload type information
+    const char* uploadTypeStr = (m_currentUploadType == OTAUploadType::LITTLEFS) ? "littlefs" : "firmware";
+    cJSON_AddStringToObject(status, "upload_type", uploadTypeStr);
     
     if (!m_otaError.empty()) {
         cJSON_AddStringToObject(status, "error", m_otaError.c_str());
