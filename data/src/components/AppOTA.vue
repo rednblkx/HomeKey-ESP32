@@ -575,7 +575,7 @@ const uploadBoth = async () => {
     setTimeout(async () => {
       addLog('info', 'Rebooting device...')
       try {
-        await fetch('/ota/reboot', { method: 'POST' })
+        await fetch('/reboot_device', { method: 'POST' })
       } catch (error) {
         // Expected - device will reboot and connection will be lost
         console.log('Reboot triggered, connection lost as expected')
