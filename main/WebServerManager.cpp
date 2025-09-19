@@ -232,15 +232,6 @@ void WebServerManager::setupRoutes() {
         .is_websocket = false
     };
     httpd_register_uri_handler(m_server, &ota_littlefs_uri);
-
-    httpd_uri_t ota_reboot_uri = {
-        .uri       = "/ota/reboot",
-        .method    = HTTP_POST,
-        .handler   = handleOTAReboot,
-        .user_ctx  = this,
-        .is_websocket = false
-    };
-    httpd_register_uri_handler(m_server, &ota_reboot_uri);
 }
 
 // Static file handler implementation
@@ -928,14 +919,6 @@ esp_err_t WebServerManager::handleClearConfig(httpd_req_t *req) {
         httpd_resp_send_500(req);
         return ESP_FAIL;
     }
-}
-
-// Reboot handler
-esp_err_t WebServerManager::handleReboot(httpd_req_t *req) {
-    httpd_resp_send(req, "Rebooting...", HTTPD_RESP_USE_STRLEN);
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    esp_restart();
-    return ESP_OK;
 }
 
 // HomeKit reset handler
@@ -1629,7 +1612,7 @@ esp_err_t WebServerManager::handleOTAUpload(httpd_req_t *req) {
 }
 
 // OTA Reboot handler
-esp_err_t WebServerManager::handleOTAReboot(httpd_req_t *req) {
+esp_err_t WebServerManager::handleReboot(httpd_req_t *req) {
     ESP_LOGI(TAG, "OTA reboot request received");
     
     // Send response before rebooting
