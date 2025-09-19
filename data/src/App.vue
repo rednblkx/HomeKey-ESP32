@@ -80,6 +80,12 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>System</router-link></li>
+          <li class="my-1"><router-link to="/ota" class="text-lg flex items-center"><svg
+              xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 mr-2" fill="none" viewBox="0 0 24 24"
+              stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>OTA Update</router-link></li>
           <li class="mt-auto">
             <label class="swap swap-rotate">
               <input type="checkbox" @click="toggleTheme" :checked="theme === 'dracula'" />
@@ -153,6 +159,7 @@
 
 <script>
 import { computed } from 'vue';
+import ws from '@/services/ws.js';
 
 export default {
   data() {
@@ -202,29 +209,29 @@ export default {
       return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dracula' : 'autumn';
     },
     testWebSocket() {
-      if (this.$ws) {
+      if (ws) {
         // Test with echo
-        this.$ws.echo({ test: 'Hello WebSocket!', timestamp: Date.now() });
+        ws.echo({ test: 'Hello WebSocket!', timestamp: Date.now() });
         // Request status
-        this.$ws.requestStatus();
+        ws.requestStatus();
         // Send ping
-        this.$ws.ping();
+        ws.ping();
         
         // Show notification
         console.log('WebSocket test messages sent');
       }
     },
     reconnectWebSocket() {
-      if (this.$ws) {
-        this.$ws.disconnect();
+      if (ws) {
+        ws.disconnect();
         setTimeout(() => {
-          this.$ws.connect();
+          ws.connect();
         }, 1000);
       }
     },
     updateWebSocketInfo() {
-      if (this.$ws && typeof this.$ws.getConnectionInfo === 'function') {
-        this.wsInfo = this.$ws.getConnectionInfo();
+      if (ws && typeof ws.getConnectionInfo === 'function') {
+        this.wsInfo = ws.getConnectionInfo();
         this.wsConnected = this.wsInfo.connected || false;
       }
     },
@@ -323,21 +330,21 @@ export default {
     });
 
     // Initialize WebSocket connection
-    if (this.$ws) {
-      this.$ws.connect();
+    if (ws) {
+      ws.connect();
     }
 
     // WebSocket status wiring
     this.updateWebSocketInfo();
-    if (this.$ws && typeof this.$ws.state === 'function') {
-      this.wsState = this.$ws.state();
-    } else if (this.$ws && this.$ws.connected) {
+    if (ws && typeof ws.state === 'function') {
+      this.wsState = ws.state();
+    } else if (ws && ws.connected) {
       this.wsState = 'open';
     } else {
       this.wsState = 'closed';
     }
     
-    this._wsOff = this.$ws?.on((evt) => {
+    this._wsOff = ws?.on((evt) => {
       if (evt.type === 'status') {
         this.wsState = evt.state;
         this.updateWebSocketInfo();
@@ -358,8 +365,8 @@ export default {
     // Fallback: poll state periodically in case early events were missed
     this._wsPoll = setInterval(() => {
       this.updateWebSocketInfo();
-      if (this.$ws && typeof this.$ws.state === 'function') {
-        const s = this.$ws.state();
+      if (ws && typeof ws.state === 'function') {
+        const s = ws.state();
         if (s && s !== this.wsState) this.wsState = s;
       }
     }, 2000);
