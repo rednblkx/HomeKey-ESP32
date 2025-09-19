@@ -3,6 +3,7 @@ import HKInfo from '@/components/HKInfo.vue'
 import AppMqtt from '@/components/AppMqtt.vue'
 import AppActions from '@/components/AppActions.vue'
 import AppMisc from '@/components/AppMisc.vue'
+import AppOTA from '@/components/AppOTA.vue'
 
 const routes = [
   {
@@ -24,6 +25,11 @@ const routes = [
     path: '/misc',
     name: 'Misc',
     component: AppMisc
+  },
+  {
+    path: '/ota',
+    name: 'OTA',
+    component: AppOTA
   }
 ]
 
