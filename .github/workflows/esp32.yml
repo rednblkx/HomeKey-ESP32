@@ -5,6 +5,11 @@ name: CI
 # Controls when the action will run. Triggers the workflow on push or pull request
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - dev
+    tags:
+      - 'v0.*'
   pull_request:
     paths-ignore:
       - '.vscode/**'
