@@ -172,7 +172,7 @@ void WebServerManager::setupRoutes() {
 
     httpd_uri_t reboot_uri = {
         .uri       = "/reboot_device",
-        .method    = HTTP_GET,
+        .method    = HTTP_POST,
         .handler   = handleReboot,
         .user_ctx  = this
     };
