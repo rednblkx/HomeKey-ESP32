@@ -422,10 +422,6 @@ esp_err_t WebServerManager::handleRootOrHash(httpd_req_t *req) {
     while ((bytes_read = file.read((uint8_t*)buffer, sizeof(buffer))) > 0) {
         // Simple template processing for VERSION
         std::string content(buffer, bytes_read);
-        size_t pos = content.find("{{VERSION}}");
-        if (pos != std::string::npos) {
-            content.replace(pos, 11, esp_app_get_description()->version);
-        }
         
         if (httpd_resp_send_chunk(req, content.c_str(), content.length()) != ESP_OK) {
             file.close();
