@@ -1283,7 +1283,7 @@ esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
     
     // Check if we have enough free heap for the operation
     size_t free_heap = esp_get_free_heap_size();
-    if (free_heap < 50000) { // Need at least 50KB free
+    if (free_heap < 30000) { // Need at least 30KB free
         ESP_LOGE(TAG, "Insufficient heap memory: %d bytes free", free_heap);
         m_otaError = "Insufficient memory for upload";
         esp_task_wdt_delete(NULL); // Remove from watchdog
