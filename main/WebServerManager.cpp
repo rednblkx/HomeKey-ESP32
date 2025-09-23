@@ -483,7 +483,9 @@ esp_err_t WebServerManager::handleGetConfig(httpd_req_t *req) {
           cJSON_AddItemToArray(issuersArray, issuerJson);
       }
         cJSON_AddItemToObject(hkInfo, "issuers", issuersArray);
-        responseJson = cJSON_PrintUnformatted(hkInfo);
+        char *response_str = cJSON_PrintUnformatted(hkInfo);
+        responseJson = response_str;
+        free(response_str);
         cJSON_Delete(hkInfo);
     } else {
         httpd_resp_set_status(req, "400 Bad Request");
@@ -666,7 +668,7 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
         rebootNeeded = true;
         rebootMsg = "Pixel Type was changed, reboot needed to apply! Rebooting...";
       } else if(keyStr == "gpioActionPin" && it->valueint != 255){
-        cJSON_AddFalseToObject(obj, "hkDumbSwitchMode");
+        cJSON_ReplaceItemInObject(obj, "hkDumbSwitchMode", cJSON_CreateBool(false));
       }
       it = it->next;
     }
@@ -674,7 +676,9 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     // Merge changes and save configuration
     if (type == "mqtt") {
       mergeJson(data, obj);
-      success = instance->m_configManager.deserializeFromJson<espConfig::mqttConfig_t>(cJSON_PrintUnformatted(data));
+      char *data_str = cJSON_PrintUnformatted(data);
+      success = instance->m_configManager.deserializeFromJson<espConfig::mqttConfig_t>(data_str);
+      free(data_str);
       if(success){
         success = instance->m_configManager.saveConfig<espConfig::mqttConfig_t>();
         rebootNeeded = true; // Always reboot on MQTT config change
@@ -682,7 +686,9 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
       } else ESP_LOGE(TAG, "Could not deserialize from JSON!");
     } else if(type == "misc" || type == "actions") {
       mergeJson(data, obj);
-      success = instance->m_configManager.deserializeFromJson<espConfig::misc_config_t>(cJSON_PrintUnformatted(data));
+      char *data_str = cJSON_PrintUnformatted(data);
+      success = instance->m_configManager.deserializeFromJson<espConfig::misc_config_t>(data_str);
+      free(data_str);
       if(success){
         success = instance->m_configManager.saveConfig<espConfig::misc_config_t>();
         if(type == "misc"){
@@ -1010,7 +1016,9 @@ std::string WebServerManager::getDeviceMetrics(){
   cJSON_AddNumberToObject(status, "uptime", esp_timer_get_time() / 1000000); // seconds
   cJSON_AddNumberToObject(status, "free_heap", esp_get_free_heap_size());
   cJSON_AddNumberToObject(status, "wifi_rssi", WiFi.RSSI());
-  std::string str = cJSON_PrintUnformatted(status);
+  char *status_str = cJSON_PrintUnformatted(status);
+  std::string str(status_str);
+  free(status_str);
   cJSON_Delete(status);
   return str;
 }
@@ -1021,7 +1029,9 @@ std::string WebServerManager::getDeviceInfo(){
   cJSON_AddStringToObject(info, "version", esp_app_get_description()->version);
   cJSON_AddBoolToObject(info, "eth_enabled", m_configManager.getConfig<espConfig::misc_config_t>().ethernetEnabled);
   cJSON_AddStringToObject(info, "wifi_ssid", WiFi.SSID().c_str());
-  std::string str = cJSON_PrintUnformatted(info);
+  char *info_str = cJSON_PrintUnformatted(info);
+  std::string str(info_str);
+  free(info_str);
   cJSON_Delete(info);
   return str;
 }
@@ -1063,7 +1073,9 @@ esp_err_t WebServerManager::handleWebSocketMessage(httpd_req_t *req, const std::
       cJSON_AddStringToObject(pong, "type", "pong");
       cJSON_AddNumberToObject(pong, "timestamp", esp_timer_get_time() / 1000);
       cJSON_AddNumberToObject(pong, "uptime", esp_timer_get_time() / 1000000);
-      std::string pong_str = cJSON_PrintUnformatted(pong);
+      char *pong_char_ptr = cJSON_PrintUnformatted(pong);
+      std::string pong_str(pong_char_ptr);
+      free(pong_char_ptr);
       cJSON_Delete(pong);
       ws_send_text(req->handle, sockfd, pong_str.c_str(), pong_str.size());
     } else if (msg_type == "metrics") {
@@ -1088,7 +1100,9 @@ esp_err_t WebServerManager::handleWebSocketMessage(httpd_req_t *req, const std::
       }
       cJSON_AddNumberToObject(echo, "timestamp", esp_timer_get_time() / 1000);
       cJSON_AddNumberToObject(echo, "uptime", esp_timer_get_time() / 1000000);
-      std::string echo_str = cJSON_PrintUnformatted(echo);
+      char *echo_char_ptr = cJSON_PrintUnformatted(echo);
+      std::string echo_str(echo_char_ptr);
+      free(echo_char_ptr);
       cJSON_Delete(echo);
       ws_send_text(req->handle, sockfd, echo_str.c_str(), echo_str.size());
     } else {
@@ -1099,7 +1113,9 @@ esp_err_t WebServerManager::handleWebSocketMessage(httpd_req_t *req, const std::
       cJSON_AddStringToObject(unknown, "type", "error");
       cJSON_AddStringToObject(unknown, "message", "Unknown message type");
       cJSON_AddStringToObject(unknown, "received_type", msg_type.c_str());
-      std::string unknown_str = cJSON_PrintUnformatted(unknown);
+      char *unknown_char_ptr = cJSON_PrintUnformatted(unknown);
+      std::string unknown_str(unknown_char_ptr);
+      free(unknown_char_ptr);
       cJSON_Delete(unknown);
       ws_send_text(req->handle, sockfd, unknown_str.c_str(),
                    unknown_str.size());
