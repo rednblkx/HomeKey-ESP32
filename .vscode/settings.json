@@ -91,7 +91,8 @@
     "--query-driver=${userHome}/.espressif/tools/xtensa-esp-elf/**/xtensa-esp-elf/bin/xtensa-*-elf-*,${userHome}/.espressif/tools/riscv32-esp-elf/**/riscv32-esp-elf/bin/riscv32-esp-elf-*",
     "--background-index",
     "--import-insertions",
-    "--all-scopes-completion"
+    "--all-scopes-completion",
+    "--clang-tidy"
   ],
   "idf.customExtraVars": {
     "IDF_TARGET": "esp32"
