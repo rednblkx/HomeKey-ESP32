@@ -14,3 +14,6 @@
 	path = components/msgpack-c/upstream
 	url = https://github.com/msgpack/msgpack-c.git
 	branch = c_master
+[submodule "components/loggable"]
+	path = components/loggable
+	url = https://github.com/rednblkx/loggable-esp32.git

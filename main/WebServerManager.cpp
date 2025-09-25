@@ -1,4 +1,5 @@
 #include <cstring>
+#include <errno.h>
 #include <event_manager.hpp>
 #include "WebServerManager.hpp"
 #include "ConfigManager.hpp"
@@ -29,6 +30,24 @@ const char* WebServerManager::TAG = "WebServerManager";
 // Forward declaration
 static void mergeJson(cJSON *target, cJSON *source);
 
+// Utility helpers for performance and safety
+static inline bool str_ends_with(const char* str, const char* suffix) {
+    if (!str || !suffix) return false;
+    const size_t lenstr = strlen(str);
+    const size_t lensuf = strlen(suffix);
+    return (lenstr >= lensuf) && (memcmp(str + lenstr - lensuf, suffix, lensuf) == 0);
+}
+
+// Converts a cJSON object to std::string and frees the cJSON object.
+static inline std::string cjson_to_string_and_free(cJSON* obj) {
+    if (!obj) return {};
+    char* raw = cJSON_PrintUnformatted(obj);
+    std::string out = raw ? std::string(raw) : std::string{};
+    if (raw) free(raw);
+    cJSON_Delete(obj);
+    return out;
+}
+
 WebServerManager::WebServerManager(ConfigManager& configManager, ReaderDataManager& readerDataManager)
     : m_server(nullptr),
       m_configManager(configManager),
@@ -56,6 +75,12 @@ WebServerManager::~WebServerManager() {
         esp_timer_delete(m_statusTimer);
         m_statusTimer = nullptr;
     }
+#ifdef WEBSERVER_USE_DEDICATED_BROADCAST_QUEUE
+    if (m_wsBroadcastQueue) {
+        vQueueDelete(m_wsBroadcastQueue);
+        m_wsBroadcastQueue = nullptr;
+    }
+#endif
 }
 
 void WebServerManager::begin() {
@@ -80,6 +105,14 @@ void WebServerManager::begin() {
     esp_err_t ret = httpd_start(&m_server, &config);
     if (ret == ESP_OK) {
         ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
+        m_wsQueue = xQueueCreate(10, sizeof(WsFrame*));
+        xTaskCreate(ws_send_task, "ws_send_task", 4096, this, 5, &m_wsTaskHandle);
+#ifdef WEBSERVER_USE_DEDICATED_BROADCAST_QUEUE
+        m_wsBroadcastQueue = xQueueCreate(8, sizeof(BroadcastMsg*));
+        if (!m_wsBroadcastQueue) {
+            ESP_LOGE(TAG, "Failed to create WebSocket broadcast queue");
+        }
+#endif
         setupRoutes();
         initializeOTAWorker();
         ESP_LOGI(TAG, "Web server started.");
@@ -252,20 +285,22 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
     bool use_compressed = false;
     const char* actual_filepath = filepath;
     
-    if (strstr(filename, ".js") || strstr(filename, ".css")) {
+    if (str_ends_with(filename, ".js") || str_ends_with(filename, ".css")) {
         // Check if client accepts gzip encoding
-        size_t accept_encoding_len = httpd_req_get_hdr_value_len(req, "Accept-Encoding");
-        if (accept_encoding_len > 0) {
-            char* accept_encoding = (char*)malloc(accept_encoding_len + 1);
-            if (accept_encoding && httpd_req_get_hdr_value_str(req, "Accept-Encoding", accept_encoding, accept_encoding_len + 1) == ESP_OK) {
-                if (strstr(accept_encoding, "gzip")) {
+        size_t accept_len = httpd_req_get_hdr_value_len(req, "Accept-Encoding");
+        if (accept_len > 0) {
+            // Cap maximum header size to prevent large allocations
+            const size_t cap = accept_len > 512 ? 512 : accept_len;
+            std::vector<char> hdr(cap + 1, 0);
+            if (httpd_req_get_hdr_value_str(req, "Accept-Encoding", hdr.data(), hdr.size()) == ESP_OK) {
+                std::string accept_encoding(hdr.data());
+                if (accept_encoding.find("gzip") != std::string::npos) {
                     snprintf(compressed_filepath, sizeof(compressed_filepath), "%s.gz", filepath);
                     if (LittleFS.exists(compressed_filepath)) {
                         use_compressed = true;
                         actual_filepath = compressed_filepath;
                     }
                 }
-                free(accept_encoding);
             }
         }
     }
@@ -284,14 +319,14 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
     
     // Determine content type based on original filename (not compressed)
     const char* content_type = "text/plain";
-    if (strstr(filename, ".html")) content_type = "text/html";
-    else if (strstr(filename, ".css")) content_type = "text/css";
-    else if (strstr(filename, ".js")) content_type = "application/javascript";
-    else if (strstr(filename, ".json")) content_type = "application/json";
-    else if (strstr(filename, ".png")) content_type = "image/png";
-    else if (strstr(filename, ".jpg") || strstr(filename, ".jpeg")) content_type = "image/jpeg";
-    else if (strstr(filename, ".ico")) content_type = "image/x-icon";
-    else if (strstr(filename, ".webp")) content_type = "image/webp";
+    if (str_ends_with(filename, ".html")) content_type = "text/html";
+    else if (str_ends_with(filename, ".css")) content_type = "text/css";
+    else if (str_ends_with(filename, ".js")) content_type = "application/javascript";
+    else if (str_ends_with(filename, ".json")) content_type = "application/json";
+    else if (str_ends_with(filename, ".png")) content_type = "image/png";
+    else if (str_ends_with(filename, ".jpg") || str_ends_with(filename, ".jpeg")) content_type = "image/jpeg";
+    else if (str_ends_with(filename, ".ico")) content_type = "image/x-icon";
+    else if (str_ends_with(filename, ".webp")) content_type = "image/webp";
     
     httpd_resp_set_type(req, content_type);
     
@@ -314,14 +349,14 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
     return ESP_OK;
 }
 
-// Helper to send text frame to a connected client
-esp_err_t WebServerManager::ws_send_text(httpd_handle_t server, int fd, const char* msg, size_t len) {
+// Helper to send a frame to a connected client
+esp_err_t WebServerManager::ws_send_frame(httpd_handle_t server, int fd, const uint8_t* payload, size_t len, httpd_ws_type_t type) {
 #ifdef CONFIG_HTTPD_WS_SUPPORT
     httpd_ws_frame_t ws_pkt = {};
     ws_pkt.final = true;
     ws_pkt.fragmented = false;
-    ws_pkt.type = HTTPD_WS_TYPE_TEXT;
-    ws_pkt.payload = (uint8_t*)msg;
+    ws_pkt.type = type;
+    ws_pkt.payload = const_cast<uint8_t*>(payload);
     ws_pkt.len = len;
     return httpd_ws_send_frame_async(server, fd, &ws_pkt);
 #else
@@ -343,24 +378,17 @@ esp_err_t WebServerManager::handleWebSocket(httpd_req_t *req) {
     }
 
     if (req->method == HTTP_GET) {
-        // WebSocket handshake - add client to our list
+        // This is the WebSocket handshake, add the client
         int sockfd = httpd_req_to_sockfd(req);
         instance->addWebSocketClient(sockfd);
         ESP_LOGI(TAG, "WebSocket client connected: fd=%d", sockfd);
-        
-        // Send system info 
-        std::string sysinfo = instance->getDeviceInfo();
-        ws_send_text(req->handle, sockfd, sysinfo.c_str(), sysinfo.size());
-        
-        // Send device metrics
-        std::string metrics = instance->getDeviceMetrics();
-        ws_send_text(req->handle, sockfd, metrics.c_str(), metrics.size());
 
-        // Send OTA status
-        std::string otaStatus = instance->getOTAStatus();
-        ws_send_text(req->handle, sockfd, otaStatus.c_str(), otaStatus.size());
+        std::string status = instance->getDeviceInfo();
+        instance->queue_ws_frame(sockfd, (const uint8_t*)status.c_str(), status.size(), HTTPD_WS_TYPE_TEXT);
+        // Do not send frames directly from the HTTP handler context
+        if (!esp_timer_is_active(instance->m_statusTimer))
+            esp_timer_start_periodic(instance->m_statusTimer, 5000 * 1000);
 
-        if(!esp_timer_is_active(instance->m_statusTimer)) esp_timer_start_periodic(instance->m_statusTimer, 5000 * 1000);
         return ESP_OK;
     }
 
@@ -371,10 +399,33 @@ esp_err_t WebServerManager::handleWebSocket(httpd_req_t *req) {
     // First get frame length
     esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 0);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "ws recv frame len failed: %s", esp_err_to_name(ret));
-        // Remove client on error
+        ESP_LOGE(TAG, "ws recv frame len failed: %s (errno: %d)", esp_err_to_name(ret), errno);
+        // Remove client on error - but be more careful about the error type
         int sockfd = httpd_req_to_sockfd(req);
-        instance->removeWebSocketClient(sockfd);
+        
+        // Check for specific WebSocket protocol errors that indicate broken connection
+        bool is_protocol_error = false;
+        
+        // Check if the error message contains "masked" or "masking" (case insensitive)
+        const char* err_name = esp_err_to_name(ret);
+        if (err_name && (strstr(err_name, "masked") || strstr(err_name, "masking") ||
+                         strstr(err_name, "MASKED") || strstr(err_name, "MASKING"))) {
+            is_protocol_error = true;
+            ESP_LOGW(TAG, "WebSocket protocol error (frame masking issue) with client fd=%d, removing client", sockfd);
+        }
+        
+        // Also check errno for connection reset/broken pipe
+        if (errno == ECONNRESET || errno == EPIPE || errno == ENOTCONN) {
+            is_protocol_error = true;
+            ESP_LOGW(TAG, "Connection reset/broken with client fd=%d (errno: %d), removing client", sockfd, errno);
+        }
+        
+        // Remove client on serious errors, including protocol errors and connection issues
+        if (ret == ESP_FAIL || ret == ESP_ERR_INVALID_STATE || ret == ESP_ERR_INVALID_ARG || is_protocol_error) {
+            instance->removeWebSocketClient(sockfd);
+        } else {
+            ESP_LOGW(TAG, "Temporary network issue with client fd=%d, keeping client", sockfd);
+        }
         return ret;
     }
 
@@ -384,20 +435,43 @@ esp_err_t WebServerManager::handleWebSocket(httpd_req_t *req) {
         ws_pkt.payload = (uint8_t*)payload.data();
         ret = httpd_ws_recv_frame(req, &ws_pkt, ws_pkt.len);
         if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "ws recv frame failed: %s", esp_err_to_name(ret));
-            // Remove client on error
+            ESP_LOGE(TAG, "ws recv frame failed: %s (errno: %d)", esp_err_to_name(ret), errno);
+            // Remove client on error - but be more careful about the error type
             int sockfd = httpd_req_to_sockfd(req);
-            instance->removeWebSocketClient(sockfd);
+            
+            // Check for specific WebSocket protocol errors that indicate broken connection
+            bool is_protocol_error = false;
+            
+            // Check if the error message contains "masked" or "masking" (case insensitive)
+            const char* err_name = esp_err_to_name(ret);
+            if (err_name && (strstr(err_name, "masked") || strstr(err_name, "masking") ||
+                             strstr(err_name, "MASKED") || strstr(err_name, "MASKING"))) {
+                is_protocol_error = true;
+                ESP_LOGW(TAG, "WebSocket protocol error (frame masking issue) with client fd=%d during frame recv, removing client", sockfd);
+            }
+            
+            // Also check errno for connection reset/broken pipe
+            if (errno == ECONNRESET || errno == EPIPE || errno == ENOTCONN) {
+                is_protocol_error = true;
+                ESP_LOGW(TAG, "Connection reset/broken with client fd=%d (errno: %d) during frame recv, removing client", sockfd, errno);
+            }
+            
+            // Remove client on serious errors, including protocol errors and connection issues
+            if (ret == ESP_FAIL || ret == ESP_ERR_INVALID_STATE || ret == ESP_ERR_INVALID_ARG || is_protocol_error) {
+                instance->removeWebSocketClient(sockfd);
+            } else {
+                ESP_LOGW(TAG, "Temporary network issue with client fd=%d during frame recv, keeping client", sockfd);
+            }
             return ret;
         }
     }
 
     // Handle different frame types
     if (ws_pkt.type == HTTPD_WS_TYPE_TEXT) {
-        ESP_LOGI(TAG, "Received WebSocket message: %s", payload.c_str());
+        ESP_LOGD(TAG, "Received WebSocket message: %s", payload.c_str());
         return instance->handleWebSocketMessage(req, payload);
     } else if (ws_pkt.type == HTTPD_WS_TYPE_CLOSE) {
-        ESP_LOGI(TAG, "WebSocket close frame received");
+        ESP_LOGD(TAG, "WebSocket close frame received");
         int sockfd = httpd_req_to_sockfd(req);
         instance->removeWebSocketClient(sockfd);
         return ESP_OK;
@@ -420,10 +494,7 @@ esp_err_t WebServerManager::handleRootOrHash(httpd_req_t *req) {
     char buffer[1024];
     size_t bytes_read;
     while ((bytes_read = file.read((uint8_t*)buffer, sizeof(buffer))) > 0) {
-        // Simple template processing for VERSION
-        std::string content(buffer, bytes_read);
-        
-        if (httpd_resp_send_chunk(req, content.c_str(), content.length()) != ESP_OK) {
+        if (httpd_resp_send_chunk(req, buffer, bytes_read) != ESP_OK) {
             file.close();
             return ESP_FAIL;
         }
@@ -820,7 +891,7 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData, con
         return false;
       }
     // --- Pin Validation ---
-    } else if (keyStr.size() >= 3 && strcmp(keyStr.data() + (keyStr.size() - 3), "Pin") == 0) {
+    } else if (str_ends_with(keyStr.c_str(), "Pin")) {
       if (!cJSON_IsNumber(incomingValue) || (incomingValue->valueint == 0)) {
         ESP_LOGE(TAG, "Invalid type or value for GPIO pin \"%s\"", keyStr.c_str());
         std::string msg = getJsonValueAsString(incomingValue) + " is not a valid value for \"" + keyStr + "\".";
@@ -954,60 +1025,294 @@ esp_err_t WebServerManager::handleStartConfigAP(httpd_req_t *req) {
 
 // WebSocket client management methods
 void WebServerManager::addWebSocketClient(int fd) {
-    std::lock_guard<std::mutex> lock(m_wsClientsMutex);
-    // Check if client already exists
-    auto it = std::find(m_wsClients.begin(), m_wsClients.end(), fd);
-    if (it == m_wsClients.end()) {
-        m_wsClients.push_back(fd);
-        ESP_LOGI(TAG, "Added WebSocket client fd=%d, total clients: %d", fd, m_wsClients.size());
+    bool added = false;
+    size_t total = 0;
+    {
+        std::lock_guard<std::mutex> lock(m_wsClientsMutex);
+        // Check if client already exists
+        auto it = std::find_if(m_wsClients.begin(), m_wsClients.end(), [fd](const std::unique_ptr<WsClient>& client) {
+            return client->fd == fd;
+        });
+        if (it == m_wsClients.end()) {
+            m_wsClients.emplace_back(std::make_unique<WsClient>(fd));
+            added = true;
+        }
+        total = m_wsClients.size();
+    }
+    if (added) {
+        ESP_LOGI(TAG, "Added WebSocket client fd=%d, total clients: %zu", fd, total);
     }
 }
 
 void WebServerManager::removeWebSocketClient(int fd) {
-    std::lock_guard<std::mutex> lock(m_wsClientsMutex);
-    auto it = std::find(m_wsClients.begin(), m_wsClients.end(), fd);
-    if (it != m_wsClients.end()) {
-        m_wsClients.erase(it);
-        ESP_LOGI(TAG, "Removed WebSocket client fd=%d, remaining clients: %d", fd, m_wsClients.size());
-        if (m_wsClients.empty()) {
-            esp_timer_stop(m_statusTimer);
+    bool removed = false;
+    size_t remaining = 0;
+    bool stopStatusTimer = false;
+    {
+        std::lock_guard<std::mutex> lock(m_wsClientsMutex);
+        auto it = std::find_if(m_wsClients.begin(), m_wsClients.end(), [fd](const std::unique_ptr<WsClient>& client) {
+            return client->fd == fd;
+        });
+        if (it != m_wsClients.end()) {
+            ESP_LOGD(TAG, "Removing WebSocket client fd=%d from list", fd);
+            m_wsClients.erase(it);
+            removed = true;
+            remaining = m_wsClients.size();
+            stopStatusTimer = m_wsClients.empty();
         }
+    }
+    if (removed) {
+        ESP_LOGI(TAG, "Removed WebSocket client fd=%d, remaining clients: %zu", fd, remaining);
+    } else {
+        ESP_LOGW(TAG, "Attempted to remove non-existent WebSocket client fd=%d", fd);
+    }
+    if (stopStatusTimer && m_statusTimer && esp_timer_is_active(m_statusTimer)) {
+        // Stop timer outside the client list lock to avoid re-entrancy
+        esp_timer_stop(m_statusTimer);
     }
 }
 
 void WebServerManager::broadcastToWebSocketClients(const char* message) {
-    std::lock_guard<std::mutex> lock(m_wsClientsMutex);
-    if (m_wsClients.empty()) {
+    broadcastWs(reinterpret_cast<const uint8_t*>(message), strlen(message), HTTPD_WS_TYPE_TEXT);
+}
+
+void WebServerManager::broadcastWs(const uint8_t* payload, size_t len, httpd_ws_type_t type) {
+#ifdef WEBSERVER_USE_DEDICATED_BROADCAST_QUEUE
+    // Producers enqueue a broadcast message; sender task will snapshot clients and send.
+    size_t total_size = sizeof(BroadcastMsg) + len;
+    BroadcastMsg* msg = static_cast<BroadcastMsg*>(malloc(total_size));
+    if (!msg) {
+        ESP_LOGE(TAG, "Failed to allocate broadcast message (%u bytes)", static_cast<unsigned>(total_size));
         return;
     }
-    
-    ESP_LOGI(TAG, "Broadcasting to %d WebSocket clients: %s", m_wsClients.size(), message);
-    
-    // Create a copy of the client list to avoid holding the lock during send operations
-    std::vector<int> clients_copy = m_wsClients;
-    
-    // Release the lock before sending
-    m_wsClientsMutex.unlock();
-    
-    for (auto it = clients_copy.begin(); it != clients_copy.end(); ) {
-        int fd = *it;
-        esp_err_t ret = ws_send_text(m_server, fd, message, strlen(message));
-        if (ret != ESP_OK) {
-            ESP_LOGW(TAG, "Failed to send to WebSocket client fd=%d: %s", fd, esp_err_to_name(ret));
-            // Remove failed client from our list
-            std::lock_guard<std::mutex> lock_again(m_wsClientsMutex);
-            auto remove_it = std::find(m_wsClients.begin(), m_wsClients.end(), fd);
-            if (remove_it != m_wsClients.end()) {
-                m_wsClients.erase(remove_it);
-            }
-            it = clients_copy.erase(it);
-        } else {
-            ++it;
+    msg->type = type;
+    msg->len = len;
+    memcpy(msg->payload, payload, len);
+    if (!m_wsBroadcastQueue || xQueueSend(m_wsBroadcastQueue, &msg, pdMS_TO_TICKS(10)) != pdPASS) {
+        ESP_LOGE(TAG, "Failed to enqueue broadcast message");
+        free(msg);
+    }
+    return;
+#else
+    // Snapshot client fds under mutex to avoid races
+    std::vector<int> fds;
+    {
+        std::lock_guard<std::mutex> lock(m_wsClientsMutex);
+        fds.reserve(m_wsClients.size());
+        for (const auto& c : m_wsClients) {
+            fds.push_back(c->fd);
         }
     }
-    
-    // Re-acquire the lock
-    m_wsClientsMutex.lock();
+
+    // Lightweight logging: show size and preview (for text)
+    if (type == HTTPD_WS_TYPE_TEXT) {
+        size_t preview_len = std::min<size_t>(len, 128);
+        ESP_LOGD(TAG, "Broadcasting TEXT to %zu WebSocket clients (%zu bytes, preview): %.*s",
+                 fds.size(), len, static_cast<int>(preview_len), reinterpret_cast<const char*>(payload));
+    } else {
+        ESP_LOGD(TAG, "Broadcasting BINARY to %zu WebSocket clients (%zu bytes)", fds.size(), len);
+    }
+
+    if (fds.empty()) {
+        return;
+    }
+    for (int fd : fds) {
+        queue_ws_frame(fd, payload, len, type);
+    }
+#endif
+}
+
+void WebServerManager::queue_ws_frame(int fd, const uint8_t* payload, size_t len, httpd_ws_type_t type) {
+    // Allocate memory for the struct and the payload
+    size_t total_size = sizeof(WsFrame) + len;
+    WsFrame* frame = static_cast<WsFrame*>(malloc(total_size));
+    if (!frame) {
+        ESP_LOGE(TAG, "Failed to allocate memory for WebSocket frame");
+        return;
+    }
+
+    // Populate the struct
+    frame->fd = fd;
+    frame->type = type;
+    frame->len = len;
+    memcpy(frame->payload, payload, len);
+
+    // Send the pointer to the queue
+    if (xQueueSend(m_wsQueue, &frame, pdMS_TO_TICKS(10)) != pdPASS) {
+        ESP_LOGE(TAG, "Failed to queue WebSocket frame");
+        free(frame);
+    }
+}
+
+void WebServerManager::ws_send_task(void* arg) {
+    WebServerManager* instance = static_cast<WebServerManager*>(arg);
+    WsFrame* frame = nullptr;
+#ifdef WEBSERVER_USE_DEDICATED_BROADCAST_QUEUE
+    BroadcastMsg* bmsg = nullptr;
+#endif
+
+    while (true) {
+#ifdef WEBSERVER_USE_DEDICATED_BROADCAST_QUEUE
+        // First, drain any queued per-fd frames without blocking
+        while (xQueueReceive(instance->m_wsQueue, &frame, 0) == pdPASS) {
+            if (!frame) {
+                continue;
+            }
+
+            esp_err_t send_ret = ESP_FAIL;
+            int target_fd = -1;
+            {
+                // Take the list lock to locate the client, then release before sending
+                std::unique_lock<std::mutex> list_lock(instance->m_wsClientsMutex);
+                auto it = std::find_if(instance->m_wsClients.begin(), instance->m_wsClients.end(),
+                                       [fd = frame->fd](const std::unique_ptr<WsClient>& client) {
+                                           return client->fd == fd;
+                                       });
+                if (it != instance->m_wsClients.end()) {
+                    target_fd = frame->fd; // Store fd for send operation
+                }
+                list_lock.unlock(); // Always unlock list lock before any potentially blocking operation
+            }
+
+            if (target_fd != -1) {
+                // CRITICAL FIX: Do NOT hold any locks during network send operation
+                // This prevents deadlock when network operations fail and ESP-IDF tries to clean up
+                ESP_LOGD(TAG, "Sending frame to client fd=%d, len=%zu", target_fd, frame->len);
+                send_ret = instance->ws_send_frame(instance->m_server, target_fd, frame->payload, frame->len, frame->type);
+                ESP_LOGD(TAG, "Send frame result for fd=%d: %s", target_fd, esp_err_to_name(send_ret));
+            }
+
+            if (send_ret != ESP_OK) {
+                // Check if this is a protocol error (like frame masking issues) or connection error
+                bool is_connection_error = false;
+                const char* err_name = esp_err_to_name(send_ret);
+                
+                if (err_name && (strstr(err_name, "masked") || strstr(err_name, "masking") ||
+                                 strstr(err_name, "MASKED") || strstr(err_name, "MASKING"))) {
+                    is_connection_error = true;
+                    ESP_LOGW(TAG, "WebSocket protocol error (frame masking) for client fd=%d, removing client", frame->fd);
+                } else if (send_ret == ESP_FAIL) {
+                    is_connection_error = true;
+                    ESP_LOGW(TAG, "Connection failed for WebSocket client fd=%d, removing client", frame->fd);
+                }
+                
+                // Only remove if it's a connection/protocol error, not temporary issues
+                if (is_connection_error || send_ret == ESP_ERR_INVALID_STATE || send_ret == ESP_ERR_INVALID_ARG) {
+                    instance->removeWebSocketClient(frame->fd);
+                } else {
+                    ESP_LOGD(TAG, "Temporary send issue for client fd=%d: %s, will retry", frame->fd, esp_err_to_name(send_ret));
+                }
+            }
+
+            free(frame); // Free the memory after processing
+        }
+
+        // Wait briefly for a broadcast; if none, loop back to drain direct frames again
+        if (xQueueReceive(instance->m_wsBroadcastQueue, &bmsg, pdMS_TO_TICKS(50)) == pdPASS) {
+            if (bmsg) {
+                // Snapshot fds under the list lock
+                std::vector<int> fds;
+                {
+                    std::lock_guard<std::mutex> lock(instance->m_wsClientsMutex);
+                    fds.reserve(instance->m_wsClients.size());
+                    for (const auto& c : instance->m_wsClients) fds.push_back(c->fd);
+                }
+                if (!fds.empty()) {
+                    // Optionally log (not under list lock)
+                    if (bmsg->type == HTTPD_WS_TYPE_TEXT) {
+                        size_t preview_len = std::min<size_t>(bmsg->len, 128);
+                        ESP_LOGI(TAG, "Broadcasting TEXT to %zu WebSocket clients (%zu bytes, preview): %.*s",
+                                 fds.size(), bmsg->len, static_cast<int>(preview_len), reinterpret_cast<const char*>(bmsg->payload));
+                    } else {
+                        ESP_LOGI(TAG, "Broadcasting BINARY to %zu WebSocket clients (%zu bytes)", fds.size(), bmsg->len);
+                    }
+                    // Send to each client without holding locks during network operations
+                    for (int fd : fds) {
+                        esp_err_t send_ret = ESP_FAIL;
+                        // CRITICAL: No locks held during network send to prevent deadlock
+                        send_ret = instance->ws_send_frame(instance->m_server, fd, bmsg->payload, bmsg->len, bmsg->type);
+                        
+                        if (send_ret != ESP_OK) {
+                            // Check if this is a protocol error (like frame masking issues) or connection error
+                            bool is_connection_error = false;
+                            const char* err_name = esp_err_to_name(send_ret);
+                            
+                            if (err_name && (strstr(err_name, "masked") || strstr(err_name, "masking") ||
+                                             strstr(err_name, "MASKED") || strstr(err_name, "MASKING"))) {
+                                is_connection_error = true;
+                                ESP_LOGW(TAG, "WebSocket protocol error (frame masking) for broadcast client fd=%d, removing client", fd);
+                            } else if (send_ret == ESP_FAIL) {
+                                is_connection_error = true;
+                                ESP_LOGW(TAG, "Connection failed for broadcast client fd=%d, removing client", fd);
+                            }
+                            
+                            // Only remove if it's a connection/protocol error, not temporary issues
+                            if (is_connection_error || send_ret == ESP_ERR_INVALID_STATE || send_ret == ESP_ERR_INVALID_ARG) {
+                                instance->removeWebSocketClient(fd);
+                            } else {
+                                ESP_LOGD(TAG, "Temporary broadcast send issue for client fd=%d: %s, will skip", fd, esp_err_to_name(send_ret));
+                            }
+                        }
+                    }
+                }
+                free(bmsg);
+            }
+        }
+#else
+        if (xQueueReceive(instance->m_wsQueue, &frame, portMAX_DELAY) == pdPASS) {
+            if (!frame) {
+                continue;
+            }
+
+            esp_err_t send_ret = ESP_FAIL;
+            int target_fd = -1;
+            {
+                // Take the list lock to locate the client, then release before sending
+                std::unique_lock<std::mutex> list_lock(instance->m_wsClientsMutex);
+                auto it = std::find_if(instance->m_wsClients.begin(), instance->m_wsClients.end(),
+                                       [fd = frame->fd](const std::unique_ptr<WsClient>& client) {
+                                           return client->fd == fd;
+                                       });
+                if (it != instance->m_wsClients.end()) {
+                    target_fd = frame->fd; // Store fd for send operation
+                }
+                list_lock.unlock(); // Always unlock list lock before any potentially blocking operation
+            }
+
+            if (target_fd != -1) {
+                // CRITICAL FIX: Do NOT hold any locks during network send operation
+                // This prevents deadlock when network operations fail and ESP-IDF tries to clean up
+                ESP_LOGD(TAG, "Sending frame to client fd=%d, len=%zu", target_fd, frame->len);
+                send_ret = instance->ws_send_frame(instance->m_server, target_fd, frame->payload, frame->len, frame->type);
+                ESP_LOGD(TAG, "Send frame result for fd=%d: %s", target_fd, esp_err_to_name(send_ret));
+            }
+
+            if (send_ret != ESP_OK) {
+                // Check if this is a protocol error (like frame masking issues) or connection error
+                bool is_connection_error = false;
+                const char* err_name = esp_err_to_name(send_ret);
+                
+                if (err_name && (strstr(err_name, "masked") || strstr(err_name, "masking") ||
+                                 strstr(err_name, "MASKED") || strstr(err_name, "MASKING"))) {
+                    is_connection_error = true;
+                    ESP_LOGW(TAG, "WebSocket protocol error (frame masking) for client fd=%d, removing client", frame->fd);
+                } else if (send_ret == ESP_FAIL) {
+                    is_connection_error = true;
+                    ESP_LOGW(TAG, "Connection failed for WebSocket client fd=%d, removing client", frame->fd);
+                }
+                
+                // Only remove if it's a connection/protocol error, not temporary issues
+                if (is_connection_error || send_ret == ESP_ERR_INVALID_STATE || send_ret == ESP_ERR_INVALID_ARG) {
+                    instance->removeWebSocketClient(frame->fd);
+                } else {
+                    ESP_LOGD(TAG, "Temporary send issue for client fd=%d: %s, will retry", frame->fd, esp_err_to_name(send_ret));
+                }
+            }
+
+            free(frame); // Free the memory after processing
+        }
+#endif
+    }
 }
 
 std::string WebServerManager::getDeviceMetrics(){
@@ -1016,11 +1321,7 @@ std::string WebServerManager::getDeviceMetrics(){
   cJSON_AddNumberToObject(status, "uptime", esp_timer_get_time() / 1000000); // seconds
   cJSON_AddNumberToObject(status, "free_heap", esp_get_free_heap_size());
   cJSON_AddNumberToObject(status, "wifi_rssi", WiFi.RSSI());
-  char *status_str = cJSON_PrintUnformatted(status);
-  std::string str(status_str);
-  free(status_str);
-  cJSON_Delete(status);
-  return str;
+  return cjson_to_string_and_free(status);
 }
 
 std::string WebServerManager::getDeviceInfo(){
@@ -1029,11 +1330,7 @@ std::string WebServerManager::getDeviceInfo(){
   cJSON_AddStringToObject(info, "version", esp_app_get_description()->version);
   cJSON_AddBoolToObject(info, "eth_enabled", m_configManager.getConfig<espConfig::misc_config_t>().ethernetEnabled);
   cJSON_AddStringToObject(info, "wifi_ssid", WiFi.SSID().c_str());
-  char *info_str = cJSON_PrintUnformatted(info);
-  std::string str(info_str);
-  free(info_str);
-  cJSON_Delete(info);
-  return str;
+  return cjson_to_string_and_free(info);
 }
 
 esp_err_t WebServerManager::handleWebSocketMessage(httpd_req_t *req, const std::string& message) {
@@ -1049,8 +1346,8 @@ esp_err_t WebServerManager::handleWebSocketMessage(httpd_req_t *req, const std::
         char *error_str = cJSON_PrintUnformatted(error);
         
         int sockfd = httpd_req_to_sockfd(req);
-        ws_send_text(req->handle, sockfd, error_str, strlen(error_str));
-        
+        queue_ws_frame(sockfd, (const uint8_t*)error_str, strlen(error_str), HTTPD_WS_TYPE_TEXT);
+
         free(error_str);
         cJSON_Delete(error);
         return ESP_OK;
@@ -1068,28 +1365,28 @@ esp_err_t WebServerManager::handleWebSocketMessage(httpd_req_t *req, const std::
     
     // Handle different message types
     if (msg_type == "ping") {
-      // Respond with pong
+      // Respond to heartbeat ping with pong
       cJSON *pong = cJSON_CreateObject();
       cJSON_AddStringToObject(pong, "type", "pong");
       cJSON_AddNumberToObject(pong, "timestamp", esp_timer_get_time() / 1000);
-      cJSON_AddNumberToObject(pong, "uptime", esp_timer_get_time() / 1000000);
       char *pong_char_ptr = cJSON_PrintUnformatted(pong);
       std::string pong_str(pong_char_ptr);
       free(pong_char_ptr);
       cJSON_Delete(pong);
-      ws_send_text(req->handle, sockfd, pong_str.c_str(), pong_str.size());
+      queue_ws_frame(httpd_req_to_sockfd(req), (const uint8_t *)pong_str.c_str(),
+                     pong_str.size(), HTTPD_WS_TYPE_TEXT);
     } else if (msg_type == "metrics") {
       // Send system status
       std::string status = getDeviceMetrics();
-      ws_send_text(req->handle, sockfd, status.c_str(), status.size());
+       queue_ws_frame(sockfd, (const uint8_t*)status.c_str(), status.size(), HTTPD_WS_TYPE_TEXT);
     } else if (msg_type == "sysinfo") {
       // Send system info
       std::string status = getDeviceInfo();
-      ws_send_text(req->handle, sockfd, status.c_str(), status.size());
+       queue_ws_frame(sockfd, (const uint8_t*)status.c_str(), status.size(), HTTPD_WS_TYPE_TEXT);
     } else if (msg_type == "ota_status") {
       // Send OTA status
       std::string otaStatus = getOTAStatus();
-      ws_send_text(req->handle, sockfd, otaStatus.c_str(), otaStatus.size());
+       queue_ws_frame(sockfd, (const uint8_t*)otaStatus.c_str(), otaStatus.size(), HTTPD_WS_TYPE_TEXT);
     } else if (msg_type == "echo") {
       // Echo the message back
       cJSON *echo = cJSON_CreateObject();
@@ -1104,7 +1401,7 @@ esp_err_t WebServerManager::handleWebSocketMessage(httpd_req_t *req, const std::
       std::string echo_str(echo_char_ptr);
       free(echo_char_ptr);
       cJSON_Delete(echo);
-      ws_send_text(req->handle, sockfd, echo_str.c_str(), echo_str.size());
+      queue_ws_frame(sockfd, (const uint8_t*)echo_str.c_str(), echo_str.size(), HTTPD_WS_TYPE_TEXT);
     } else {
       ESP_LOGW(TAG, "Unknown WebSocket message type: %s", msg_type.c_str());
 
@@ -1117,8 +1414,8 @@ esp_err_t WebServerManager::handleWebSocketMessage(httpd_req_t *req, const std::
       std::string unknown_str(unknown_char_ptr);
       free(unknown_char_ptr);
       cJSON_Delete(unknown);
-      ws_send_text(req->handle, sockfd, unknown_str.c_str(),
-                   unknown_str.size());
+      queue_ws_frame(sockfd, (const uint8_t*)unknown_str.c_str(),
+                   unknown_str.size(), HTTPD_WS_TYPE_TEXT);
     }
 
     cJSON_Delete(json);
@@ -1675,12 +1972,7 @@ std::string WebServerManager::getOTAStatus() {
         cJSON_AddNumberToObject(status, "total_bytes", m_otaTotalBytes);
     }
     
-    char *status_str = cJSON_PrintUnformatted(status);
-    std::string result(status_str);
-    free(status_str);
-    cJSON_Delete(status);
-    
-    return result;
+    return cjson_to_string_and_free(status);
 }
 
 // Broadcast OTA status to all WebSocket clients
