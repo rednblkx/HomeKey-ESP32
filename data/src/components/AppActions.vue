@@ -1,5 +1,5 @@
 <template>
-  <div class="w-full max-w-4xl">
+  <div class="w-full max-w-4xl py-6">
     <h1 class="md:text-3xl text-2xl font-bold mb-8">Hardware Actions</h1>
     <div v-if="loading" class="text-center">
       <span class="loading loading-spinner loading-lg"></span>

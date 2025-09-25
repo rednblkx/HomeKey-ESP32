@@ -1,5 +1,5 @@
 <template>
-  <div class="w-full max-w-4xl space-y-6">
+  <div class="w-full max-w-4xl space-y-6 py-6">
     <!-- HomeKey Info Card -->
     <div v-if="loading" class="text-center">
       <span class="loading loading-spinner loading-lg"></span>

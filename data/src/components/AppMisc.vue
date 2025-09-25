@@ -1,14 +1,14 @@
 <template>
-  <div class="flex flex-col">
+  <div class="flex flex-col py-6">
     <h1 class="md:text-3xl text-3xl font-bold mb-8 self-start">
       System Settings
-      <div class="tooltip tooltip-bottom tooltip-info" data-tip="Reboot required to apply!">
+      <span class="max-sm:before:transform-[translateX(-80%)!important] tooltip tooltip-bottom sm:tooltip-right tooltip-info sm:ml-2" data-tip="Reboot required to apply!">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
           class="size-6">
           <path stroke-linecap="round" stroke-linejoin="round"
             d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z" />
         </svg>
-      </div>
+      </span>
     </h1>
     <div v-if="loading" class="text-center">
       <span class="loading loading-spinner loading-lg"></span>
@@ -203,7 +203,7 @@
                       <span class="label-text">Ethernet PHY Type</span>
                     </label>
                     <select v-model.number="miscConfig.ethPhyType" :disabled="miscConfig.ethActivePreset !== 255"
-                      @change="handleEthChipChange" class="select select-bordered w-full">
+                      class="select select-bordered w-full">
                       <option v-for="(chip, key) in ethConfig.supportedChips" :key="key" :value="parseInt(key)">{{
                         chip.name }}</option>
                     </select>
@@ -496,11 +496,6 @@ export default {
       }
     };
 
-    const handleEthChipChange = () => {
-      // This function is primarily for enabling/disabling fields based on ethActivePreset
-      // The actual values are updated by handleEthPresetChange or direct v-model binding
-    };
-
     const resetForm = () => {
       miscConfig.value = JSON.parse(JSON.stringify(originalMiscConfig));
     };
@@ -525,7 +520,6 @@ export default {
       saveMiscConfig,
       resetForm,
       handleEthPresetChange,
-      handleEthChipChange,
     };
   },
 };

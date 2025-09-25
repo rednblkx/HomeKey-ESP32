@@ -1,8 +1,8 @@
 <template>
-  <div class="w-full max-w-4xl">
+  <div class="w-full max-w-4xl py-6">
     <h1 class="md:text-3xl text-2xl font-bold mb-8">
       MQTT Settings
-      <div class="tooltip tooltip-bottom" data-tip="Reboot required to apply!">
+      <div class="tooltip tooltip-bottom tooltip-info" data-tip="Reboot required to apply!">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
           class="size-6">
           <path stroke-linecap="round" stroke-linejoin="round"
