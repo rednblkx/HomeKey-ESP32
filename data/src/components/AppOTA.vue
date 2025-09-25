@@ -1,5 +1,5 @@
 <template>
-  <div class="w-full max-w-4xl space-y-6">
+  <div class="w-full max-w-4xl space-y-6 py-6">
     <!-- OTA Update Card -->
     <div class="card bg-base-200 shadow-xl">
       <h2 class="card-title p-4 pb-0">

@@ -110,7 +110,7 @@
       </ul>
       </div>
     </div>
-    <div class="drawer-content flex flex-col items-center justify-center">
+    <div class="drawer-content flex flex-col items-center justify-center max-h-dvh">
       <!-- Mobile Navbar -->
       <div class="navbar bg-base-100 lg:hidden">
         <div class="navbar-start">
@@ -156,7 +156,7 @@
         </div>
       </div>
       <!-- Content -->
-      <main class="flex-1 p-6 overflow-y-auto w-full">
+      <main class="flex-1 px-6 overflow-y-auto w-full">
         <router-view></router-view>
       </main>
     </div>
