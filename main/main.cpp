@@ -1,3 +1,5 @@
+#include <iostream>
+#include <memory>
 #define FMT_HEADER_ONLY
 #include "config.hpp"
 #include "logger.hpp"
@@ -14,6 +16,8 @@
 #include <sodium/crypto_sign.h>
 #include <sodium/crypto_box.h>
 #include "HAP.h"
+#include "loggable.hpp"
+#include "WebSocketLogSinker.h"
 
 const char* TAG = "LockApp";
 espp::Logger logger({.tag = "LockApp"});
@@ -129,7 +133,13 @@ std::function<void(int)> lambda = [](int status) {
     webServerManager->begin();
   }
 };
-void setup() {
+using namespace loggable;
+
+void setup() { 
+  auto& distributor = Sinker::instance();
+
+  distributor.set_level(LogLevel::Debug);
+  distributor.hook_esp_log(true);
   Serial.begin(115200);
   // espp::EventManager::get().set_log_level(espp::Logger::Verbosity::DEBUG);
   readerDataManager = new ReaderDataManager;
@@ -142,6 +152,7 @@ void setup() {
   webServerManager = new WebServerManager(*configManager, *readerDataManager);
   homekitLock = new HomeKitLock(lambda, *lockManager, *configManager, *readerDataManager);
   nfcManager = new NfcManager(*readerDataManager, configManager->getConfig<espConfig::misc_config_t>().nfcGpioPins);
+  distributor.add_sinker(std::make_shared<WebSocketLogSinker>(webServerManager));
   homekitLock->begin();
   hardwareManager->begin();
   lockManager->begin();

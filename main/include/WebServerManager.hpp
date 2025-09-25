@@ -1,4 +1,6 @@
 #pragma once
+#include <memory>
+#include <atomic>
 #include "esp_http_server.h"
 #include "cJSON.h"
 #include "esp_timer.h"
@@ -7,10 +9,14 @@
 #include <string>
 #include <vector>
 #include <mutex>
+#include "esp_log.h"
 
 class ConfigManager;
 class ReaderDataManager;
 class SystemManager;
+namespace loggable {
+    class WebSocketLogSinker;
+}
 
 /**
  * @class WebServerManager
@@ -38,8 +44,16 @@ public:
      * @brief Initializes the web server and attaches all handlers.
      */
     void begin();
+    
+    void broadcastWs(const uint8_t * payload, size_t len, httpd_ws_type_t type);
+    void broadcastToWebSocketClients(const char* message);
 
 private:
+    friend class loggable::WebSocketLogSinker;
+
+    // WebSocket sending task
+    static void ws_send_task(void* arg);
+    void queue_ws_frame(int fd, const uint8_t* payload, size_t len, httpd_ws_type_t type);
     // --- Route Setup ---
     void setupRoutes();
 
@@ -65,8 +79,13 @@ private:
     // --- Helper Methods ---
     static bool validateRequest(httpd_req_t *req, cJSON *currentData, const char* body);
     static WebServerManager* getInstance(httpd_req_t *req);
-    static esp_err_t ws_send_text(httpd_handle_t server, int fd, const char* msg, size_t len);
-    static void statusTimerCallback(void* arg){ WebServerManager* instance = static_cast<WebServerManager*>(arg); instance->broadcastToWebSocketClients(instance->getDeviceMetrics().c_str()); }
+    static esp_err_t ws_send_frame(httpd_handle_t server, int fd, const uint8_t* payload, size_t len, httpd_ws_type_t type = HTTPD_WS_TYPE_TEXT);
+    static void statusTimerCallback(void* arg){
+        WebServerManager* instance = static_cast<WebServerManager*>(arg);
+        // Ensure the string outlives c_str() usage during the call
+        auto metrics = instance->getDeviceMetrics();
+        instance->broadcastToWebSocketClients(metrics.c_str());
+    }
     std::string getDeviceMetrics();
     std::string getDeviceInfo();
     std::string getOTAStatus();
@@ -75,18 +94,41 @@ private:
     // --- WebSocket Management ---
     void addWebSocketClient(int fd);
     void removeWebSocketClient(int fd);
-    void broadcastToWebSocketClients(const char* message);
     esp_err_t handleWebSocketMessage(httpd_req_t *req, const std::string& message);
     
     // --- Member Variables ---
     httpd_handle_t m_server;
+    QueueHandle_t m_wsQueue;
+    TaskHandle_t m_wsTaskHandle;
     ConfigManager& m_configManager;
     ReaderDataManager& m_readerDataManager;
     esp_timer_handle_t m_statusTimer;
     
     // WebSocket client management
-    std::vector<int> m_wsClients;
+    struct WsClient {
+        int fd;
+        std::mutex mutex;
+        WsClient(int file_descriptor) : fd(file_descriptor) {}
+    };
+    std::vector<std::unique_ptr<WsClient>> m_wsClients;
+
+    // Locking rules for m_wsClientsMutex:
+    //  - Only protect structural access to m_wsClients (add/remove/iterate/find).
+    //  - NEVER call ESP_LOG* or esp_timer_* while holding this mutex.
+    //  - NEVER perform network I/O (httpd_ws_send_frame_async) while holding this mutex.
+    //  - Take at most for short critical sections, and release before any callbacks.
     std::mutex m_wsClientsMutex;
+
+    // Optional dedicated broadcast queue; when enabled via WEBSERVER_USE_DEDICATED_BROADCAST_QUEUE,
+    // broadcastWs enqueues messages and ws_send_task snapshots clients and sends.
+#ifdef WEBSERVER_USE_DEDICATED_BROADCAST_QUEUE
+    struct BroadcastMsg {
+        httpd_ws_type_t type;
+        size_t len;
+        uint8_t payload[];
+    };
+    QueueHandle_t m_wsBroadcastQueue = nullptr;
+#endif
     
     // OTA upload types
     enum class OTAUploadType {
@@ -116,6 +158,13 @@ private:
     void initializeOTAWorker();
     void cleanupOTAAsync();
     
+    struct WsFrame {
+        int fd;
+        httpd_ws_type_t type;
+        size_t len;
+        uint8_t payload[]; // Flexible array member
+    };
+
     struct OTAAsyncRequest {
         httpd_req_t* req;
         size_t contentLength;

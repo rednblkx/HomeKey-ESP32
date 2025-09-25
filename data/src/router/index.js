@@ -4,6 +4,7 @@ import AppMqtt from '@/components/AppMqtt.vue'
 import AppActions from '@/components/AppActions.vue'
 import AppMisc from '@/components/AppMisc.vue'
 import AppOTA from '@/components/AppOTA.vue'
+import LogViewer from '@/components/LogViewer.vue'
 
 const routes = [
   {
@@ -30,6 +31,11 @@ const routes = [
     path: '/ota',
     name: 'OTA',
     component: AppOTA
+  },
+  {
+    path: '/logs',
+    name: 'Logs',
+    component: LogViewer
   }
 ]
 
