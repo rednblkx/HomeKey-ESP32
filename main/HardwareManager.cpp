@@ -49,7 +49,7 @@ HardwareManager::HardwareManager(const espConfig::misc_config_t& miscConfig)
       default:
         break;
     }
-  }, 3072);
+  }, 4096);
   espp::EventManager::get().add_subscriber(
       "hardware/gpioPinChanged", "HardwareManager",
       [&](const std::vector<uint8_t> &data) {
