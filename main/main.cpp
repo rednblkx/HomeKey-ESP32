@@ -131,11 +131,15 @@ std::function<void(int)> lambda = [](int status) {
     sprintf(identifier, "%.2s%.2s%.2s%.2s%.2s%.2s", HAPClient::accessory.ID, HAPClient::accessory.ID + 3, HAPClient::accessory.ID + 6, HAPClient::accessory.ID + 9, HAPClient::accessory.ID + 12, HAPClient::accessory.ID + 15);
     mqttManager->begin(std::string(identifier));
     webServerManager->begin();
+    
+    auto& distributor = loggable::Sinker::instance();
+    distributor.add_sinker(std::make_shared<loggable::WebSocketLogSinker>(webServerManager));
+    ESP_LOGI("WebServerManager", "WebSocketLogSinker registered successfully");
   }
 };
 using namespace loggable;
 
-void setup() { 
+void setup() {
   auto& distributor = Sinker::instance();
 
   distributor.set_level(LogLevel::Debug);
@@ -152,7 +156,6 @@ void setup() {
   webServerManager = new WebServerManager(*configManager, *readerDataManager);
   homekitLock = new HomeKitLock(lambda, *lockManager, *configManager, *readerDataManager);
   nfcManager = new NfcManager(*readerDataManager, configManager->getConfig<espConfig::misc_config_t>().nfcGpioPins);
-  distributor.add_sinker(std::make_shared<WebSocketLogSinker>(webServerManager));
   homekitLock->begin();
   hardwareManager->begin();
   lockManager->begin();
