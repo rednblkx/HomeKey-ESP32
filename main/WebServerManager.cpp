@@ -1821,6 +1821,7 @@ std::string WebServerManager::getDeviceMetrics() {
 std::string WebServerManager::getDeviceInfo() {
   cJSON *info = cJSON_CreateObject();
   cJSON_AddStringToObject(info, "type", "sysinfo");
+  cJSON_AddStringToObject(info, "deviceName", m_configManager.getConfig<espConfig::misc_config_t>().deviceName.c_str());
   cJSON_AddStringToObject(info, "version", esp_app_get_description()->version);
   cJSON_AddBoolToObject(
       info, "eth_enabled",

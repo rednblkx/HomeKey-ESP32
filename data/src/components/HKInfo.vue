@@ -53,12 +53,22 @@
     <div class="card bg-base-200 shadow-xl">
       <h2 class="card-title p-4 pb-0"><div class="badge badge-info badge-md">Info</div> System</h2>
       <div class="card-body p-4">
-        <div>
+        <div class="flex flex-col gap-4">
           <div class="stats stats-vertical md:stats-horizontal shadow bg-base-100 w-full">
+            <div class="stat">
+              <div class="stat-title">Device Name</div>
+              <div class="stat-value text-xl">{{ sysInfo?.deviceName || 'N/A' }}</div>
+            </div>
             <div class="stat">
               <div class="stat-title">Version</div>
               <div class="stat-value text-xl">{{ sysInfo?.version || 'N/A' }}</div>
             </div>
+            <div class="stat">
+              <div class="stat-title">Uptime</div>
+              <div class="stat-value text-xl">{{ sysInfo?.uptime || 'N/A' }}</div>
+            </div>
+          </div>
+          <div class="stats stats-vertical md:stats-horizontal shadow bg-base-100 w-full">
             <div class="stat">
               <div class="stat-title">WiFi SSID</div>
               <div class="stat-value text-xl">{{ sysInfo?.wifi_ssid || 'N/A' }}</div>
@@ -77,7 +87,7 @@
     </div>
     
     <!-- WebSocket Test Component -->
-    <WebSocketTestComponent />
+    <WebSocketTestComponent v-if="dev" />
   </div>
 </template>
 
@@ -93,6 +103,7 @@ export default {
       hkInfo: {},
       loading: true,
       error: null,
+      dev: __DEV__
     };
   },
   async mounted() {
