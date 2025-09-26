@@ -27,7 +27,7 @@ struct gpioLockAction {
  * Reads the device Bluetooth MAC address and formats an identifier using bytes 2–5.
  *
  * @return std::string Identifier in the form "ESP_{XX}{XX}{XX}{XX}" where each `XX`
- *         is the corresponding MAC byte rendered as two uppercase hexadecimal digits.
+ *         is the Bluetooth MAC byte starting from 2 rendered as two uppercase hexadecimal digits.
  */
 static const std::string platform_create_id_string(void) {
   uint8_t mac[6];

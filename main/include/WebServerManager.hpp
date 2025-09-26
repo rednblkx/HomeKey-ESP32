@@ -117,11 +117,11 @@ private:
         int fd;
         std::mutex mutex;
         /**
- * @brief Construct a WsClient for the specified client socket descriptor.
- *
- * @param file_descriptor File descriptor identifying the WebSocket client connection.
- */
-WsClient(int file_descriptor) : fd(file_descriptor) {}
+         * @brief Construct a WsClient for the specified client socket descriptor.
+         *
+         * @param file_descriptor File descriptor identifying the WebSocket client connection.
+         */
+        WsClient(int file_descriptor) : fd(file_descriptor) {}
     };
     std::vector<std::unique_ptr<WsClient>> m_wsClients;
 

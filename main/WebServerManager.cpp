@@ -370,6 +370,7 @@ void WebServerManager::setupRoutes() {
  *         if the file was not found, could not be opened, or a send error
  *         occurred (a 404 response is sent when the file is missing or cannot
  *         be opened).
+ */
 esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
   const char *base_path = (const char *)req->user_ctx;
   char filepath[256];

@@ -8,7 +8,7 @@
 namespace Utils {
 
 /**
- * @brief Compute the CRC-16/X-25 checksum for a data buffer and write it in little-endian.
+ * @brief Compute the ISO/IEC 14443-A (CRC_A) checksum for a data buffer and write it in little-endian.
  *
  * @param data Pointer to the input byte buffer.
  * @param size Number of bytes in the buffer to process.
