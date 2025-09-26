@@ -22,6 +22,19 @@
 const char* TAG = "LockApp";
 espp::Logger logger({.tag = "LockApp"});
 
+/**
+ * @brief Handle Ethernet events, update hostname at start, and log state changes.
+ *
+ * This event handler responds to Arduino Ethernet events: on start it retrieves
+ * the MAC address, constructs and sets a hostname derived from the MAC; on
+ * connection, disconnection, IP acquisition/loss, and stop events it logs the
+ * corresponding state change. For the GOT_IP event the network interface
+ * descriptor from `info` is included in the log.
+ *
+ * @param event The Ethernet event identifier (arduino_event_id_t).
+ * @param info  Event-specific data; used for logging the network interface
+ *              descriptor when the event is ARDUINO_EVENT_ETH_GOT_IP.
+ */
 static void ethEventHandler(arduino_event_id_t event, arduino_event_info_t info) {
   uint8_t mac[6] = { 0, 0, 0, 0, 0, 0 };
   char macStr[13] = {0};
@@ -57,6 +70,22 @@ WebServerManager *webServerManager;
 HomeKitLock *homekitLock;
 NfcManager *nfcManager;
 
+/**
+ * @brief Initializes the Ethernet subsystem according to saved configuration.
+ *
+ * Initializes and starts Ethernet if enabled in configuration, registers the Ethernet
+ * event handler, and applies either a selected board preset or a custom pin/PHY
+ * configuration. If Ethernet is disabled, or if the active preset/index or custom
+ * PHY is invalid or unsupported, the function logs an error and exits without
+ * initializing Ethernet.
+ *
+ * Observable behaviours:
+ * - Registers ethEventHandler with Network for Ethernet events when initialization begins.
+ * - Uses a preset configuration when `ethActivePreset` is a valid index; otherwise
+ *   uses custom configuration from `miscConfig`.
+ * - If a configuration requires a built-in EMAC but the build does not include
+ *   CONFIG_ETH_USE_ESP32_EMAC, logs an error and does not initialize Ethernet.
+ */
 void initializeETH(){
   const auto& miscConfig = configManager->getConfig<espConfig::misc_config_t>();
 
@@ -139,6 +168,17 @@ std::function<void(int)> lambda = [](int status) {
 };
 using namespace loggable;
 
+/**
+ * @brief Configure runtime and initialize core subsystems and manager instances.
+ *
+ * Initializes logging and serial output, brings up Ethernet according to configuration,
+ * constructs global manager objects (ReaderDataManager, ConfigManager, HardwareManager,
+ * LockManager, MqttManager, WebServerManager, HomeKitLock, NfcManager) and starts those
+ * managers that require explicit startup.
+ *
+ * The function has the side effect of allocating and assigning globals used across the
+ * application and invoking their initialization routines.
+ */
 void setup() {
   auto& distributor = Sinker::instance();
 
@@ -162,7 +202,12 @@ void setup() {
   nfcManager->begin();
 }
 
-//////////////////////////////////////
+/**
+ * @brief Run the main application loop: service HomeSpan events and yield to the RTOS.
+ *
+ * Polls HomeSpan to process HomeKit and internal events, then delays 50 ms to allow other
+ * FreeRTOS tasks to run.
+ */
 
 void loop() {
     homeSpan.poll();

@@ -9,15 +9,34 @@
 const char* ReaderDataManager::TAG = "ReaderDataManager";
 const char* ReaderDataManager::NVS_KEY = "READERDATA";
 
+/**
+ * @brief Constructs a ReaderDataManager and initializes internal state.
+ *
+ * Initializes the manager with no open NVS handle and marks it as not initialized.
+ */
 ReaderDataManager::ReaderDataManager() : m_isInitialized(false) {
 }
 
+/**
+ * @brief Releases resources held by the manager and closes the NVS handle if initialized.
+ *
+ * If the manager opened the NVS namespace during its lifetime, this destructor closes
+ * the associated NVS handle to ensure proper cleanup of system resources.
+ */
 ReaderDataManager::~ReaderDataManager() {
     if (m_isInitialized) {
         nvs_close(m_nvsHandle);
     }
 }
 
+/**
+ * @brief Initialize NVS storage for reader data and load any existing data.
+ *
+ * Opens the "SAVED_DATA" NVS namespace, sets the logger level for this component,
+ * marks the manager as initialized, and invokes load() to populate in-memory data.
+ *
+ * @return true if initialization succeeded and load was triggered, false if opening NVS failed.
+ */
 bool ReaderDataManager::begin() {
   esp_log_level_set(TAG, ESP_LOG_INFO);
     if (m_isInitialized) {
@@ -36,18 +55,44 @@ bool ReaderDataManager::begin() {
     return true;
 }
 
+/**
+ * @brief Accesses the current in-memory reader data.
+ *
+ * @return const readerData_t& Reference to the stored reader data.
+ */
 const readerData_t& ReaderDataManager::getReaderData() const {
     return m_readerData;
 }
 
+/**
+ * @brief Accesses the reader's group identifier.
+ *
+ * @return const std::vector<uint8_t>& Reference to the stored group identifier bytes.
+ */
 const std::vector<uint8_t>& ReaderDataManager::getReaderGid() const {
     return m_readerData.reader_gid;
 }
 
+/**
+ * @brief Provides access to the stored reader unique identifier.
+ *
+ * @return const std::vector<uint8_t>& Reference to the reader unique identifier as a byte vector.
+ */
 const std::vector<uint8_t>& ReaderDataManager::getReaderId() const {
     return m_readerData.reader_id;
 }
 
+/**
+ * @brief Loads reader data from NVS into the in-memory reader data structure.
+ *
+ * Reads the MessagePack-serialized blob stored under the NVS key and deserializes it into
+ * m_readerData. If the key is not found, the in-memory reader data is reset to defaults.
+ * If the stored blob is empty or cannot be read or parsed, the in-memory state is left
+ * unchanged (or reset only when key is not found) and an error is logged.
+ *
+ * Preconditions:
+ * - The NVS namespace must be opened (m_isInitialized == true).
+ */
 void ReaderDataManager::load() {
     if (!m_isInitialized) {
         ESP_LOGE(TAG, "Cannot load, not initialized.");
@@ -90,6 +135,13 @@ void ReaderDataManager::load() {
     msgpack_unpacked_destroy(&unpacked);
 }
 
+/**
+ * @brief Persist the in-memory reader data to non-volatile storage (NVS).
+ *
+ * Serializes the current in-memory readerData_t and writes it to NVS under the class's configured key, then commits the change.
+ *
+ * @return const readerData_t* Pointer to the in-memory reader data after a successful save; `nullptr` on failure (for example, if the manager is not initialized or an NVS error occurs).
+ */
 const readerData_t* ReaderDataManager::saveData() {
     if (!m_isInitialized) {
         ESP_LOGE(TAG, "Cannot save, not initialized.");
@@ -119,11 +171,24 @@ const readerData_t* ReaderDataManager::saveData() {
     return &getReaderData();
 }
 
+/**
+ * @brief Replace the in-memory reader data with the supplied data and persist it to NVS.
+ *
+ * @param newData The reader data to store (replaces the current in-memory state).
+ * @return const readerData_t* Pointer to the stored reader data after a successful save, or `nullptr` on error.
+ */
 const readerData_t* ReaderDataManager::updateReaderData(const readerData_t& newData) {
     m_readerData = newData;
     return saveData();
 }
 
+/**
+ * @brief Clears the in-memory reader key material and persists the cleared state to NVS.
+ *
+ * If the manager is not initialized, no changes are made and the function returns immediately.
+ *
+ * @return `true` if the in-memory key was cleared (and a save attempt was issued), `false` if the manager was not initialized.
+ */
 bool ReaderDataManager::eraseReaderKey() {
     if (!m_isInitialized) {
         ESP_LOGE(TAG, "Cannot delete, not initialized.");
@@ -143,6 +208,14 @@ bool ReaderDataManager::eraseReaderKey() {
     return true;
 }
 
+/**
+ * @brief Erase all reader data from both in-memory state and NVS persistent storage.
+ *
+ * @details Clears the in-memory readerData_t, removes the stored blob under the manager's NVS key,
+ * and commits the erase to NVS. Fails if the manager is not initialized or if erase/commit operations fail.
+ *
+ * @return true if the in-memory data was cleared and the NVS erase + commit succeeded, false otherwise.
+ */
 bool ReaderDataManager::deleteAllReaderData() {
     if (!m_isInitialized) {
         ESP_LOGE(TAG, "Cannot delete, not initialized.");
@@ -168,6 +241,16 @@ bool ReaderDataManager::deleteAllReaderData() {
     return true;
 }
 
+/**
+ * @brief Adds a new issuer to the in-memory issuer list if an issuer with the same identifier is not already present.
+ *
+ * If no existing issuer has an identifier equal to `issuerId`, appends a new issuer to the manager's in-memory
+ * issuers vector using `issuerId` and the first 32 bytes of `publicKey`.
+ *
+ * @param issuerId Byte sequence identifying the issuer.
+ * @param publicKey Pointer to the issuer's public key bytes; the first 32 bytes are copied.
+ * @return true if a new issuer was appended, false if an issuer with the same identifier already existed.
+ */
 bool ReaderDataManager::addIssuerIfNotExists(const std::vector<uint8_t>& issuerId, const uint8_t* publicKey) {
     for (const auto& issuer : m_readerData.issuers) {
         if (issuer.issuer_id.size() == issuerId.size() && 
@@ -186,7 +269,15 @@ bool ReaderDataManager::addIssuerIfNotExists(const std::vector<uint8_t>& issuerI
     return true;
 }
 
-// Implementations of serialization/deserialization helper functions
+/**
+ * @brief Packs an hkEndpoint_t into MessagePack format using the provided packer.
+ *
+ * Serializes the endpoint's seven fields: "endpointId", "last_used_at", "counter",
+ * "key_type", "publicKey", "endpoint_key_x", and "persistent_key".
+ *
+ * @param pk MessagePack packer used to write the serialized data.
+ * @param endpoint Endpoint structure whose contents will be serialized.
+ */
 
 void ReaderDataManager::pack_hkEndpoint_t(msgpack_packer* pk, const hkEndpoint_t& endpoint) {
     msgpack_pack_map(pk, 7); // 7 members in hkEndpoint_t
@@ -232,6 +323,21 @@ void ReaderDataManager::pack_hkEndpoint_t(msgpack_packer* pk, const hkEndpoint_t
     });
 }
 
+/**
+ * @brief Deserialize a MessagePack object into an hkEndpoint_t structure.
+ *
+ * Parses a MessagePack map containing endpoint fields and populates the provided
+ * hkEndpoint_t with any present entries. Recognized keys (and their target
+ * members) are: "endpointId" -> endpoint_id, "last_used_at" -> last_used_at,
+ * "counter" -> counter, "key_type" -> key_type, "publicKey" -> endpoint_pk,
+ * "endpoint_key_x" -> endpoint_pk_x, and "persistent_key" -> endpoint_prst_k.
+ *
+ * If the incoming object is not a map, the function returns immediately and
+ * does not modify the output parameter.
+ *
+ * @param obj MessagePack object expected to be a map representing an endpoint.
+ * @param[out] endpoint Destination hkEndpoint_t to populate with parsed values.
+ */
 void ReaderDataManager::unpack_hkEndpoint_t(msgpack_object obj, hkEndpoint_t& endpoint) {
     if (obj.type != MSGPACK_OBJECT_MAP) {
         ESP_LOGE(TAG, "Error: Expected map for hkEndpoint_t deserialization.");
@@ -277,6 +383,16 @@ void ReaderDataManager::unpack_hkEndpoint_t(msgpack_object obj, hkEndpoint_t& en
     }
 }
 
+/**
+ * @brief Serializes an hkIssuer_t into MessagePack format and writes it to the given packer.
+ *
+ * The issuer is encoded as a map with four keys: "issuerId", "publicKey", "issuer_key_x", and "endpoints".
+ * Byte-vector fields are written as arrays of unsigned bytes. The "endpoints" key is written as an array
+ * of endpoint objects, each serialized as a nested MessagePack structure.
+ *
+ * @param pk Pointer to an active msgpack_packer used for writing the serialized data.
+ * @param issuer The issuer object whose fields will be serialized into the packer.
+ */
 void ReaderDataManager::pack_hkIssuer_t(msgpack_packer* pk, const hkIssuer_t& issuer) {
     msgpack_pack_map(pk, 4); // 4 members in hkIssuer_t
 
@@ -309,6 +425,21 @@ void ReaderDataManager::pack_hkIssuer_t(msgpack_packer* pk, const hkIssuer_t& is
     }
 }
 
+/**
+ * @brief Deserialize an hkIssuer_t from a MessagePack map.
+ *
+ * Parses the provided MessagePack object and populates the given `issuer`
+ * with any present fields: `issuerId`, `publicKey`, `issuer_key_x`, and
+ * `endpoints`. Array fields are converted to their corresponding byte
+ * vectors; `endpoints` is deserialized into `issuer.endpoints` using
+ * `unpack_hkEndpoint_t`. Fields that are not present are left unchanged.
+ *
+ * If `obj` is not a map, the function logs an error and returns without
+ * modifying `issuer`.
+ *
+ * @param obj MessagePack object expected to be a map representing an hkIssuer_t.
+ * @param[out] issuer Reference to the hkIssuer_t to populate.
+ */
 void ReaderDataManager::unpack_hkIssuer_t(msgpack_object obj, hkIssuer_t& issuer) {
     if (obj.type != MSGPACK_OBJECT_MAP) {
         ESP_LOGE(TAG, "Error: Expected map for hkIssuer_t deserialization.");
@@ -347,6 +478,17 @@ void ReaderDataManager::unpack_hkIssuer_t(msgpack_object obj, hkIssuer_t& issuer
     }
 }
 
+/**
+ * @brief Serializes a readerData_t instance into MessagePack and appends it to the packer.
+ *
+ * Packs a map with the keys `reader_private_key`, `reader_public_key`, `reader_key_x`,
+ * `group_identifier`, `unique_identifier`, and `issuers`. Byte-array fields are written
+ * as arrays of unsigned bytes; `issuers` is written as an array with each entry serialized
+ * via pack_hkIssuer_t.
+ *
+ * @param pk Pointer to an initialized msgpack_packer that will receive the serialized data.
+ * @param reader_data The readerData_t object to serialize.
+ */
 void ReaderDataManager::pack_readerData_t(msgpack_packer* pk, const readerData_t& reader_data) {
     msgpack_pack_map(pk, 6); // 6 members in readerData_t
 
@@ -393,6 +535,14 @@ void ReaderDataManager::pack_readerData_t(msgpack_packer* pk, const readerData_t
     }
 }
 
+/**
+ * @brief Populate a readerData_t structure from a MessagePack object.
+ *
+ * Deserializes expected fields from a MessagePack map into the provided reader_data structure; missing or type-mismatched fields are left unchanged and the function returns immediately if the top-level object is not a map.
+ *
+ * @param obj MessagePack object expected to be a map containing keys: "reader_private_key", "reader_public_key", "reader_key_x", "group_identifier", "unique_identifier", and "issuers".
+ * @param[out] reader_data Destination structure that will be updated with any fields present and correctly typed in the MessagePack map.
+ */
 void ReaderDataManager::unpack_readerData_t(msgpack_object obj, readerData_t& reader_data) {
     if (obj.type != MSGPACK_OBJECT_MAP) {
         ESP_LOGE(TAG, "Error: Expected map for readerData_t deserialization.");

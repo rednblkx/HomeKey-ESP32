@@ -10,6 +10,23 @@ const char* HardwareManager::TAG = "HardwareManager";
 
 const std::array<const char*, 6> pixelTypeMap = { "RGB", "RBG", "BRG", "BGR", "GBR", "GRB" };
 
+/**
+ * @brief Construct a HardwareManager and register its event handlers and publishers.
+ *
+ * Initializes internal state from the provided misc configuration and registers event subscribers
+ * for "lock/action", "nfc/event", and "hardware/gpioPinChanged". Also creates publishers for
+ * "lock/updateState" and "lock/altAction". Task and queue handles are initialized to nullptr.
+ *
+ * The registered subscribers:
+ * - "lock/action": deserializes an EventLockState and applies its targetState via setLockOutput.
+ * - "nfc/event": handles HOMEKEY_TAP and TAG_TAP events, triggering success/failure feedback and
+ *   potentially the alternate action.
+ * - "hardware/gpioPinChanged": updates pin configuration when GPIO ownership changes (resets old
+ *   pin, disables pull-up, configures new pin as output and restores state for gpioActionPin).
+ *
+ * @param miscConfig Configuration values controlling GPIO pins, NeoPixel type/behavior, and
+ *                   timing used by the HardwareManager.
+ */
 HardwareManager::HardwareManager(const espConfig::misc_config_t& miscConfig)
     : m_miscConfig(miscConfig),
       m_feedbackTaskHandle(nullptr),
@@ -73,6 +90,16 @@ HardwareManager::HardwareManager(const espConfig::misc_config_t& miscConfig)
   espp::EventManager::get().add_publisher("lock/altAction", "HardwareManager");
 }
 
+/**
+ * @brief Initialize hardware resources and runtime infrastructure based on misc configuration.
+ *
+ * Configures GPIO pins and initial output states for NFC indicators, action and alternate-action pins;
+ * creates and configures the NeoPixel controller if present; installs the alternate-action ISR and
+ * creates its initiator queue/task when configured; creates ESP timers for GPIO/pixel/alt-action sources;
+ * and creates the feedback and lock-control queues and their associated tasks.
+ *
+ * This prepares the HardwareManager to receive events and perform timed feedback and lock control.
+ */
 void HardwareManager::begin() {
     ESP_LOGI(TAG, "Initializing hardware pins...");
 
@@ -172,7 +199,11 @@ void HardwareManager::begin() {
     ESP_LOGI(TAG, "Hardware initialization complete.");
 }
 
-// --- Public API Methods ---
+/**
+ * @brief Enqueue a desired lock state for the lock-control task to apply.
+ *
+ * @param state Desired lock state (for example `LOCKED` or `UNLOCKED`) to be processed and applied by the manager.
+ */
 
 void HardwareManager::setLockOutput(int state) {
     if (m_lockControlQueue != nullptr) {
@@ -180,6 +211,11 @@ void HardwareManager::setLockOutput(int state) {
     }
 }
 
+/**
+ * @brief Enqueue a success feedback event for the feedback task to process.
+ *
+ * If the internal feedback queue is not initialized, the call has no effect.
+ */
 void HardwareManager::showSuccessFeedback() {
     if (m_feedbackQueue != nullptr) {
         FeedbackType feedback = FeedbackType::SUCCESS;
@@ -187,6 +223,12 @@ void HardwareManager::showSuccessFeedback() {
     }
 }
 
+/**
+ * @brief Enqueues a failure feedback event for the feedback task.
+ *
+ * If the internal feedback queue has been created, posts a FAILURE event so the
+ * feedback task will run the configured failure sequence (GPIOs/NeoPixel).
+ */
 void HardwareManager::showFailureFeedback() {
     if (m_feedbackQueue != nullptr) {
         FeedbackType feedback = FeedbackType::FAILURE;
@@ -194,7 +236,17 @@ void HardwareManager::showFailureFeedback() {
     }
 }
 
-// --- Private Implementations ---
+/**
+ * @brief Timer callback that handles configured hardware timeouts and applies the associated output changes.
+ *
+ * Processes the provided TimerContext and, based on its TimerSources value, performs one of:
+ * - toggle the NFC success or failure GPIO,
+ * - turn off the NeoPixel,
+ * - toggle the alternate-action GPIO,
+ * - clear the alt-action armed flag and turn off the alt-action init LED.
+ *
+ * @param arg Pointer to a TimerContext whose `hw_manager` and `timer_source` fields determine the target HardwareManager and the action to execute.
+ */
 
 void HardwareManager::handleTimer(void* arg){
   TimerContext* context = static_cast<TimerContext*>(arg);
@@ -229,15 +281,43 @@ void HardwareManager::handleTimer(void* arg){
   }
 }
 
+/**
+ * @brief Task entry that dispatches to a HardwareManager instance's initiator task.
+ *
+ * Casts the provided void pointer to a HardwareManager pointer and invokes its initiator_task().
+ *
+ * @param arg Pointer to the HardwareManager instance.
+ */
 void HardwareManager::initiator_task_entry(void* arg) {
     static_cast<HardwareManager*>(arg)->initiator_task();
 }
 
+/**
+ * @brief ISR posted by the initiator GPIO; signals the initiator task by enqueuing a wake byte.
+ *
+ * Posts a single dummy byte to the HardwareManager's initiator queue from ISR context to wake
+ * the initiator task without blocking.
+ *
+ * @param arg Pointer to the HardwareManager instance whose initiator queue will be signaled.
+ */
 void IRAM_ATTR HardwareManager::initiator_isr_handler(void* arg) {
     uint8_t dummy = 0;
     xQueueSendFromISR(static_cast<HardwareManager*>(arg)->m_initiatorQueue, &dummy, NULL);
 }
 
+/**
+ * @brief Waits for initiator events and arms the alternate action window.
+ *
+ * This task blocks waiting for a byte posted to the initiator queue (typically from an ISR).
+ * When an event is received and the alternate action is not already armed, it marks the
+ * alternate action as armed, turns on the configured alt-action-init LED (if a valid pin is set),
+ * and starts a one-shot timer that will disarm the initiation window after the configured timeout.
+ *
+ * Side effects:
+ * - Sets `m_altActionArmed` to true.
+ * - Writes HIGH to `m_miscConfig.hkAltActionInitLedPin` when that pin is not 255.
+ * - Starts `m_altActionInitTimer` for `m_miscConfig.hkAltActionInitTimeout` milliseconds.
+ */
 void HardwareManager::initiator_task() {
     uint8_t dummy;
     while (true) {
@@ -255,10 +335,24 @@ void HardwareManager::initiator_task() {
     }
 }
 
+/**
+ * @brief Task entry wrapper that forwards to the HardwareManager instance's lockControlTask.
+ *
+ * @param instance Pointer to a HardwareManager instance (must not be null).
+ */
 void HardwareManager::lockControlTaskEntry(void* instance) {
     static_cast<HardwareManager*>(instance)->lockControlTask();
 }
 
+/**
+ * @brief Processes incoming lock commands and applies them to hardware and system state.
+ *
+ * Continuously waits for lock state values from the internal lock-control queue. For each received
+ * state, if a GPIO action pin is configured the function drives that pin to the configured lock
+ * or unlock level and publishes an EventLockState with the received state as `currentState`,
+ * `targetState` set to `UNKNOWN`, and `source` set to `INTERNAL` on the "lock/updateState" topic.
+ * If no action pin is configured the received command is logged and ignored.
+ */
 void HardwareManager::lockControlTask() {
     int receivedState;
     while (true) {
@@ -286,6 +380,14 @@ void HardwareManager::lockControlTask() {
     }
 }
 
+/**
+ * @brief Triggers the configured alternate (home-key) action when armed.
+ *
+ * If the manager is armed, publishes the "lock/altAction" event. When an alternate-action GPIO is configured (pin != 255),
+ * writes the configured GPIO state to that pin and starts the alt-action timer for the configured timeout.
+ *
+ * @note The timer is started for @c hkAltActionTimeout milliseconds.
+ */
 void HardwareManager::triggerAltAction() {
   if (m_altActionArmed) { 
       espp::EventManager::get().publish("lock/altAction", {});
@@ -297,10 +399,33 @@ void HardwareManager::triggerAltAction() {
   }
 }
 
+/**
+ * @brief Starts the feedback task for the provided HardwareManager instance.
+ *
+ * This is a FreeRTOS task entry function that casts the opaque `instance` pointer
+ * to `HardwareManager*` and invokes its feedback task routine.
+ *
+ * @param instance Pointer to a HardwareManager object (must be a valid `HardwareManager*`).
+ */
 void HardwareManager::feedbackTaskEntry(void* instance) {
     static_cast<HardwareManager*>(instance)->feedbackTask();
 }
 
+/**
+ * @brief Processes queued feedback events and actuates configured hardware indicators.
+ *
+ * This task runs indefinitely, blocking on the internal feedback queue. For each
+ * FeedbackType received it executes the corresponding sequence:
+ * - FeedbackType::SUCCESS: stops conflicting timers, sets the NeoPixel to the
+ *   configured success color and starts the pixel success timer, and drives
+ *   the configured NFC success GPIO for the configured duration.
+ * - FeedbackType::FAILURE: stops conflicting timers, sets the NeoPixel to the
+ *   configured failure color and starts the pixel failure timer, and drives
+ *   the configured NFC failure GPIO for the configured duration.
+ *
+ * GPIO pins configured with the sentinel value 255 are ignored. Timers and
+ * NeoPixel behavior use durations and colors from the instance's misc configuration.
+ */
 void HardwareManager::feedbackTask() {
     FeedbackType feedback;
     while (true) {

@@ -21,6 +21,14 @@ struct gpioLockAction {
   uint8_t action;
 };
 
+/**
+ * @brief Create a platform identifier string derived from the device MAC address.
+ *
+ * Reads the device Bluetooth MAC address and formats an identifier using bytes 2–5.
+ *
+ * @return std::string Identifier in the form "ESP_{XX}{XX}{XX}{XX}" where each `XX`
+ *         is the corresponding MAC byte rendered as two uppercase hexadecimal digits.
+ */
 static const std::string platform_create_id_string(void) {
   uint8_t mac[6];
   esp_read_mac(mac, ESP_MAC_BT);
@@ -31,6 +39,13 @@ namespace espConfig
 {
   struct mqttConfig_t
   {
+    /**
+     * @brief Initialize MQTT configuration with defaults and compose topic names.
+     *
+     * Constructs an mqttConfig_t using a platform-generated client identifier, assigns
+     * that identifier to the mqttClientId member, and appends standard MQTT topic
+     * suffixes to the identifier to populate the various topic string members.
+     */
     mqttConfig_t(){
       std::string id = platform_create_id_string();
       mqttClientId = id;

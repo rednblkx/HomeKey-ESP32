@@ -30,7 +30,15 @@ const char *WebServerManager::TAG = "WebServerManager";
 // Forward declaration
 static void mergeJson(cJSON *target, cJSON *source);
 
-// Utility helpers for performance and safety
+/**
+ * @brief Checks whether a C string ends with the given suffix.
+ *
+ * Compares the trailing characters of `str` against `suffix`.
+ *
+ * @param str Null-terminated string to test. If nullptr, treated as not matching.
+ * @param suffix Null-terminated suffix to look for. If nullptr, treated as not matching.
+ * @return true if `str` ends with `suffix`, false otherwise.
+ */
 static inline bool str_ends_with(const char *str, const char *suffix) {
   if (!str || !suffix)
     return false;
@@ -40,7 +48,17 @@ static inline bool str_ends_with(const char *str, const char *suffix) {
          (memcmp(str + lenstr - lensuf, suffix, lensuf) == 0);
 }
 
-// Converts a cJSON object to std::string and frees the cJSON object.
+/**
+ * @brief Serialize a cJSON value to a std::string and release the cJSON object.
+ *
+ * Converts the provided cJSON structure to a compact JSON string and frees all
+ * resources associated with the cJSON object.
+ *
+ * @param obj Pointer to the cJSON object to serialize; ownership is consumed and
+ *            the object will be deleted by this function.
+ * @return std::string The serialized JSON text, or an empty string if `obj` is null
+ *                     or serialization fails.
+ */
 static inline std::string cjson_to_string_and_free(cJSON *obj) {
   if (!obj)
     return {};
@@ -52,6 +70,16 @@ static inline std::string cjson_to_string_and_free(cJSON *obj) {
   return out;
 }
 
+/**
+ * @brief Construct a WebServerManager and register required event publishers.
+ *
+ * Initializes the WebServerManager with references to the configuration and
+ * reader-data managers and registers the "homekit/event" and
+ * "hardware/gpioPinChanged" event publishers with the global EventManager.
+ *
+ * @param configManager Reference to the ConfigManager used for persistent config.
+ * @param readerDataManager Reference to the ReaderDataManager that provides reader-related identifiers and data.
+ */
 WebServerManager::WebServerManager(ConfigManager &configManager,
                                    ReaderDataManager &readerDataManager)
     : m_server(nullptr), m_configManager(configManager),
@@ -61,6 +89,14 @@ WebServerManager::WebServerManager(ConfigManager &configManager,
                                           "WebServerManager");
 }
 
+/**
+ * @brief Cleanly shuts down the web server manager and releases its resources.
+ *
+ * Performs overall cleanup for the WebServerManager instance: finalizes any
+ * pending OTA worker state, stops and clears the HTTP server, stops and
+ * deletes the status timer, and deletes the dedicated WebSocket broadcast
+ * queue when present.
+ */
 WebServerManager::~WebServerManager() {
   ESP_LOGI(TAG, "WebServerManager destructor called");
 
@@ -87,6 +123,17 @@ WebServerManager::~WebServerManager() {
 #endif
 }
 
+/**
+ * @brief Initializes and starts the web server, WebSocket infrastructure, OTA worker, and status timer.
+ *
+ * Performs the full startup sequence required for HTTP/WebSocket operation:
+ * mounts LittleFS, starts the HTTP server, creates WebSocket queues and the send task, registers HTTP/WebSocket routes,
+ * initializes the OTA worker, and creates a periodic status timer.
+ *
+ * On critical failures (e.g., LittleFS mount, HTTP server start, queue or task creation) the method aborts startup,
+ * stops any partially started services and returns without leaving the server running. Failure to create the status
+ * timer is treated as non-fatal and startup continues.
+ */
 void WebServerManager::begin() {
   ESP_LOGI(TAG, "Initializing...");
 
@@ -180,10 +227,24 @@ void WebServerManager::begin() {
   ESP_LOGI("WebServerManager", "Web server initialization complete");
 }
 
+/**
+ * @brief Retrieve the WebServerManager instance associated with an HTTP request.
+ *
+ * Extracts and returns the pointer stored in the request's `user_ctx`.
+ *
+ * @param req HTTP request whose `user_ctx` is expected to hold a `WebServerManager*`.
+ * @return WebServerManager* Pointer from `req->user_ctx`, or `nullptr` if none is set.
+ */
 WebServerManager *WebServerManager::getInstance(httpd_req_t *req) {
   return static_cast<WebServerManager *>(req->user_ctx);
 }
 
+/**
+ * @brief Register all HTTP and WebSocket routes used by the web server.
+ *
+ * Sets up handlers for static assets, the root page, API endpoints (config, ethernet,
+ * reboot, resets, start AP), the WebSocket endpoint (when enabled), and OTA upload endpoints.
+ */
 void WebServerManager::setupRoutes() {
   // Static file handlers
   httpd_uri_t static_uri = {.uri = "/static/*",
@@ -293,7 +354,22 @@ void WebServerManager::setupRoutes() {
   httpd_register_uri_handler(m_server, &ota_littlefs_uri);
 }
 
-// Static file handler implementation
+/**
+ * @brief Serves static files from LittleFS based on the request URI.
+ *
+ * Determines the filesystem path using req->user_ctx as the base path and the
+ * request URI, sets an appropriate Content-Type, and streams the file to the
+ * client. For `.js` and `.css` files it will prefer a gzip-compressed variant
+ * (`.gz`) when the client advertises gzip support and will set
+ * `Content-Encoding: gzip` when serving compressed content. If the file is not
+ * found or cannot be opened, a 404 response is sent.
+ *
+ * @param req HTTP request whose `user_ctx` is treated as the base filesystem path
+ *            and whose `uri` identifies the requested file.
+ * @return esp_err_t `ESP_OK` if the file was successfully streamed; `ESP_FAIL`
+ *         if the file was not found, could not be opened, or a send error
+ *         occurred (a 404 response is sent when the file is missing or cannot
+ *         be opened).
 esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
   const char *base_path = (const char *)req->user_ctx;
   char filepath[256];
@@ -385,7 +461,16 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
   return ESP_OK;
 }
 
-// Helper to send a frame to a connected client
+/**
+ * @brief Send a WebSocket frame to a connected client.
+ *
+ * @param server HTTP server handle associated with the connection.
+ * @param fd File descriptor identifying the WebSocket client.
+ * @param payload Pointer to the frame payload bytes.
+ * @param len Length of the payload in bytes.
+ * @param type WebSocket frame type (text, binary, close, ping, pong).
+ * @return esp_err_t `ESP_OK` on success, or an ESP error code; `ESP_ERR_NOT_SUPPORTED` if WebSocket support is disabled.
+ */
 esp_err_t WebServerManager::ws_send_frame(httpd_handle_t server, int fd,
                                           const uint8_t *payload, size_t len,
                                           httpd_ws_type_t type) {
@@ -402,7 +487,19 @@ esp_err_t WebServerManager::ws_send_frame(httpd_handle_t server, int fd,
 #endif
 }
 
-// WebSocket handler
+/**
+ * @brief Handle WebSocket connections and incoming WebSocket frames for the server.
+ *
+ * Processes the WebSocket handshake (registers new clients and queues initial
+ * device info), receives and validates incoming frames, dispatches text frames
+ * to the message handler, and removes clients on terminal protocol or
+ * connection errors.
+ *
+ * @param req HTTPD request context representing the WebSocket connection.
+ * @return esp_err_t ESP_OK on successful handling of the request; an ESP error
+ * code on failure (e.g., network/protocol errors encountered while receiving
+ * frames).
+ */
 esp_err_t WebServerManager::handleWebSocket(httpd_req_t *req) {
 #ifndef CONFIG_HTTPD_WS_SUPPORT
   httpd_resp_set_status(req, "501 Not Implemented");
@@ -548,7 +645,14 @@ esp_err_t WebServerManager::handleWebSocket(httpd_req_t *req) {
 #endif
 }
 
-// Root/Index handler
+/**
+ * @brief Serves the site's index page by streaming /index.html from LittleFS.
+ *
+ * Attempts to open /index.html from LittleFS and streams its contents to the HTTP client in chunks; if the file is missing or a send error occurs, responds with a 404 and fails.
+ *
+ * @param req HTTP request context used to send the response.
+ * @return esp_err_t `ESP_OK` if the file was streamed and the response completed, `ESP_FAIL` if the file could not be opened or a chunk send failed.
+ */
 esp_err_t WebServerManager::handleRootOrHash(httpd_req_t *req) {
   File file = LittleFS.open("/index.html", "r");
   if (!file) {
@@ -572,7 +676,18 @@ esp_err_t WebServerManager::handleRootOrHash(httpd_req_t *req) {
   return ESP_OK;
 }
 
-// Get configuration handler
+/**
+ * @brief Handle incoming /config HTTP requests and return the requested configuration as JSON.
+ *
+ * Supports query parameter `type` with the following values:
+ * - `"mqtt"`: returns MQTT configuration.
+ * - `"misc"` or `"actions"`: returns misc/actions configuration.
+ * - `"hkinfo"`: returns HomeKit-related reader information (group_identifier, unique_identifier, issuers with endpoints).
+ *
+ * If `type` is missing or invalid, the handler sends a 400 response with an explanatory message. On internal failures it sends a 500 response.
+ *
+ * @param req HTTP request object; must include a URL query string containing a `type` parameter.
+ * @return esp_err_t `ESP_OK` if a JSON response was successfully sent, `ESP_FAIL` if an error response was sent. */
 esp_err_t WebServerManager::handleGetConfig(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
   if (!instance) {
@@ -647,7 +762,17 @@ esp_err_t WebServerManager::handleGetConfig(httpd_req_t *req) {
   return ESP_OK;
 }
 
-// Get Ethernet configuration handler
+/**
+ * @brief Builds and sends the device's Ethernet capabilities and board presets as JSON.
+ *
+ * The response contains an object with keys:
+ *  - `supportedChips`: array of supported Ethernet chip descriptors (`name`, `emac`, `phy_type`),
+ *  - `boardPresets`: array of board preset descriptors (each includes `name`, `ethChip`, optional `rmii_conf` when compiled with ESP32 EMAC, and `spi_conf`),
+ *  - `ethEnabled`: boolean indicating whether Ethernet is enabled in the current misc config.
+ *
+ * @param req HTTP request context used to write the JSON response.
+ * @return esp_err_t `ESP_OK` if the JSON payload was generated and sent successfully, `ESP_FAIL` if the server instance could not be retrieved or an internal error occurred.
+ */
 esp_err_t WebServerManager::handleGetEthConfig(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
   if (!instance) {
@@ -710,7 +835,24 @@ esp_err_t WebServerManager::handleGetEthConfig(httpd_req_t *req) {
   return ESP_OK;
 }
 
-// Save configuration handler
+/**
+ * @brief Handle HTTP request to save configuration changes.
+ *
+ * Validates and applies JSON configuration changes specified in the request
+ * body for the configuration type indicated by the "type" query parameter
+ * ("mqtt", "misc", or "actions"). On successful validation the handler merges
+ * incoming values into the current configuration, persists the updated config,
+ * publishes any relevant events (for HomeKit or GPIO changes), and may schedule
+ * a device reboot if required by the applied changes.
+ *
+ * The handler sends appropriate HTTP responses for missing/invalid parameters or
+ * payloads and for internal failures, and may trigger a soft restart when a
+ * reboot is required to apply changes.
+ *
+ * @param req HTTP request containing the "type" query parameter and JSON body.
+ * @return esp_err_t ESP_OK on successful save (and after any scheduled reboot
+ *         has been initiated), ESP_FAIL on validation or processing failure.
+ */
 esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
   if (!instance) {
@@ -886,6 +1028,12 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
   }
 }
 
+/**
+ * @brief Convert a cJSON value to its compact JSON string representation.
+ *
+ * @param value Pointer to the cJSON value to stringify (not modified or freed).
+ * @return std::string Compact (unformatted) JSON text representing the provided value.
+ */
 std::string getJsonValueAsString(cJSON *value) {
   char *str = cJSON_PrintUnformatted(value);
   std::string s(str);
@@ -893,6 +1041,23 @@ std::string getJsonValueAsString(cJSON *value) {
   return s;
 }
 
+/**
+ * @brief Merge top-level properties from one cJSON object into another.
+ *
+ * Copies each key from @p source into @p target: if a key already exists in
+ * @p target its value is replaced with a deep duplicate of the value from
+ * @p source, otherwise the key and a deep duplicate of its value are added to
+ * @p target.
+ *
+ * @param target cJSON object to be modified and receive properties from @p source.
+ * @param source cJSON object whose top-level properties will be copied.
+ *
+ * Notes:
+ * - Only top-level keys of @p source are considered (no special merging of nested
+ *   objects beyond duplicating them).
+ * - Values are duplicated with cJSON_Duplicate(..., true), so @p source is not
+ *   modified and ownership of the duplicated items is transferred to @p target.
+ */
 static void mergeJson(cJSON *target, cJSON *source) {
   cJSON *item = source->child;
   while (item) {
@@ -907,6 +1072,19 @@ static void mergeJson(cJSON *target, cJSON *source) {
   }
 }
 
+/**
+ * @brief Validates a JSON configuration update against an existing schema and rejects invalid changes.
+ *
+ * Parses the provided JSON `body`, verifies each key exists in `currentData`, checks type compatibility
+ * and value constraints for special keys (e.g., "setupCode" format and pairing, keys ending with "Pin",
+ * boolean coercion from 0/1), and sends an appropriate HTTP error response on validation failure.
+ *
+ * @param req HTTP request context used to send error responses when validation fails.
+ * @param currentData cJSON object containing the current configuration schema and values to validate against.
+ * @param body JSON string with the proposed configuration changes.
+ * @return true if all properties in `body` are valid for `currentData`; `false` if parsing fails or any validation rule fails
+ *         (an HTTP error response will have been sent to the client in that case).
+ */
 bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
                                        const char *body) {
   uint8_t propertiesProcessed = 0;
@@ -1073,7 +1251,22 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
   return true;
 }
 
-// Clear configuration handler
+/**
+ * @brief Clears a stored configuration section specified by the request.
+ *
+ * Reads the "type" query parameter from the HTTP request and deletes the
+ * corresponding configuration:
+ * - "mqtt" -> deletes the MQTT configuration
+ * - "misc" or "actions" -> deletes the misc/actions configuration
+ *
+ * On successful deletion the handler responds with "Cleared! Rebooting...",
+ * delays briefly, and restarts the device. If the "type" parameter is missing
+ * the handler responds with HTTP 400; if deletion fails it responds with
+ * HTTP 500.
+ *
+ * @param req HTTP request containing the query parameter `type`.
+ * @return esp_err_t `ESP_OK` if the requested configuration was deleted and restart was initiated, `ESP_FAIL` otherwise.
+ */
 esp_err_t WebServerManager::handleClearConfig(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
   if (!instance) {
@@ -1117,7 +1310,14 @@ esp_err_t WebServerManager::handleClearConfig(httpd_req_t *req) {
   }
 }
 
-// HomeKit reset handler
+/**
+ * @brief Erase all HomeKit pairings and initiate a device reboot.
+ *
+ * Sends an HTTP response indicating HomeKit pairings will be erased, deletes all stored reader data, and issues the HomeSpan reset command to trigger HomeKit pairing removal and a reboot.
+ *
+ * @param req HTTP request context used to send the response.
+ * @return esp_err_t `ESP_OK` if the handler executed and reset was initiated, `ESP_FAIL` if the WebServerManager instance could not be retrieved (a 500 response is sent in that case).
+ */
 esp_err_t WebServerManager::handleHKReset(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
   if (!instance) {
@@ -1132,7 +1332,15 @@ esp_err_t WebServerManager::handleHKReset(httpd_req_t *req) {
   return ESP_OK;
 }
 
-// WiFi reset handler
+/**
+ * @brief Erase stored Wi‑Fi credentials and trigger a device reboot.
+ *
+ * Sends an HTTP response informing the client that Wi‑Fi credentials are being erased and a reboot will occur,
+ * then issues the serial command that initiates credential erasure and reboot.
+ *
+ * @param req The HTTP request that triggered this handler; used to send the response.
+ * @return esp_err_t `ESP_OK` on success.
+ */
 esp_err_t WebServerManager::handleWifiReset(httpd_req_t *req) {
   httpd_resp_send(req, "Erasing WiFi credentials and rebooting...",
                   HTTPD_RESP_USE_STRLEN);
@@ -1140,7 +1348,14 @@ esp_err_t WebServerManager::handleWifiReset(httpd_req_t *req) {
   return ESP_OK;
 }
 
-// Start config AP handler
+/**
+ * @brief Initiates device configuration access-point mode and responds to the HTTP client.
+ *
+ * Sends a short confirmation response to the requester, waits one second, then issues
+ * the serial command that instructs the system to enter configuration AP mode.
+ *
+ * @return esp_err_t ESP_OK on success.
+ */
 esp_err_t WebServerManager::handleStartConfigAP(httpd_req_t *req) {
   httpd_resp_send(req, "Starting AP mode...", HTTPD_RESP_USE_STRLEN);
   vTaskDelay(pdMS_TO_TICKS(1000));
@@ -1148,7 +1363,14 @@ esp_err_t WebServerManager::handleStartConfigAP(httpd_req_t *req) {
   return ESP_OK;
 }
 
-// WebSocket client management methods
+/**
+ * @brief Register a new WebSocket client identified by its socket file descriptor.
+ *
+ * Adds a WsClient for the given socket fd to the internal client list if one
+ * does not already exist and logs the addition. This operation is thread-safe.
+ *
+ * @param fd Socket file descriptor of the connected WebSocket client.
+ */
 void WebServerManager::addWebSocketClient(int fd) {
   bool added = false;
   size_t total = 0;
@@ -1171,6 +1393,20 @@ void WebServerManager::addWebSocketClient(int fd) {
   }
 }
 
+/**
+ * @brief Remove a WebSocket client identified by its file descriptor.
+ *
+ * Removes the client with the given socket file descriptor from the internal
+ * WebSocket client list. If the client was present it will be erased and, when
+ * this removal leaves no remaining clients, the shared status timer will be
+ * stopped.
+ *
+ * This operation is thread-safe: the client list is modified under the
+ * internal mutex and the timer stop is performed outside that lock to avoid
+ * re-entrancy.
+ *
+ * @param fd Socket file descriptor identifying the WebSocket client to remove.
+ */
 void WebServerManager::removeWebSocketClient(int fd) {
   bool removed = false;
   size_t remaining = 0;
@@ -1202,11 +1438,31 @@ void WebServerManager::removeWebSocketClient(int fd) {
   }
 }
 
+/**
+ * @brief Broadcasts a textual message to all connected WebSocket clients.
+ *
+ * Sends the provided null-terminated UTF-8 text as a WebSocket text frame to every registered client.
+ *
+ * @param message Null-terminated UTF-8 string to broadcast. The string length is determined with `strlen`.
+ */
 void WebServerManager::broadcastToWebSocketClients(const char *message) {
   broadcastWs(reinterpret_cast<const uint8_t *>(message), strlen(message),
               HTTPD_WS_TYPE_TEXT);
 }
 
+/**
+ * @brief Broadcasts a WebSocket message to all connected clients.
+ *
+ * Enqueues the provided payload for delivery to every current WebSocket client;
+ * if a dedicated broadcast queue is enabled the message is placed on that queue,
+ * otherwise a snapshot of client connections is taken and a send frame is queued
+ * for each client. If there are no connected clients the function returns
+ * without sending.
+ *
+ * @param payload Pointer to the message bytes to broadcast.
+ * @param len Length of the message in bytes.
+ * @param type WebSocket frame type (e.g., `HTTPD_WS_TYPE_TEXT` or `HTTPD_WS_TYPE_BINARY`).
+ */
 void WebServerManager::broadcastWs(const uint8_t *payload, size_t len,
                                    httpd_ws_type_t type) {
 #ifdef WEBSERVER_USE_DEDICATED_BROADCAST_QUEUE
@@ -1257,6 +1513,18 @@ void WebServerManager::broadcastWs(const uint8_t *payload, size_t len,
 #endif
 }
 
+/**
+ * @brief Enqueues a WebSocket frame for asynchronous transmission by the send task.
+ *
+ * Allocates a contiguous WsFrame containing a copy of the provided payload and attempts
+ * to push a pointer to that frame into the manager's WebSocket queue. If allocation
+ * or queueing fails the allocated frame (if any) is freed and the function returns.
+ *
+ * @param fd Target WebSocket client file descriptor.
+ * @param payload Pointer to the frame payload to copy.
+ * @param len Number of bytes in `payload`.
+ * @param type WebSocket frame type (e.g., HTTPD_WS_TYPE_TEXT or HTTPD_WS_TYPE_BINARY).
+ */
 void WebServerManager::queue_ws_frame(int fd, const uint8_t *payload,
                                       size_t len, httpd_ws_type_t type) {
   // Allocate memory for the struct and the payload
@@ -1280,6 +1548,17 @@ void WebServerManager::queue_ws_frame(int fd, const uint8_t *payload,
   }
 }
 
+/**
+ * @brief Task loop that sends queued WebSocket frames and broadcasts to clients.
+ *
+ * Runs indefinitely: drains per-client frames and (when enabled) broadcast messages,
+ * sends each payload to the appropriate connected clients, and removes clients
+ * that exhibit protocol or connection errors. The task snapshots client fds
+ * under a lock but never holds locks during network I/O. Allocated frame and
+ * broadcast buffers are freed after processing.
+ *
+ * @param arg Pointer to the WebServerManager instance (task argument).
+ */
 void WebServerManager::ws_send_task(void *arg) {
   WebServerManager *instance = static_cast<WebServerManager *>(arg);
   WsFrame *frame = nullptr;
@@ -1507,6 +1786,17 @@ void WebServerManager::ws_send_task(void *arg) {
   }
 }
 
+/**
+ * @brief Builds a JSON payload containing basic device metrics.
+ *
+ * The JSON includes the following fields:
+ * - `type`: `"metrics"`
+ * - `uptime`: device uptime in seconds
+ * - `free_heap`: free heap memory in bytes
+ * - `wifi_rssi`: Wi‑Fi RSSI value in dBm
+ *
+ * @return std::string JSON-encoded metrics object.
+ */
 std::string WebServerManager::getDeviceMetrics() {
   cJSON *status = cJSON_CreateObject();
   cJSON_AddStringToObject(status, "type", "metrics");
@@ -1517,6 +1807,16 @@ std::string WebServerManager::getDeviceMetrics() {
   return cjson_to_string_and_free(status);
 }
 
+/**
+ * @brief Builds a JSON object containing basic system information.
+ *
+ * The JSON includes the fields `type` ("sysinfo"), `version` (application version),
+ * `eth_enabled` (boolean indicating if Ethernet is enabled in misc config), and
+ * `wifi_ssid` (currently connected Wi‑Fi SSID).
+ *
+ * @return std::string JSON string with system information. The caller receives
+ * the serialized JSON; memory for the underlying cJSON is freed by this call.
+ */
 std::string WebServerManager::getDeviceInfo() {
   cJSON *info = cJSON_CreateObject();
   cJSON_AddStringToObject(info, "type", "sysinfo");
@@ -1528,6 +1828,17 @@ std::string WebServerManager::getDeviceInfo() {
   return cjson_to_string_and_free(info);
 }
 
+/**
+ * @brief Process a JSON-formatted WebSocket text message and send an appropriate response to the originating client.
+ *
+ * This handler parses the provided JSON message, dispatches by the message's "type" field,
+ * and queues a text WebSocket frame back to the same client containing the response.
+ * Supported message types include heartbeat ping/pong, device metrics, system info, OTA status,
+ * echo (returns provided data with timestamp and uptime), and error responses for invalid JSON or unknown types.
+ *
+ * @param req HTTP request context for the WebSocket connection; used to determine the client's socket.
+ * @param message Raw JSON message payload received from the client.
+ * @return esp_err_t `ESP_OK` if the message was processed and a response was queued; otherwise an appropriate ESP error code. */
 esp_err_t WebServerManager::handleWebSocketMessage(httpd_req_t *req,
                                                    const std::string &message) {
   // Parse JSON message
@@ -1623,7 +1934,17 @@ esp_err_t WebServerManager::handleWebSocketMessage(httpd_req_t *req,
   return ESP_OK;
 }
 
-// Initialize OTA Worker
+/**
+ * @brief Initialize and start the asynchronous OTA worker pipeline.
+ *
+ * Creates the synchronization primitive and queue used to submit OTA requests and
+ * starts the OTA worker task that processes queued requests.
+ *
+ * On success the manager will have an OTA worker task handle, a binary semaphore
+ * indicating worker readiness, and a single-slot request queue. On failure the
+ * function releases any partially allocated resources and leaves the OTA
+ * worker-related members null.
+ */
 void WebServerManager::initializeOTAWorker() {
   ESP_LOGI(TAG, "Initializing OTA worker");
 
@@ -1662,7 +1983,13 @@ void WebServerManager::initializeOTAWorker() {
   ESP_LOGI(TAG, "OTA worker initialized successfully");
 }
 
-// OTA Worker Task
+/**
+ * @brief OTA worker task loop that processes queued OTA requests.
+ *
+ * Signals readiness by giving the instance's m_otaWorkerReady semaphore, waits for an OTAAsyncRequest from m_otaRequestQueue, sets the instance upload state, calls otaUploadAsync to perform the upload, and completes the associated asynchronous HTTP request. Logs upload type, progress, and errors.
+ *
+ * @param parameter Pointer to the WebServerManager instance passed as the task parameter.
+ */
 void WebServerManager::otaWorkerTask(void *parameter) {
   ESP_LOGI(TAG, "OTA worker task started");
   WebServerManager *instance = static_cast<WebServerManager *>(parameter);
@@ -1704,7 +2031,22 @@ void WebServerManager::otaWorkerTask(void *parameter) {
   vTaskDelete(NULL);
 }
 
-// Queue OTA Request
+/**
+ * @brief Accepts an OTA upload HTTP request and enqueues it for asynchronous processing.
+ *
+ * Validates that no OTA is currently active and that the OTA worker is available,
+ * creates an async copy of the HTTP request, determines the upload type from the
+ * request URI ("/ota/littlefs" selects LITTLEFS; otherwise firmware), parses the
+ * optional "skipReboot" query parameter, and posts an OTAAsyncRequest to the OTA
+ * worker queue. Sends an immediate HTTP JSON acceptance response on success or
+ * an appropriate HTTP error response on failure.
+ *
+ * @param req Pointer to the incoming HTTP request initiating the OTA upload.
+ * @return esp_err_t `ESP_OK` if the request was accepted and queued; `ESP_FAIL`
+ *         if the request was rejected due to OTA in progress, worker busy, or
+ *         queueing failure. May return a different `esp_err_t` if creating the
+ *         async handler copy fails.
+ */
 esp_err_t WebServerManager::queueOTARequest(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
   // Check if OTA is already in progress
@@ -1781,7 +2123,19 @@ esp_err_t WebServerManager::queueOTARequest(httpd_req_t *req) {
   return ESP_OK;
 }
 
-// Async OTA Upload Processing
+/**
+ * @brief Process an asynchronous OTA upload from an HTTP request and apply it to the device.
+ *
+ * Reads the upload payload from the provided HTTP request and writes it either to the firmware
+ * update partition or to the LittleFS data partition depending on the current upload type.
+ * Progress and error state are reflected in the instance OTA status fields and are periodically
+ * broadcast to connected clients. On successful firmware updates the next boot partition is set
+ * and the device will reboot unless the upload was requested with reboot disabled.
+ *
+ * @param req HTTP request (async) supplying the OTA payload; data is read from this request.
+ * @return esp_err_t ESP_OK on successful completion of the upload and finalization;
+ *         ESP_FAIL on any error (in which case `m_otaError` is set with a human-readable message).
+ */
 esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
   std::lock_guard<std::mutex> lock(m_otaMutex);
 
@@ -2127,6 +2481,12 @@ esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
   return ESP_OK;
 }
 
+/**
+ * @brief Release and stop the asynchronous OTA worker and its resources.
+ *
+ * Frees the OTA worker task, the OTA request queue, and the OTA-ready semaphore
+ * if they exist, and clears the OTA in-progress indicator.
+ */
 void WebServerManager::cleanupOTAAsync() {
   // Clean up worker task
   if (m_otaWorkerHandle != nullptr) {
@@ -2149,7 +2509,15 @@ void WebServerManager::cleanupOTAAsync() {
   m_otaInProgress = false;
 }
 
-// OTA Upload handler (Async version)
+/**
+ * @brief Accepts an incoming OTA HTTP upload request and queues it for asynchronous processing.
+ *
+ * The request is not processed synchronously by this handler; instead it is enqueued for the OTA
+ * worker to perform the actual upload and flashing/partition work.
+ *
+ * @param req Pointer to the HTTP request representing the OTA upload.
+ * @return esp_err_t `ESP_OK` if the request was accepted and queued, otherwise an error code indicating why queuing failed.
+ */
 esp_err_t WebServerManager::handleOTAUpload(httpd_req_t *req) {
   ESP_LOGI(TAG, "OTA upload request received");
 
@@ -2157,7 +2525,15 @@ esp_err_t WebServerManager::handleOTAUpload(httpd_req_t *req) {
   return queueOTARequest(req);
 }
 
-// OTA Reboot handler
+/**
+ * @brief Handle an HTTP request that triggers a short-delayed device reboot.
+ *
+ * Sends a JSON response informing the client that the device is rebooting,
+ * waits briefly, and then restarts the device.
+ *
+ * @param req HTTP request used to send the JSON response before reboot.
+ * @return esp_err_t `ESP_OK` if the response was sent and the reboot was initiated.
+ */
 esp_err_t WebServerManager::handleReboot(httpd_req_t *req) {
   ESP_LOGI(TAG, "OTA reboot request received");
 
@@ -2173,7 +2549,22 @@ esp_err_t WebServerManager::handleReboot(httpd_req_t *req) {
   return ESP_OK;
 }
 
-// Get OTA status as JSON string
+/**
+ * Builds a JSON representation of the current OTA update status.
+ *
+ * The returned JSON contains the following fields:
+ * - `type`: fixed value `"ota_status"`.
+ * - `in_progress`: `true` if an OTA is active, `false` otherwise.
+ * - `bytes_written`: number of bytes written so far.
+ * - `upload_type`: `"littlefs"` or `"firmware"`.
+ * - `error`: error message when present.
+ * - `current_version`: currently running firmware version.
+ * - `running_partition`: label of the running partition when available.
+ * - `next_update_partition`: label of the partition selected for the next update when available.
+ * - `progress_percent` and `total_bytes`: included when an OTA is in progress and total size is known.
+ *
+ * @return std::string JSON string describing the OTA status (ownership: caller).
+ */
 std::string WebServerManager::getOTAStatus() {
   cJSON *status = cJSON_CreateObject();
   cJSON_AddStringToObject(status, "type", "ota_status");
@@ -2216,13 +2607,27 @@ std::string WebServerManager::getOTAStatus() {
   return cjson_to_string_and_free(status);
 }
 
-// Broadcast OTA status to all WebSocket clients
+/**
+ * @brief Broadcasts the current OTA status to all connected WebSocket clients.
+ *
+ * Retrieves the OTA status payload produced by getOTAStatus() and sends it to
+ * every connected WebSocket client as a text message. The payload is a JSON
+ * string that includes the `"type": "ota_status"` object produced by
+ * getOTAStatus().
+ */
 void WebServerManager::broadcastOTAStatus() {
   std::string otaStatus = getOTAStatus();
   broadcastToWebSocketClients(otaStatus.c_str());
 }
 
-// Not found handler
+/**
+ * @brief Responds to unknown or unmatched HTTP requests with a 404 Not Found.
+ *
+ * Sends an HTTP 404 response for the given request.
+ *
+ * @param req HTTP request context to respond to.
+ * @return esp_err_t `ESP_FAIL`.
+ */
 esp_err_t WebServerManager::handleNotFound(httpd_req_t *req) {
   httpd_resp_send_404(req);
   return ESP_FAIL;
