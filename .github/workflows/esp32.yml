@@ -35,10 +35,6 @@ jobs:
             managed_components
             sdkconfig
           key: ${{ runner.os }}-esp32-build
-      - name: Cache Docker images.
-        uses: AndreKurait/docker-cache@0.6.0
-        with:
-          key: docker-${{ runner.os }}-espidf
       - name: ESP32 Build
         uses: espressif/esp-idf-ci-action@v1
         with:
@@ -74,10 +70,6 @@ jobs:
             managed_components
             sdkconfig
           key: ${{ runner.os }}-esp32c3-build
-      - name: Cache Docker images.
-        uses: AndreKurait/docker-cache@0.6.0
-        with:
-          key: docker-${{ runner.os }}-espidf
       - name: ESP32C3 Build
         uses: espressif/esp-idf-ci-action@v1
         with:
@@ -113,10 +105,6 @@ jobs:
             managed_components
             sdkconfig
           key: ${{ runner.os }}-esp32c6-build
-      - name: Cache Docker images.
-        uses: AndreKurait/docker-cache@0.6.0
-        with:
-          key: docker-${{ runner.os }}-espidf
       - name: ESP32C6 Build
         uses: espressif/esp-idf-ci-action@v1
         with:
@@ -152,10 +140,6 @@ jobs:
             managed_components
             sdkconfig
           key: ${{ runner.os }}-esp32s3-build
-      - name: Cache Docker images.
-        uses: AndreKurait/docker-cache@0.6.0
-        with:
-          key: docker-${{ runner.os }}-espidf
       - name: ESP32S3 Build
         uses: espressif/esp-idf-ci-action@v1
         with:
