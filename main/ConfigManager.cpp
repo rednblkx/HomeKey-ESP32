@@ -10,6 +10,15 @@
 
 const char* ConfigManager::TAG = "ConfigManager";
 
+/**
+ * @brief Initialize ConfigManager and build the configuration key-to-field map.
+ *
+ * Constructs a ConfigManager instance, marks it uninitialized, and populates
+ * the internal m_configMap with mappings from configuration keys (for the
+ * "mqtt" and "misc" sections) to pointers of their corresponding in-memory
+ * fields. The map enables unified serialization/deserialization and JSON
+ * handling for both MQTT and miscellaneous settings.
+ */
 ConfigManager::ConfigManager() : m_isInitialized(false) {
   m_configMap = { 
     {"mqtt",{ 
@@ -89,12 +98,25 @@ ConfigManager::ConfigManager() : m_isInitialized(false) {
   };
 }
 
+/**
+ * @brief Releases resources held by ConfigManager.
+ *
+ * Closes the open NVS handle if the manager was initialized.
+ */
 ConfigManager::~ConfigManager() {
   if (m_isInitialized) {
     nvs_close(m_nvsHandle);
   }
 }
 
+/**
+ * @brief Initialize the NVS-backed configuration subsystem and load saved MQTT and miscellaneous settings.
+ *
+ * This opens the NVS namespace used for saved configuration, sets the internal initialized state,
+ * and loads configuration blobs for "MQTTDATA" and "MISCDATA" into memory.
+ *
+ * @return true if initialization succeeded or was already performed, false if opening the NVS handle failed.
+ */
 bool ConfigManager::begin() {
   if (m_isInitialized) {
     ESP_LOGW(TAG, "ConfigManager already initialized.");
@@ -120,6 +142,20 @@ bool ConfigManager::begin() {
 }
 
 template <typename ConfigType>
+/**
+ * @brief Access the stored configuration corresponding to the requested ConfigType.
+ *
+ * Returns a reference to the internal configuration instance for the specified
+ * template type.
+ *
+ * @tparam ConfigType The configuration struct type to retrieve. Supported values:
+ *                    `espConfig::mqttConfig_t` or `espConfig::misc_config_t`.
+ * @return const ConfigType& Reference to the matching in-memory configuration:
+ *                           the MQTT configuration when `ConfigType` is
+ *                           `espConfig::mqttConfig_t`, or the miscellaneous
+ *                           configuration when `ConfigType` is
+ *                           `espConfig::misc_config_t`.
+ */
 const ConfigType& ConfigManager::getConfig() const {
   using NonConstConfigType = std::remove_const_t<ConfigType>;
 
@@ -137,6 +173,16 @@ template const espConfig::misc_config_t& ConfigManager::getConfig<espConfig::mis
 template const espConfig::misc_config_t& ConfigManager::getConfig<espConfig::misc_config_t const>() const;
 
 template <typename ConfigType>
+/**
+ * @brief Clears the in-memory configuration for the specified config type and removes its persisted NVS blob.
+ *
+ * The function resets the matching member configuration to its default/empty state and attempts to erase
+ * the corresponding NVS entry ("MQTTDATA" for MQTT config, "MISCDATA" for misc config).
+ *
+ * @returns `true` if the NVS key was erased successfully, `false` otherwise.
+ *
+ * @note Instantiating this template with an unsupported `ConfigType` produces a compile-time error.
+ */
 bool ConfigManager::deleteConfig() {
   if constexpr (std::is_same_v<ConfigType, espConfig::mqttConfig_t>){
     m_mqttConfig = {}; 
@@ -153,6 +199,13 @@ template bool ConfigManager::deleteConfig<espConfig::mqttConfig_t>();
 template bool ConfigManager::deleteConfig<espConfig::misc_config_t>();
 
 template <typename ConfigType>
+/**
+ * @brief Saves the selected configuration group to non-volatile storage (NVS).
+ *
+ * Chooses the NVS blob key based on the config type and attempts to write and commit the serialized data.
+ *
+ * @returns `true` if the configuration was written and committed to NVS, `false` otherwise.
+ */
 bool ConfigManager::saveConfig() {
   std::string key;
   if constexpr (std::is_same_v<ConfigType, espConfig::mqttConfig_t>){
@@ -173,6 +226,17 @@ bool ConfigManager::saveConfig() {
 template bool ConfigManager::saveConfig<espConfig::mqttConfig_t>();
 template bool ConfigManager::saveConfig<espConfig::misc_config_t>();
 
+/**
+ * @brief Loads and applies a configuration blob from NVS into the in-memory config.
+ *
+ * Attempts to read a MessagePack blob stored under the given NVS key and, if present
+ * and valid, deserializes it into the corresponding in-memory configuration (either
+ * the MQTT or misc config). If the key is absent, the blob is empty, or parsing fails,
+ * the in-memory configuration is left unchanged (defaults remain).
+ *
+ * @param key NVS blob key to load; valid values are "MQTTDATA" (loads MQTT config)
+ *            and "MISCDATA" (loads misc config).
+ */
 void ConfigManager::loadConfigFromNvs(const char *key) {
   if (!m_isInitialized) {
     ESP_LOGE(TAG, "Cannot load, NVS not initialized.");
@@ -222,6 +286,15 @@ void ConfigManager::loadConfigFromNvs(const char *key) {
   msgpack_unpacked_destroy(&unpacked);
 }
 
+/**
+ * @brief Persist the specified configuration group into NVS under the given key.
+ *
+ * Writes a MessagePack-serialized blob for the configuration identified by `key`
+ * ("MISCDATA" or "MQTTDATA") into the opened NVS namespace and commits the change.
+ *
+ * @param key NVS blob key that identifies which configuration to save ("MISCDATA" or "MQTTDATA").
+ * @return bool `true` if the blob was written and NVS commit succeeded, `false` otherwise (including when NVS is not initialized or on write/commit errors).
+ */
 bool ConfigManager::saveConfigToNvs(const char *key) {
   if (!m_isInitialized) {
     ESP_LOGE(TAG, "Cannot save, NVS not initialized.");
@@ -252,6 +325,27 @@ bool ConfigManager::saveConfigToNvs(const char *key) {
   return true;
 }
 
+/**
+ * @brief Populates in-memory configuration fields from a MessagePack map.
+ *
+ * Deserializes a MessagePack map object into the ConfigManager's in-memory configuration
+ * entries identified by the provided section name (`type`). For each string key found
+ * in the MessagePack map that exists in the internal `m_configMap[type]`, the matching
+ * in-memory field is updated. Supported value types:
+ * - string -> std::string
+ * - boolean -> bool
+ * - positive integer -> uint8_t / uint16_t
+ * - array of integers -> std::array<uint8_t, N> (N = 4, 5, 7)
+ * - array of [enum, value] pairs -> std::map<espConfig::misc_config_t::colorMap, uint8_t>
+ * - array of [string, value] pairs -> std::map<std::string, uint8_t>
+ *
+ * Unknown keys are ignored. If `obj` is not a MessagePack map, an error is logged and
+ * no assignments are performed.
+ *
+ * @param obj MessagePack object expected to be a map of configuration keys to values.
+ * @param type Configuration section name (e.g., "mqtt" or "misc") used to look up the
+ *             corresponding key → field mapping in `m_configMap`.
+ */
 void ConfigManager::deserialize(msgpack_object obj, std::string type) {
   if (obj.type == MSGPACK_OBJECT_MAP) {
     msgpack_object_kv *map = obj.via.map.ptr;
@@ -334,6 +428,16 @@ void ConfigManager::deserialize(msgpack_object obj, std::string type) {
 }
 
 template <typename ConfigType>
+/**
+ * @brief Serializes the selected configuration type into a MessagePack binary blob.
+ *
+ * Produces a MessagePack representation of the in-memory configuration for either the misc or mqtt config type,
+ * encoding strings, booleans, unsigned integers, fixed-size byte arrays, and map entries. Map entries are encoded
+ * as arrays of key/value pairs; enum-keyed color maps are encoded as [enum, value] pairs and string-keyed maps as
+ * [string, value] pairs.
+ *
+ * @return std::vector<uint8_t> Byte vector containing the MessagePack-encoded configuration. 
+ */
 std::vector<uint8_t> ConfigManager::serialize() {
   msgpack_sbuffer sbuf;
   msgpack_sbuffer_init(&sbuf);
@@ -410,6 +514,19 @@ std::vector<uint8_t> ConfigManager::serialize() {
 }
 
 template <typename ConfigType>
+/**
+ * @brief Convert the selected configuration (MQTT or misc) into a JSON string.
+ *
+ * Serializes in-memory configuration fields into a JSON object. Supported field types:
+ * - std::string as JSON strings
+ * - bool as JSON booleans
+ * - uint8_t/uint16_t as JSON numbers
+ * - fixed-size byte arrays (std::array<uint8_t, 4|5|7>) as JSON arrays of numbers
+ * - std::map<espConfig::misc_config_t::colorMap, uint8_t> as an array of two-element arrays [enumValue, value]
+ * - std::map<std::string, uint8_t> as a JSON object mapping names to numeric values
+ *
+ * @return std::string JSON representation of the configuration; returns an empty string if serialization fails.
+ */
 std::string ConfigManager::serializeToJson() {
   cJSON *root = cJSON_CreateObject();
   if (!root) {
@@ -482,6 +599,17 @@ template std::string ConfigManager::serializeToJson<espConfig::misc_config_t>();
 template std::string ConfigManager::serializeToJson<espConfig::mqttConfig_t>();
 
 template <typename ConfigType>
+/**
+ * @brief Parses a JSON string and applies its fields to the selected in-memory configuration.
+ *
+ * Parses `json_string`, validates types and shapes of present fields, and updates the corresponding
+ * configuration members (either the "misc" or "mqtt" config selected by the template parameter).
+ * Only keys that exist in the manager's config map are processed; keys with type/shape mismatches
+ * are ignored and cause the function to report failure.
+ *
+ * @param json_string JSON object string containing configuration keys and values.
+ * @return bool `true` if the JSON was parsed and all processed keys were valid and applied; `false` if parsing failed or one or more processed keys failed validation.
+ */
 bool ConfigManager::deserializeFromJson(const std::string& json_string) {
     cJSON *root = cJSON_Parse(json_string.c_str());
     if (!root) {

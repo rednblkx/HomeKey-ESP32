@@ -80,6 +80,14 @@ private:
     static bool validateRequest(httpd_req_t *req, cJSON *currentData, const char* body);
     static WebServerManager* getInstance(httpd_req_t *req);
     static esp_err_t ws_send_frame(httpd_handle_t server, int fd, const uint8_t* payload, size_t len, httpd_ws_type_t type = HTTPD_WS_TYPE_TEXT);
+    /**
+     * @brief Timer callback that collects device metrics and broadcasts them to all WebSocket clients.
+     *
+     * Invoked by the status timer to obtain the current device metrics and send that data to connected
+     * WebSocket clients via the manager's broadcast mechanism.
+     *
+     * @param arg Pointer to the WebServerManager instance that will produce and broadcast metrics; must be a valid WebServerManager*.
+     */
     static void statusTimerCallback(void* arg){
         WebServerManager* instance = static_cast<WebServerManager*>(arg);
         // Ensure the string outlives c_str() usage during the call
@@ -108,6 +116,11 @@ private:
     struct WsClient {
         int fd;
         std::mutex mutex;
+        /**
+         * @brief Construct a WsClient for the specified client socket descriptor.
+         *
+         * @param file_descriptor File descriptor identifying the WebSocket client connection.
+         */
         WsClient(int file_descriptor) : fd(file_descriptor) {}
     };
     std::vector<std::unique_ptr<WsClient>> m_wsClients;

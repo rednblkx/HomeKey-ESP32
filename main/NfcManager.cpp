@@ -16,6 +16,16 @@
 
 const char* NfcManager::TAG = "NfcManager";
 
+/**
+ * @brief Initializes the NFC manager, configures internal state, and registers NFC-related event handlers.
+ *
+ * Sets initial ECP data and task handles, registers an "nfc/event" publisher, and subscribes to
+ * "homekit/internal" events to react to ACCESSDATA_CHANGED (updates ECP data) and DEBUG_AUTH_FLOW
+ * (updates the authentication flow).
+ *
+ * @param readerDataManager Reference to the ReaderDataManager used to read and persist reader data.
+ * @param nfcGpioPins Four GPIO pin numbers used to construct the PN532 SPI interface.
+ */
 NfcManager::NfcManager(ReaderDataManager& readerDataManager,const std::array<uint8_t, 4> &nfcGpioPins)
     : nfcGpioPins(nfcGpioPins),
       m_readerDataManager(readerDataManager),
@@ -45,6 +55,13 @@ NfcManager::NfcManager(ReaderDataManager& readerDataManager,const std::array<uin
   }, 3072);
 }
 
+/**
+ * @brief Initialize the PN532 SPI interface, create the PN532 instance, and start the NFC polling task.
+ *
+ * Initializes internal PN532_SPI and PN532 objects and launches the background task that drives NFC polling.
+ *
+ * @return `true` if the NFC polling task was started, `false` otherwise.
+ */
 bool NfcManager::begin() {
     m_pn532spi = new PN532_SPI(nfcGpioPins[0], nfcGpioPins[1], nfcGpioPins[2], nfcGpioPins[3]); 
     m_nfc = new PN532 (*m_pn532spi);
@@ -53,6 +70,14 @@ bool NfcManager::begin() {
     return true;
 }
 
+/**
+ * @brief Update the internal ECP data buffer with the reader GID and its CRC16.
+ *
+ * If the Reader GID is 8 bytes long, copies it into bytes 8–15 of the internal
+ * ECP buffer and computes a CRC16 over the first 16 bytes, storing the 2-byte
+ * CRC at bytes 16–17 of the buffer. If the Reader GID is not provisioned,
+ * logs a warning and leaves the ECP buffer unchanged.
+ */
 void NfcManager::updateEcpData() {
     const auto& readerGid = m_readerDataManager.getReaderGid();
     if (readerGid.size() == 8) {
@@ -63,6 +88,15 @@ void NfcManager::updateEcpData() {
     }
 }
 
+/**
+ * @brief Initialize and configure the PN532 NFC reader and refresh ECP data.
+ *
+ * Attempts to start the PN532, verify firmware presence, configure the SAM,
+ * RF field, and passive activation retry policy, then updates the manager's
+ * ECP data buffer.
+ *
+ * @return `true` if the reader was successfully initialized and ECP data updated, `false` if firmware/version check failed and the reader was stopped.
+ */
 bool NfcManager::initializeReader() {
     m_nfc->begin();
     uint32_t versiondata = m_nfc->getFirmwareVersion();
@@ -80,20 +114,50 @@ bool NfcManager::initializeReader() {
     return true;
 }
 
+/**
+ * @brief Starts the PN532 reconnection retry task if it is not already running.
+ *
+ * Creates and stores a task handle for the background retry loop; if a retry task
+ * is already active, this function returns without side effects.
+ */
 void NfcManager::startRetryTask() {
     if (m_retryTaskHandle == nullptr) {
         xTaskCreateUniversal(retryTaskEntry, "nfc_retry_task", 4096, this, 5, &m_retryTaskHandle, 1);
     }
 }
 
+/**
+ * @brief FreeRTOS task entry that dispatches to an instance's polling loop.
+ *
+ * This static function is used as a task entry point and calls the associated
+ * NfcManager instance's pollingTask method.
+ *
+ * @param instance Pointer to the NfcManager instance whose pollingTask will be executed.
+ */
 void NfcManager::pollingTaskEntry(void* instance) {
     static_cast<NfcManager*>(instance)->pollingTask();
 }
 
+/**
+ * @brief RTOS task entry point for the NFC retry task.
+ *
+ * This function is the C-style entry invoked by the RTOS; it expects a pointer
+ * to an NfcManager instance (passed as void*) and transfers control to that
+ * instance's retry task implementation.
+ *
+ * @param instance Pointer to an NfcManager instance, provided by the RTOS task creation call.
+ */
 void NfcManager::retryTaskEntry(void* instance) {
     static_cast<NfcManager*>(instance)->retryTask();
 }
 
+/**
+ * @brief Continuously attempts to reconnect to the PN532 and restores normal polling on success.
+ *
+ * Repeatedly calls reader initialization until it succeeds. When the PN532 is reinitialized,
+ * the method resumes the polling task if present, clears the retry task handle, and terminates
+ * the current retry task. On failure, it waits 5 seconds before trying again.
+ */
 void NfcManager::retryTask() {
     ESP_LOGI(TAG, "Starting PN532 reconnection task...");
     while (true) {
@@ -108,6 +172,15 @@ void NfcManager::retryTask() {
     }
 }
 
+/**
+ * @brief Main NFC polling loop that monitors the PN532 reader and dispatches tag handling.
+ *
+ * @details Initializes the NFC reader and then runs indefinitely, repeatedly
+ * checking the reader's responsiveness and polling for passive ISO14443A tags.
+ * If the reader becomes unresponsive, this task schedules a reconnection retry
+ * and suspends itself. When a tag is detected, it invokes the tag handling path
+ * and waits for the tag to be removed before continuing normal polling.
+ */
 void NfcManager::pollingTask() {
     if (!initializeReader()) {
       startRetryTask();
@@ -149,6 +222,13 @@ void NfcManager::pollingTask() {
     }
 }
 
+/**
+ * @brief Handles a detected NFC tag by attempting to select the HomeKey applet and processing the tag accordingly.
+ *
+ * Attempts to select the HomeKey applet on the tag via an APDU select command; if selection succeeds, proceeds with
+ * HomeKey authentication handling. If selection fails, reads the tag's UID/ATQA/SAK and processes it as a generic ISO14443A tag.
+ * Logs the tag processing duration and releases the PN532 device state before returning.
+ */
 void NfcManager::handleTagPresence() {
     auto startTime = std::chrono::high_resolution_clock::now();
     uint8_t selectAppletCmd[] = { 0x00, 0xA4, 0x04, 0x00, 0x07, 0xA0, 0x00, 0x00, 0x08, 0x58, 0x01, 0x01, 0x00 };
@@ -174,6 +254,16 @@ void NfcManager::handleTagPresence() {
     m_nfc->inRelease();
 }
 
+/**
+ * @brief Attempts HomeKey authentication for the currently-present NFC tag.
+ *
+ * Performs authentication using the manager's configured authentication flow and the current reader data.
+ * On successful authentication, updates stored reader data and publishes a HOMEKEY_TAP event containing
+ * success status, issuer ID, endpoint ID, and reader ID. On failure, publishes a HOMEKEY_TAP event indicating
+ * authentication failure.
+ *
+ * @note This method has side effects: it may update ReaderDataManager and will publish an event via EventManager.
+ */
 void NfcManager::handleHomeKeyAuth() {
     auto transceiveLambda = [this](std::vector<uint8_t>& send, std::vector<uint8_t>& recv, bool isLong) -> bool {
         uint8_t responseBuffer[256];
@@ -212,6 +302,18 @@ void NfcManager::handleHomeKeyAuth() {
     }
 }
 
+/**
+ * @brief Publish a TAG_TAP NFC event for a detected non-HomeKey (generic) tag.
+ *
+ * Constructs an EventTagTap containing the tag UID, ATQA, and SAK, serializes it
+ * into an NfcEvent payload, and publishes the serialized event to the NFC event
+ * topic.
+ *
+ * @param uid Pointer to the tag UID bytes.
+ * @param uidLen Number of bytes in `uid`.
+ * @param atqa Pointer to the 2-byte ATQA value.
+ * @param sak Pointer to the 1-byte SAK value.
+ */
 void NfcManager::handleGenericTag(const uint8_t* uid, uint8_t uidLen, const uint8_t* atqa, const uint8_t* sak) {
     EventTagTap s{.uid = std::vector<uint8_t>(uid, uid+uidLen), .atqa = std::vector<uint8_t>(atqa, atqa + 2), .sak = std::vector<uint8_t>(sak, sak + 1)};
     std::vector<uint8_t> d;
@@ -222,6 +324,13 @@ void NfcManager::handleGenericTag(const uint8_t* uid, uint8_t uidLen, const uint
     espp::EventManager::get().publish("nfc/event", event_data);
 }
 
+/**
+ * @brief Waits for an NFC tag to be removed from the reader's RF field and recovers if it remains.
+ *
+ * Polls the reader for tag presence up to 50 times with 50 ms intervals, calling inRelease between checks.
+ * If the tag remains after the timeout, forces an RF field reset (toggle off/on) to clear the tag state.
+ * Always issues a final inRelease before returning.
+ */
 void NfcManager::waitForTagRemoval() {
     ESP_LOGD(TAG, "Waiting for tag to be removed from field...");
     int counter = 50;

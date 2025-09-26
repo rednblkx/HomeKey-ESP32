@@ -5,10 +5,21 @@
 
 namespace loggable {
 
+/**
+ * @brief Constructs a WebSocketLogSinker that will broadcast formatted log messages.
+ *
+ * @param webServerManager Pointer to the WebServerManager used to broadcast messages to connected WebSocket clients. If `nullptr`, broadcasting is disabled.
+ */
 WebSocketLogSinker::WebSocketLogSinker(WebServerManager* webServerManager)
     : m_webServerManager(webServerManager) {
 }
 
+/**
+ * @brief Convert a LogLevel value to its corresponding uppercase string label.
+ *
+ * @param level Log level to convert.
+ * @return const char* One of `ERROR`, `WARN`, `INFO`, `DEBUG`, `VERBOSE`, or `NONE` when the level is unrecognized.
+ */
 const char* WebSocketLogSinker::level_to_string(LogLevel level) {
     switch (level) {
     case LogLevel::Error: return "ERROR";
@@ -20,6 +31,16 @@ const char* WebSocketLogSinker::level_to_string(LogLevel level) {
     }
 }
 
+/**
+ * @brief Serializes a log message to JSON and broadcasts it to connected WebSocket clients.
+ *
+ * Creates a JSON object containing the message timestamp (seconds since epoch), type ("log"),
+ * level, tag, and msg, then sends the serialized JSON to all WebSocket clients via the
+ * associated WebServerManager. Safeguards against null web server manager and prevents
+ * re-entrant broadcasts triggered by logging during a broadcast.
+ *
+ * @param message Log message to serialize and broadcast.
+ */
 void WebSocketLogSinker::consume(const LogMessage& message) {
     if (!m_webServerManager) return;
 

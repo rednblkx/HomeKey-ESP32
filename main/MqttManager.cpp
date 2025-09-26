@@ -11,6 +11,15 @@
 
 const char* MqttManager::TAG = "MqttManager";
 
+/**
+ * @brief Initialize MqttManager from configuration and register MQTT-related event subscribers and publishers.
+ *
+ * Constructs the manager using settings from the provided ConfigManager, initializes internal MQTT configuration
+ * and device name, and registers event subscribers and publishers used to bridge internal events (lock state,
+ * alternate lock actions, and NFC/Home Key events) to MQTT publishing and vice versa.
+ *
+ * @param configManager Source of runtime configuration values used to initialize the MQTT manager.
+ */
 MqttManager::MqttManager(const ConfigManager& configManager)
     : m_mqttConfig(configManager.getConfig<espConfig::mqttConfig_t>()),
       m_client(nullptr),
@@ -58,6 +67,15 @@ MqttManager::MqttManager(const ConfigManager& configManager)
   }, 3072);
 }
 
+/**
+ * @brief Initialize and start the MQTT client using stored configuration and a device identifier.
+ *
+ * Configures the MQTT client from m_mqttConfig, registers the instance-level MQTT event handler,
+ * and starts the client if a valid broker hostname is present.
+ *
+ * @param deviceID Unique device identifier to associate with the MQTT client and discovery topics.
+ * @return true if the MQTT client was started, false if startup was skipped because the broker host was not configured.
+ */
 bool MqttManager::begin(std::string deviceID) {
     ESP_LOGI(TAG, "Initializing...");
 
@@ -90,6 +108,16 @@ bool MqttManager::begin(std::string deviceID) {
     return true;
 }
 
+/**
+ * @brief Publish a message to the configured MQTT broker.
+ *
+ * Publishes the given payload to the specified MQTT topic using the provided QoS and retain flag.
+ *
+ * @param topic Destination MQTT topic.
+ * @param payload Message payload (may be empty).
+ * @param qos MQTT quality of service level (typically 0, 1, or 2).
+ * @param retain If true, the broker will retain the message as the last known value for the topic.
+ */
 void MqttManager::publish(const std::string& topic, const std::string& payload, int qos, bool retain) {
     if (!m_client) {
         ESP_LOGW(TAG, "Cannot publish, MQTT client not initialized.");
@@ -98,13 +126,36 @@ void MqttManager::publish(const std::string& topic, const std::string& payload, 
     esp_mqtt_client_publish(m_client, topic.c_str(), payload.c_str(), payload.length(), qos, retain);
 }
 
-// --- Event Handling Logic ---
+/**
+ * @brief MQTT event callback that forwards received events to the associated MqttManager instance.
+ *
+ * Casts @p handler_args to a MqttManager pointer and invokes the instance's onMqttEvent method with
+ * the provided MQTT event parameters.
+ *
+ * @param handler_args Pointer to the MqttManager instance (passed by the MQTT library).
+ * @param base MQTT event base identifier.
+ * @param event_id Numeric MQTT event identifier.
+ * @param event_data Pointer to event-specific data provided by the MQTT library.
+ */
 
 void MqttManager::mqttEventHandler(void* handler_args, esp_event_base_t base, int32_t event_id, void* event_data) {
     MqttManager* instance = static_cast<MqttManager*>(handler_args);
     instance->onMqttEvent(base, event_id, event_data);
 }
 
+/**
+ * @brief Dispatches incoming MQTT events to the appropriate handlers and logs status.
+ *
+ * Interprets the MQTT event contained in `event_data` and:
+ * - invokes onConnected() when a connection is established,
+ * - logs disconnection and errors,
+ * - extracts topic and payload and forwards them to onData() for incoming messages,
+ * - logs unhandled event types.
+ *
+ * @param base MQTT event base (unused by this method).
+ * @param event_id Raw event identifier (unused; the method reads the id from `event_data`).
+ * @param event_data Pointer to an `esp_mqtt_event_t`-compatible structure containing the MQTT event, topic, and payload.
+ */
 void MqttManager::onMqttEvent(esp_event_base_t base, int32_t event_id, void* event_data) {
     esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
     
@@ -130,6 +181,13 @@ void MqttManager::onMqttEvent(esp_event_base_t base, int32_t event_id, void* eve
     }
 }
 
+/**
+ * @brief Handle actions to perform immediately after the MQTT client connects.
+ *
+ * Publishes the configured "online" last-will/retain presence message, subscribes to configured command topics used for lock and battery commands, and triggers Home Assistant MQTT discovery if enabled.
+ *
+ * The retained presence message is published to the configured LWT topic with QoS 1. Subscriptions include lock state/command topics and the battery level command topic; the custom lock state command topic is subscribed only when custom states are enabled. If Home Assistant discovery is enabled in configuration, discovery payloads are published.
+ */
 void MqttManager::onConnected() {
     ESP_LOGI(TAG, "MQTT client connected.");
     
@@ -149,6 +207,17 @@ void MqttManager::onConnected() {
     }
 }
 
+/**
+ * @brief Handle an incoming MQTT message and translate it into internal events.
+ *
+ * Processes messages on configured MQTT command topics to update or override lock
+ * state, handle custom lock-state codes, and forward battery level changes as
+ * HomeKit events. Matching topic payloads are converted into the appropriate
+ * EventManager events.
+ *
+ * @param topic MQTT topic of the received message.
+ * @param data Payload of the received message as a string.
+ */
 void MqttManager::onData(const std::string& topic, const std::string& data) {
     ESP_LOGI(TAG, "Received message on topic '%s': %s", topic.c_str(), data.c_str());
 
@@ -252,7 +321,17 @@ void MqttManager::onData(const std::string& topic, const std::string& data) {
     }
 }
 
-// --- Publishing Methods ---
+/**
+ * @brief Publish the lock's current/target state to the configured MQTT state topic.
+ *
+ * Publishes a string representation of the lock state to the MQTT topic configured in m_mqttConfig.lockStateTopic.
+ * If the current state differs from the target state, the published value indicates an in-transition state
+ * ("locking" or "unlocking"); otherwise the numeric current state is published. The message is sent with QoS 0
+ * and retained.
+ *
+ * @param currentState Numeric code representing the lock's current state.
+ * @param targetState Numeric code representing the lock's target state.
+ */
 
 void MqttManager::publishLockState(int currentState, int targetState) {
     std::string stateStr;
@@ -264,6 +343,15 @@ void MqttManager::publishLockState(int currentState, int targetState) {
     publish(m_mqttConfig.lockStateTopic, stateStr, 0, true);
 }
 
+/**
+ * @brief Publish a Home Key Tap event to the configured Home Key MQTT topic.
+ *
+ * Constructs a JSON payload containing hex-encoded identifiers and a "homekey" flag, then publishes it to the configured Home Key topic.
+ *
+ * @param issuerId Byte sequence of the issuer identifier; encoded as an uppercase hex string in the `issuerId` JSON field.
+ * @param endpointId Byte sequence of the endpoint identifier; encoded as an uppercase hex string in the `endpointId` JSON field.
+ * @param readerId Byte sequence of the reader identifier; encoded as an uppercase hex string in the `readerId` JSON field.
+ */
 void MqttManager::publishHomeKeyTap(const std::vector<uint8_t>& issuerId, const std::vector<uint8_t>& endpointId, const std::vector<uint8_t>& readerId) {
     cJSON *doc = cJSON_CreateObject();
     cJSON_AddStringToObject(doc, "issuerId", fmt::format("{:02X}", fmt::join(issuerId, "")).c_str());
@@ -277,6 +365,19 @@ void MqttManager::publishHomeKeyTap(const std::vector<uint8_t>& issuerId, const 
     cJSON_Delete(doc);
 }
 
+/**
+ * @brief Publish an NFC tag UID tap payload to the configured Home Key topic.
+ *
+ * When configured to allow NFC tag publishing, builds a JSON payload containing
+ * the tag UID, ATQA, and SAK as uppercase hex strings and a `homekey` flag set
+ * to `false`, then publishes it to the manager's configured hkTopic.
+ *
+ * @param uid Byte vector of the tag UID to include in the payload.
+ * @param atqa Byte vector of the tag ATQA to include in the payload.
+ * @param sak Byte vector of the tag SAK to include in the payload.
+ *
+ * If NFC tag publishing is disabled in the MQTT configuration, no publish is performed.
+ */
 void MqttManager::publishUidTap(const std::vector<uint8_t>& uid, const std::vector<uint8_t> &atqa, const std::vector<uint8_t> &sak) {
     if(!m_mqttConfig.nfcTagNoPublish){
       cJSON *doc = cJSON_CreateObject();
@@ -292,6 +393,14 @@ void MqttManager::publishUidTap(const std::vector<uint8_t>& uid, const std::vect
     } else ESP_LOGW(TAG, "MQTT publishing of Tag UID not enabled, ignoring!");
 }
 
+/**
+ * @brief Publish Home Assistant MQTT discovery payloads for the device's lock and (optionally) NFC tag.
+ *
+ * Composes a device descriptor and sends retained, QoS 1 discovery messages to Home Assistant discovery topics
+ * so the lock entity and, if enabled, an NFC tag entity are automatically discovered. The lock payload includes
+ * state and command topics, payload values for lock states, and the availability topic. The NFC/tag payload
+ * includes the topic and a JSON value template for extracting the tag UID.
+ */
 void MqttManager::publishHassDiscovery() {
     ESP_LOGI(TAG, "Publishing Home Assistant discovery messages...");
 

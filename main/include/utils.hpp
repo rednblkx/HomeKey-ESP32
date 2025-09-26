@@ -8,10 +8,11 @@
 namespace Utils {
 
 /**
- * @brief Calculates the CRC-16/X-25 checksum.
- * @param data Pointer to the data buffer.
- * @param size Size of the data.
- * @param result Pointer to a 2-byte array to store the result (little-endian).
+ * @brief Compute the ISO/IEC 14443-A (CRC_A) checksum for a data buffer and write it in little-endian.
+ *
+ * @param data Pointer to the input byte buffer.
+ * @param size Number of bytes in the buffer to process.
+ * @param result Pointer to a 2-byte array that receives the checksum in little-endian order (low byte first).
  */
 inline void crc16a(unsigned char* data, unsigned int size, unsigned char* result) {
     unsigned short w_crc = 0x6363;
@@ -26,11 +27,14 @@ inline void crc16a(unsigned char* data, unsigned int size, unsigned char* result
 }
 
 /**
- * @brief Creates the HomeKit issuer identifier hash from a public key.
- * This is a SHA-256 hash of the string "key-identifier" concatenated with the public key.
- * @param key Pointer to the 32-byte public key.
- * @param len Length of the key (should be 32).
- * @return An 8-byte vector containing the truncated hash.
+ * @brief Produce the HomeKit issuer identifier derived from a public key.
+ *
+ * Computes SHA-256 over the ASCII string "key-identifier" concatenated with the provided public key
+ * and returns the first 8 bytes of the digest as the issuer identifier.
+ *
+ * @param key Pointer to the public key bytes (expected length: 32).
+ * @param len Length of the public key in bytes (should be 32).
+ * @return std::vector<uint8_t> An 8-byte vector containing the first 8 bytes of the SHA-256 digest.
  */
 inline std::vector<uint8_t> getHashIdentifier(const uint8_t* key, size_t len) {
     std::vector<unsigned char> hashable;

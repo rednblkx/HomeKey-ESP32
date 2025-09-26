@@ -14,16 +14,40 @@ CUSTOM_CHAR(NFCAccessControlPoint, 264, PR+PW+WR, TLV_ENC, NULL_TLV, NULL_TLV, N
 CUSTOM_CHAR(NFCAccessSupportedConfiguration, 265, PR, TLV_ENC, NULL_TLV, NULL_TLV, NULL_TLV, true)
 CUSTOM_CHAR(LockControlPoint, 19, PW, TLV_ENC, NULL_TLV, NULL_TLV, NULL_TLV, true)
 
+/**
+ * @brief Constructs a LockManagement service and registers required characteristics.
+ *
+ * Initializes the service with ID "44" and name "LockManagement" (active) and adds
+ * the LockControlPoint and Version characteristics to the service's required list.
+ */
 Service::LockManagement::LockManagement() : SpanService{ "44","LockManagement",true } {
   req.push_back(&_CUSTOM_LockControlPoint);
   req.push_back(&hapChars.Version);
 }
+/**
+ * @brief Creates the NFCAccess service and registers its required characteristics.
+ *
+ * Registers ConfigurationState, NFCAccessControlPoint, and NFCAccessSupportedConfiguration as required characteristics for the service.
+ */
 Service::NFCAccess::NFCAccess() : SpanService{ "266","NFCAccess",true } {
   req.push_back(&_CUSTOM_ConfigurationState);
   req.push_back(&_CUSTOM_NFCAccessControlPoint);
   req.push_back(&_CUSTOM_NFCAccessSupportedConfiguration);
 }
 
+/**
+ * @brief Configure the NFC accessory information accessory and its characteristics.
+ *
+ * Initializes accessory information characteristics for an NFC HomeKit accessory:
+ * sets identify, manufacturer ("rednblkx"), model ("HomeKey-ESP32"), name (from config.deviceName),
+ * firmware revision (trimmed app version), and serial number (derived from the device BT MAC as "HK-<MAC>");
+ * selects a HardwareFinish TLV from hk_color_vals using config.hk_key_color (defaults to index 0 on out-of-range)
+ * and applies it to the HardwareFinish characteristic.
+ *
+ * @param config Configuration values; only config.deviceName and config.hk_key_color are used:
+ *               - deviceName: accessory Name characteristic value.
+ *               - hk_key_color: index into hk_color_vals to choose the HardwareFinish TLV.
+ */
 HomeKitLock::NFCAIS::NFCAIS(const espConfig::misc_config_t& config) {
     ESP_LOGI(HomeKitLock::TAG, "Configuring NFCAccessoryInformation");
     opt.push_back(&_CUSTOM_HardwareFinish);
@@ -49,12 +73,28 @@ HomeKitLock::NFCAIS::NFCAIS(const espConfig::misc_config_t& config) {
     new Characteristic::HardwareFinish(hwfinish);
 }
 
+/**
+ * @brief Configure the LockManagement service for the accessory.
+ *
+ * Creates and registers the Lock Control Point and Version characteristics required
+ * by the Lock Management service.
+ */
 HomeKitLock::LockManagementService::LockManagementService() {
     ESP_LOGI(HomeKitLock::TAG, "Configuring LockManagement");
     new Characteristic::LockControlPoint();
     new Characteristic::Version();
 };
 
+/**
+ * @brief Configure lock mechanism integration between HomeKit and the lock manager.
+ *
+ * Initializes LockCurrentState and LockTargetState characteristics (and installs them into the provided HomeKit bridge),
+ * registers event publishers for lock state overrides and target changes, and publishes an initial overrideState event
+ * containing the current and target lock states with source set to HOMEKIT.
+ *
+ * @param bridge HomeKit bridge instance whose characteristic pointers will be set to the newly created characteristics.
+ * @param lockManager Lock manager providing current and target lock state values and the HOMEKIT source identifier.
+ */
 HomeKitLock::LockMechanismService::LockMechanismService(HomeKitLock& bridge, LockManager& lockManager) : m_lockManager(lockManager) {
     espp::EventManager::get().add_publisher("lock/overrideState", "LockMechanismService");
     espp::EventManager::get().add_publisher("lock/targetStateChanged", "LockMechanismService");
@@ -70,6 +110,15 @@ HomeKitLock::LockMechanismService::LockMechanismService(HomeKitLock& bridge, Loc
     alpaca::serialize(s, d);
     espp::EventManager::get().publish("lock/overrideState", d);
 }
+/**
+ * @brief Publishes an event when the lock target state has changed.
+ *
+ * If the target-state characteristic was updated, serializes an EventLockState
+ * containing the current state, the new target state, and source set to HOMEKIT,
+ * then publishes it on the "lock/targetStateChanged" channel.
+ *
+ * @return boolean `true` on completion.
+ */
 boolean HomeKitLock::LockMechanismService::update() {
     if (m_lockTargetState->updated()) {
       EventLockState s{
@@ -84,6 +133,15 @@ boolean HomeKitLock::LockMechanismService::update() {
     return true;
 }
 
+/**
+ * @brief Configure NFC Access service and register its characteristics and event publisher.
+ *
+ * Creates and registers the ConfigurationState, NFCAccessSupportedConfiguration (with default TLV
+ * entries), and NFCAccessControlPoint characteristics, and adds an internal "homekit/internal"
+ * event publisher for NFCAccessService.
+ *
+ * @param readerDataManager Reference to the ReaderDataManager used for managing NFC reader data.
+ */
 HomeKitLock::NFCAccessService::NFCAccessService(ReaderDataManager& readerDataManager) : m_readerDataManager(readerDataManager) {
     ESP_LOGI(HomeKitLock::TAG, "Configuring NFCAccess");
     new Characteristic::ConfigurationState();
@@ -93,6 +151,13 @@ HomeKitLock::NFCAccessService::NFCAccessService(ReaderDataManager& readerDataMan
     m_nfcControlPoint = new Characteristic::NFCAccessControlPoint();
     espp::EventManager::get().add_publisher("homekit/internal", "NFCAccessService");
 }
+/**
+ * @brief Handles an update from the NFC Access Control Point, processes the incoming TLV control data, applies any response TLV to the control point, and publishes an internal access-data-changed event.
+ *
+ * When the NFC control point has new data, the function retrieves the TLV, invokes the HomeKit NFC processing context to handle save/remove callbacks and produce a response, writes the response TLV back to the control point, and emits a "homekit/internal" event of type ACCESSDATA_CHANGED.
+ *
+ * @return `true` if the update cycle completed, `false` otherwise.
+ */
 boolean HomeKitLock::NFCAccessService::update() {
     if (!m_nfcControlPoint->updated()) return true;
     TLV8 ctrlData(nullptr, 0);
@@ -115,6 +180,15 @@ boolean HomeKitLock::NFCAccessService::update() {
     return true;
 }
 
+/**
+ * @brief Configure battery-related HomeKit characteristics for the bridge.
+ *
+ * Initializes the bridge's StatusLowBattery and BatteryLevel characteristics and assigns them
+ * to the HomeKitLock instance.
+ *
+ * @param bridge The HomeKitLock instance to configure; its `m_statusLowBattery` is set to 0
+ *               and its `m_batteryLevel` is set to 100. 
+ */
 HomeKitLock::PhysicalLockBatteryService::PhysicalLockBatteryService(HomeKitLock& bridge) {
     ESP_LOGI(HomeKitLock::TAG, "Configuring PhysicalLockBattery");
     bridge.m_statusLowBattery = new Characteristic::StatusLowBattery(0, true);

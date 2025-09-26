@@ -8,6 +8,17 @@
 
 const char* LockManager::TAG = "LockManager";
 
+/**
+ * @brief Construct a LockManager configured for managing lock state and events.
+ *
+ * Initializes internal state from the provided miscConfig, registers event
+ * publishers and subscribers for lock state/action updates and NFC events,
+ * and creates the momentary-state timer used for temporary unlocks.
+ *
+ * @param miscConfig Configuration values that control NFC behavior, momentary
+ *                   timeout and related lock handling flags (e.g. lockAlwaysUnlock,
+ *                   lockAlwaysLock, GPIO/momentary source settings).
+ */
 LockManager::LockManager(const espConfig::misc_config_t& miscConfig)
     : m_miscConfig(miscConfig),
       m_currentState(lockStates::LOCKED),
@@ -81,6 +92,12 @@ LockManager::LockManager(const espConfig::misc_config_t& miscConfig)
   esp_timer_create(&momentaryStateTimer_arg, &momentaryStateTimer);
 }
 
+/**
+ * @brief Publish the manager's current and target lock state with source INTERNAL to initialize external listeners.
+ *
+ * Constructs an EventLockState reflecting the LockManager's current and target states (source set to INTERNAL)
+ * and publishes it on the "lock/action" event channel so external components receive the initial lock state.
+ */
 void LockManager::begin() {
   ESP_LOGI(TAG, "Initializing to Default/NVS state");
   EventLockState s{
@@ -94,21 +111,45 @@ void LockManager::begin() {
   // espp::EventManager::get().publish("lock/stateChanged", d);
 }
 
+/**
+ * @brief Timer callback that sets the lock's target state to LOCKED with source INTERNAL.
+ *
+ * @param instance Pointer to the LockManager instance provided to the timer callback.
+ */
 void LockManager::handleTimer(void* instance){
   static_cast<LockManager*>(instance)->setTargetState(LOCKED, INTERNAL);
 }
 
-// --- State Getters ---
+/**
+ * @brief Gets the current lock state.
+ *
+ * @return int Current lock state as an integer code (e.g., LOCKED or UNLOCKED).
+ */
 
 int LockManager::getCurrentState() const {
     return m_currentState;
 }
 
+/**
+ * @brief Retrieves the manager's configured target lock state.
+ *
+ * @return int The target lock state (e.g., LOCKED or UNLOCKED).
+ */
 int LockManager::getTargetState() const {
     return m_targetState;
 }
 
-// --- Command Methods ---
+/**
+ * @brief Request a change of the lock's target state and notify observers.
+ *
+ * Updates the stored target state, optionally updates the current state in dumb-switch mode,
+ * publishes a `lock/action` event when an external action should be performed, always publishes
+ * a `lock/stateChanged` event with the resulting current and target states, and starts the
+ * momentary unlock timer when an unlock was requested by a configured momentary source.
+ *
+ * @param state Desired target lock state (use values from lockStates).
+ * @param source Origin of the request which may affect publishing behavior and momentary handling.
+ */
 
 void LockManager::setTargetState(uint8_t state, Source source) {
     if (state == m_targetState && m_currentState == m_targetState) {
@@ -153,6 +194,16 @@ void LockManager::setTargetState(uint8_t state, Source source) {
     }
 }
 
+/**
+ * @brief Apply an external override to the lock's current and/or target state and notify observers.
+ *
+ * If a provided state equals 255, that state is left unchanged. Stops any active momentary-state timer,
+ * updates the internal current and target states, and publishes the resulting state to "lock/action"
+ * and "lock/stateChanged".
+ *
+ * @param c_state External current state to apply, or 255 to leave the current state unchanged.
+ * @param t_state External target state to apply, or 255 to leave the target state unchanged.
+ */
 void LockManager::overrideState(uint8_t c_state, uint8_t t_state) {
     if (c_state == m_currentState && t_state == m_targetState) return;
 

@@ -16,6 +16,17 @@
 const char* HomeKitLock::TAG = "HomeKitBridge";
 static HomeKitLock* s_instance = nullptr;
 
+/**
+ * @brief Initialize the HomeKitLock singleton, register internal event publishers/subscribers, and store manager callbacks.
+ *
+ * Enforces a single instance (calls esp_restart() if another instance exists), registers the "homekit/internal" publisher,
+ * and subscribes to "lock/stateChanged" and "homekit/event" to keep lock state, pairing code, and battery status synchronized.
+ *
+ * @param conn_cb Callback invoked when connection status changes; receives an integer status code.
+ * @param lockManager Reference to the LockManager used to control and query lock state.
+ * @param configManager Reference to the ConfigManager used for configuration access.
+ * @param readerDataManager Reference to the ReaderDataManager used to manage reader/issuer data.
+ */
 HomeKitLock::HomeKitLock(std::function<void(int)> &conn_cb, LockManager& lockManager, ConfigManager& configManager, ReaderDataManager& readerDataManager)
     : m_lockManager(lockManager),
       m_configManager(configManager),
@@ -61,6 +72,11 @@ HomeKitLock::HomeKitLock(std::function<void(int)> &conn_cb, LockManager& lockMan
         }, 3072); 
 }
 
+/**
+ * @brief Initialize HomeSpan, expose lock-related accessories/services, and register runtime callbacks.
+ *
+ * Configures HomeSpan using settings from ConfigManager (pins, OTA password, port, host name suffix), initializes reader data handling, creates the lock accessory and its services/characteristics (including lock mechanism, management, NFC access, protocol/version, and optional physical battery service), installs developer debug commands, and registers controller and connection callbacks.
+ */
 void HomeKitLock::begin() {
     const auto& miscConfig = m_configManager.getConfig<espConfig::misc_config_t>();
     const auto& app_version = esp_app_get_description()->version;
@@ -101,6 +117,22 @@ void HomeKitLock::begin() {
     ESP_LOGI(TAG, "HomeSpan setup complete.");
 }
 
+/**
+ * @brief Register developer/user debug commands for HomeKit lock operations.
+ *
+ * Installs a set of SpanUserCommand handlers that allow interactive/debug control of
+ * runtime behaviors and data related to HomeKey, logging, authentication flow,
+ * MQTT configuration, battery state, and registered issuers.
+ *
+ * Available commands:
+ * - 'D' : Delete all HomeKey reader data.
+ * - 'L' : Set runtime log level for multiple subsystems (E/W/I/D/V/N).
+ * - 'F' : Select HomeKey authentication flow (FAST, STANDARD, ATTESTATION) and publish a debug auth-flow event.
+ * - 'M' : Erase stored MQTT configuration.
+ * - 'N' : Toggle battery-low status (0 = normal, 1 = low).
+ * - 'B' : Set battery level percentage.
+ * - 'P' : Print registered HomeKey issuers (issuer IDs and public keys).
+ */
 void HomeKitLock::setupDebugCommands() {
     new SpanUserCommand('D', "Delete Home Key Data", [](const char* c) {
         s_instance->m_readerDataManager.deleteAllReaderData();
@@ -212,6 +244,15 @@ void HomeKitLock::setupDebugCommands() {
 }
 
 
+/**
+ * @brief Update the accessory's current and target lock state characteristics.
+ *
+ * Applies the provided current and target lock state values to the corresponding HomeKit characteristics
+ * when those values differ from the characteristics' existing values.
+ *
+ * @param currentState The current lock state to set (use HAP lock state values appropriate for the platform).
+ * @param targetState The desired/target lock state to set (use HAP lock target state values appropriate for the platform).
+ */
 void HomeKitLock::updateLockState(int currentState, int targetState) {
     if (m_lockCurrentState->getNewVal() != currentState) {
         m_lockCurrentState->setVal(currentState);
@@ -221,6 +262,16 @@ void HomeKitLock::updateLockState(int currentState, int targetState) {
     }
 }
 
+/**
+ * @brief Update HomeKit battery level and low-battery status characteristics.
+ *
+ * Updates the accessory's battery level characteristic and the low-battery status
+ * characteristic only when the corresponding characteristic exists and its value
+ * differs from the provided one.
+ *
+ * @param batteryLevel Battery charge percentage (0–100) to set on the accessory.
+ * @param isLow True if the battery should be marked as low, false otherwise.
+ */
 void HomeKitLock::updateBatteryStatus(uint8_t batteryLevel, bool isLow) {
     if (m_batteryLevel && m_batteryLevel->getVal() != batteryLevel) {
         m_batteryLevel->setVal(batteryLevel);
@@ -230,14 +281,37 @@ void HomeKitLock::updateBatteryStatus(uint8_t batteryLevel, bool isLow) {
     }
 }
 
+/**
+ * @brief Relay HomeSpan controller-list change notifications to the singleton instance.
+ *
+ * Invoked as a static callback; if a HomeKitLock singleton exists, forwards the event by calling
+ * the instance's controllerCallback() method.
+ */
 void HomeKitLock::staticControllerCallback() {
     if (s_instance) s_instance->controllerCallback();
 }
 
+/**
+ * @brief Invoke the configured connection callback with the provided status if the singleton exists.
+ *
+ * Calls the instance's connection callback passing `status` when the global singleton `s_instance` is set.
+ *
+ * @param status Connection status code forwarded to the callback.
+ */
 void HomeKitLock::connectionEstablished(int status) {
     if (s_instance) s_instance->conn_cb(status);
 }
 
+/**
+ * @brief Handle changes to the HomeKit controller list and synchronize stored HomeKey issuers.
+ *
+ * When called, this updates the ReaderDataManager to match the current set of paired controllers:
+ * - If there are zero admin controllers, deletes all stored reader data.
+ * - Otherwise, ensures each controller's LTPK has a corresponding issuer entry and, if any new issuers
+ *   were added, attempts to persist the updated reader data to NVS.
+ *
+ * Side effects: may delete reader data, add issuer entries, and write data to NVS; logs success or failure.
+ */
 void HomeKitLock::controllerCallback() {
     ESP_LOGI(TAG, "HomeKit controller list changed.");
     if (HAPClient::nAdminControllers() == 0) {
