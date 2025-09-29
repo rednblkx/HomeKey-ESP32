@@ -2,6 +2,8 @@
 #include "mqtt_client.h"
 #include <string>
 #include <vector>
+#include "esp_tls.h"
+#include "esp_timer.h"
 
 class LockManager;
 class ConfigManager;
@@ -22,7 +24,12 @@ public:
      * @param lockManager Reference to the core lock logic manager.
      * @param configManager Reference to the application configuration manager.
      */
-    MqttManager(const ConfigManager& configManager);
+     MqttManager(const ConfigManager& configManager);
+
+     /**
+      * @brief Destroys the MqttManager and cleans up resources.
+      */
+     ~MqttManager();
 
     /**
      * @brief Initializes and starts the MQTT client.
@@ -55,6 +62,19 @@ public:
      */
     void publishUidTap(const std::vector<uint8_t>& uid, const std::vector<uint8_t> &atqa, const std::vector<uint8_t> &sak);
 
+    // --- Reconnection and Connection Status ---
+    /**
+     * @brief Checks if the MQTT client is currently connected.
+     * @return True if connected, false otherwise.
+     */
+    bool isConnected() const;
+    
+    /**
+     * @brief Reconnects the MQTT client with new certificates.
+     * @return True if reconnection was triggered successfully, false otherwise.
+     */
+    bool reconnectWithNewCertificates();
+
 private:
     // --- Event Handling ---
     static void mqttEventHandler(void* handler_args, esp_event_base_t base, int32_t event_id, void* event_data);
@@ -66,11 +86,45 @@ private:
     void publish(const std::string& topic, const std::string& payload, int qos = 0, bool retain = false);
     void publishHassDiscovery();
 
+    // --- SSL/TLS Configuration ---
+    bool configureSSL(esp_mqtt_client_config_t& mqtt_cfg);
+    bool loadCertificates();
+    void logSSLError(const char* operation, esp_err_t error);
+    
+    // Internal reconnection methods
+    void startReconnectionTimer();
+    void stopReconnectionTimer();
+    void handleReconnection();
+
+    // Health check methods
+    void startHealthCheckTimer();
+    void stopHealthCheckTimer();
+    void performHealthCheck();
+
     // --- Member Variables ---
     std::string deviceID;
     const espConfig::mqttConfig_t& m_mqttConfig;
     esp_mqtt_client_handle_t m_client;
     const std::string &device_name;
+    
+    // SSL/TLS related members
+    esp_tls_cfg_t m_tls_cfg;
+    bool m_sslConfigured;
+    
+    // Reconnection state
+    bool m_isConnected;
+    bool m_isReconnecting;
+    esp_timer_handle_t m_reconnectionTimer;
+    uint32_t m_reconnectionAttempts;
+    uint32_t m_maxReconnectionAttempts;
+    uint32_t m_reconnectionDelayMs;
+    static constexpr uint32_t MAX_RECONNECTION_DELAY_MS = 30000; // 30 seconds
+    static constexpr uint32_t INITIAL_RECONNECTION_DELAY_MS = 1000; // 1 second
+
+    // Health check state
+    esp_timer_handle_t m_healthCheckTimer;
+    uint32_t m_lastHealthCheckTime;
+    static constexpr uint32_t HEALTH_CHECK_INTERVAL_MS = 300000; // 5 minutes
     
     static const char* TAG;
 };

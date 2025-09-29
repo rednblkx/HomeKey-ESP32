@@ -9,6 +9,13 @@
 #define MQTT_CUSTOM_STATE_ENABLED 0 // Flag to enable the use of custom states and relevant MQTT Topics
 #define MQTT_DISCOVERY true //Enable or disable discovery for home assistant tags functionality, set to true to enable.
 
+//MQTT SSL/TLS Settings
+#define MQTT_USE_SSL false // Enable/disable SSL/TLS for MQTT connection
+#define MQTT_CA_CERT "" // CA certificate for server validation (PEM format)
+#define MQTT_CLIENT_CERT "" // Client certificate for mutual authentication (PEM format)
+#define MQTT_CLIENT_KEY "" // Client private key for mutual authentication (PEM format)
+#define MQTT_ALLOW_INSECURE false // Allow connections without proper certificate validation (INSECURE - use only for testing)
+
 // MQTT Topics
 #define MQTT_LWT_TOPIC "status"
 #define MQTT_CUSTOM_STATE_TOPIC "homekit/custom_state" // MQTT Topic for publishing custom lock state

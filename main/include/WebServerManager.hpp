@@ -14,6 +14,7 @@
 class ConfigManager;
 class ReaderDataManager;
 class SystemManager;
+class MqttManager;
 namespace loggable {
     class WebSocketLogSinker;
 }
@@ -34,6 +35,12 @@ public:
      * @param readerDataManager Reference to the HomeKey reader data manager.
      */
     WebServerManager(ConfigManager& configManager, ReaderDataManager& readerDataManager);
+    
+    /**
+     * @brief Sets the MQTT manager instance for certificate reconnection handling.
+     * @param mqttManager Pointer to the MQTT manager instance.
+     */
+    void setMqttManager(MqttManager* mqttManager);
 
     /**
      * @brief Destructor - cleans up OTA resources.
@@ -75,6 +82,11 @@ private:
     // OTA endpoint handlers
     static esp_err_t handleOTAUpload(httpd_req_t *req);
     static esp_err_t handleOTAReboot(httpd_req_t *req);
+    
+    // Certificate endpoint handlers
+    static esp_err_t handleCertificateUpload(httpd_req_t *req);
+    static esp_err_t handleCertificateStatus(httpd_req_t *req);
+    static esp_err_t handleCertificateDelete(httpd_req_t *req);
 
     // --- Helper Methods ---
     static bool validateRequest(httpd_req_t *req, cJSON *currentData, const char* body);
@@ -111,6 +123,7 @@ private:
     ConfigManager& m_configManager;
     ReaderDataManager& m_readerDataManager;
     esp_timer_handle_t m_statusTimer;
+    MqttManager* m_mqttManager; // Pointer to MQTT manager for certificate reconnection
     
     // WebSocket client management
     struct WsClient {

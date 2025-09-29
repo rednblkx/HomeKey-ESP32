@@ -1,29 +1,33 @@
-#include <cstring>
-#include <errno.h>
-#include <event_manager.hpp>
 #include "WebServerManager.hpp"
 #include "ConfigManager.hpp"
 #include "HomeSpan.h"
+#include "MqttManager.hpp"
 #include "ReaderDataManager.hpp"
-#include "esp_log.h"
+#include "cJSON.h"
 #include "config.hpp"
+#include "esp_http_server.h"
+#include "esp_log.h"
+#include "esp_ota_ops.h"
+#include "esp_partition.h"
+#include "esp_task_wdt.h"
 #include "esp_timer.h"
 #include "eth_structs.hpp"
 #include "eventStructs.hpp"
 #include "fmt/base.h"
 #include "fmt/ranges.h"
-#include <LittleFS.h>
-#include <esp_app_desc.h>
-#include <string>
-#include "cJSON.h"
-#include "esp_http_server.h"
-#include "alpaca/alpaca.h"
-#include "esp_ota_ops.h"
-#include "esp_partition.h"
-#include "freertos/task.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
-#include "esp_task_wdt.h"
+#include "freertos/task.h"
+#include <LittleFS.h>
+#include <cstring>
+#include <dirent.h>
+#include <errno.h>
+#include <esp_app_desc.h>
+#include <event_manager.hpp>
+#include <mbedtls/error.h>
+#include <mbedtls/x509_crt.h>
+#include <string>
+#include <sys/stat.h>
 
 const char *WebServerManager::TAG = "WebServerManager";
 
@@ -83,7 +87,7 @@ static inline std::string cjson_to_string_and_free(cJSON *obj) {
 WebServerManager::WebServerManager(ConfigManager &configManager,
                                    ReaderDataManager &readerDataManager)
     : m_server(nullptr), m_configManager(configManager),
-      m_readerDataManager(readerDataManager) {
+      m_readerDataManager(readerDataManager), m_mqttManager(nullptr) {
   espp::EventManager::get().add_publisher("homekit/event", "WebServerManager");
   espp::EventManager::get().add_publisher("hardware/gpioPinChanged",
                                           "WebServerManager");
@@ -143,7 +147,32 @@ void WebServerManager::begin() {
     ESP_LOGE(TAG, "Failed to mount LittleFS. Web server cannot start.");
     return;
   }
+
   ESP_LOGI("WebServerManager", "LittleFS mounted successfully");
+
+  // List all files present on LittleFS after initialization
+  ESP_LOGI(TAG, "Listing all files on LittleFS:");
+  DIR *dir = opendir("/littlefs");
+  if (dir) {
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+      if (entry->d_type == DT_REG) { // regular file
+        struct stat st;
+        std::string path = "/littlefs/" + std::string(entry->d_name);
+        if (stat(path.c_str(), &st) == 0) {
+          ESP_LOGI(TAG, "File: %s, size: %ld bytes", entry->d_name, st.st_size);
+        }
+      } else if (entry->d_type == DT_DIR) { // directory
+        if (strcmp(entry->d_name, ".") != 0 &&
+            strcmp(entry->d_name, "..") != 0) {
+          ESP_LOGI(TAG, "Directory: %s", entry->d_name);
+        }
+      }
+    }
+    closedir(dir);
+  } else {
+    ESP_LOGE(TAG, "Failed to open directory for listing");
+  }
 
   // Step 2: Create HTTP server with minimal configuration
   ESP_LOGI("WebServerManager", "Starting HTTP server...");
@@ -255,26 +284,13 @@ void WebServerManager::setupRoutes() {
                             .handle_ws_control_frames = false};
   httpd_register_uri_handler(m_server, &static_uri);
 
-  httpd_uri_t assets_uri = {.uri = "/assets/*",
+  httpd_uri_t assets_uri = {.uri = "/_app/*",
                             .method = HTTP_GET,
                             .handler = handleStaticFiles,
-                            .user_ctx = (void *)"/assets",
+                            .user_ctx = (void *)"/_app",
                             .is_websocket = false,
                             .handle_ws_control_frames = false};
   httpd_register_uri_handler(m_server, &assets_uri);
-
-  httpd_uri_t fragment_uri = {.uri = "/fragment/*",
-                              .method = HTTP_GET,
-                              .handler = handleStaticFiles,
-                              .user_ctx = (void *)"/routes"};
-  httpd_register_uri_handler(m_server, &fragment_uri);
-
-  // Main web routes
-  httpd_uri_t root_uri = {.uri = "/",
-                          .method = HTTP_GET,
-                          .handler = handleRootOrHash,
-                          .user_ctx = this};
-  httpd_register_uri_handler(m_server, &root_uri);
 
   // API endpoints
   httpd_uri_t config_get_uri = {.uri = "/config",
@@ -352,6 +368,34 @@ void WebServerManager::setupRoutes() {
       .user_ctx = this,
       .is_websocket = false};
   httpd_register_uri_handler(m_server, &ota_littlefs_uri);
+
+  // Certificate endpoints
+  httpd_uri_t cert_upload_uri = {.uri = "/certificates/upload",
+                                 .method = HTTP_POST,
+                                 .handler = handleCertificateUpload,
+                                 .user_ctx = this,
+                                 .is_websocket = false};
+  httpd_register_uri_handler(m_server, &cert_upload_uri);
+
+  httpd_uri_t cert_status_uri = {.uri = "/certificates/status",
+                                 .method = HTTP_GET,
+                                 .handler = handleCertificateStatus,
+                                 .user_ctx = this,
+                                 .is_websocket = false};
+  httpd_register_uri_handler(m_server, &cert_status_uri);
+
+  httpd_uri_t cert_delete_uri = {.uri = "/certificates/*",
+                                 .method = HTTP_DELETE,
+                                 .handler = handleCertificateDelete,
+                                 .user_ctx = this,
+                                 .is_websocket = false};
+  httpd_register_uri_handler(m_server, &cert_delete_uri);
+  // Main web routes
+  httpd_uri_t root_uri = {.uri = "/*",
+                          .method = HTTP_GET,
+                          .handler = handleRootOrHash,
+                          .user_ctx = this};
+  httpd_register_uri_handler(m_server, &root_uri);
 }
 
 /**
@@ -655,7 +699,7 @@ esp_err_t WebServerManager::handleWebSocket(httpd_req_t *req) {
  * @return esp_err_t `ESP_OK` if the file was streamed and the response completed, `ESP_FAIL` if the file could not be opened or a chunk send failed.
  */
 esp_err_t WebServerManager::handleRootOrHash(httpd_req_t *req) {
-  File file = LittleFS.open("/index.html", "r");
+  File file = LittleFS.open("/app.html", "r");
   if (!file) {
     httpd_resp_send_404(req);
     return ESP_FAIL;
@@ -991,7 +1035,8 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
       success = instance->m_configManager.saveConfig<espConfig::mqttConfig_t>();
       rebootNeeded = true; // Always reboot on MQTT config change
       rebootMsg = "MQTT config saved, reboot needed to apply! Rebooting...";
-    } else ESP_LOGE(TAG, "Could not deserialize from JSON!");
+    } else
+      ESP_LOGE(TAG, "Could not deserialize from JSON!");
   } else if (type == "misc" || type == "actions") {
     mergeJson(data, obj);
     char *data_str = cJSON_PrintUnformatted(data);
@@ -1116,20 +1161,21 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
 
     bool typeOk = false;
     if (cJSON_IsString(existingValue)) {
-      ESP_LOGD(TAG, "VALUE FOR %s IS String",keyStr.c_str());
+      ESP_LOGD(TAG, "VALUE FOR %s IS String", keyStr.c_str());
       typeOk = cJSON_IsString(incomingValue);
     } else if (cJSON_IsObject(existingValue)) {
-      ESP_LOGD(TAG, "VALUE FOR %s IS OBJECT",keyStr.c_str());
+      ESP_LOGD(TAG, "VALUE FOR %s IS OBJECT", keyStr.c_str());
       typeOk = cJSON_IsObject(incomingValue);
     } else if (cJSON_IsArray(existingValue)) {
-      ESP_LOGD(TAG, "VALUE FOR %s IS ARRAY",keyStr.c_str());
+      ESP_LOGD(TAG, "VALUE FOR %s IS ARRAY", keyStr.c_str());
       typeOk = cJSON_IsArray(incomingValue);
     } else if (cJSON_IsBool(existingValue)) {
-      ESP_LOGD(TAG, "VALUE FOR %s IS BOOL",keyStr.c_str());
+      ESP_LOGD(TAG, "VALUE FOR %s IS BOOL", keyStr.c_str());
       typeOk = cJSON_IsBool(incomingValue) ||
-               (cJSON_IsNumber(incomingValue) && (incomingValue->valueint == 0 || incomingValue->valueint == 1));
+               (cJSON_IsNumber(incomingValue) &&
+                (incomingValue->valueint == 0 || incomingValue->valueint == 1));
     } else if (cJSON_IsNumber(existingValue)) {
-      ESP_LOGD(TAG, "VALUE FOR %s IS UINT",keyStr.c_str());
+      ESP_LOGD(TAG, "VALUE FOR %s IS UINT", keyStr.c_str());
       typeOk = cJSON_IsNumber(incomingValue);
     } else {
       ESP_LOGD(TAG, "RX VALUE NOT MATCH ANY EXPECTED TYPE");
@@ -1173,7 +1219,8 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
       }
       if (homeSpan.controllerListBegin() != homeSpan.controllerListEnd() &&
           code.compare(cJSON_GetStringValue(existingValue)) != 0) {
-        ESP_LOGE(TAG, "Attempted to change Setup Code while devices are paired.");
+        ESP_LOGE(TAG,
+                 "Attempted to change Setup Code while devices are paired.");
         httpd_resp_set_status(req, "400 Bad Request");
         httpd_resp_send(req,
                         "The Setup Code can only be set if no devices are "
@@ -1222,7 +1269,8 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
       }
 
       if (!valueOk) {
-        ESP_LOGE(TAG, "\"%s\" could not validate! Expected a boolean (or 0/1).\n",
+        ESP_LOGE(TAG,
+                 "\"%s\" could not validate! Expected a boolean (or 0/1).\n",
                  keyStr.c_str());
         std::string msg = getJsonValueAsString(incomingValue) +
                           " is not a valid value for \"" + keyStr + "\".";
@@ -1496,14 +1544,18 @@ void WebServerManager::broadcastWs(const uint8_t *payload, size_t len,
     }
   }
 
-    // Lightweight logging: show size and preview (for text)
-    if (type == HTTPD_WS_TYPE_TEXT) {
-        size_t preview_len = std::min<size_t>(len, 128);
-        ESP_LOGD(TAG, "Broadcasting TEXT to %zu WebSocket clients (%zu bytes, preview): %.*s",
-                 fds.size(), len, static_cast<int>(preview_len), reinterpret_cast<const char*>(payload));
-    } else {
-        ESP_LOGD(TAG, "Broadcasting BINARY to %zu WebSocket clients (%zu bytes)", fds.size(), len);
-    }
+  // Lightweight logging: show size and preview (for text)
+  if (type == HTTPD_WS_TYPE_TEXT) {
+    size_t preview_len = std::min<size_t>(len, 128);
+    ESP_LOGD(
+        TAG,
+        "Broadcasting TEXT to %zu WebSocket clients (%zu bytes, preview): %.*s",
+        fds.size(), len, static_cast<int>(preview_len),
+        reinterpret_cast<const char *>(payload));
+  } else {
+    ESP_LOGD(TAG, "Broadcasting BINARY to %zu WebSocket clients (%zu bytes)",
+             fds.size(), len);
+  }
 
   if (fds.empty()) {
     return;
@@ -1821,7 +1873,9 @@ std::string WebServerManager::getDeviceMetrics() {
 std::string WebServerManager::getDeviceInfo() {
   cJSON *info = cJSON_CreateObject();
   cJSON_AddStringToObject(info, "type", "sysinfo");
-  cJSON_AddStringToObject(info, "deviceName", m_configManager.getConfig<espConfig::misc_config_t>().deviceName.c_str());
+  cJSON_AddStringToObject(
+      info, "deviceName",
+      m_configManager.getConfig<espConfig::misc_config_t>().deviceName.c_str());
   cJSON_AddStringToObject(info, "version", esp_app_get_description()->version);
   cJSON_AddBoolToObject(
       info, "eth_enabled",
@@ -2620,6 +2674,288 @@ std::string WebServerManager::getOTAStatus() {
 void WebServerManager::broadcastOTAStatus() {
   std::string otaStatus = getOTAStatus();
   broadcastToWebSocketClients(otaStatus.c_str());
+}
+
+/**
+/**
+ * @brief Handles certificate upload requests
+ * @param req HTTP request containing certificate content
+ * @return ESP_OK on success, ESP_FAIL on error
+ *
+ * Expects:
+ * - Query parameter: ?type=<ca|client|key>
+ * - Request body: Certificate content in PEM format
+ * - Max content length: 16KB
+ *
+ * Returns JSON response with status, message, type, and size
+ */
+esp_err_t WebServerManager::handleCertificateUpload(httpd_req_t *req) {
+  WebServerManager *instance = getInstance(req);
+  if (!instance) {
+    httpd_resp_send_500(req);
+    return ESP_FAIL;
+  }
+
+  ESP_LOGI(TAG, "Certificate bundle upload request, content length: %d",
+           req->content_len);
+
+  // Read request body
+  size_t content_len = req->content_len;
+  if (content_len == 0 || content_len > 32768) { // Max 32KB for bundle
+    httpd_resp_set_status(req, "400 Bad Request");
+    httpd_resp_send(req, "Invalid bundle content length",
+                    HTTPD_RESP_USE_STRLEN);
+    return ESP_FAIL;
+  }
+
+  std::string bundleContent;
+  bundleContent.reserve(content_len + 1);
+
+  char buffer[1024];
+  size_t remaining = content_len;
+  size_t total_received = 0;
+
+  while (remaining > 0) {
+    size_t chunk_size = std::min(remaining, sizeof(buffer) - 1);
+    int received = httpd_req_recv(req, buffer, chunk_size);
+
+    if (received <= 0) {
+      httpd_resp_set_status(req, "400 Bad Request");
+      httpd_resp_send(req, "Failed to receive bundle data",
+                      HTTPD_RESP_USE_STRLEN);
+      return ESP_FAIL;
+    }
+
+    buffer[received] = '\0';
+    bundleContent.append(buffer, received);
+    remaining -= received;
+    total_received += received;
+  }
+
+  // Save certificate bundle using ConfigManager
+  bool success = instance->m_configManager.saveCertificateBundle(bundleContent);
+
+  // Check if MQTT is currently connected and trigger reconnection with new
+  // certificates
+  bool reconnectionTriggered = false;
+  std::string reconnectionStatus = "not_needed";
+
+  if (success) {
+    ESP_LOGI(TAG, "Certificate bundle uploaded successfully, size: %zu bytes",
+             bundleContent.length());
+
+    // Trigger MQTT reconnection if MQTT manager is available and connected
+    if (instance->m_mqttManager != nullptr) {
+      if (instance->m_mqttManager->isConnected()) {
+        ESP_LOGI(
+            TAG,
+            "MQTT is connected, triggering reconnection with new certificates");
+        reconnectionTriggered =
+            instance->m_mqttManager->reconnectWithNewCertificates();
+        reconnectionStatus = reconnectionTriggered ? "triggered" : "failed";
+      } else {
+        ESP_LOGI(TAG, "MQTT is not connected, will use new certificates on "
+                      "next connection attempt");
+        reconnectionStatus = "pending_next_connection";
+      }
+    } else {
+      ESP_LOGW(
+          TAG,
+          "MQTT manager not available, certificate reconnection not triggered");
+    }
+  } else {
+    ESP_LOGE(TAG, "Failed to save certificate bundle");
+  }
+
+  if (success) {
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddStringToObject(response, "status", "success");
+    cJSON_AddStringToObject(response, "message",
+                            "Certificate bundle uploaded successfully");
+    cJSON_AddNumberToObject(response, "size", total_received);
+    cJSON_AddStringToObject(response, "reconnectionStatus",
+                            reconnectionStatus.c_str());
+    cJSON_AddBoolToObject(response, "reconnectionTriggered",
+                          reconnectionTriggered);
+
+    char *response_str = cJSON_PrintUnformatted(response);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, response_str, strlen(response_str));
+
+    free(response_str);
+    cJSON_Delete(response);
+    return ESP_OK;
+  } else {
+    httpd_resp_set_status(req, "500 Internal Server Error");
+    httpd_resp_send(req, "Failed to save certificate bundle",
+                    HTTPD_RESP_USE_STRLEN);
+    return ESP_FAIL;
+  }
+}
+
+// Certificate status handler
+esp_err_t WebServerManager::handleCertificateStatus(httpd_req_t *req) {
+  WebServerManager *instance = getInstance(req);
+  if (!instance) {
+    httpd_resp_send_500(req);
+    return ESP_FAIL;
+  }
+
+  ESP_LOGI(TAG, "Certificate status request received");
+
+  cJSON *response = cJSON_CreateObject();
+  cJSON *certificates = cJSON_CreateObject();
+
+  // Check each certificate type with enhanced validation
+  const char *certTypes[] = {"ca", "client", "privateKey"};
+  for (const char *certType : certTypes) {
+    cJSON *certInfo = cJSON_CreateObject();
+
+    // Load certificate content from ConfigManager
+    std::string certContent;
+    bool exists = false;
+    size_t contentSize = 0;
+
+    if (strcmp(certType, "privateKey") == 0) {
+      // Private key is stored in MQTT config, not as certificate file
+      certContent = instance->m_configManager.getConfig<espConfig::mqttConfig_t>().clientKey;
+      exists = !certContent.empty();
+      contentSize = certContent.length();
+    } else {
+      certContent = instance->m_configManager.loadCertificate(certType);
+      exists = !certContent.empty();
+      contentSize = certContent.length();
+    }
+
+    cJSON_AddBoolToObject(certInfo, "exists", exists);
+    cJSON_AddNumberToObject(certInfo, "size", contentSize);
+
+    if (exists) {
+      // Validate certificate content and get detailed information
+      bool isValid = instance->m_configManager.validateCertificateContent(
+          certContent, certType);
+      cJSON_AddBoolToObject(certInfo, "valid", isValid);
+
+      // Get issuer and expiration information (only for certificates, not private key)
+      if (strcmp(certType, "privateKey") != 0) {
+        std::string issuer =
+            instance->m_configManager.getCertificateIssuer(certContent);
+        std::string expiration =
+            instance->m_configManager.getCertificateExpiration(certContent);
+
+        if (!issuer.empty()) {
+          cJSON_AddStringToObject(certInfo, "issuer", issuer.c_str());
+        }
+
+        if (!expiration.empty()) {
+          cJSON_AddStringToObject(certInfo, "expiration", expiration.c_str());
+        }
+      }
+
+      // For client certificates, check if private key matches
+      if (strcmp(certType, "client") == 0) {
+        std::string privateKeyContent = instance->m_configManager.getConfig<espConfig::mqttConfig_t>().clientKey;
+        if (!privateKeyContent.empty()) {
+          bool keyMatches =
+              instance->m_configManager.validatePrivateKeyMatchesCertificate(
+                  privateKeyContent, certContent);
+          cJSON_AddBoolToObject(certInfo, "keyMatches", keyMatches);
+        }
+      }
+
+      // Add validation message
+      std::string validationMsg =
+          isValid ? "Certificate is valid" : "Certificate validation failed";
+      cJSON_AddStringToObject(certInfo, "validationMessage",
+                              validationMsg.c_str());
+    } else {
+      cJSON_AddBoolToObject(certInfo, "valid", false);
+      cJSON_AddStringToObject(certInfo, "validationMessage",
+                              strcmp(certType, "privateKey") == 0 ? "Private key not configured" : "Certificate not found");
+    }
+
+    cJSON_AddItemToObject(certificates, certType, certInfo);
+  }
+
+  cJSON_AddItemToObject(response, "certificates", certificates);
+  cJSON_AddStringToObject(response, "status", "success");
+
+  // Add timestamp
+  cJSON_AddNumberToObject(response, "timestamp", time(nullptr));
+
+  char *response_str = cJSON_PrintUnformatted(response);
+  httpd_resp_set_type(req, "application/json");
+  httpd_resp_send(req, response_str, strlen(response_str));
+
+  free(response_str);
+  cJSON_Delete(response);
+  return ESP_OK;
+}
+
+// Certificate delete handler
+esp_err_t WebServerManager::handleCertificateDelete(httpd_req_t *req) {
+  WebServerManager *instance = getInstance(req);
+  if (!instance) {
+    httpd_resp_send_500(req);
+    return ESP_FAIL;
+  }
+
+  ESP_LOGI(TAG, "Certificate delete request for URI: %s", req->uri);
+
+  // Extract certificate type from URI path
+  const char *uri = req->uri;
+  const char *type_start = strrchr(uri, '/');
+  if (!type_start || strlen(type_start) <= 1) {
+    httpd_resp_set_status(req, "400 Bad Request");
+    httpd_resp_send(req, "Missing certificate type in URL",
+                    HTTPD_RESP_USE_STRLEN);
+    return ESP_FAIL;
+  }
+
+  std::string certType = type_start + 1;
+
+  // Validate certificate type
+  if (certType != "ca" && certType != "client" && certType != "privateKey") {
+    ESP_LOGE(TAG, "Invalid certificate type for deletion: %s",
+             certType.c_str());
+    httpd_resp_set_status(req, "400 Bad Request");
+    httpd_resp_send(
+        req,
+        "Invalid certificate type. Must be 'ca', 'client', or 'privateKey'",
+        HTTPD_RESP_USE_STRLEN);
+    return ESP_FAIL;
+  }
+
+  // Delete certificate using ConfigManager
+  bool success = instance->m_configManager.deleteCertificate(certType);
+
+  if (success) {
+    ESP_LOGI(TAG, "Certificate deleted successfully for type: %s",
+             certType.c_str());
+  } else {
+    ESP_LOGE(TAG, "Failed to delete certificate for type: %s",
+             certType.c_str());
+  }
+
+  if (success) {
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddStringToObject(response, "status", "success");
+    cJSON_AddStringToObject(response, "message",
+                            "Certificate deleted successfully");
+    cJSON_AddStringToObject(response, "type", certType.c_str());
+
+    char *response_str = cJSON_PrintUnformatted(response);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, response_str, strlen(response_str));
+
+    free(response_str);
+    cJSON_Delete(response);
+    return ESP_OK;
+  } else {
+    httpd_resp_set_status(req, "500 Internal Server Error");
+    httpd_resp_send(req, "Failed to delete certificate", HTTPD_RESP_USE_STRLEN);
+    return ESP_FAIL;
+  }
 }
 
 /**

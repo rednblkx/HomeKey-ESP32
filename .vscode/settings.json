@@ -86,13 +86,11 @@
     "interface/ftdi/esp32_devkitj_v1.cfg",
     "target/esp32.cfg"
   ],
-  "clangd.path": "${userHome}/.espressif/tools/esp-clang/esp-19.1.2_20250312/esp-clang/bin/clangd",
+  "clangd.path": "/home/polaris/.espressif/tools/esp-clang/esp-19.1.2_20250312/esp-clang/bin/clangd",
   "clangd.arguments": [
-    "--query-driver=${userHome}/.espressif/tools/xtensa-esp-elf/**/xtensa-esp-elf/bin/xtensa-*-elf-*,${userHome}/.espressif/tools/riscv32-esp-elf/**/riscv32-esp-elf/bin/riscv32-esp-elf-*",
     "--background-index",
-    "--import-insertions",
-    "--all-scopes-completion",
-    "--clang-tidy"
+    "--query-driver=/home/polaris/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20241119/xtensa-esp-elf/bin/xtensa-esp32-elf-gcc",
+    "--compile-commands-dir=/home/polaris/Projects/HomeKey-ESP32/build"
   ],
   "idf.customExtraVars": {
     "IDF_TARGET": "esp32"

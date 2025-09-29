@@ -30,7 +30,8 @@
               Broker
             </div>
             <div class="collapse-content">
-              <div class="text-xs uppercase font-semibold opacity-60 mb-4">TCP - Without TLS</div>
+              <div class="text-xs uppercase font-semibold opacity-60 mb-4" v-if="!mqttConfig.useSSL">TCP - Without TLS</div>
+              <div class="text-xs uppercase font-semibold opacity-60 mb-4" v-else>TCP - With TLS/SSL</div>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="form-control">
                   <label class="label">
@@ -80,6 +81,225 @@
                     <input type="checkbox" v-model="mqttConfig.hassMqttDiscoveryEnabled" :true-value="1"
                       :false-value="0" class="toggle toggle-primary" />
                   </label>
+                </div>
+                <div class="form-control md:col-span-2 mb-4">
+                  <label class="label cursor-pointer">
+                    <span class="label-text">Enable SSL/TLS</span>
+                    <input type="checkbox" v-model="mqttConfig.useSSL" :true-value="1" :false-value="0" class="toggle toggle-primary" @change="onSSLToggleChange" />
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SSL/TLS Configuration Section -->
+          <div v-if="mqttConfig.useSSL" class="collapse collapse-arrow bg-base-100">
+            <input type="checkbox" name="mqtt-accordion" />
+            <div class="collapse-title font-medium flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 mr-2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+              </svg>
+              SSL/TLS Settings
+            </div>
+            <div class="collapse-content">
+              <div class="space-y-6">
+                <div class="form-control">
+                  <label class="label cursor-pointer">
+                    <span class="label-text">Allow Insecure Connections (skip certificate validation)</span>
+                    <input type="checkbox" v-model="mqttConfig.allowInsecure" :true-value="1" :false-value="0" class="toggle toggle-warning" />
+                  </label>
+                </div>
+
+                <!-- Certificate Status Display -->
+                <div class="bg-base-200 rounded-lg p-4">
+                  <h4 class="font-medium mb-3">Certificate Status</h4>
+                  
+                  <!-- Reconnection Status Alert -->
+                  <div v-if="reconnectionStatus.isReconnecting" class="alert alert-info mb-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0011.664 0l3.181-3.183m-3.181-4.991v4.99" />
+                    </svg>
+                    <span>{{ reconnectionStatus.message }}</span>
+                  </div>
+                  
+                  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <!-- CA Certificate -->
+                    <div class="flex flex-col p-3 bg-base-100 rounded-lg">
+                      <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center">
+                          <svg v-if="certificateStatus.ca" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-success mr-2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-error mr-2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span class="text-sm font-medium">CA Certificate</span>
+                        </div>
+                        <button v-if="certificateStatus.ca" @click="deleteCertificateHandler('ca')" class="btn btn-ghost btn-xs btn-error">Delete</button>
+                      </div>
+                      <div v-if="detailedCertificateStatus.ca" class="text-xs space-y-1">
+                        <div v-if="detailedCertificateStatus.ca.issuer" class="flex justify-between">
+                          <span class="opacity-60">Issuer:</span>
+                          <span class="truncate">{{ detailedCertificateStatus.ca.issuer }}</span>
+                        </div>
+                        <div v-if="detailedCertificateStatus.ca.expiration" class="flex justify-between">
+                          <span class="opacity-60">Expires:</span>
+                          <span>{{ new Date(detailedCertificateStatus.ca.expiration).toLocaleDateString() }}</span>
+                        </div>
+                        <div v-if="detailedCertificateStatus.ca.daysUntilExpiry !== undefined" class="flex justify-between">
+                          <span class="opacity-60">Days left:</span>
+                          <span :class="detailedCertificateStatus.ca.daysUntilExpiry < 30 ? 'text-warning' : 'text-success'">
+                            {{ detailedCertificateStatus.ca.daysUntilExpiry }}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <!-- Client Certificate -->
+                    <div class="flex flex-col p-3 bg-base-100 rounded-lg">
+                      <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center">
+                          <svg v-if="certificateStatus.client" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-success mr-2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-error mr-2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span class="text-sm font-medium">Client Certificate</span>
+                        </div>
+                        <button v-if="certificateStatus.client" @click="deleteCertificateHandler('client')" class="btn btn-ghost btn-xs btn-error">Delete</button>
+                      </div>
+                      <div v-if="detailedCertificateStatus.client" class="text-xs space-y-1">
+                        <div v-if="detailedCertificateStatus.client.issuer" class="flex justify-between">
+                          <span class="opacity-60">Issuer:</span>
+                          <span class="truncate">{{ detailedCertificateStatus.client.issuer }}</span>
+                        </div>
+                        <div v-if="detailedCertificateStatus.client.expiration" class="flex justify-between">
+                          <span class="opacity-60">Expires:</span>
+                          <span>{{ new Date(detailedCertificateStatus.client.expiration).toLocaleDateString() }}</span>
+                        </div>
+                        <div v-if="detailedCertificateStatus.client.daysUntilExpiry !== undefined" class="flex justify-between">
+                          <span class="opacity-60">Days left:</span>
+                          <span :class="detailedCertificateStatus.client.daysUntilExpiry < 30 ? 'text-warning' : 'text-success'">
+                            {{ detailedCertificateStatus.client.daysUntilExpiry }}
+                          </span>
+                        </div>
+                        <div v-if="detailedCertificateStatus.client.subject" class="flex justify-between">
+                          <span class="opacity-60">Subject:</span>
+                          <span class="truncate">{{ detailedCertificateStatus.client.subject }}</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <!-- Private Key -->
+                    <div class="flex flex-col p-3 bg-base-100 rounded-lg">
+                      <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center">
+                          <svg v-if="certificateStatus.privateKey" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-success mr-2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-error mr-2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span class="text-sm font-medium">Private Key</span>
+                        </div>
+                        <button v-if="certificateStatus.privateKey" @click="deleteCertificateHandler('privateKey')" class="btn btn-ghost btn-xs btn-error">Delete</button>
+                      </div>
+                      <div v-if="detailedCertificateStatus.privateKey" class="text-xs space-y-1">
+                        <div v-if="detailedCertificateStatus.privateKey.keyType" class="flex justify-between">
+                          <span class="opacity-60">Type:</span>
+                          <span>{{ detailedCertificateStatus.privateKey.keyType }}</span>
+                        </div>
+                        <div v-if="detailedCertificateStatus.privateKey.keySize" class="flex justify-between">
+                          <span class="opacity-60">Key Size:</span>
+                          <span>{{ detailedCertificateStatus.privateKey.keySize }} bits</span>
+                        </div>
+                        <div v-if="detailedCertificateStatus.privateKey.matchesCertificate !== undefined" class="flex justify-between">
+                          <span class="opacity-60">Matches Cert:</span>
+                          <span :class="detailedCertificateStatus.privateKey.matchesCertificate ? 'text-success' : 'text-error'">
+                            {{ detailedCertificateStatus.privateKey.matchesCertificate ? 'Yes' : 'No' }}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <!-- Certificate Validation Status -->
+                  <div v-if="detailedCertificateStatus.ca || detailedCertificateStatus.client || detailedCertificateStatus.privateKey" class="mt-4 p-3 bg-base-100 rounded-lg">
+                    <h5 class="font-medium mb-2">Validation Status</h5>
+                    <div class="space-y-1 text-xs">
+                      <div v-if="detailedCertificateStatus.ca" class="flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 mr-2" :class="detailedCertificateStatus.ca.valid ? 'text-success' : 'text-error'">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>CA Certificate: {{ detailedCertificateStatus.ca.valid ? 'Valid' : 'Invalid' }}</span>
+                      </div>
+                      <div v-if="detailedCertificateStatus.client" class="flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 mr-2" :class="detailedCertificateStatus.client.valid ? 'text-success' : 'text-error'">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Client Certificate: {{ detailedCertificateStatus.client.valid ? 'Valid' : 'Invalid' }}</span>
+                      </div>
+                      <div v-if="detailedCertificateStatus.privateKey" class="flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 mr-2" :class="detailedCertificateStatus.privateKey.valid ? 'text-success' : 'text-error'">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Private Key: {{ detailedCertificateStatus.privateKey.valid ? 'Valid' : 'Invalid' }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Certificate Upload Sections -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div class="form-control">
+                    <label class="label">
+                      <span class="label-text">CA Certificate</span>
+                    </label>
+                    <input
+                      type="file"
+                      @change="handleCertificateUpload('ca', $event)"
+                      accept=".pem,.crt,.cer,.der"
+                      class="file-input file-input-bordered w-full"
+                      :disabled="uploadProgress.ca > 0 && uploadProgress.ca < 100"
+                    />
+                    <div v-if="uploadProgress.ca > 0 && uploadProgress.ca < 100" class="progress progress-info mt-2">
+                      <div class="progress-bar" :style="{ width: uploadProgress.ca + '%' }"></div>
+                    </div>
+                    <div v-if="uploadErrors.ca" class="text-error text-sm mt-1">{{ uploadErrors.ca }}</div>
+                  </div>
+                  <div class="form-control">
+                    <label class="label">
+                      <span class="label-text">Client Certificate</span>
+                    </label>
+                    <input
+                      type="file"
+                      @change="handleCertificateUpload('client', $event)"
+                      accept=".pem,.crt,.cer,.der"
+                      class="file-input file-input-bordered w-full"
+                      :disabled="uploadProgress.client > 0 && uploadProgress.client < 100"
+                    />
+                    <div v-if="uploadProgress.client > 0 && uploadProgress.client < 100" class="progress progress-info mt-2">
+                      <div class="progress-bar" :style="{ width: uploadProgress.client + '%' }"></div>
+                    </div>
+                    <div v-if="uploadErrors.client" class="text-error text-sm mt-1">{{ uploadErrors.client }}</div>
+                  </div>
+                  <div class="form-control">
+                    <label class="label">
+                      <span class="label-text">Private Key</span>
+                    </label>
+                    <input
+                      type="file"
+                      @change="handleCertificateUpload('privateKey', $event)"
+                      accept=".pem,.key,.der"
+                      class="file-input file-input-bordered w-full"
+                      :disabled="uploadProgress.privateKey > 0 && uploadProgress.privateKey < 100"
+                    />
+                    <div v-if="uploadProgress.privateKey > 0 && uploadProgress.privateKey < 100" class="progress progress-info mt-2">
+                      <div class="progress-bar" :style="{ width: uploadProgress.privateKey + '%' }"></div>
+                    </div>
+                    <div v-if="uploadErrors.privateKey" class="text-error text-sm mt-1">{{ uploadErrors.privateKey }}</div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -268,7 +488,7 @@
 
 <script>
 import { ref, onMounted } from 'vue';
-import { fetchConfig, saveConfig } from '../services/api';
+import { fetchConfig, saveConfig, uploadCertificate, getCertificateStatus, getDetailedCertificateStatus, deleteCertificate } from '../services/api';
 
 export default {
   name: 'AppMqtt',
@@ -292,6 +512,8 @@ export default {
       lockEnableCustomState: 0,
       lockCustomStateTopic: '',
       lockCustomStateCmd: '',
+      useSSL: 0,
+      allowInsecure: 0,
       customLockActions: {
         UNLOCK: 255,
         LOCK: 255,
@@ -307,6 +529,31 @@ export default {
     });
     const loading = ref(true);
     const error = ref(null);
+    const certificateStatus = ref({
+      ca: false,
+      client: false,
+      privateKey: false,
+    });
+    const detailedCertificateStatus = ref({
+      ca: null,
+      client: null,
+      privateKey: null,
+    });
+    const reconnectionStatus = ref({
+      isReconnecting: false,
+      message: '',
+      lastReconnection: null,
+    });
+    const uploadProgress = ref({
+      ca: 0,
+      client: 0,
+      privateKey: 0,
+    });
+    const uploadErrors = ref({
+      ca: '',
+      client: '',
+      privateKey: '',
+    });
     let originalMqttConfig = {}; // To store the original fetched config for reset
 
     const fetchMqttConfig = async () => {
@@ -315,14 +562,137 @@ export default {
         // Flatten the customLockActions and customLockStates for v-model compatibility
         mqttConfig.value = {
           ...data,
+          useSSL: data.useSSL || 0,
+          allowInsecure: data.allowInsecure || 0,
           customLockActions: data.customLockActions || { UNLOCK: 255, LOCK: 255 },
           customLockStates: data.customLockStates || { C_UNLOCKING: 255, C_LOCKING: 255, C_UNLOCKED: 255, C_LOCKED: 255, C_JAMMED: 255, C_UNKNOWN: 255 },
         };
         originalMqttConfig = JSON.parse(JSON.stringify(mqttConfig.value)); // Deep copy for reset
+        await fetchCertificateStatus();
       } catch (e) {
         error.value = e.message;
       } finally {
         loading.value = false;
+      }
+    };
+
+    const fetchCertificateStatus = async () => {
+      try {
+        const status = await getCertificateStatus();
+        certificateStatus.value = status;
+        
+        // Also fetch detailed status
+        try {
+          const detailedStatus = await getDetailedCertificateStatus();
+          detailedCertificateStatus.value = detailedStatus;
+        } catch (e) {
+          console.warn('Detailed certificate status not available:', e);
+          // Fallback to basic status
+          detailedCertificateStatus.value = {
+            ca: status.ca ? { valid: true, type: 'ca' } : null,
+            client: status.client ? { valid: true, type: 'client' } : null,
+            privateKey: status.privateKey ? { valid: true, type: 'privateKey' } : null,
+          };
+        }
+      } catch (e) {
+        console.error('Error fetching certificate status:', e);
+      }
+    };
+
+    const handleCertificateUpload = async (type, event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      // Reset error for this type
+      uploadErrors.value[type] = '';
+      
+      // Validate file type
+      const validExtensions = ['.pem', '.crt', '.cer', '.der', '.key'];
+      const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
+      
+      if (type === 'privateKey' && !['.pem', '.key', '.der'].includes(fileExtension)) {
+        uploadErrors.value[type] = 'Invalid file type for private key';
+        return;
+      } else if (type !== 'privateKey' && !validExtensions.slice(0, -1).includes(fileExtension)) {
+        uploadErrors.value[type] = 'Invalid certificate file type';
+        return;
+      }
+
+      // Simulate upload progress
+      uploadProgress.value[type] = 0;
+      
+      const reader = new FileReader();
+      reader.onloadstart = () => {
+        uploadProgress.value[type] = 10;
+      };
+      reader.onprogress = (e) => {
+        if (e.lengthComputable) {
+          uploadProgress.value[type] = Math.min(90, (e.loaded / e.total) * 100);
+        }
+      };
+      reader.onload = async (e) => {
+        try {
+          uploadProgress.value[type] = 95;
+          const content = e.target.result;
+          const result = await uploadCertificate(type, content);
+          uploadProgress.value[type] = 100;
+          
+          // Handle reconnection status from response
+          if (result.reconnectionStatus) {
+            reconnectionStatus.value = {
+              isReconnecting: result.reconnectionStatus.isReconnecting,
+              message: result.reconnectionStatus.message,
+              lastReconnection: new Date().toISOString(),
+            };
+            
+            // Show reconnection notification
+            if (result.reconnectionStatus.isReconnecting) {
+              alert(`Certificate uploaded successfully. ${result.reconnectionStatus.message}`);
+            } else if (result.reconnectionStatus.message) {
+              alert(`Certificate uploaded successfully. ${result.reconnectionStatus.message}`);
+            }
+          }
+          
+          // Refresh certificate status
+          await fetchCertificateStatus();
+          
+          // Clear file input
+          event.target.value = '';
+          
+          // Reset progress after a delay
+          setTimeout(() => {
+            uploadProgress.value[type] = 0;
+          }, 1000);
+        } catch (error) {
+          uploadErrors.value[type] = `Upload failed: ${error.message}`;
+          uploadProgress.value[type] = 0;
+        }
+      };
+      reader.onerror = () => {
+        uploadErrors.value[type] = 'Failed to read file';
+        uploadProgress.value[type] = 0;
+      };
+      
+      reader.readAsText(file);
+    };
+
+    const deleteCertificateHandler = async (type) => {
+      if (!confirm(`Are you sure you want to delete the ${type} certificate?`)) {
+        return;
+      }
+      
+      try {
+        await deleteCertificate(type);
+        await fetchCertificateStatus();
+      } catch (e) {
+        alert(`Error deleting certificate: ${e.message}`);
+      }
+    };
+
+    const onSSLToggleChange = () => {
+      // If SSL is disabled, reset allowInsecure to 0
+      if (mqttConfig.value.useSSL === 0) {
+        mqttConfig.value.allowInsecure = 0;
       }
     };
 
@@ -364,8 +734,16 @@ export default {
       mqttConfig,
       loading,
       error,
+      certificateStatus,
+      detailedCertificateStatus,
+      reconnectionStatus,
+      uploadProgress,
+      uploadErrors,
       saveMqttConfig,
       resetForm,
+      handleCertificateUpload,
+      deleteCertificateHandler,
+      onSSLToggleChange,
     };
   },
 };

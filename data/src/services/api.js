@@ -47,3 +47,44 @@ export async function fetchEthConfig() {
   }
   return response.json();
 }
+
+// Certificate management endpoints
+export async function uploadCertificate(type, content) {
+  const response = await fetch(`${API_BASE_URL}/certificates/upload?type=${type}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-pem-file',
+    },
+    body: content,
+  });
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function getCertificateStatus() {
+  const response = await fetch(`${API_BASE_URL}/certificates/status`);
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function getDetailedCertificateStatus() {
+  const response = await fetch(`${API_BASE_URL}/certificates/status/detailed`);
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function deleteCertificate(type) {
+  const response = await fetch(`${API_BASE_URL}/certificates/${type}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+  return response.json();
+}

@@ -1,9 +1,12 @@
 #pragma once
+#include "config.hpp"
 #include <nvs.h>
 #include <variant>
 #include <vector>
+#include <string>
+#include <map>
+#include <LittleFS.h>
 #include "msgpack/object.h"
-#include "config.hpp"
 
 class ConfigManager {
 public:
@@ -27,6 +30,24 @@ public:
     template <typename ConfigType>
     std::string serializeToJson();
 
+    // Certificate storage methods
+    bool saveCertificate(const std::string& certType, const std::string& certContent);
+    bool saveCertificateBundle(const std::string& bundleContent);
+    std::string loadCertificate(const std::string& certType);
+    bool deleteCertificate(const std::string& certType);
+    std::map<std::string, std::string> getCertificateStatus();
+    
+    // Enhanced certificate validation and information
+    std::map<std::string, std::string> getDetailedCertificateStatus();
+    bool validateCertificateContent(const std::string& certContent, const std::string& certType);
+    bool validatePrivateKeyMatchesCertificate(const std::string& privateKey, const std::string& certificate);
+    std::string getCertificateIssuer(const std::string& certContent);
+    std::string getCertificateExpiration(const std::string& certContent);
+
+  private:
+    // Helper functions for certificate validation
+    bool validateCertificateWithMbedTLS(const std::string& certContent, const std::string& certType);
+    bool validatePrivateKeyContent(const std::string& keyContent);
 
   private:
     using ConfigMapType = std::map<std::string,
@@ -42,8 +63,12 @@ public:
     std::vector<uint8_t> serialize();
 
     void loadConfigFromNvs(const char* key);
-
     bool saveConfigToNvs(const char* key);
+
+    // Certificate storage helpers
+    bool ensureCertsDirectory();
+    bool validateCertificateFormat(const std::string& certContent);
+    std::string getCertificateFilePath(const std::string& certType);
 
     std::map<std::string, ConfigMapType> m_configMap;
     espConfig::mqttConfig_t m_mqttConfig;
