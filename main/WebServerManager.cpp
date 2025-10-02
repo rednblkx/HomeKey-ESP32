@@ -2677,7 +2677,6 @@ void WebServerManager::broadcastOTAStatus() {
 }
 
 /**
-/**
  * @brief Handles certificate upload requests
  * @param req HTTP request containing certificate content
  * @return ESP_OK on success, ESP_FAIL on error
