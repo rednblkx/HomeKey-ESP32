@@ -61,7 +61,7 @@
 	<title>HomeKey-ESP32</title>
 </svelte:head>
 
-<div class="flex flex-col h-screen">
+<div class="flex flex-col h-dvh">
 	<!-- Mobile Navbar -->
 	<div class="navbar bg-base-100 lg:hidden sticky top-[0] z-[9999]">
 		<div class="navbar-start">
