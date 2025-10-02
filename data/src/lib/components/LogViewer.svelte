@@ -33,18 +33,6 @@
 	const SCROLL_EDGE_MARGIN = 16;
 	const SMOOTH_SCROLL_DURATION = 300;
 
-	function getLogLevelIcon(level: LogLevel): string {
-		const icons: Record<LogLevel, string> = {
-			ERROR: '❌',
-			WARN: '⚠️',
-			INFO: 'ℹ️',
-			DEBUG: '🐛',
-			VERBOSE: '📝',
-			NONE: '🚫',
-		};
-		return icons[level] || 'ℹ️';
-	}
-
 	function getLogLevelColor(level: LogLevel): string {
 		const colors: Record<LogLevel, string> = {
 			ERROR: 'text-error',
@@ -430,10 +418,14 @@
 							onclick={() => item.expanded = !item.expanded}
 							>
 							<div class="flex items-center">
+								<div class="flex items-center justify-center mr-1">
+									<span class="transition-transform duration-200" class:rotate-90={item.expanded}>
+										<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="size-5">
+											<path fill-rule="evenodd" d="M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+										</svg>
+									</span>
+								</div>
 								<div class="flex items-center">
-									<div class="flex items-center justify-center mr-1">
-										<span class="transition-transform duration-200" class:rotate-90={item.expanded}>{getLogLevelIcon(item.level)}</span>
-									</div>
 									<span class="font-bold mr-2 {getLogLevelColor(item.level)}">{item.level}</span>
 								</div>
 								<div class="flex max-sm:flex-col">
