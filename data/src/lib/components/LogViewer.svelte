@@ -33,14 +33,6 @@
 	const SCROLL_EDGE_MARGIN = 16;
 	const SMOOTH_SCROLL_DURATION = 300;
 
-	/**
-	 * Toggles the expanded state of a log item.
-	 * @param {{ expanded: boolean }} item
-	 */
-	function toggleExpanded(item: { expanded: boolean; }) {
-		item.expanded = !item.expanded;
-	}
-
 	function getLogLevelIcon(level: LogLevel): string {
 		const icons: Record<LogLevel, string> = {
 			ERROR: '❌',
@@ -312,7 +304,7 @@
 					if (messageData && (messageData.type === 'log' || messageData.level || messageData.msg)) {
 						const log : LogEntry = {
 							// Add component-specific fields
-							id: Date.now() + Math.round(Math.random() * 1000),
+							id: Date.now() + Math.floor(Math.random() * 1234),
 							localts: new Date().toISOString(),
 							expanded: false,
 							// Include any additional fields from the message
@@ -336,7 +328,7 @@
 							msg: `WebSocket message processing error: ${e instanceof Error ? e.message : String(e)}`,
 							tag: 'WS_ERROR',
 							ts: new Date().toISOString(),
-							id: Date.now() + Math.random(),
+							id: Date.now() + Math.floor(Math.random() * 1234),
 							localts: new Date().toISOString(),
 							expanded: false,
 						});
