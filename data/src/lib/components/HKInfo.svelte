@@ -23,7 +23,7 @@
 	 */
 	onMount(async (): Promise<void> => {
 		// Set system info loading state
-		setLoadingState('systemInfoLoading', true);
+		systemInfo.uptime == 0 && setLoadingState('systemInfoLoading', true);
 
 		// Lazy-load WebSocketTest component only in development mode
 		if (import.meta.env.DEV) {
