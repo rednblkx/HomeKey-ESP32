@@ -177,6 +177,9 @@ jobs:
       - name: Install dependencies
         run: bun install
         working-directory: data
+      - name: Run tests
+        run: bun run test:run
+        working-directory: data
       - name: Build
         run: bun run build
         working-directory: data
