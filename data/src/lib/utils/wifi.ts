@@ -21,13 +21,13 @@ export function calculateWifiSignal(rssi: number | undefined): WifiSignalStrengt
 	}
 
 	let strength: WifiSignalStrength;
-	if (rssi >= -70) {
+	if (rssi >= -50) {
 		strength = 'Excellent';
-	} else if (rssi >= -80) {
+	} else if (rssi >= -60) {
 		strength = 'Good';
-	} else if (rssi >= -90) {
+	} else if (rssi >= -70) {
 		strength = 'Fair';
-	} else if (rssi >= -100) {
+	} else if (rssi >= -90) {
 		strength = 'Poor';
 	} else {
 		strength = 'Unknown';
