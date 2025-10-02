@@ -5,6 +5,11 @@ idf_component_register(SRCS "main.cpp" "ConfigManager.cpp" "ReaderDataManager.cp
                     PRIV_REQUIRES HomeSpan PN532 HK-HomeKit-Lib esp_http_server mqtt libsodium
                     msgpack-c json format loggable)
 if(NOT DEFINED ENV{CI})
-  add_custom_target(webui WORKING_DIRECTORY ${COMPONENT_DIR}/../data COMMAND bun run build VERBATIM)
-  littlefs_create_partition_image(spiffs ../data/dist FLASH_IN_PROJECT DEPENDS webui)
+  add_custom_target(webui 
+    WORKING_DIRECTORY ${COMPONENT_DIR}/../data 
+    COMMAND bun run build 
+    COMMAND bash -c "find build -regex '.*\\.\\(html\\.gz\\|css\\|br\\|js\\|json\\)' -delete"
+    VERBATIM
+  )
+  littlefs_create_partition_image(spiffs ../data/build FLASH_IN_PROJECT DEPENDS webui)
 endif()
