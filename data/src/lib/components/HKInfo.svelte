@@ -4,6 +4,7 @@
 	import { systemInfo } from '$lib/stores/system.svelte.js';
 	import { loadingStates, setLoadingState } from '$lib/stores/loading.svelte.js';
 	import { calculateWifiSignal } from '$lib/utils/wifi.js';
+  import { version } from '$app/environment';
 
 	/**
 	 * Props for HKInfo component
@@ -159,6 +160,10 @@
 						<div class="stat">
 							<div class="stat-title">Version</div>
 							<div class="stat-value text-xl">{systemInfo?.version || 'N/A'}</div>
+						</div>
+						<div class="stat">
+							<div class="stat-title">UI Version</div>
+							<div class="stat-value text-xl">{version || 'N/A'}</div>
 						</div>
 						<div class="stat">
 							<div class="stat-title">Uptime</div>

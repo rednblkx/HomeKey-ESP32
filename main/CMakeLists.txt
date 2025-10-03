@@ -8,7 +8,7 @@ if(NOT DEFINED ENV{CI})
   add_custom_target(webui 
     WORKING_DIRECTORY ${COMPONENT_DIR}/../data 
     COMMAND bun run build 
-    COMMAND bash -c "find build -regex '.*\\.\\(html\\.gz\\|css\\|br\\|js\\|json\\)' -delete"
+    COMMAND bash -c "find build -regex '.*\\.\\(html\\.gz\\|css\\|br\\|js\\|json\\.gz\\)' -delete"
     VERBATIM
   )
   littlefs_create_partition_image(spiffs ../data/build FLASH_IN_PROJECT DEPENDS webui)
