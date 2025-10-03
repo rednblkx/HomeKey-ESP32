@@ -1,5 +1,4 @@
 #include "ConfigManager.hpp"
-#include "Esp.h"
 #include "cJSON.h"
 #include "config.hpp"
 #include <algorithm>
@@ -9,9 +8,13 @@
 #include <string>
 #include <vector>
 #include "esp_log.h"
+#include "mbedtls/x509.h"
 #include "msgpack.h"
 #include <LittleFS.h>
 #include "fmt/format.h"
+#include "nvs.h"
+#include <mbedtls/entropy.h>
+#include <mbedtls/ctr_drbg.h>
 #include <mbedtls/x509_crt.h>
 #include <mbedtls/pk.h>
 #include <mbedtls/error.h>
@@ -55,12 +58,16 @@ ConfigManager::ConfigManager() : m_isInitialized(false) {
         &m_mqttConfig.hassMqttDiscoveryEnabled},
       {"nfcTagNoPublish", &m_mqttConfig.nfcTagNoPublish},
       {"useSSL", &m_mqttConfig.useSSL},
-      {"caCert", &m_mqttConfig.caCert},
-      {"clientCert", &m_mqttConfig.clientCert},
-      {"clientKey", &m_mqttConfig.clientKey},
       {"allowInsecure", &m_mqttConfig.allowInsecure},
       {"customLockStates", &m_mqttConfig.customLockStates},
       {"customLockActions", &m_mqttConfig.customLockActions}
+      }
+    },
+{
+      "ssl", {
+        {"caCert", &m_mqttSslConfig.caCert},
+        {"clientCert", &m_mqttSslConfig.clientCert},
+        {"clientKey", &m_mqttSslConfig.clientKey},
       }
     },
     {"misc",{
@@ -146,10 +153,16 @@ bool ConfigManager::begin() {
     return false;
   }
 
+  nvs_stats_t nvs_stats;
+  nvs_get_stats(NULL, &nvs_stats);
+  ESP_LOGI(TAG,"Count: UsedEntries = (%lu), FreeEntries = (%lu), AvailableEntries = (%lu), AllEntries = (%lu)\n",
+       nvs_stats.used_entries, nvs_stats.free_entries, nvs_stats.available_entries, nvs_stats.total_entries);
+
   m_isInitialized = true;
 
   ESP_LOGI(TAG, "Loading configurations from NVS...");
   loadConfigFromNvs("MQTTDATA");
+  loadConfigFromNvs("MQTTSSLDATA");
   loadConfigFromNvs("MISCDATA");
 
   ESP_LOGI(TAG, "Initialization complete.");
@@ -176,7 +189,9 @@ const ConfigType& ConfigManager::getConfig() const {
 
   if constexpr (std::is_same_v<NonConstConfigType, espConfig::mqttConfig_t>) {
     return m_mqttConfig;
-  } else if constexpr (std::is_same_v<NonConstConfigType, espConfig::misc_config_t>) {
+  } else if constexpr (std::is_same_v<NonConstConfigType, espConfig::mqtt_ssl_t>) {
+    return m_mqttSslConfig;
+  }  else if constexpr (std::is_same_v<NonConstConfigType, espConfig::misc_config_t>) {
     return m_miscConfig;
   } else {
     static_assert(std::is_void_v<ConfigType> && false, "Unsupported ConfigType for getConfig");
@@ -184,6 +199,7 @@ const ConfigType& ConfigManager::getConfig() const {
 }
 template const espConfig::mqttConfig_t& ConfigManager::getConfig<espConfig::mqttConfig_t>() const;
 template const espConfig::mqttConfig_t& ConfigManager::getConfig<espConfig::mqttConfig_t const>() const;
+template const espConfig::mqtt_ssl_t& ConfigManager::getConfig<espConfig::mqtt_ssl_t const>() const;
 template const espConfig::misc_config_t& ConfigManager::getConfig<espConfig::misc_config_t>() const;
 template const espConfig::misc_config_t& ConfigManager::getConfig<espConfig::misc_config_t const>() const;
 
@@ -201,7 +217,7 @@ template <typename ConfigType>
 bool ConfigManager::deleteConfig() {
   if constexpr (std::is_same_v<ConfigType, espConfig::mqttConfig_t>){
     m_mqttConfig = {}; 
-    return !nvs_erase_key(m_nvsHandle, "MQTTDATA");
+    return !nvs_erase_key(m_nvsHandle, "MQTTDATA") && !nvs_erase_key(m_nvsHandle, "MQTTSSLDATA");
   } else if constexpr(std::is_same_v<ConfigType, espConfig::misc_config_t>){
     m_miscConfig = {};
     return !nvs_erase_key(m_nvsHandle, "MISCDATA");
@@ -225,6 +241,8 @@ bool ConfigManager::saveConfig() {
   std::string key;
   if constexpr (std::is_same_v<ConfigType, espConfig::mqttConfig_t>){
     key = "MQTTDATA";
+  } else if constexpr (std::is_same_v<ConfigType, espConfig::mqtt_ssl_t>){
+    key = "MQTTSSLDATA";
   } else if constexpr(std::is_same_v<ConfigType, espConfig::misc_config_t>){
     key = "MISCDATA";
   } else {
@@ -292,6 +310,8 @@ void ConfigManager::loadConfigFromNvs(const char *key) {
     msgpack_object obj = unpacked.data;
     if(!strcmp(key, "MQTTDATA")){
       deserialize(obj, "mqtt");
+    } else if(!strcmp(key, "MQTTSSLDATA")){
+      deserialize(obj, "ssl");
     } else if(!strcmp(key, "MISCDATA")){
       deserialize(obj, "misc");
     } else {ESP_LOGE(TAG, "Key '%s' not valid", key);return;}
@@ -319,6 +339,8 @@ bool ConfigManager::saveConfigToNvs(const char *key) {
   std::vector<uint8_t> buf;
   if (!strcmp(key, "MISCDATA")){
     buf = serialize<espConfig::misc_config_t>();
+  } else if (!strcmp(key, "MQTTSSLDATA")){
+    buf = serialize<espConfig::mqtt_ssl_t>();
   } else if (!strcmp(key, "MQTTDATA")){
     buf = serialize<espConfig::mqttConfig_t>();
   }
@@ -461,6 +483,8 @@ std::vector<uint8_t> ConfigManager::serialize() {
   ConfigMapType configMap;
   if constexpr (std::is_same_v<espConfig::misc_config_t, ConfigType>){
     configMap = m_configMap["misc"];
+  } else if constexpr (std::is_same_v<espConfig::mqtt_ssl_t, ConfigType>){
+    configMap = m_configMap["ssl"];
   } else if constexpr (std::is_same_v<espConfig::mqttConfig_t, ConfigType>){
     configMap = m_configMap["mqtt"];
   }
@@ -783,7 +807,7 @@ bool ConfigManager::saveCertificate(const std::string& certType, const std::stri
 
     // Validate certificate type
     if (certType != "ca" && certType != "client" && certType != "privateKey") {
-        ESP_LOGE(TAG, "Invalid certificate type: %s. Must be 'ca', 'client', or 'key'.", certType.c_str());
+        ESP_LOGE(TAG, "Invalid certificate type: %s. Must be 'ca', 'client', or 'privateKey'.", certType.c_str());
         return false;
     }
 
@@ -793,25 +817,16 @@ bool ConfigManager::saveCertificate(const std::string& certType, const std::stri
         return false;
     }
 
-
-    std::string filePath = getCertificateFilePath(certType);
-
-    // Write certificate to file
-    File file = LittleFS.open(filePath.c_str(), "w");
-    if (!file) {
-        ESP_LOGE(TAG, "Failed to open file for writing: %s", filePath.c_str());
-        return false;
+    if(certType == "ca"){
+      ESP_LOGI(TAG, "CA CERT: %s", certContent.c_str());
+      m_mqttSslConfig.caCert = certContent;
+    } else if(certType == "client"){
+      ESP_LOGI(TAG, "CLIENT CERT: %s", certContent.c_str());
+      m_mqttSslConfig.clientCert = certContent;
+    } else if(certType == "privateKey"){
+      ESP_LOGI(TAG, "PRIVATE KEY: %s", certContent.c_str());
+      m_mqttSslConfig.clientKey = certContent;
     }
-    size_t written = file.print(certContent.c_str());
-
-    file.close();
-
-    if (written != certContent.length()) {
-        ESP_LOGE(TAG, "Failed to write complete certificate. Written: %zu, Expected: %zu", written, certContent.length());
-        return false;
-    }
-
-    ESP_LOGI(TAG, "Wrote %zu bytes to file", written);
 
     ESP_LOGI(TAG, "Certificate saved successfully: %s", certType.c_str());
     return true;
@@ -915,6 +930,8 @@ bool ConfigManager::saveCertificateBundle(const std::string& bundleContent) {
         success = false;
     }
 
+    saveConfig<espConfig::mqtt_ssl_t>();
+
     if (success) {
         ESP_LOGI(TAG, "Certificate bundle saved successfully");
     } else {
@@ -936,34 +953,14 @@ std::string ConfigManager::loadCertificate(const std::string& certType) {
         return "";
     }
 
-    std::string filePath = getCertificateFilePath(certType);
+    std::string content;
 
-    // Check if file exists
-    if (!LittleFS.exists(filePath.c_str())) {
-        ESP_LOGW(TAG, "Certificate file not found: %s", filePath.c_str());
-        return "";
-    }
-
-    // Read certificate from file
-    File file = LittleFS.open(filePath.c_str(), "r");
-    if (!file) {
-        ESP_LOGE(TAG, "Failed to open file for reading: %s", filePath.c_str());
-        return "";
-    }
-
-    size_t fileSize = file.size();
-    if (fileSize == 0) {
-        file.close();
-        return "";
-    }
-
-    std::string content(fileSize, '\0');
-    size_t bytesRead = file.read((uint8_t*)content.data(), fileSize);
-    file.close();
-
-    if (bytesRead != fileSize) {
-        ESP_LOGE(TAG, "Failed to read complete certificate file: read %zu, expected %zu", bytesRead, fileSize);
-        return "";
+    if(certType == "ca"){
+      content = m_mqttSslConfig.caCert;
+    } else if(certType == "client"){
+      content = m_mqttSslConfig.clientCert;
+    } else if(certType == "privateKey"){
+      content = m_mqttSslConfig.clientKey;
     }
 
     ESP_LOGI(TAG, "Certificate loaded successfully: %s (size: %zu bytes)", certType.c_str(), content.length());
@@ -981,66 +978,18 @@ bool ConfigManager::deleteCertificate(const std::string& certType) {
         ESP_LOGE(TAG, "Invalid certificate type: %s. Must be 'ca', 'client', or 'key'.", certType.c_str());
         return false;
     }
-
-    std::string filePath = getCertificateFilePath(certType);
-    
-    // Check if file exists
-    if (!LittleFS.exists(filePath.c_str())) {
-        ESP_LOGW(TAG, "Certificate file not found for deletion: %s", filePath.c_str());
-        return true; // Consider it successful if file doesn't exist
+  
+    if(certType == "ca"){
+      m_mqttSslConfig.caCert.clear();
+    } else if(certType == "client"){
+      m_mqttSslConfig.clientCert.clear();
+    } else if(certType == "privateKey"){
+      m_mqttSslConfig.clientKey.clear();
     }
-
-    // Delete the file
-    if (!LittleFS.remove(filePath.c_str())) {
-        ESP_LOGE(TAG, "Failed to delete certificate file: %s", filePath.c_str());
-        return false;
-    }
+ 
+    saveConfig<espConfig::mqtt_ssl_t>();
 
     ESP_LOGI(TAG, "Certificate deleted successfully: %s", certType.c_str());
-    return true;
-}
-
-std::map<std::string, std::string> ConfigManager::getCertificateStatus() {
-    std::map<std::string, std::string> status;
-    
-    if (!m_isInitialized) {
-        ESP_LOGE(TAG, "Cannot get certificate status, ConfigManager not initialized.");
-        return status;
-    }
-
-    // Check each certificate type
-    std::vector<std::string> certTypes = {"ca", "client", "privateKey"};
-    for (const auto& certType : certTypes) {
-        std::string filePath = getCertificateFilePath(certType);
-        if (LittleFS.exists(filePath.c_str())) {
-            File file = LittleFS.open(filePath.c_str(), "r");
-            if (file) {
-                size_t size = file.size();
-                file.close();
-                status[certType] = fmt::format("Present ({} bytes)", size);
-            } else {
-                status[certType] = "Error reading file";
-            }
-        } else {
-            status[certType] = "Not present";
-        }
-    }
-
-    return status;
-}
-
-bool ConfigManager::ensureCertsDirectory() {
-    const char* certsDir = "/certs";
-    
-    // Check if directory exists
-    if (!LittleFS.exists(certsDir)) {
-        ESP_LOGI(TAG, "Creating certs directory");
-        if (!LittleFS.mkdir(certsDir)) {
-            ESP_LOGE(TAG, "Failed to create certs directory");
-            return false;
-        }
-    }
-    
     return true;
 }
 
@@ -1145,51 +1094,6 @@ bool ConfigManager::validateCertificateFormat(const std::string& certContent) {
 
     ESP_LOGD(TAG, "PEM format validation passed for type: %s", beginType.c_str());
     return true;
-}
-
-std::string ConfigManager::getCertificateFilePath(const std::string& certType) {
-    return fmt::format("/{}.pem", certType);
-}
-
-// Enhanced certificate validation and information methods
-
-std::map<std::string, std::string> ConfigManager::getDetailedCertificateStatus() {
-    std::map<std::string, std::string> status;
-    
-    if (!m_isInitialized) {
-        ESP_LOGE(TAG, "Cannot get detailed certificate status, ConfigManager not initialized.");
-        return status;
-    }
-    
-    // Check each certificate type
-    std::vector<std::string> certTypes = {"ca", "client", "privateKey"};
-    for (const auto& certType : certTypes) {
-        std::string filePath = getCertificateFilePath(certType);
-        if (LittleFS.exists(filePath.c_str())) {
-            File file = LittleFS.open(filePath.c_str(), "r");
-            if (file) {
-                std::string content;
-                while (file.available()) {
-                    content += (char)file.read();
-                }
-                file.close();
-                
-                // Get detailed information
-                std::string issuer = getCertificateIssuer(content);
-                std::string expiration = getCertificateExpiration(content);
-                std::string validation = validateCertificateContent(content, certType) ? "Valid" : "Invalid";
-                
-                status[certType] = fmt::format("Present ({} bytes) - {} - Issuer: {} - Expires: {}",
-                                             content.length(), validation, issuer, expiration);
-            } else {
-                status[certType] = "Error reading file";
-            }
-        } else {
-            status[certType] = "Not present";
-        }
-    }
-    
-    return status;
 }
 
 bool ConfigManager::validateCertificateContent(const std::string& certContent, const std::string& certType) {
@@ -1373,10 +1277,24 @@ bool ConfigManager::validatePrivateKeyMatchesCertificate(const std::string& priv
         return false;
     }
 
+    mbedtls_entropy_context entropy;
+    mbedtls_ctr_drbg_context ctr_drbg;
+  
+    mbedtls_entropy_init(&entropy);
+    mbedtls_ctr_drbg_init(&ctr_drbg);
+
+    int ret = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy,
+                                  (const unsigned char *)"polaris1", strlen("polaris1"));
+    if (ret != 0) {
+        // Handle error
+        fprintf(stderr, "mbedtls_ctr_drbg_seed failed: %d\n", ret);
+        return ret;
+    }
+
     // Parse the private key
     mbedtls_pk_context pk;
     mbedtls_pk_init(&pk);
-    int ret = mbedtls_pk_parse_key(&pk, reinterpret_cast<const unsigned char*>(privateKey.c_str()), privateKey.length() + 1, nullptr, 0, nullptr, nullptr);
+    ret = mbedtls_pk_parse_key(&pk, reinterpret_cast<const unsigned char*>(privateKey.c_str()), privateKey.length() + 1, nullptr, 0, mbedtls_ctr_drbg_random, &ctr_drbg);
     if (ret != 0) {
         char error_buf[100];
         mbedtls_strerror(ret, error_buf, sizeof(error_buf));
@@ -1399,7 +1317,7 @@ bool ConfigManager::validatePrivateKeyMatchesCertificate(const std::string& priv
     }
 
     // Check if the private key and certificate public key match
-    ret = mbedtls_pk_check_pair(&cert.pk, &pk, nullptr, nullptr);
+    ret = mbedtls_pk_check_pair(&cert.pk, &pk, mbedtls_ctr_drbg_random, &ctr_drbg);
     if (ret != 0) {
         char error_buf[100];
         mbedtls_strerror(ret, error_buf, sizeof(error_buf));
@@ -1408,6 +1326,9 @@ bool ConfigManager::validatePrivateKeyMatchesCertificate(const std::string& priv
         mbedtls_x509_crt_free(&cert);
         return false;
     }
+
+    mbedtls_ctr_drbg_free(&ctr_drbg);
+    mbedtls_entropy_free(&entropy);
 
     // Additional checks for key type compatibility
     mbedtls_pk_type_t cert_key_type = mbedtls_pk_get_type(&cert.pk);
@@ -1454,58 +1375,38 @@ bool ConfigManager::validatePrivateKeyMatchesCertificate(const std::string& priv
     return true;
 }
 
+std::string ConfigManager::getCertificateSubject(const std::string& certContent) {
+  mbedtls_x509_crt cert;
+  mbedtls_x509_crt_init(&cert);
+
+  int ret = mbedtls_x509_crt_parse(&cert, reinterpret_cast<const unsigned char*>(certContent.c_str()), certContent.length() + 1);
+  char subject[256];
+  ret = mbedtls_x509_dn_gets(subject, sizeof(subject), &cert.subject);
+  if(ret > 0)
+    return subject;
+  return "";
+}
+
 std::string ConfigManager::getCertificateIssuer(const std::string& certContent) {
-    // Extract issuer information from certificate
-    // This is a simplified implementation - in reality, you'd parse the ASN.1 structure
-    
-    // Look for common issuer patterns in the certificate content
-    std::vector<std::string> issuerPatterns = {
-        "Issuer:", "CN=", "O=", "OU=", "C=", "ST=", "L="
-    };
-    
-    for (const auto& pattern : issuerPatterns) {
-        size_t pos = certContent.find(pattern);
-        if (pos != std::string::npos) {
-            // Extract a reasonable portion of the issuer info
-            size_t endPos = certContent.find("\n", pos);
-            if (endPos != std::string::npos) {
-                return certContent.substr(pos, endPos - pos);
-            }
-        }
-    }
-    
-    return "Unknown";
+  mbedtls_x509_crt cert;
+  mbedtls_x509_crt_init(&cert);
+
+  int ret = mbedtls_x509_crt_parse(&cert, reinterpret_cast<const unsigned char*>(certContent.c_str()), certContent.length() + 1);
+  char issuer[256];
+  ret = mbedtls_x509_dn_gets(issuer, sizeof(issuer), &cert.issuer);
+  if(ret > 0)
+    return issuer;
+  return "";
 }
 
 std::string ConfigManager::getCertificateExpiration(const std::string& certContent) {
-    // Extract expiration date from certificate
-    // This is a simplified implementation - in reality, you'd parse the ASN.1 structure
-    
-    // Look for expiration date patterns
-    std::vector<std::string> datePatterns = {
-        "Not After:", "Valid Until:", "Expires:"
-    };
-    
-    for (const auto& pattern : datePatterns) {
-        size_t pos = certContent.find(pattern);
-        if (pos != std::string::npos) {
-            // Extract the date portion
-            size_t startPos = pos + pattern.length();
-            size_t endPos = certContent.find("\n", startPos);
-            if (endPos != std::string::npos) {
-                std::string dateStr = certContent.substr(startPos, endPos - startPos);
-                // Trim whitespace
-                dateStr.erase(0, dateStr.find_first_not_of(" \t"));
-                dateStr.erase(dateStr.find_last_not_of(" \t") + 1);
-                return dateStr;
-            }
-        }
-    }
-    
-    // If no explicit expiration found, check for validity period indicators
-    if (certContent.find("Valid") != std::string::npos) {
-        return "Valid (date not explicitly shown)";
-    }
-    
-    return "Unknown";
+  mbedtls_x509_crt cert;
+  mbedtls_x509_crt_init(&cert);
+
+  int ret = mbedtls_x509_crt_parse(&cert, reinterpret_cast<const unsigned char*>(certContent.c_str()), certContent.length() + 1);
+  mbedtls_x509_time valid_from = cert.valid_from;
+  mbedtls_x509_time valid_to = cert.valid_to;
+  if(!ret)
+    return fmt::format("Valid From={}/{}/{} To={}/{}/{}", valid_from.day, valid_from.mon, valid_from.year, valid_to.day, valid_to.mon, valid_to.year);
+  return "";
 }

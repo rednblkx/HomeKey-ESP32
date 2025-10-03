@@ -266,52 +266,56 @@ export interface OTAStatus {
  */
 export interface CertificatesStatus {
   /** CA certificate status */
-  ca?: {
-    /** Whether the certificate exists */
-    exists: boolean;
-    /** Certificate file size in bytes */
-    size: number;
-    /** Whether the certificate is valid */
-    valid: boolean;
-    /** Certificate issuer information */
-    issuer?: string;
-    /** Certificate expiration date */
-    expiration?: string;
-    /** Validation message or error */
-    validationMessage?: string;
+  certificates: {
+    ca?: {
+      /** Whether the certificate exists */
+      exists: boolean;
+      /** Certificate file size in bytes */
+      size: number;
+      /** Whether the certificate is valid */
+      valid: boolean;
+      /** Certificate issuer information */
+      issuer?: string;
+      /** Certificate subject information */
+      subject?: string;
+      /** Certificate expiration date */
+      expiration?: string;
+      /** Validation message or error */
+      validationMessage?: string;
+    };
+    /** Client certificate status */
+    client?: {
+      /** Whether the certificate exists */
+      exists: boolean;
+      /** Certificate file size in bytes */
+      size: number;
+      /** Whether the certificate is valid */
+      valid: boolean;
+      /** Certificate issuer information */
+      issuer?: string;
+      /** Certificate subject information */
+      subject?: string;
+      /** Certificate expiration date */
+      expiration?: string;
+      /** Whether the private key matches this certificate */
+      keyMatches?: boolean;
+      /** Validation message or error */
+      validationMessage?: string;
+    };
+    /** Private key status */
+    privateKey?: {
+      /** Whether the private key exists */
+      exists: boolean;
+      /** Key file size in bytes */
+      size: number;
+      /** Whether the private key is valid */
+      valid: boolean;
+      /** Validation message or error */
+      validationMessage?: string;
+    };
   };
-  /** Client certificate status */
-  client?: {
-    /** Whether the certificate exists */
-    exists: boolean;
-    /** Certificate file size in bytes */
-    size: number;
-    /** Whether the certificate is valid */
-    valid: boolean;
-    /** Certificate issuer information */
-    issuer?: string;
-    /** Certificate expiration date */
-    expiration?: string;
-    /** Whether the private key matches this certificate */
-    keyMatches?: boolean;
-    /** Validation message or error */
-    validationMessage?: string;
-  };
-  /** Private key status */
-  privateKey?: {
-    /** Whether the private key exists */
-    exists: boolean;
-    /** Key file size in bytes */
-    size: number;
-    /** Whether the private key is valid */
-    valid: boolean;
-    /** Key issuer information (if applicable) */
-    issuer?: string;
-    /** Key expiration date (if applicable) */
-    expiration?: string;
-    /** Validation message or error */
-    validationMessage?: string;
-  };
+  status: string;
+  timestamp: number;
 }
 
 /**

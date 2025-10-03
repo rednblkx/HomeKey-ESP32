@@ -18,6 +18,7 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       proxy: {
+        "/certificates": "http://localhost:8000",
         "/config": "http://localhost:8000",
         "/eth_get_config": "http://localhost:8000",
         "/ws": { target: "ws://localhost:8000", ws: true },

@@ -35,13 +35,12 @@ public:
     bool saveCertificateBundle(const std::string& bundleContent);
     std::string loadCertificate(const std::string& certType);
     bool deleteCertificate(const std::string& certType);
-    std::map<std::string, std::string> getCertificateStatus();
     
     // Enhanced certificate validation and information
-    std::map<std::string, std::string> getDetailedCertificateStatus();
     bool validateCertificateContent(const std::string& certContent, const std::string& certType);
     bool validatePrivateKeyMatchesCertificate(const std::string& privateKey, const std::string& certificate);
     std::string getCertificateIssuer(const std::string& certContent);
+    std::string getCertificateSubject(const std::string& certContent);
     std::string getCertificateExpiration(const std::string& certContent);
 
   private:
@@ -66,12 +65,11 @@ public:
     bool saveConfigToNvs(const char* key);
 
     // Certificate storage helpers
-    bool ensureCertsDirectory();
     bool validateCertificateFormat(const std::string& certContent);
-    std::string getCertificateFilePath(const std::string& certType);
 
     std::map<std::string, ConfigMapType> m_configMap;
     espConfig::mqttConfig_t m_mqttConfig;
+    espConfig::mqtt_ssl_t m_mqttSslConfig;
     espConfig::misc_config_t m_miscConfig;
     nvs_handle m_nvsHandle;
     bool m_isInitialized;

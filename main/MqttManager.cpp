@@ -23,6 +23,7 @@ const char* MqttManager::TAG = "MqttManager";
  */
 MqttManager::MqttManager(const ConfigManager& configManager)
     : m_mqttConfig(configManager.getConfig<espConfig::mqttConfig_t>()),
+      m_mqttSslConfig(configManager.getConfig<const espConfig::mqtt_ssl_t>()),
       m_client(nullptr),
       device_name(configManager.getConfig<espConfig::misc_config_t>().deviceName),
       m_sslConfigured(false),
@@ -622,9 +623,9 @@ bool MqttManager::configureSSL(esp_mqtt_client_config_t& mqtt_cfg) {
     // Configure TLS settings
     mqtt_cfg.broker.verification.use_global_ca_store = false;
 
-    if (!m_mqttConfig.caCert.empty()) {
-        mqtt_cfg.broker.verification.certificate = m_mqttConfig.caCert.c_str();
-        mqtt_cfg.broker.verification.certificate_len = m_mqttConfig.caCert.length();
+    if (!m_mqttSslConfig.caCert.empty()) {
+        mqtt_cfg.broker.verification.certificate = m_mqttSslConfig.caCert.c_str();
+        mqtt_cfg.broker.verification.certificate_len = m_mqttSslConfig.caCert.length() + 1;
         mqtt_cfg.broker.verification.skip_cert_common_name_check = m_mqttConfig.allowInsecure;
         ESP_LOGI(TAG, "Server certificate validation: ENABLED - CA certificate configured");
         ESP_LOGI(TAG, "Certificate validation mode: %s", m_mqttConfig.allowInsecure ? "SKIP_COMMON_NAME" : "FULL_VALIDATION");
@@ -642,11 +643,11 @@ bool MqttManager::configureSSL(esp_mqtt_client_config_t& mqtt_cfg) {
         return false;
     }
 
-    if (!m_mqttConfig.clientCert.empty() && !m_mqttConfig.clientKey.empty()) {
-        mqtt_cfg.credentials.authentication.certificate = m_mqttConfig.clientCert.c_str();
-        mqtt_cfg.credentials.authentication.certificate_len = m_mqttConfig.clientCert.length();
-        mqtt_cfg.credentials.authentication.key = m_mqttConfig.clientKey.c_str();
-        mqtt_cfg.credentials.authentication.key_len = m_mqttConfig.clientKey.length();
+    if (!m_mqttSslConfig.clientCert.empty() && !m_mqttSslConfig.clientKey.empty()) {
+        mqtt_cfg.credentials.authentication.certificate = m_mqttSslConfig.clientCert.c_str();
+        mqtt_cfg.credentials.authentication.certificate_len = m_mqttSslConfig.clientCert.length() + 1;
+        mqtt_cfg.credentials.authentication.key = m_mqttSslConfig.clientKey.c_str();
+        mqtt_cfg.credentials.authentication.key_len = m_mqttSslConfig.clientKey.length() + 1;
         ESP_LOGI(TAG, "Client authentication: ENABLED - Mutual TLS configured");
         ESP_LOGI(TAG, "TLS handshake state: MUTUAL_AUTH_READY - Client certificate and key configured");
     } else {
@@ -670,20 +671,20 @@ bool MqttManager::loadCertificates() {
     ESP_LOGI(TAG, "Certificate validation state: STARTING - Beginning certificate format validation");
 
     // Validate certificate formats (basic check for PEM format)
-    if (!m_mqttConfig.caCert.empty()) {
+    if (!m_mqttSslConfig.caCert.empty()) {
         ESP_LOGI(TAG, "Validating CA certificate format...");
-        if (m_mqttConfig.caCert.find("-----BEGIN CERTIFICATE-----") == std::string::npos ||
-            m_mqttConfig.caCert.find("-----END CERTIFICATE-----") == std::string::npos) {
+        if (m_mqttSslConfig.caCert.find("-----BEGIN CERTIFICATE-----") == std::string::npos ||
+            m_mqttSslConfig.caCert.find("-----END CERTIFICATE-----") == std::string::npos) {
             ESP_LOGE(TAG, "Certificate validation FAILED: Invalid CA certificate format - missing PEM headers");
             ESP_LOGE(TAG, "Expected format: PEM certificate with '-----BEGIN CERTIFICATE-----' and '-----END CERTIFICATE-----'");
             return false;
         }
-        ESP_LOGI(TAG, "Certificate validation PASSED: CA certificate format valid (%zu bytes)", m_mqttConfig.caCert.length());
+        ESP_LOGI(TAG, "Certificate validation PASSED: CA certificate format valid (%zu bytes)", m_mqttSslConfig.caCert.length());
 
         // Additional validation - check for basic certificate structure
         size_t certCount = 0;
         size_t pos = 0;
-        while ((pos = m_mqttConfig.caCert.find("-----BEGIN CERTIFICATE-----", pos)) != std::string::npos) {
+        while ((pos = m_mqttSslConfig.caCert.find("-----BEGIN CERTIFICATE-----", pos)) != std::string::npos) {
             certCount++;
             pos += 27; // length of "-----BEGIN CERTIFICATE-----"
         }
@@ -692,39 +693,39 @@ bool MqttManager::loadCertificates() {
         ESP_LOGI(TAG, "No CA certificate configured - will use insecure mode if allowInsecure=true");
     }
 
-    if (!m_mqttConfig.clientCert.empty()) {
+    if (!m_mqttSslConfig.clientCert.empty()) {
         ESP_LOGI(TAG, "Validating client certificate format...");
-        if (m_mqttConfig.clientCert.find("-----BEGIN CERTIFICATE-----") == std::string::npos ||
-            m_mqttConfig.clientCert.find("-----END CERTIFICATE-----") == std::string::npos) {
+        if (m_mqttSslConfig.clientCert.find("-----BEGIN CERTIFICATE-----") == std::string::npos ||
+            m_mqttSslConfig.clientCert.find("-----END CERTIFICATE-----") == std::string::npos) {
             ESP_LOGE(TAG, "Certificate validation FAILED: Invalid client certificate format - missing PEM headers");
             ESP_LOGE(TAG, "Expected format: PEM certificate with '-----BEGIN CERTIFICATE-----' and '-----END CERTIFICATE-----'");
             return false;
         }
-        ESP_LOGI(TAG, "Certificate validation PASSED: Client certificate format valid (%zu bytes)", m_mqttConfig.clientCert.length());
+        ESP_LOGI(TAG, "Certificate validation PASSED: Client certificate format valid (%zu bytes)", m_mqttSslConfig.clientCert.length());
     }
 
-    if (!m_mqttConfig.clientKey.empty()) {
+    if (!m_mqttSslConfig.clientKey.empty()) {
         ESP_LOGI(TAG, "Validating client private key format...");
-        if (m_mqttConfig.clientKey.find("-----BEGIN") == std::string::npos ||
-            m_mqttConfig.clientKey.find("-----END") == std::string::npos) {
+        if (m_mqttSslConfig.clientKey.find("-----BEGIN") == std::string::npos ||
+            m_mqttSslConfig.clientKey.find("-----END") == std::string::npos) {
             ESP_LOGE(TAG, "Certificate validation FAILED: Invalid client key format - missing PEM headers");
             ESP_LOGE(TAG, "Expected format: PEM private key with '-----BEGIN [TYPE] PRIVATE KEY-----' and '-----END [TYPE] PRIVATE KEY-----'");
             return false;
         }
 
         // Check if it's RSA or EC key
-        bool isRSA = m_mqttConfig.clientKey.find("-----BEGIN RSA PRIVATE KEY-----") != std::string::npos;
-        bool isEC = m_mqttConfig.clientKey.find("-----BEGIN EC PRIVATE KEY-----") != std::string::npos;
-        bool isPKCS8 = m_mqttConfig.clientKey.find("-----BEGIN PRIVATE KEY-----") != std::string::npos;
+        bool isRSA = m_mqttSslConfig.clientKey.find("-----BEGIN RSA PRIVATE KEY-----") != std::string::npos;
+        bool isEC = m_mqttSslConfig.clientKey.find("-----BEGIN EC PRIVATE KEY-----") != std::string::npos;
+        bool isPKCS8 = m_mqttSslConfig.clientKey.find("-----BEGIN PRIVATE KEY-----") != std::string::npos;
 
         if (isRSA) {
-            ESP_LOGI(TAG, "Certificate validation PASSED: RSA private key format valid (%zu bytes)", m_mqttConfig.clientKey.length());
+            ESP_LOGI(TAG, "Certificate validation PASSED: RSA private key format valid (%zu bytes)", m_mqttSslConfig.clientKey.length());
         } else if (isEC) {
-            ESP_LOGI(TAG, "Certificate validation PASSED: EC private key format valid (%zu bytes)", m_mqttConfig.clientKey.length());
+            ESP_LOGI(TAG, "Certificate validation PASSED: EC private key format valid (%zu bytes)", m_mqttSslConfig.clientKey.length());
         } else if (isPKCS8) {
-            ESP_LOGI(TAG, "Certificate validation PASSED: PKCS#8 private key format valid (%zu bytes)", m_mqttConfig.clientKey.length());
+            ESP_LOGI(TAG, "Certificate validation PASSED: PKCS#8 private key format valid (%zu bytes)", m_mqttSslConfig.clientKey.length());
         } else {
-            ESP_LOGW(TAG, "Private key format detected but type unknown - proceeding anyway (%zu bytes)", m_mqttConfig.clientKey.length());
+            ESP_LOGW(TAG, "Private key format detected but type unknown - proceeding anyway (%zu bytes)", m_mqttSslConfig.clientKey.length());
         }
     }
 
@@ -783,9 +784,9 @@ void MqttManager::logSSLError(const char* operation, esp_err_t error) {
         ESP_LOGI(TAG, "SSL Configuration state: useSSL=%s, allowInsecure=%s, hasCACert=%s, hasClientCert=%s, hasClientKey=%s",
                  m_mqttConfig.useSSL ? "true" : "false",
                  m_mqttConfig.allowInsecure ? "true" : "false",
-                 !m_mqttConfig.caCert.empty() ? "true" : "false",
-                 !m_mqttConfig.clientCert.empty() ? "true" : "false",
-                 !m_mqttConfig.clientKey.empty() ? "true" : "false");
+                 !m_mqttSslConfig.caCert.empty() ? "true" : "false",
+                 !m_mqttSslConfig.clientCert.empty() ? "true" : "false",
+                 !m_mqttSslConfig.clientKey.empty() ? "true" : "false");
     }
 }
 

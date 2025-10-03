@@ -84,12 +84,15 @@ namespace espConfig
     bool nfcTagNoPublish = false;
     /* SSL/TLS Settings */
     bool useSSL = MQTT_USE_SSL;
-    std::string caCert = MQTT_CA_CERT;
-    std::string clientCert = MQTT_CLIENT_CERT;
-    std::string clientKey = MQTT_CLIENT_KEY;
     bool allowInsecure = MQTT_ALLOW_INSECURE;
     std::map<std::string, uint8_t> customLockStates = { {"C_LOCKED", C_LOCKED}, {"C_UNLOCKING", C_UNLOCKING}, {"C_UNLOCKED", C_UNLOCKED}, {"C_LOCKING", C_LOCKING}, {"C_JAMMED", C_JAMMED}, {"C_UNKNOWN", C_UNKNOWN} };
     std::map<std::string, uint8_t> customLockActions = { {"UNLOCK", C_UNLOCK}, {"LOCK", C_LOCK} };
+  };
+
+  struct mqtt_ssl_t {
+    std::string caCert = MQTT_CA_CERT;
+    std::string clientCert = MQTT_CLIENT_CERT;
+    std::string clientKey = MQTT_CLIENT_KEY;
   };
 
   struct misc_config_t

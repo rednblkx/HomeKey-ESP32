@@ -7,7 +7,7 @@
 
 class LockManager;
 class ConfigManager;
-namespace espConfig { struct mqttConfig_t; }
+namespace espConfig { struct mqttConfig_t; struct mqtt_ssl_t;}
 
 /**
  * @class MqttManager
@@ -104,6 +104,7 @@ private:
     // --- Member Variables ---
     std::string deviceID;
     const espConfig::mqttConfig_t& m_mqttConfig;
+    const espConfig::mqtt_ssl_t& m_mqttSslConfig;
     esp_mqtt_client_handle_t m_client;
     const std::string &device_name;
     

@@ -60,10 +60,10 @@
   const fetchCertificateStatus = async () => {
     try {
       const response = await getCertificateStatus();
-      if (response.success) {
+      if (response.success && response.data) {
         certificateStatus = response.data;
       } else {
-        console.error("Error fetching certificate status:", response.message);
+        console.error("Error fetching certificate status:", response.success);
       }
     } catch (e) {
       console.error("Error fetching certificate status:", e);
@@ -348,203 +348,210 @@
                   </label>
                 </div>
               </div>
-            </div>
-          </div>
-
-          <!-- SSL/TLS Configuration Section -->
-          {#if mqttConfig.useSSL}
-            <div class="collapse collapse-arrow bg-base-100">
-              <input type="checkbox" name="mqtt-accordion" />
-              <div class="collapse-title font-medium flex items-center">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke-width="1.5"
-                  stroke="currentColor"
-                  class="w-5 mr-2"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"
-                  />
-                </svg>
-                SSL/TLS Settings
-              </div>
-              <div class="collapse-content">
-                <div class="space-y-6">
-                  <div class="form-control">
-                    <label class="label cursor-pointer">
-                      <span class="label-text"
-                        >Allow Insecure Connections (skip certificate
-                        validation)</span
-                      >
-                      <input
-                        type="checkbox"
-                        bind:checked={mqttConfig.allowInsecure}
-                        class="toggle toggle-warning"
+              <!-- SSL/TLS Configuration Section -->
+              {#if mqttConfig.useSSL}
+                <div class="collapse collapse-arrow bg-base-200 collapse-open">
+                  <input type="checkbox" name="mqtt-accordion" />
+                  <div class="collapse-title font-medium flex items-center">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke-width="1.5"
+                      stroke="currentColor"
+                      class="w-5 mr-2"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"
                       />
-                    </label>
+                    </svg>
+                    SSL/TLS Settings
                   </div>
-
-                  <!-- Certificate Status Display -->
-                  <div class="bg-base-200 rounded-lg p-4">
-                    <h4 class="font-medium mb-3">Certificate Status</h4>
-
-                    <!-- Reconnection Status Alert -->
-                    {#if reconnectionStatus.isReconnecting}
-                      <div class="alert alert-info mb-4">
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke-width="1.5"
-                          stroke="currentColor"
-                          class="w-6 h-6"
-                        >
-                          <path
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                            d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0011.664 0l3.181-3.183m-3.181-4.991v4.99"
+                  <div class="collapse-content">
+                    <div class="space-y-6">
+                      <div class="form-control">
+                        <label class="label cursor-pointer">
+                          <span class="label-text">Skip server cert validation</span
+                          >
+                          <input
+                            type="checkbox"
+                            bind:checked={mqttConfig.allowInsecure}
+                            class="toggle toggle-warning"
                           />
-                        </svg>
-                        <span>{reconnectionStatus.message}</span>
+                        </label>
                       </div>
-                    {/if}
 
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <!-- CA Certificate -->
-                      <div class="flex flex-col p-3 bg-base-100 rounded-lg">
-                        <div class="flex items-center justify-between mb-2">
-                          <div class="flex items-center">
+                      <!-- Certificate Status Display -->
+                      <div class="bg-base-200 rounded-lg">
+                        <!-- Reconnection Status Alert -->
+                        {#if reconnectionStatus.isReconnecting}
+                          <div class="alert alert-info mb-4">
                             <svg
-                              class="w-5 h-5 mr-2"
-                              class:text-success={certificateStatus?.ca}
-                              class:text-error={!certificateStatus?.ca}
+                              xmlns="http://www.w3.org/2000/svg"
                               fill="none"
                               viewBox="0 0 24 24"
+                              stroke-width="1.5"
                               stroke="currentColor"
+                              class="w-6 h-6"
                             >
                               <path
                                 stroke-linecap="round"
                                 stroke-linejoin="round"
-                                d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0011.664 0l3.181-3.183m-3.181-4.991v4.99"
                               />
                             </svg>
-                            <span class="text-sm font-medium"
-                              >CA Certificate</span
-                            >
+                            <span>{reconnectionStatus.message}</span>
                           </div>
-                          {#if certificateStatus?.ca}
-                            <button
-                              onclick={() => deleteCertificateHandler("ca")}
-                              class="btn btn-ghost btn-xs btn-error"
-                              >Delete</button
-                            >
-                          {/if}
+                        {/if}
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <!-- CA Certificate -->
+                          <div class="flex flex-col p-3 bg-base-100 rounded-lg">
+                            <div class="flex items-center justify-between mb-2">
+                              <div class="flex items-center">
+                                <svg
+                                  class="w-5 h-5 mr-2"
+                                  class:text-success={certificateStatus?.certificates?.ca?.exists}
+                                  class:text-error={!certificateStatus?.certificates?.ca?.exists}
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                  />
+                                </svg>
+                                <div class="flex flex-col">
+                                  <span class="text-sm font-medium">CA Certificate</span>
+                                  <span class="text-sm font-medium text-base-content/75">{certificateStatus?.certificates.ca?.validationMessage}</span>
+                                  <span class="text-sm font-medium text-base-content/75">{certificateStatus?.certificates.ca?.expiration}</span>
+                                  <span class="text-sm font-medium text-base-content/50">Subject: {certificateStatus?.certificates.ca?.subject}</span>
+                                  <span class="text-sm font-medium text-base-content/50">Issuer: {certificateStatus?.certificates.ca?.issuer}</span>
+                                </div>
+                              </div>
+                              {#if certificateStatus?.certificates?.ca}
+                                <button
+                                  onclick={() => deleteCertificateHandler("ca")}
+                                  class="btn btn-ghost btn-xs btn-error"
+                                >Delete</button
+                                >
+                              {/if}
+                            </div>
+                          </div>
+
+                          <!-- Client Certificate -->
+                          <div class="flex flex-col p-3 bg-base-100 rounded-lg">
+                            <div class="flex items-center justify-between mb-2">
+                              <div class="flex items-center">
+                                <svg
+                                  class="w-5 h-5 mr-2"
+                                  class:text-success={certificateStatus?.certificates?.client?.exists}
+                                  class:text-error={!certificateStatus?.certificates?.client?.exists}
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                  />
+                                </svg>
+                                <div class="flex flex-col">
+                                  <span class="text-sm font-medium">Client Certificate</span>
+                                  <span class="text-sm font-medium text-base-content/75">{certificateStatus?.certificates.client?.validationMessage}</span>
+                                  <span class="text-sm font-medium text-base-content/75">{certificateStatus?.certificates.client?.expiration}</span>
+                                  <span class="text-sm font-medium text-base-content/50">Subject: {certificateStatus?.certificates.client?.subject}</span>
+                                  <span class="text-sm font-medium text-base-content/50">Issuer: {certificateStatus?.certificates.client?.issuer}</span>
+                                </div>
+                              </div>
+                              {#if certificateStatus?.certificates?.client}
+                                <button
+                                  onclick={() => deleteCertificateHandler("client")}
+                                  class="btn btn-ghost btn-xs btn-error"
+                                >Delete</button
+                                >
+                              {/if}
+                            </div>
+                          </div>
+
+                          <!-- Private Key -->
+                          <div class="flex flex-col p-3 bg-base-100 rounded-lg">
+                            <div class="flex items-center justify-between mb-2">
+                              <div class="flex items-center">
+                                <svg
+                                  class="w-5 h-5 mr-2"
+                                  class:text-success={certificateStatus?.certificates?.privateKey?.exists}
+                                  class:text-error={!certificateStatus?.certificates?.privateKey?.exists}
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                  />
+                                </svg>
+                                <div class="flex flex-col">
+                                  <span class="text-sm font-medium">Private Key</span>
+                                  <span class="text-sm font-medium text-base-content/50">{certificateStatus?.certificates.privateKey?.validationMessage}</span>
+                                </div>
+                              </div>
+                              {#if certificateStatus?.certificates?.privateKey}
+                                <button
+                                  onclick={() =>
+                                    deleteCertificateHandler("privateKey")}
+                                  class="btn btn-ghost btn-xs btn-error"
+                                >Delete</button
+                                >
+                              {/if}
+                            </div>
+                          </div>
                         </div>
                       </div>
 
-                      <!-- Client Certificate -->
-                      <div class="flex flex-col p-3 bg-base-100 rounded-lg">
-                        <div class="flex items-center justify-between mb-2">
-                          <div class="flex items-center">
-                            <svg
-                              class="w-5 h-5 mr-2"
-                              class:text-success={certificateStatus?.client}
-                              class:text-error={!certificateStatus?.client}
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                              />
-                            </svg>
-                            <span class="text-sm font-medium"
-                              >Client Certificate</span
-                            >
+                      <!-- Certificate Upload Section -->
+                      <div class="form-control">
+                        <label class="label">
+                          <span class="label-text"
+                          >Certificate Bundle (CA + Client Certificate + Private
+                            Key)</span
+                          >
+                        </label>
+                        <input
+                          type="file"
+                          onchange={(e) => handleCertificateUpload(e)}
+                          accept=".pem,.crt,.cer,.der,.key"
+                          class="file-input file-input-bordered w-full"
+                          disabled={uploadProgress.ca > 0 &&
+                            uploadProgress.ca < 100}
+                        />
+                        {#if uploadProgress.ca > 0 && uploadProgress.ca < 100}
+                          <div class="progress progress-info mt-2">
+                            <div
+                              class="progress-bar"
+                              style="width: {uploadProgress.ca}%"
+                            ></div>
                           </div>
-                          {#if certificateStatus?.client}
-                            <button
-                              onclick={() => deleteCertificateHandler("client")}
-                              class="btn btn-ghost btn-xs btn-error"
-                              >Delete</button
-                            >
-                          {/if}
-                        </div>
-                      </div>
-
-                      <!-- Private Key -->
-                      <div class="flex flex-col p-3 bg-base-100 rounded-lg">
-                        <div class="flex items-center justify-between mb-2">
-                          <div class="flex items-center">
-                            <svg
-                              class="w-5 h-5 mr-2"
-                              class:text-success={certificateStatus?.privateKey}
-                              class:text-error={!certificateStatus?.privateKey}
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                              />
-                            </svg>
-                            <span class="text-sm font-medium">Private Key</span>
+                        {/if}
+                        {#if uploadErrors.ca}
+                          <div class="text-error text-sm mt-1">
+                            {uploadErrors.ca}
                           </div>
-                          {#if certificateStatus?.privateKey}
-                            <button
-                              onclick={() =>
-                                deleteCertificateHandler("privateKey")}
-                              class="btn btn-ghost btn-xs btn-error"
-                              >Delete</button
-                            >
-                          {/if}
-                        </div>
+                        {/if}
                       </div>
                     </div>
                   </div>
-
-                  <!-- Certificate Upload Section -->
-                  <div class="form-control">
-                    <label class="label">
-                      <span class="label-text"
-                        >Certificate Bundle (CA + Client Certificate + Private
-                        Key)</span
-                      >
-                    </label>
-                    <input
-                      type="file"
-                      onchange={(e) => handleCertificateUpload(e)}
-                      accept=".pem,.crt,.cer,.der,.key"
-                      class="file-input file-input-bordered w-full"
-                      disabled={uploadProgress.ca > 0 &&
-                        uploadProgress.ca < 100}
-                    />
-                    {#if uploadProgress.ca > 0 && uploadProgress.ca < 100}
-                      <div class="progress progress-info mt-2">
-                        <div
-                          class="progress-bar"
-                          style="width: {uploadProgress.ca}%"
-                        ></div>
-                      </div>
-                    {/if}
-                    {#if uploadErrors.ca}
-                      <div class="text-error text-sm mt-1">
-                        {uploadErrors.ca}
-                      </div>
-                    {/if}
-                  </div>
                 </div>
-              </div>
+              {/if}
             </div>
-          {/if}
+          </div>
+
 
           <div class="collapse collapse-arrow bg-base-100">
             <input type="checkbox" name="mqtt-accordion" />

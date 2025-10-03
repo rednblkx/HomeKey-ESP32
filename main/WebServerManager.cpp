@@ -2812,16 +2812,9 @@ esp_err_t WebServerManager::handleCertificateStatus(httpd_req_t *req) {
     bool exists = false;
     size_t contentSize = 0;
 
-    if (strcmp(certType, "privateKey") == 0) {
-      // Private key is stored in MQTT config, not as certificate file
-      certContent = instance->m_configManager.getConfig<espConfig::mqttConfig_t>().clientKey;
-      exists = !certContent.empty();
-      contentSize = certContent.length();
-    } else {
-      certContent = instance->m_configManager.loadCertificate(certType);
-      exists = !certContent.empty();
-      contentSize = certContent.length();
-    }
+    certContent = instance->m_configManager.loadCertificate(certType);
+    exists = !certContent.empty();
+    contentSize = certContent.length();
 
     cJSON_AddBoolToObject(certInfo, "exists", exists);
     cJSON_AddNumberToObject(certInfo, "size", contentSize);
@@ -2836,11 +2829,17 @@ esp_err_t WebServerManager::handleCertificateStatus(httpd_req_t *req) {
       if (strcmp(certType, "privateKey") != 0) {
         std::string issuer =
             instance->m_configManager.getCertificateIssuer(certContent);
+        std::string subject =
+            instance->m_configManager.getCertificateSubject(certContent);
         std::string expiration =
             instance->m_configManager.getCertificateExpiration(certContent);
 
         if (!issuer.empty()) {
           cJSON_AddStringToObject(certInfo, "issuer", issuer.c_str());
+        }
+
+        if (!subject.empty()) {
+          cJSON_AddStringToObject(certInfo, "subject", subject.c_str());
         }
 
         if (!expiration.empty()) {
@@ -2850,7 +2849,7 @@ esp_err_t WebServerManager::handleCertificateStatus(httpd_req_t *req) {
 
       // For client certificates, check if private key matches
       if (strcmp(certType, "client") == 0) {
-        std::string privateKeyContent = instance->m_configManager.getConfig<espConfig::mqttConfig_t>().clientKey;
+        std::string privateKeyContent = instance->m_configManager.getConfig<const espConfig::mqtt_ssl_t>().clientKey;
         if (!privateKeyContent.empty()) {
           bool keyMatches =
               instance->m_configManager.validatePrivateKeyMatchesCertificate(
@@ -2861,7 +2860,7 @@ esp_err_t WebServerManager::handleCertificateStatus(httpd_req_t *req) {
 
       // Add validation message
       std::string validationMsg =
-          isValid ? "Certificate is valid" : "Certificate validation failed";
+          isValid ? !strcmp(certType, "privateKey") ? "Key is valid" : "Certificate is valid" : "Validation failed";
       cJSON_AddStringToObject(certInfo, "validationMessage",
                               validationMsg.c_str());
     } else {
