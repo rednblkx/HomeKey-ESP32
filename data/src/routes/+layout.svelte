@@ -110,9 +110,9 @@
 			<label for="main-content-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
 			<NavigationMenu onClose={closeDrawer} isMobile={false} bind:triggerElement={sidebarTrigger} id="main-navigation" />
 		</div>
-		<div class="drawer-content flex flex-col h-full">
+		<div class="drawer-content h-full w-full">
 			<!-- Content -->
-			<main id="main-content" class="px-6 w-full h-full flex-1">
+			<main id="main-content" class="px-6 h-full overflow-y-auto">
 				{@render children()}
 			</main>
 		</div>
