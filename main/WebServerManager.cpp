@@ -142,13 +142,15 @@ void WebServerManager::begin() {
   ESP_LOGI(TAG, "Initializing...");
 
   // Step 1: Mount LittleFS with minimal logging
-  ESP_LOGI("WebServerManager", "Mounting LittleFS...");
+  ESP_LOGI(TAG, "Mounting LittleFS...");
   if (!LittleFS.begin()) {
     ESP_LOGE(TAG, "Failed to mount LittleFS. Web server cannot start.");
     return;
   }
 
-  ESP_LOGI("WebServerManager", "LittleFS mounted successfully");
+  ESP_LOGI(TAG, "LittleFS mounted successfully");
+
+  ESP_LOGI(TAG, "Filesystem usage: %d/%d bytes", LittleFS.usedBytes(), LittleFS.totalBytes());
 
   // List all files present on LittleFS after initialization
   ESP_LOGI(TAG, "Listing all files on LittleFS:");
@@ -175,7 +177,7 @@ void WebServerManager::begin() {
   }
 
   // Step 2: Create HTTP server with minimal configuration
-  ESP_LOGI("WebServerManager", "Starting HTTP server...");
+  ESP_LOGI(TAG, "Starting HTTP server...");
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   config.server_port = 80;
   config.max_uri_handlers = 20;
@@ -189,18 +191,18 @@ void WebServerManager::begin() {
 
   esp_err_t ret = httpd_start(&m_server, &config);
   if (ret != ESP_OK) {
-    ESP_LOGE("WebServerManager", "Error starting server: %s",
+    ESP_LOGE(TAG, "Error starting server: %s",
              esp_err_to_name(ret));
     return;
   }
-  ESP_LOGI("WebServerManager", "HTTP server started on port %d",
+  ESP_LOGI(TAG, "HTTP server started on port %d",
            config.server_port);
 
   // Step 3: Create WebSocket infrastructure
-  ESP_LOGI("WebServerManager", "Creating WebSocket infrastructure...");
+  ESP_LOGI(TAG, "Creating WebSocket infrastructure...");
   m_wsQueue = xQueueCreate(10, sizeof(WsFrame *));
   if (!m_wsQueue) {
-    ESP_LOGE("WebServerManager", "Failed to create WebSocket queue");
+    ESP_LOGE(TAG, "Failed to create WebSocket queue");
     httpd_stop(m_server);
     m_server = nullptr;
     return;
@@ -209,7 +211,7 @@ void WebServerManager::begin() {
 #ifdef WEBSERVER_USE_DEDICATED_BROADCAST_QUEUE
   m_wsBroadcastQueue = xQueueCreate(8, sizeof(BroadcastMsg *));
   if (!m_wsBroadcastQueue) {
-    ESP_LOGE("WebServerManager", "Failed to create WebSocket broadcast queue");
+    ESP_LOGE(TAG, "Failed to create WebSocket broadcast queue");
     vQueueDelete(m_wsQueue);
     httpd_stop(m_server);
     m_server = nullptr;
@@ -217,11 +219,10 @@ void WebServerManager::begin() {
   }
 #endif
 
-  // Step 4: Create WebSocket send task
   BaseType_t task_result =
       xTaskCreate(ws_send_task, "ws_send_task", 4096, this, 5, &m_wsTaskHandle);
   if (task_result != pdPASS) {
-    ESP_LOGE("WebServerManager", "Failed to create WebSocket send task");
+    ESP_LOGE(TAG, "Failed to create WebSocket send task");
 #ifdef WEBSERVER_USE_DEDICATED_BROADCAST_QUEUE
     if (m_wsBroadcastQueue)
       vQueueDelete(m_wsBroadcastQueue);
@@ -232,28 +233,23 @@ void WebServerManager::begin() {
     return;
   }
 
-  // Step 5: Setup routes (this is where most of the work happens)
-  ESP_LOGI("WebServerManager", "Setting up routes...");
   setupRoutes();
 
-  // Step 6: Initialize OTA worker
-  ESP_LOGI("WebServerManager", "Initializing OTA worker...");
   initializeOTAWorker();
 
-  // Step 7: Create status timer
-  ESP_LOGI("WebServerManager", "Creating status timer...");
+  ESP_LOGI(TAG, "Creating status timer...");
   esp_timer_create_args_t statusTimerArgs = {
       .callback = &WebServerManager::statusTimerCallback,
       .arg = this,
       .name = "statusTimer"};
   esp_err_t timer_ret = esp_timer_create(&statusTimerArgs, &m_statusTimer);
   if (timer_ret != ESP_OK) {
-    ESP_LOGE("WebServerManager", "Failed to create status timer: %s",
+    ESP_LOGE(TAG, "Failed to create status timer: %s",
              esp_err_to_name(timer_ret));
     // Continue without timer - not critical
   }
 
-  ESP_LOGI("WebServerManager", "Web server initialization complete");
+  ESP_LOGI(TAG, "Web server initialization complete");
 }
 
 /**
@@ -275,6 +271,7 @@ WebServerManager *WebServerManager::getInstance(httpd_req_t *req) {
  * reboot, resets, start AP), the WebSocket endpoint (when enabled), and OTA upload endpoints.
  */
 void WebServerManager::setupRoutes() {
+  ESP_LOGI(TAG, "Setting up routes...");
   // Static file handlers
   httpd_uri_t static_uri = {.uri = "/static/*",
                             .method = HTTP_GET,
