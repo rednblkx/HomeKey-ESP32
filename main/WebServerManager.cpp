@@ -5,8 +5,10 @@
 #include "ReaderDataManager.hpp"
 #include "cJSON.h"
 #include "config.hpp"
+#include "esp_heap_caps.h"
 #include "esp_http_server.h"
 #include "esp_ota_ops.h"
+#include "esp_task_wdt.h"
 #include "esp_timer.h"
 #include "eth_structs.hpp"
 #include "eventStructs.hpp"
@@ -20,11 +22,16 @@
 #include <esp_app_desc.h>
 #include <event_manager.hpp>
 #include <string>
+#include <vector>
 
 const char *WebServerManager::TAG = "WebServerManager";
 
+// WebSocket payload size limit
+const size_t MAX_WS_PAYLOAD = 8192; // 8KB max payload
+
 // Forward declaration
 static void mergeJson(cJSON *target, cJSON *source);
+
 
 /**
  * @brief Checks whether a C string ends with the given suffix.
@@ -177,8 +184,8 @@ void WebServerManager::begin() {
   config.max_open_sockets = 8;
   config.stack_size = 8192;
   config.uri_match_fn = httpd_uri_match_wildcard;
-  config.recv_wait_timeout = 30;
-  config.send_wait_timeout = 30;
+  config.recv_wait_timeout = 10;
+  config.send_wait_timeout = 10;
   config.lru_purge_enable = true;
 
   esp_err_t ret = httpd_start(&m_server, &config);
@@ -406,8 +413,8 @@ void WebServerManager::setupRoutes() {
  */
 esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
   const char *base_path = (const char *)req->user_ctx;
-  char filepath[256];
-  char compressed_filepath[260];
+  std::string filepath;
+  std::string compressed_filepath;
 
   // Get the file path from URI
   const char *filename = req->uri + strlen(base_path);
@@ -415,11 +422,11 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
     filename = "/index.html";
   }
 
-  snprintf(filepath, sizeof(filepath), "%s%s", base_path, filename);
+  filepath = std::string(base_path) + filename;
 
   // Check for compressed version first for .js and .css files
   bool use_compressed = false;
-  const char *actual_filepath = filepath;
+  std::string actual_filepath = filepath;
 
   if (str_ends_with(filename, ".js") || str_ends_with(filename, ".css")) {
     // Check if client accepts gzip encoding
@@ -432,9 +439,8 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
                                       hdr.size()) == ESP_OK) {
         std::string accept_encoding(hdr.data());
         if (accept_encoding.find("gzip") != std::string::npos) {
-          snprintf(compressed_filepath, sizeof(compressed_filepath), "%s.gz",
-                   filepath);
-          if (LittleFS.exists(compressed_filepath)) {
+          compressed_filepath = filepath + ".gz";
+          if (LittleFS.exists(compressed_filepath.c_str())) {
             use_compressed = true;
             actual_filepath = compressed_filepath;
           }
@@ -444,12 +450,12 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
   }
 
   // Check if file exists
-  if (!LittleFS.exists(actual_filepath)) {
+  if (!LittleFS.exists(actual_filepath.c_str())) {
     httpd_resp_send_404(req);
     return ESP_FAIL;
   }
 
-  File file = LittleFS.open(actual_filepath, "r");
+  File file = LittleFS.open(actual_filepath.c_str(), "r");
   if (!file) {
     httpd_resp_send_404(req);
     return ESP_FAIL;
@@ -610,6 +616,15 @@ esp_err_t WebServerManager::handleWebSocket(httpd_req_t *req) {
                sockfd);
     }
     return ret;
+  }
+
+  // Validate payload size
+  if (ws_pkt.len > MAX_WS_PAYLOAD) {
+    ESP_LOGE(TAG, "WebSocket payload too large: %zu bytes (max: %zu)",
+             ws_pkt.len, MAX_WS_PAYLOAD);
+    int sockfd = httpd_req_to_sockfd(req);
+    instance->removeWebSocketClient(sockfd);
+    return ESP_FAIL;
   }
 
   std::string payload;
@@ -911,8 +926,15 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
   }
 
   // Read request body
-  char content[2048];
-  int ret = httpd_req_recv(req, content, sizeof(content) - 1);
+  const size_t max_content_size = 2048;
+  if (req->content_len >= max_content_size) {
+    httpd_resp_set_status(req, "413 Payload Too Large");
+    httpd_resp_send(req, "Request body too large", HTTPD_RESP_USE_STRLEN);
+    return ESP_FAIL;
+  }
+
+  std::vector<char> content(max_content_size, 0);
+  int ret = httpd_req_recv(req, content.data(), content.size() - 1);
   if (ret <= 0) {
     httpd_resp_set_status(req, "400 Bad Request");
     httpd_resp_send(req, "Invalid request body", HTTPD_RESP_USE_STRLEN);
@@ -920,7 +942,7 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
   }
   content[ret] = '\0';
 
-  cJSON *obj = cJSON_Parse(content);
+  cJSON *obj = cJSON_Parse(content.data());
   if (!obj) {
     httpd_resp_set_status(req, "400 Bad Request");
     httpd_resp_send(req, "Invalid JSON", HTTPD_RESP_USE_STRLEN);
@@ -949,7 +971,7 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     return ESP_FAIL;
   }
 
-  if (!validateRequest(req, configSchema, content)) {
+  if (!validateRequest(req, configSchema, content.data())) {
     cJSON_Delete(data);
     cJSON_Delete(configSchema);
     cJSON_Delete(obj);
@@ -1568,26 +1590,26 @@ void WebServerManager::broadcastWs(const uint8_t *payload, size_t len,
  * @param type WebSocket frame type (e.g., HTTPD_WS_TYPE_TEXT or HTTPD_WS_TYPE_BINARY).
  */
 void WebServerManager::queue_ws_frame(int fd, const uint8_t *payload,
-                                      size_t len, httpd_ws_type_t type) {
-  // Allocate memory for the struct and the payload
-  size_t total_size = sizeof(WsFrame) + len;
-  WsFrame *frame = static_cast<WsFrame *>(malloc(total_size));
-  if (!frame) {
-    ESP_LOGE(TAG, "Failed to allocate memory for WebSocket frame");
-    return;
-  }
+                                       size_t len, httpd_ws_type_t type) {
+   // Allocate memory for the struct and the payload
+   size_t total_size = sizeof(WsFrame) + len;
+   WsFrame* raw_frame = static_cast<WsFrame *>(malloc(total_size));
+   if (!raw_frame) {
+     ESP_LOGE(TAG, "Failed to allocate memory for WebSocket frame");
+     return;
+   }
 
-  // Populate the struct
-  frame->fd = fd;
-  frame->type = type;
-  frame->len = len;
-  memcpy(frame->payload, payload, len);
+   // Populate the struct
+   raw_frame->fd = fd;
+   raw_frame->type = type;
+   raw_frame->len = len;
+   memcpy(raw_frame->payload, payload, len);
 
-  // Send the pointer to the queue
-  if (xQueueSend(m_wsQueue, &frame, pdMS_TO_TICKS(10)) != pdPASS) {
-    ESP_LOGE(TAG, "Failed to queue WebSocket frame");
-    free(frame);
-  }
+   // Send the pointer to the queue
+   if (xQueueSend(m_wsQueue, &raw_frame, pdMS_TO_TICKS(10)) != pdPASS) {
+     ESP_LOGE(TAG, "Failed to queue WebSocket frame");
+     free(raw_frame);
+   }
 }
 
 /**
@@ -2295,7 +2317,7 @@ esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
 
   // Ensure minimum and maximum buffer sizes
   const size_t min_buffer_size = 4096;       // 4KB minimum
-  const size_t max_buffer_size = 512 * 1024; // 512KB maximum
+  const size_t max_buffer_size = 64 * 1024; // 64KB maximum
 
   if (buffer_size < min_buffer_size) {
     buffer_size = min_buffer_size;
@@ -2308,10 +2330,19 @@ esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
     buffer_size = content_len;
   }
 
+  // Check for sufficient contiguous memory
+  size_t largest_free = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+  if (largest_free < buffer_size) {
+      ESP_LOGE(TAG, "Insufficient contiguous memory: largest free block %d bytes, needed %d bytes", largest_free, buffer_size);
+      m_otaError = "Insufficient contiguous memory for buffer";
+      esp_task_wdt_delete(NULL);
+      return ESP_FAIL;
+  }
+
   ESP_LOGI(TAG, "Allocating %d byte buffer (free heap: %d bytes)", buffer_size,
            available_heap);
 
-  char *buffer = (char *)malloc(buffer_size);
+  char *buffer = (char *)heap_caps_malloc(buffer_size, MALLOC_CAP_8BIT);
   if (!buffer) {
     ESP_LOGE(TAG, "Failed to allocate %d byte buffer for OTA", buffer_size);
     esp_ota_abort(m_otaHandle);
@@ -2363,6 +2394,8 @@ esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
     esp_task_wdt_reset();
 
     int received = httpd_req_recv(req, buffer, chunk_size);
+
+    vTaskDelay(1);
 
     // Reset watchdog after receive operation
     esp_task_wdt_reset();
@@ -2432,6 +2465,8 @@ esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
     m_otaWrittenBytes += received;
     remaining -= received;
 
+    vTaskDelay(1);
+
     ESP_LOGI(TAG, "Received %d bytes, total: %d/%d (%.1f%%)", received,
              m_otaWrittenBytes, content_len,
              (float)m_otaWrittenBytes / content_len * 100.0);
@@ -2450,14 +2485,17 @@ esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
 
     // Yield after each chunk to allow other tasks to run and monitor heap
     size_t current_heap = esp_get_free_heap_size();
-    ESP_LOGI(TAG, "Free heap during OTA: %d bytes", current_heap);
+    size_t largest_free = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+    ESP_LOGI(TAG, "Free heap during OTA: %d bytes, largest free block: %d bytes", current_heap, largest_free);
+    if (current_heap < 20000) {
+        ESP_LOGW(TAG, "Warning: Free heap dropped below 20KB: %d bytes", current_heap);
+    }
     vTaskDelay(pdMS_TO_TICKS(
         50)); // Slightly longer delay since chunks are much larger
   }
 
   ESP_LOGI(TAG, "OTA write completed: %d bytes", m_otaWrittenBytes);
 
-  // Free the buffer
   free(buffer);
 
   // Remove task from watchdog before finalizing

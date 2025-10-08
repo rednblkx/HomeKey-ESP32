@@ -18,6 +18,32 @@ namespace loggable {
 }
 
 /**
+ * @brief WebSocket frame structure for queuing.
+ */
+struct WsFrame {
+    int fd;
+    httpd_ws_type_t type;
+    size_t len;
+    uint8_t payload[]; // Flexible array member
+};
+
+/**
+ * @brief Custom deleter for WsFrame pointers.
+ */
+struct WsFrameDeleter {
+    void operator()(WsFrame* frame) const {
+        if (frame) {
+            free(frame);
+        }
+    }
+};
+
+/**
+ * @brief RAII wrapper for WsFrame using unique_ptr.
+ */
+using WsFramePtr = std::unique_ptr<WsFrame, WsFrameDeleter>;
+
+/**
  * @class WebServerManager
  * @brief Manages the web-based configuration portal.
  *
