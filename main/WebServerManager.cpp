@@ -234,8 +234,6 @@ void WebServerManager::begin() {
 
   setupRoutes();
 
-  initializeOTAWorker();
-
   ESP_LOGI(TAG, "Creating status timer...");
   esp_timer_create_args_t statusTimerArgs = {
       .callback = &WebServerManager::statusTimerCallback,
@@ -2097,6 +2095,7 @@ void WebServerManager::otaWorkerTask(void *parameter) {
   }
 
   ESP_LOGW(TAG, "OTA worker task stopped");
+  instance->m_otaWorkerHandle = nullptr;
   vTaskDelete(NULL);
 }
 
@@ -2571,7 +2570,6 @@ esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
     // mount
   }
 
-  esp_task_wdt_delete(NULL); // Remove from watchdog
   return ESP_OK;
 }
 
@@ -2614,6 +2612,12 @@ void WebServerManager::cleanupOTAAsync() {
  */
 esp_err_t WebServerManager::handleOTAUpload(httpd_req_t *req) {
   ESP_LOGI(TAG, "OTA upload request received");
+
+  WebServerManager* instance = static_cast<WebServerManager*>(req->user_ctx);
+
+  if(instance->m_otaWorkerHandle == nullptr) {
+    instance->initializeOTAWorker();
+  }
 
   // Queue the request for async processing
   return queueOTARequest(req);
