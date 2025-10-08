@@ -22,6 +22,7 @@
 #include <dirent.h>
 #include <esp_app_desc.h>
 #include <event_manager.hpp>
+#include <future>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -2104,6 +2105,11 @@ void WebServerManager::otaWorkerTask(void *parameter) {
       if (result != ESP_OK) {
         ESP_LOGE(TAG, "OTA upload failed");
       }
+      instance->m_otaInProgress = false;
+      instance->m_otaWrittenBytes = 0;
+      instance->m_otaTotalBytes = 0;
+      instance->m_otaError.clear();
+      instance->m_otaHandle = 0;
     } else {
       ESP_LOGW(TAG, "OTA worker task timed out waiting for request");
       break;
@@ -2343,7 +2349,9 @@ esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
              content_len, m_littlefsPartition->subtype, m_littlefsPartition->address);
   }
   // Broadcast OTA start status
-  broadcastOTAStatus();
+  auto f = std::async(std::launch::async, [this]() {
+    broadcastOTAStatus();
+  });
 
   // Allocate buffer prioritizing PSRAM for large buffers, falling back to internal RAM
   const size_t preferred_size = 64 * 1024; // 64KB preferred buffer size
@@ -2511,7 +2519,9 @@ esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
                content_len, (float)m_otaWrittenBytes / content_len * 100.0);
 
       // Broadcast progress update
-      broadcastOTAStatus();
+      auto f = std::async(std::launch::async, [this]() {
+        broadcastOTAStatus();
+      });
 
       last_broadcast_bytes = m_otaWrittenBytes; // Update last broadcast point
     }
