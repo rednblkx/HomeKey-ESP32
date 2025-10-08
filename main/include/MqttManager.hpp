@@ -2,7 +2,6 @@
 #include "mqtt_client.h"
 #include <string>
 #include <vector>
-#include "esp_tls.h"
 #include "esp_timer.h"
 
 class LockManager;
