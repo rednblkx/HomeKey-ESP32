@@ -19,10 +19,10 @@
 	});
 </script>
 
-<div class="bg-base-200 text-base-content lg:w-70 h-full flex flex-col" role="navigation" aria-label="Main navigation" {id}>
+<div class="bg-base-200 text-base-content lg:w-80 max-w-full h-full flex flex-col" role="navigation" aria-label="Main navigation" {id}>
 	<!-- Header Section -->
 	<div class="text-lg font-bold hidden lg:block">
-		<div class="flex items-center flex-col p-4 justify-center">
+		<div class="flex items-center flex-col p-4">
 			<img src={logoSrc()} alt="HomeKey-ESP32 logo" class="w-8 h-8" />
 			<div class="flex items-center flex-col">
 				<span>HomeKey-ESP32</span>
