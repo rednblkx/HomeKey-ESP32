@@ -6,10 +6,7 @@
 #include "cJSON.h"
 #include "config.hpp"
 #include "esp_http_server.h"
-#include "esp_log.h"
 #include "esp_ota_ops.h"
-#include "esp_partition.h"
-#include "esp_task_wdt.h"
 #include "esp_timer.h"
 #include "eth_structs.hpp"
 #include "eventStructs.hpp"
@@ -19,15 +16,10 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include <LittleFS.h>
-#include <cstring>
 #include <dirent.h>
-#include <errno.h>
 #include <esp_app_desc.h>
 #include <event_manager.hpp>
-#include <mbedtls/error.h>
-#include <mbedtls/x509_crt.h>
 #include <string>
-#include <sys/stat.h>
 
 const char *WebServerManager::TAG = "WebServerManager";
 
@@ -2674,16 +2666,18 @@ void WebServerManager::broadcastOTAStatus() {
 }
 
 /**
- * @brief Handles certificate upload requests
- * @param req HTTP request containing certificate content
+ * @brief Handles certificate bundle upload requests
+ * @param req HTTP request containing certificate bundle content
  * @return ESP_OK on success, ESP_FAIL on error
  *
  * Expects:
- * - Query parameter: ?type=<ca|client|key>
- * - Request body: Certificate content in PEM format
- * - Max content length: 16KB
+ * - Request body: Certificate bundle content in PEM format containing CA, client cert, and private key
+ * - Max content length: 8KB
  *
- * Returns JSON response with status, message, type, and size
+ * The bundle is parsed and individual certificates are saved using ConfigManager's centralized
+ * certificate validation and storage methods. Certificate validation is handled by ConfigManager.
+ *
+ * Returns JSON response with status, message, size, and reconnection status
  */
 esp_err_t WebServerManager::handleCertificateUpload(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
@@ -2697,7 +2691,7 @@ esp_err_t WebServerManager::handleCertificateUpload(httpd_req_t *req) {
 
   // Read request body
   size_t content_len = req->content_len;
-  if (content_len == 0 || content_len > 32768) { // Max 32KB for bundle
+  if (content_len == 0 || content_len > 8192) { // Max 8KB
     httpd_resp_set_status(req, "400 Bad Request");
     httpd_resp_send(req, "Invalid bundle content length",
                     HTTPD_RESP_USE_STRLEN);
@@ -2731,34 +2725,10 @@ esp_err_t WebServerManager::handleCertificateUpload(httpd_req_t *req) {
   // Save certificate bundle using ConfigManager
   bool success = instance->m_configManager.saveCertificateBundle(bundleContent);
 
-  // Check if MQTT is currently connected and trigger reconnection with new
-  // certificates
-  bool reconnectionTriggered = false;
-  std::string reconnectionStatus = "not_needed";
-
   if (success) {
     ESP_LOGI(TAG, "Certificate bundle uploaded successfully, size: %zu bytes",
              bundleContent.length());
 
-    // Trigger MQTT reconnection if MQTT manager is available and connected
-    if (instance->m_mqttManager != nullptr) {
-      if (instance->m_mqttManager->isConnected()) {
-        ESP_LOGI(
-            TAG,
-            "MQTT is connected, triggering reconnection with new certificates");
-        reconnectionTriggered =
-            instance->m_mqttManager->reconnectWithNewCertificates();
-        reconnectionStatus = reconnectionTriggered ? "triggered" : "failed";
-      } else {
-        ESP_LOGI(TAG, "MQTT is not connected, will use new certificates on "
-                      "next connection attempt");
-        reconnectionStatus = "pending_next_connection";
-      }
-    } else {
-      ESP_LOGW(
-          TAG,
-          "MQTT manager not available, certificate reconnection not triggered");
-    }
   } else {
     ESP_LOGE(TAG, "Failed to save certificate bundle");
   }
@@ -2769,10 +2739,6 @@ esp_err_t WebServerManager::handleCertificateUpload(httpd_req_t *req) {
     cJSON_AddStringToObject(response, "message",
                             "Certificate bundle uploaded successfully");
     cJSON_AddNumberToObject(response, "size", total_received);
-    cJSON_AddStringToObject(response, "reconnectionStatus",
-                            reconnectionStatus.c_str());
-    cJSON_AddBoolToObject(response, "reconnectionTriggered",
-                          reconnectionTriggered);
 
     char *response_str = cJSON_PrintUnformatted(response);
     httpd_resp_set_type(req, "application/json");
@@ -2789,7 +2755,15 @@ esp_err_t WebServerManager::handleCertificateUpload(httpd_req_t *req) {
   }
 }
 
-// Certificate status handler
+/**
+ * @brief Handles certificate status requests
+ * @param req HTTP request for certificate status information
+ * @return ESP_OK on success, ESP_FAIL on error
+ *
+ * Returns JSON response with detailed status for each certificate type (CA, client, private key)
+ * including existence, validity, size, issuer, subject, expiration, and key matching information.
+ * Certificate validation is performed using ConfigManager's centralized validation methods.
+ */
 esp_err_t WebServerManager::handleCertificateStatus(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
   if (!instance) {
@@ -2802,7 +2776,7 @@ esp_err_t WebServerManager::handleCertificateStatus(httpd_req_t *req) {
   cJSON *response = cJSON_CreateObject();
   cJSON *certificates = cJSON_CreateObject();
 
-  // Check each certificate type with enhanced validation
+  // Check each certificate type using ConfigManager's centralized validation
   const char *certTypes[] = {"ca", "client", "privateKey"};
   for (const char *certType : certTypes) {
     cJSON *certInfo = cJSON_CreateObject();
@@ -2887,7 +2861,16 @@ esp_err_t WebServerManager::handleCertificateStatus(httpd_req_t *req) {
   return ESP_OK;
 }
 
-// Certificate delete handler
+/**
+ * @brief Handles certificate deletion requests
+ * @param req HTTP request for certificate deletion
+ * @return ESP_OK on success, ESP_FAIL on error
+ *
+ * Expects URI in format: /certificates/{type} where type is 'ca', 'client', or 'privateKey'
+ * Uses ConfigManager's centralized certificate deletion method.
+ *
+ * Returns JSON response with status, message, and certificate type
+ */
 esp_err_t WebServerManager::handleCertificateDelete(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
   if (!instance) {
@@ -2921,7 +2904,7 @@ esp_err_t WebServerManager::handleCertificateDelete(httpd_req_t *req) {
     return ESP_FAIL;
   }
 
-  // Delete certificate using ConfigManager
+  // Delete certificate using ConfigManager's centralized method
   bool success = instance->m_configManager.deleteCertificate(certType);
 
   if (success) {

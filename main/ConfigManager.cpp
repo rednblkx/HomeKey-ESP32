@@ -1,9 +1,6 @@
 #include "ConfigManager.hpp"
 #include "cJSON.h"
 #include "config.hpp"
-#include <algorithm>
-#include <cstddef>
-#include <cstdint>
 #include <ranges>
 #include <string>
 #include <vector>
@@ -18,8 +15,6 @@
 #include <mbedtls/x509_crt.h>
 #include <mbedtls/pk.h>
 #include <mbedtls/error.h>
-#include <mbedtls/platform.h>
-#include <ctime>
 
 const char* ConfigManager::TAG = "ConfigManager";
 
@@ -1409,4 +1404,88 @@ std::string ConfigManager::getCertificateExpiration(const std::string& certConte
   if(!ret)
     return fmt::format("Valid From={}/{}/{} To={}/{}/{}", valid_from.day, valid_from.mon, valid_from.year, valid_to.day, valid_to.mon, valid_to.year);
   return "";
+}
+
+/**
+ * @brief Provides validated SSL certificates for MQTT configuration
+ *
+ * This centralized method loads and validates all SSL certificates required for MQTT connections.
+ * It performs comprehensive validation including format, content, and cryptographic compatibility checks.
+ *
+ * @return MqttSSLCertificates struct containing validated certificates and validation status
+ */
+MqttSSLCertificates ConfigManager::getMqttSSLCertificates() {
+    MqttSSLCertificates certs;
+
+    ESP_LOGI(TAG, "Loading and validating MQTT SSL certificates...");
+
+    // Load certificates
+    certs.caCert = loadCertificate("ca");
+    certs.clientCert = loadCertificate("client");
+    certs.clientKey = loadCertificate("privateKey");
+
+    // Validate CA certificate if present
+    if (!certs.caCert.empty()) {
+        if (!validateCertificateContent(certs.caCert, "ca")) {
+            ESP_LOGE(TAG, "CA certificate validation failed");
+            certs.isValid = false;
+            certs.errorMessage = "Invalid CA certificate";
+            return certs;
+        }
+        certs.hasCACert = true;
+        ESP_LOGI(TAG, "CA certificate validated successfully");
+    } else {
+        ESP_LOGI(TAG, "No CA certificate configured");
+    }
+
+    // Validate client certificate if present
+    if (!certs.clientCert.empty()) {
+        if (!validateCertificateContent(certs.clientCert, "client")) {
+            ESP_LOGE(TAG, "Client certificate validation failed");
+            certs.isValid = false;
+            certs.errorMessage = "Invalid client certificate";
+            return certs;
+        }
+        certs.hasClientCert = true;
+        ESP_LOGI(TAG, "Client certificate validated successfully");
+    } else {
+        ESP_LOGI(TAG, "No client certificate configured");
+    }
+
+    // Validate private key if present
+    if (!certs.clientKey.empty()) {
+        if (!validateCertificateContent(certs.clientKey, "privateKey")) {
+            ESP_LOGE(TAG, "Private key validation failed");
+            certs.isValid = false;
+            certs.errorMessage = "Invalid private key";
+            return certs;
+        }
+        certs.hasPrivateKey = true;
+        ESP_LOGI(TAG, "Private key validated successfully");
+    } else {
+        ESP_LOGI(TAG, "No private key configured");
+    }
+
+    // Validate certificate-key pair compatibility if both are present
+    if (certs.hasClientCert && certs.hasPrivateKey) {
+        if (!validatePrivateKeyMatchesCertificate(certs.clientKey, certs.clientCert)) {
+            ESP_LOGE(TAG, "Private key does not match client certificate");
+            certs.isValid = false;
+            certs.errorMessage = "Private key does not match client certificate";
+            return certs;
+        }
+        ESP_LOGI(TAG, "Certificate-key pair validation successful");
+    }
+
+    // Check if we have sufficient certificates for SSL
+    if (!certs.hasCACert && !m_mqttConfig.allowInsecure) {
+        ESP_LOGE(TAG, "No CA certificate configured and allowInsecure is false");
+        certs.isValid = false;
+        certs.errorMessage = "CA certificate required when allowInsecure is false";
+        return certs;
+    }
+
+    certs.isValid = true;
+    ESP_LOGI(TAG, "All MQTT SSL certificates validated successfully");
+    return certs;
 }

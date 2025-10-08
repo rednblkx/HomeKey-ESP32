@@ -27,17 +27,10 @@ MqttManager::MqttManager(const ConfigManager& configManager)
       m_client(nullptr),
       device_name(configManager.getConfig<espConfig::misc_config_t>().deviceName),
       m_sslConfigured(false),
-      m_isConnected(false),
-      m_isReconnecting(false),
-      m_reconnectionTimer(nullptr),
-      m_reconnectionAttempts(0),
-      m_maxReconnectionAttempts(10),
-      m_reconnectionDelayMs(INITIAL_RECONNECTION_DELAY_MS),
       m_healthCheckTimer(nullptr),
       m_lastHealthCheckTime(0)
 {
     // Initialize TLS configuration
-    memset(&m_tls_cfg, 0, sizeof(m_tls_cfg));
   espp::EventManager::get().add_subscriber(
       "lock/stateChanged", "MqttManager",
       [&](const std::vector<uint8_t> &data) {
@@ -81,8 +74,6 @@ MqttManager::MqttManager(const ConfigManager& configManager)
 }
 
 MqttManager::~MqttManager() {
-   // Clean up timers
-   stopReconnectionTimer();
    stopHealthCheckTimer();
 
    // Clean up MQTT client if it exists
@@ -122,6 +113,10 @@ bool MqttManager::begin(std::string deviceID) {
         ESP_LOGI(TAG, "SSL/TLS is enabled for MQTT connection");
         mqtt_cfg.broker.address.transport = MQTT_TRANSPORT_OVER_SSL;
         
+        if (m_mqttConfig.useSSL && m_mqttConfig.allowInsecure) {
+            ESP_LOGW(TAG, "Security warning: SSL/TLS is enabled but certificate validation is disabled");
+        }
+
         if (!configureSSL(mqtt_cfg)) {
             ESP_LOGE(TAG, "Failed to configure SSL/TLS for MQTT connection");
             return false;
@@ -225,14 +220,9 @@ void MqttManager::onMqttEvent(esp_event_base_t base, int32_t event_id, void* eve
             break;
         case MQTT_EVENT_DISCONNECTED:
             ESP_LOGW(TAG, "MQTT_EVENT_DISCONNECTED: Client disconnected from broker");
-            ESP_LOGI(TAG, "Connection state: DISCONNECTED - Previous state was %s",
-                     m_isConnected ? "CONNECTED" : "NOT_CONNECTED");
-            m_isConnected = false;
             // Stop health checks when disconnected
             stopHealthCheckTimer();
             ESP_LOGI(TAG, "Connection health monitoring: DISABLED - Connection lost");
-            // Start reconnection timer for any disconnection
-            startReconnectionTimer();
             break;
         case MQTT_EVENT_SUBSCRIBED:
             ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED: Successfully subscribed to topic (msg_id=%d)", event->msg_id);
@@ -304,11 +294,6 @@ void MqttManager::onMqttEvent(esp_event_base_t base, int32_t event_id, void* eve
             } else {
                 ESP_LOGE(TAG, "MQTT error occurred but no error handle available");
             }
-            // Start reconnection on error if not already connected
-            if (!m_isConnected && !m_isReconnecting) {
-                ESP_LOGI(TAG, "Starting reconnection due to MQTT error");
-                startReconnectionTimer();
-            }
             break;
         default:
             ESP_LOGD(TAG, "Unhandled MQTT event: %d", event->event_id);
@@ -327,9 +312,6 @@ void MqttManager::onConnected() {
     ESP_LOGI(TAG, "MQTT client connected%s", m_mqttConfig.useSSL ? " with SSL/TLS encryption" : "");
 
     m_isConnected = true;
-    m_isReconnecting = false;
-    m_reconnectionAttempts = 0; // Reset reconnection attempts on successful connection
-    stopReconnectionTimer(); // Stop any ongoing reconnection attempts
 
     if (m_mqttConfig.useSSL) {
         ESP_LOGI(TAG, "SSL/TLS connection established successfully");
@@ -609,16 +591,18 @@ void MqttManager::publishHassDiscovery() {
 
 // --- SSL/TLS Configuration Methods ---
 
+/**
+ * @brief Configure SSL/TLS settings for MQTT connection
+ *
+ * This method sets up SSL/TLS parameters for the MQTT client using pre-validated certificates
+ * from ConfigManager. Certificate validation and loading is now centralized in ConfigManager.
+ *
+ * @param mqtt_cfg Reference to MQTT client configuration structure to be updated
+ * @return true if SSL configuration was successful, false otherwise
+ */
 bool MqttManager::configureSSL(esp_mqtt_client_config_t& mqtt_cfg) {
     ESP_LOGI(TAG, "Configuring SSL/TLS for MQTT connection...");
     ESP_LOGI(TAG, "TLS handshake state: CONFIGURING - Setting up SSL/TLS parameters");
-
-    // Load certificates first
-    if (!loadCertificates()) {
-        ESP_LOGE(TAG, "Failed to load SSL/TLS certificates");
-        ESP_LOGI(TAG, "TLS handshake state: FAILED - Certificate loading failed");
-        return false;
-    }
 
     // Configure TLS settings
     mqtt_cfg.broker.verification.use_global_ca_store = false;
@@ -655,92 +639,12 @@ bool MqttManager::configureSSL(esp_mqtt_client_config_t& mqtt_cfg) {
         ESP_LOGI(TAG, "TLS handshake state: SERVER_AUTH_ONLY - One-way TLS authentication");
     }
 
-    // Set SSL/TLS transport specific settings
-    mqtt_cfg.network.disable_auto_reconnect = false;
-    mqtt_cfg.session.keepalive = 60;
-    mqtt_cfg.session.disable_clean_session = false;
-
     m_sslConfigured = true;
     ESP_LOGI(TAG, "SSL/TLS configuration completed successfully");
     ESP_LOGI(TAG, "TLS handshake state: READY - Configuration complete, ready for connection attempt");
     return true;
 }
 
-bool MqttManager::loadCertificates() {
-    ESP_LOGI(TAG, "Loading SSL/TLS certificates...");
-    ESP_LOGI(TAG, "Certificate validation state: STARTING - Beginning certificate format validation");
-
-    // Validate certificate formats (basic check for PEM format)
-    if (!m_mqttSslConfig.caCert.empty()) {
-        ESP_LOGI(TAG, "Validating CA certificate format...");
-        if (m_mqttSslConfig.caCert.find("-----BEGIN CERTIFICATE-----") == std::string::npos ||
-            m_mqttSslConfig.caCert.find("-----END CERTIFICATE-----") == std::string::npos) {
-            ESP_LOGE(TAG, "Certificate validation FAILED: Invalid CA certificate format - missing PEM headers");
-            ESP_LOGE(TAG, "Expected format: PEM certificate with '-----BEGIN CERTIFICATE-----' and '-----END CERTIFICATE-----'");
-            return false;
-        }
-        ESP_LOGI(TAG, "Certificate validation PASSED: CA certificate format valid (%zu bytes)", m_mqttSslConfig.caCert.length());
-
-        // Additional validation - check for basic certificate structure
-        size_t certCount = 0;
-        size_t pos = 0;
-        while ((pos = m_mqttSslConfig.caCert.find("-----BEGIN CERTIFICATE-----", pos)) != std::string::npos) {
-            certCount++;
-            pos += 27; // length of "-----BEGIN CERTIFICATE-----"
-        }
-        ESP_LOGI(TAG, "CA certificate chain contains %zu certificate(s)", certCount);
-    } else {
-        ESP_LOGI(TAG, "No CA certificate configured - will use insecure mode if allowInsecure=true");
-    }
-
-    if (!m_mqttSslConfig.clientCert.empty()) {
-        ESP_LOGI(TAG, "Validating client certificate format...");
-        if (m_mqttSslConfig.clientCert.find("-----BEGIN CERTIFICATE-----") == std::string::npos ||
-            m_mqttSslConfig.clientCert.find("-----END CERTIFICATE-----") == std::string::npos) {
-            ESP_LOGE(TAG, "Certificate validation FAILED: Invalid client certificate format - missing PEM headers");
-            ESP_LOGE(TAG, "Expected format: PEM certificate with '-----BEGIN CERTIFICATE-----' and '-----END CERTIFICATE-----'");
-            return false;
-        }
-        ESP_LOGI(TAG, "Certificate validation PASSED: Client certificate format valid (%zu bytes)", m_mqttSslConfig.clientCert.length());
-    }
-
-    if (!m_mqttSslConfig.clientKey.empty()) {
-        ESP_LOGI(TAG, "Validating client private key format...");
-        if (m_mqttSslConfig.clientKey.find("-----BEGIN") == std::string::npos ||
-            m_mqttSslConfig.clientKey.find("-----END") == std::string::npos) {
-            ESP_LOGE(TAG, "Certificate validation FAILED: Invalid client key format - missing PEM headers");
-            ESP_LOGE(TAG, "Expected format: PEM private key with '-----BEGIN [TYPE] PRIVATE KEY-----' and '-----END [TYPE] PRIVATE KEY-----'");
-            return false;
-        }
-
-        // Check if it's RSA or EC key
-        bool isRSA = m_mqttSslConfig.clientKey.find("-----BEGIN RSA PRIVATE KEY-----") != std::string::npos;
-        bool isEC = m_mqttSslConfig.clientKey.find("-----BEGIN EC PRIVATE KEY-----") != std::string::npos;
-        bool isPKCS8 = m_mqttSslConfig.clientKey.find("-----BEGIN PRIVATE KEY-----") != std::string::npos;
-
-        if (isRSA) {
-            ESP_LOGI(TAG, "Certificate validation PASSED: RSA private key format valid (%zu bytes)", m_mqttSslConfig.clientKey.length());
-        } else if (isEC) {
-            ESP_LOGI(TAG, "Certificate validation PASSED: EC private key format valid (%zu bytes)", m_mqttSslConfig.clientKey.length());
-        } else if (isPKCS8) {
-            ESP_LOGI(TAG, "Certificate validation PASSED: PKCS#8 private key format valid (%zu bytes)", m_mqttSslConfig.clientKey.length());
-        } else {
-            ESP_LOGW(TAG, "Private key format detected but type unknown - proceeding anyway (%zu bytes)", m_mqttSslConfig.clientKey.length());
-        }
-    }
-
-    if (m_mqttConfig.allowInsecure) {
-        ESP_LOGW(TAG, "SECURITY WARNING: SSL/TLS certificate validation is disabled (allowInsecure=true)");
-        ESP_LOGW(TAG, "This configuration allows man-in-the-middle attacks and should only be used for testing");
-        ESP_LOGI(TAG, "Certificate validation state: DISABLED - allowInsecure flag set");
-    } else {
-        ESP_LOGI(TAG, "Certificate validation state: ENABLED - Full certificate validation will be performed");
-    }
-
-    ESP_LOGI(TAG, "Certificate loading completed successfully");
-    ESP_LOGI(TAG, "TLS handshake preparation: CERTIFICATES_VALIDATED - Ready for SSL/TLS connection");
-    return true;
-}
 
 void MqttManager::logSSLError(const char* operation, esp_err_t error) {
     if (error != ESP_OK) {
@@ -790,118 +694,8 @@ void MqttManager::logSSLError(const char* operation, esp_err_t error) {
     }
 }
 
-// --- Reconnection Methods ---
-
-bool MqttManager::reconnectWithNewCertificates() {
-    ESP_LOGI(TAG, "Reconnecting MQTT with new certificates...");
-    
-    if (!m_client) {
-        ESP_LOGE(TAG, "Cannot reconnect: MQTT client not initialized");
-        return false;
-    }
-    
-    // Stop current connection
-    esp_mqtt_client_stop(m_client);
-    esp_mqtt_client_destroy(m_client);
-    m_client = nullptr;
-    m_isConnected = false;
-    
-    // Re-initialize with new configuration
-    return begin(deviceID);
-}
-
 bool MqttManager::isConnected() const {
     return m_isConnected;
-}
-
-void MqttManager::startReconnectionTimer() {
-    if (m_reconnectionTimer || m_isReconnecting) {
-        ESP_LOGW(TAG, "Reconnection already in progress");
-        return;
-    }
-
-    m_reconnectionAttempts++;
-
-    if (m_reconnectionAttempts > m_maxReconnectionAttempts) {
-        ESP_LOGE(TAG, "Max reconnection attempts reached (%d), giving up", m_maxReconnectionAttempts);
-        m_reconnectionAttempts = 0; // Reset for future attempts
-        return;
-    }
-
-    // Calculate exponential backoff delay with jitter
-    uint32_t baseDelay = INITIAL_RECONNECTION_DELAY_MS * (1 << (m_reconnectionAttempts - 1));
-    m_reconnectionDelayMs = std::min(baseDelay, MAX_RECONNECTION_DELAY_MS);
-    // Add some jitter to avoid thundering herd
-    m_reconnectionDelayMs += (esp_random() % 1000);
-
-    ESP_LOGI(TAG, "Starting reconnection timer: attempt %d/%d, delay %d ms",
-             m_reconnectionAttempts, m_maxReconnectionAttempts, m_reconnectionDelayMs);
-
-    esp_timer_create_args_t timer_args = {
-        .callback = [](void* arg) {
-            MqttManager* instance = static_cast<MqttManager*>(arg);
-            instance->handleReconnection();
-        },
-        .arg = this,
-        .name = "mqtt_reconnect"
-    };
-
-    esp_timer_create(&timer_args, &m_reconnectionTimer);
-    esp_timer_start_once(m_reconnectionTimer, m_reconnectionDelayMs * 1000); // Convert to microseconds
-}
-
-void MqttManager::stopReconnectionTimer() {
-    if (m_reconnectionTimer) {
-        esp_timer_stop(m_reconnectionTimer);
-        esp_timer_delete(m_reconnectionTimer);
-        m_reconnectionTimer = nullptr;
-    }
-}
-
-void MqttManager::handleReconnection() {
-    ESP_LOGI(TAG, "Handling MQTT reconnection attempt %d/%d", m_reconnectionAttempts, m_maxReconnectionAttempts);
-
-    if (m_isConnected) {
-        ESP_LOGI(TAG, "Already connected, cancelling reconnection");
-        m_isReconnecting = false;
-        stopReconnectionTimer();
-        return;
-    }
-
-    m_isReconnecting = true;
-    bool success = false;
-
-    if (m_mqttConfig.useSSL) {
-        // For SSL connections, reload certificates and recreate client
-        ESP_LOGI(TAG, "Attempting SSL reconnection with certificate reload");
-        success = reconnectWithNewCertificates();
-    } else {
-        // For non-SSL connections, use simple reconnect
-        ESP_LOGI(TAG, "Attempting non-SSL reconnection");
-        if (m_client) {
-            esp_err_t err = esp_mqtt_client_reconnect(m_client);
-            success = (err == ESP_OK);
-            if (success) {
-                ESP_LOGI(TAG, "Non-SSL reconnection initiated successfully");
-            } else {
-                ESP_LOGE(TAG, "Non-SSL reconnection failed: %s", esp_err_to_name(err));
-            }
-        } else {
-            ESP_LOGE(TAG, "MQTT client not initialized, cannot reconnect");
-        }
-    }
-
-    if (success) {
-        ESP_LOGI(TAG, "Reconnection attempt %d successful", m_reconnectionAttempts);
-        m_reconnectionAttempts = 0; // Reset on successful connection
-        m_isReconnecting = false;
-        stopReconnectionTimer();
-    } else {
-        ESP_LOGE(TAG, "Reconnection attempt %d failed", m_reconnectionAttempts);
-        m_isReconnecting = false;
-        // Timer will be restarted with exponential backoff in the next attempt
-        startReconnectionTimer();
-    }
 }
 
 // --- Health Check Methods ---
@@ -958,21 +752,6 @@ void MqttManager::performHealthCheck() {
         publish(healthTopic, std::to_string(healthCheckCounter), 0, false);
 
         ESP_LOGD(TAG, "Health check ping sent (counter: %d)", healthCheckCounter);
-    } else {
-        ESP_LOGW(TAG, "Health status: POOR - Connection is down");
-        ESP_LOGI(TAG, "Reconnection status: %s", m_isReconnecting ? "IN_PROGRESS" : "IDLE");
-        if (m_reconnectionAttempts > 0) {
-            ESP_LOGI(TAG, "Reconnection attempts: %d/%d", m_reconnectionAttempts, m_maxReconnectionAttempts);
-        }
-    }
-
-    // Check for potential issues
-    if (m_mqttConfig.useSSL && m_mqttConfig.allowInsecure) {
-        ESP_LOGW(TAG, "Security warning: SSL/TLS is enabled but certificate validation is disabled");
-    }
-
-    if (!m_isConnected && !m_isReconnecting) {
-        ESP_LOGW(TAG, "Connection issue detected: Not connected and not attempting reconnection");
     }
 
     m_lastHealthCheckTime = currentTime;

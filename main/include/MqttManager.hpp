@@ -68,12 +68,6 @@ public:
      * @return True if connected, false otherwise.
      */
     bool isConnected() const;
-    
-    /**
-     * @brief Reconnects the MQTT client with new certificates.
-     * @return True if reconnection was triggered successfully, false otherwise.
-     */
-    bool reconnectWithNewCertificates();
 
 private:
     // --- Event Handling ---
@@ -88,13 +82,7 @@ private:
 
     // --- SSL/TLS Configuration ---
     bool configureSSL(esp_mqtt_client_config_t& mqtt_cfg);
-    bool loadCertificates();
     void logSSLError(const char* operation, esp_err_t error);
-    
-    // Internal reconnection methods
-    void startReconnectionTimer();
-    void stopReconnectionTimer();
-    void handleReconnection();
 
     // Health check methods
     void startHealthCheckTimer();
@@ -107,21 +95,11 @@ private:
     const espConfig::mqtt_ssl_t& m_mqttSslConfig;
     esp_mqtt_client_handle_t m_client;
     const std::string &device_name;
+    bool m_isConnected;
     
     // SSL/TLS related members
-    esp_tls_cfg_t m_tls_cfg;
     bool m_sslConfigured;
     
-    // Reconnection state
-    bool m_isConnected;
-    bool m_isReconnecting;
-    esp_timer_handle_t m_reconnectionTimer;
-    uint32_t m_reconnectionAttempts;
-    uint32_t m_maxReconnectionAttempts;
-    uint32_t m_reconnectionDelayMs;
-    static constexpr uint32_t MAX_RECONNECTION_DELAY_MS = 30000; // 30 seconds
-    static constexpr uint32_t INITIAL_RECONNECTION_DELAY_MS = 1000; // 1 second
-
     // Health check state
     esp_timer_handle_t m_healthCheckTimer;
     uint32_t m_lastHealthCheckTime;

@@ -8,6 +8,20 @@
 #include <LittleFS.h>
 #include "msgpack/object.h"
 
+/**
+ * @brief Structure containing validated SSL certificates for MQTT configuration
+ */
+struct MqttSSLCertificates {
+    std::string caCert;           ///< CA certificate content
+    std::string clientCert;       ///< Client certificate content
+    std::string clientKey;        ///< Private key content
+    bool hasCACert = false;       ///< Whether CA certificate is present
+    bool hasClientCert = false;   ///< Whether client certificate is present
+    bool hasPrivateKey = false;   ///< Whether private key is present
+    bool isValid = false;         ///< Overall validation status
+    std::string errorMessage;     ///< Error message if validation failed
+};
+
 class ConfigManager {
 public:
     ConfigManager();
@@ -43,10 +57,8 @@ public:
     std::string getCertificateSubject(const std::string& certContent);
     std::string getCertificateExpiration(const std::string& certContent);
 
-  private:
-    // Helper functions for certificate validation
-    bool validateCertificateWithMbedTLS(const std::string& certContent, const std::string& certType);
-    bool validatePrivateKeyContent(const std::string& keyContent);
+    // Centralized SSL certificate provider for MQTT
+    MqttSSLCertificates getMqttSSLCertificates();
 
   private:
     using ConfigMapType = std::map<std::string,
@@ -64,8 +76,10 @@ public:
     void loadConfigFromNvs(const char* key);
     bool saveConfigToNvs(const char* key);
 
-    // Certificate storage helpers
+    // Helper functions for certificate validation
     bool validateCertificateFormat(const std::string& certContent);
+    bool validateCertificateWithMbedTLS(const std::string& certContent, const std::string& certType);
+    bool validatePrivateKeyContent(const std::string& keyContent);
 
     std::map<std::string, ConfigMapType> m_configMap;
     espConfig::mqttConfig_t m_mqttConfig;

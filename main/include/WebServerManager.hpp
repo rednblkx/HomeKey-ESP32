@@ -1,6 +1,5 @@
 #pragma once
 #include <memory>
-#include <atomic>
 #include "esp_http_server.h"
 #include "cJSON.h"
 #include "esp_timer.h"
@@ -9,7 +8,6 @@
 #include <string>
 #include <vector>
 #include <mutex>
-#include "esp_log.h"
 
 class ConfigManager;
 class ReaderDataManager;
