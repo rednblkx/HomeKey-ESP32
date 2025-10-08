@@ -350,7 +350,7 @@
               </div>
               <!-- SSL/TLS Configuration Section -->
               {#if mqttConfig.useSSL}
-                <div class="collapse collapse-arrow bg-base-200 collapse-open">
+                <div class="collapse collapse-arrow bg-base-200">
                   <input type="checkbox" name="mqtt-accordion" />
                   <div class="collapse-title font-medium flex items-center">
                     <svg
