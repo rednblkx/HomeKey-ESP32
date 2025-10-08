@@ -503,7 +503,7 @@
 			{#if isDisabled}
 				<div class="mb-4">
 					<div class="flex justify-between text-sm mb-2">
-						<span>{currentUploadStep} Progress</span>
+						<span>{currentUploadStep()} Progress</span>
 						<span>{Math.round(progressPercent)}%</span>
 					</div>
 					<progress
@@ -518,7 +518,7 @@
 					</div>
 					{#if sequentialUpload}
 						<div class="text-xs text-center mt-1 opacity-70">
-							{uploadStepText}
+							{uploadStepText()}
 						</div>
 					{/if}
 				</div>
@@ -565,7 +565,7 @@
 					<svg class:loading={uploading && sequentialUpload} xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
 					</svg>
-					{(uploading && sequentialUpload) ? uploadStepText : 'Upload Both'}
+					{(uploading && sequentialUpload) ? uploadStepText() : 'Upload Both'}
 				</button>
 			</div>
 
