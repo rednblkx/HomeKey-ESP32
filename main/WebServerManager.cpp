@@ -5,6 +5,7 @@
 #include "ReaderDataManager.hpp"
 #include "cJSON.h"
 #include "config.hpp"
+#include "esp_err.h"
 #include "esp_heap_caps.h"
 #include "esp_http_server.h"
 #include "esp_ota_ops.h"
@@ -22,12 +23,16 @@
 #include <esp_app_desc.h>
 #include <event_manager.hpp>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 const char *WebServerManager::TAG = "WebServerManager";
 
 // WebSocket payload size limit
 const size_t MAX_WS_PAYLOAD = 8192; // 8KB max payload
+
+// Max OTA size
+const size_t MAX_OTA_SIZE = 0x1E0000;
 
 // Forward declaration
 static void mergeJson(cJSON *target, cJSON *source);
@@ -2081,6 +2086,17 @@ void WebServerManager::otaWorkerTask(void *parameter) {
       // Process the OTA upload
       esp_err_t result = instance->otaUploadAsync(otaReq.req);
 
+      if(result == ESP_FAIL) {
+        httpd_resp_set_status(otaReq.req, "500 Internal Server Error");
+        httpd_resp_set_type(otaReq.req, "application/json");
+        httpd_resp_sendstr(otaReq.req, "{\"status\":\"error\",\"message\":\"OTA upload failed\"}");
+      } else {
+        // Send immediate response
+        httpd_resp_set_status(otaReq.req, "202 Accepted");
+        httpd_resp_set_type(otaReq.req, "application/json");
+        httpd_resp_sendstr(otaReq.req, "{\"status\":\"finished\",\"message\":\"OTA upload finished\"}");
+      }
+
       // Complete the async request
       if (httpd_req_async_handler_complete(otaReq.req) != ESP_OK) {
         ESP_LOGE(TAG, "Failed to complete async OTA request");
@@ -2122,8 +2138,7 @@ esp_err_t WebServerManager::queueOTARequest(httpd_req_t *req) {
     std::lock_guard<std::mutex> lock(instance->m_otaMutex);
     if (instance->m_otaInProgress) {
       httpd_resp_set_status(req, "409 Conflict");
-      httpd_resp_send(req, "OTA update already in progress",
-                      HTTPD_RESP_USE_STRLEN);
+      httpd_resp_sendstr(req, "{\"status\":\"error\",\"message\":\"OTA update already in progress\"}");
       return ESP_FAIL;
     }
   }
@@ -2140,8 +2155,7 @@ esp_err_t WebServerManager::queueOTARequest(httpd_req_t *req) {
   if (xSemaphoreTake(instance->m_otaWorkerReady, 0) == pdFALSE) {
     ESP_LOGE(TAG, "OTA worker is busy");
     httpd_resp_set_status(req, "503 Service Unavailable");
-    httpd_resp_send(req, "OTA worker is busy, try again later",
-                    HTTPD_RESP_USE_STRLEN);
+    httpd_resp_sendstr(req, "{\"status\":\"error\",\"message\":\"OTA worker is busy, try again later\"}");
     httpd_req_async_handler_complete(reqCopy);
     return ESP_FAIL;
   }
@@ -2176,17 +2190,10 @@ esp_err_t WebServerManager::queueOTARequest(httpd_req_t *req) {
       pdFALSE) {
     ESP_LOGE(TAG, "Failed to queue OTA request");
     httpd_resp_set_status(req, "503 Service Unavailable");
-    httpd_resp_send(req, "Failed to queue OTA request", HTTPD_RESP_USE_STRLEN);
+    httpd_resp_sendstr(req, "{\"status\":\"error\",\"message\":\"Failed to queue OTA request\"}");
     httpd_req_async_handler_complete(reqCopy);
     return ESP_FAIL;
   }
-
-  // Send immediate response
-  httpd_resp_set_type(req, "application/json");
-  httpd_resp_send(req,
-                  "{\"status\":\"accepted\",\"message\":\"OTA upload queued "
-                  "for processing\"}",
-                  HTTPD_RESP_USE_STRLEN);
 
   return ESP_OK;
 }
@@ -2218,6 +2225,13 @@ esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
   esp_task_wdt_reconfigure(&wdt_config);
   esp_task_wdt_add(NULL); // Add current task to watchdog
 
+  std::unordered_map<esp_err_t, std::string> errMap = {
+    {ESP_ERR_OTA_VALIDATE_FAILED, "Invalid OTA image"},
+    {ESP_ERR_OTA_BASE, "OTA error"},
+    {ESP_ERR_INVALID_ARG, "Invalid argument"},
+    {ESP_ERR_INVALID_STATE, "Invalid state"},
+    {ESP_ERR_INVALID_SIZE, "Invalid size"},
+  };
   ESP_LOGI(TAG, "Starting async OTA upload processing");
   ESP_LOGI(TAG, "Free heap before OTA: %d bytes", esp_get_free_heap_size());
 
@@ -2229,6 +2243,13 @@ esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
     return ESP_FAIL;
   }
 
+  if(content_len > MAX_OTA_SIZE) {
+    ESP_LOGE(TAG, "OTA size too large: %d bytes", content_len);
+    m_otaError = "OTA size too large. Make sure you are not using the merged firmware file. Max size is " + std::to_string(MAX_OTA_SIZE) + " bytes. Received: " + std::to_string(content_len) + " bytes";
+    esp_task_wdt_delete(NULL); // Remove from watchdog
+    return ESP_FAIL;
+  }
+
   const char *uploadTypeStr = (m_currentUploadType == OTAUploadType::LITTLEFS)
                                   ? "LittleFS"
                                   : "Firmware";
@@ -2236,7 +2257,7 @@ esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
 
   // Check if we have enough free heap for the operation
   size_t free_heap = esp_get_free_heap_size();
-  if (free_heap < 30000) { // Need at least 30KB free
+  if (free_heap < 8192) { // Need at least 8KB free
     ESP_LOGE(TAG, "Insufficient heap memory: %d bytes free", free_heap);
     m_otaError = "Insufficient memory for upload";
     esp_task_wdt_delete(NULL); // Remove from watchdog
@@ -2261,9 +2282,9 @@ esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
     err = esp_ota_begin(m_updatePartition, content_len, &m_otaHandle);
     esp_task_wdt_reset();   // Reset watchdog timer
     if (err != ESP_OK) {
-      ESP_LOGE(TAG, "esp_ota_begin failed: %s", esp_err_to_name(err));
+      ESP_LOGE(TAG, "esp_ota_begin failed: %d", err);
       m_otaError =
-          "Failed to begin firmware OTA: " + std::string(esp_err_to_name(err));
+          "Failed to begin firmware OTA: " + std::to_string(err);
       esp_task_wdt_delete(NULL); // Remove from watchdog
       return ESP_FAIL;
     }
@@ -2299,10 +2320,9 @@ esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
     err = esp_partition_erase_range(m_littlefsPartition, 0,
                                     m_littlefsPartition->size);
     if (err != ESP_OK) {
-      ESP_LOGE(TAG, "Failed to erase LittleFS partition: %s",
-               esp_err_to_name(err));
+      ESP_LOGE(TAG, "Failed to erase LittleFS partition: %d", err);
       m_otaError = "Failed to erase LittleFS partition: " +
-                   std::string(esp_err_to_name(err));
+                   std::to_string(err);
       esp_task_wdt_delete(NULL); // Remove from watchdog
       return ESP_FAIL;
     }
@@ -2314,54 +2334,64 @@ esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
   m_otaTotalBytes = content_len;
   m_otaError.clear();
 
-  ESP_LOGI(TAG, "Preparing to write %d bytes to partition subtype %d at offset 0x%lx",
-           content_len, m_updatePartition->subtype, m_updatePartition->address);
+  // Log partition info for the current upload type
+  if (m_currentUploadType == OTAUploadType::FIRMWARE && m_updatePartition) {
+    ESP_LOGI(TAG, "Preparing to write %d bytes to firmware partition subtype %d at offset 0x%lx",
+             content_len, m_updatePartition->subtype, m_updatePartition->address);
+  } else if (m_currentUploadType == OTAUploadType::LITTLEFS && m_littlefsPartition) {
+    ESP_LOGI(TAG, "Preparing to write %d bytes to LittleFS partition subtype %d at offset 0x%lx",
+             content_len, m_littlefsPartition->subtype, m_littlefsPartition->address);
+  }
   // Broadcast OTA start status
   broadcastOTAStatus();
 
-  // Allocate buffer based on available heap (80% of free heap)
-  size_t available_heap = esp_get_free_heap_size();
-  size_t buffer_size = (available_heap * 85) / 100;
-
-  // Ensure minimum and maximum buffer sizes
-  const size_t min_buffer_size = 4096;       // 4KB minimum
-  const size_t max_buffer_size = 128 * 1024; // 128KB maximum
-
-  if (buffer_size < min_buffer_size) {
-    buffer_size = min_buffer_size;
-  } else if (buffer_size > max_buffer_size) {
-    buffer_size = max_buffer_size;
-  }
+  // Allocate buffer prioritizing PSRAM for large buffers, falling back to internal RAM
+  const size_t preferred_size = 64 * 1024; // 64KB preferred buffer size
+  size_t buffer_size = preferred_size;
 
   // Also ensure buffer doesn't exceed remaining content
   if (buffer_size > content_len) {
     buffer_size = content_len;
   }
 
-  // Check for sufficient contiguous memory
-  size_t largest_free = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
-  if (largest_free < buffer_size) {
-    ESP_LOGW(TAG, "Largest block smaller than expected, free heap: %d bytes, needed %d bytes", largest_free, buffer_size);
-    buffer_size = largest_free;
-    ESP_LOGW(TAG, "Adjusting buffer size to %d bytes", buffer_size);
+  // Try to allocate from PSRAM first
+  void *buffer = heap_caps_malloc(buffer_size, MALLOC_CAP_SPIRAM);
+  if (buffer) {
+    ESP_LOGI(TAG, "Allocated %d byte buffer from PSRAM", buffer_size);
+  } else {
+    // Fallback to internal RAM with reduced size based on largest free contiguous block
+    size_t largest_free = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+    buffer_size = (largest_free * 80) / 100;
+
+    // Ensure minimum buffer size
+    const size_t min_buffer_size = 4096; // 4KB minimum
+    if (buffer_size < min_buffer_size) {
+      buffer_size = min_buffer_size;
+    }
+
+    // Also ensure buffer doesn't exceed remaining content
+    if (buffer_size > content_len) {
+      buffer_size = content_len;
+    }
+
+    buffer = heap_caps_malloc(buffer_size, MALLOC_CAP_8BIT);
+    if (buffer) {
+      ESP_LOGI(TAG, "Allocated %d byte buffer from internal RAM (largest free block: %d bytes)", buffer_size, largest_free);
+    } else {
+      ESP_LOGE(TAG, "Failed to allocate buffer from internal RAM");
+      esp_ota_abort(m_otaHandle);
+      m_otaInProgress = false;
+      m_otaError = "Failed to allocate buffer for OTA";
+
+      // Broadcast error status
+      broadcastOTAStatus();
+
+      esp_task_wdt_delete(NULL); // Remove from watchdog
+      return ESP_FAIL;
+    }
   }
 
-  ESP_LOGI(TAG, "Allocating %d byte buffer (free heap: %d bytes)", buffer_size,
-           available_heap);
-
-  char *buffer = (char *)heap_caps_malloc(buffer_size, MALLOC_CAP_8BIT);
-  if (!buffer) {
-    ESP_LOGE(TAG, "Failed to allocate %d byte buffer for OTA", buffer_size);
-    esp_ota_abort(m_otaHandle);
-    m_otaInProgress = false;
-    m_otaError = "Failed to allocate buffer for OTA";
-
-    // Broadcast error status
-    broadcastOTAStatus();
-
-    esp_task_wdt_delete(NULL); // Remove from watchdog
-    return ESP_FAIL;
-  }
+  char *char_buffer = static_cast<char *>(buffer);
 
   size_t remaining = content_len;
   int consecutive_failures = 0;
@@ -2387,7 +2417,7 @@ esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
       // Broadcast error status
       broadcastOTAStatus();
 
-      free(buffer);
+      heap_caps_free(buffer);
       esp_task_wdt_delete(NULL); // Remove from watchdog
       return ESP_FAIL;
     }
@@ -2397,12 +2427,7 @@ esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
     ESP_LOGD(TAG, "Attempting to receive %d bytes, %d remaining", chunk_size,
              remaining);
 
-    // Reset watchdog before potentially long receive operation
-    esp_task_wdt_reset();
-
-    int received = httpd_req_recv(req, buffer, chunk_size);
-
-    vTaskDelay(1);
+    int received = httpd_req_recv(req, char_buffer, chunk_size);
 
     // Reset watchdog after receive operation
     esp_task_wdt_reset();
@@ -2421,7 +2446,7 @@ esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
         // Broadcast error status
         broadcastOTAStatus();
 
-        free(buffer);
+        heap_caps_free(buffer);
         esp_task_wdt_delete(NULL); // Remove from watchdog
         return ESP_FAIL;
       }
@@ -2435,20 +2460,19 @@ esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
     last_progress_time = xTaskGetTickCount(); // Update progress time
 
     if (m_currentUploadType == OTAUploadType::FIRMWARE) {
-      esp_task_wdt_reset();
       err = esp_ota_write(m_otaHandle, buffer, received);
       esp_task_wdt_reset();
       if (err != ESP_OK) {
-        ESP_LOGE(TAG, "esp_ota_write failed: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "esp_ota_write failed: %d", err);
         esp_ota_abort(m_otaHandle);
         m_otaInProgress = false;
         m_otaError =
-            "Failed to write firmware: " + std::string(esp_err_to_name(err));
+            "Failed to write firmware: " + errMap[err];
 
         // Broadcast error status
         broadcastOTAStatus();
 
-        free(buffer);
+        heap_caps_free(buffer);
         esp_task_wdt_delete(NULL); // Remove from watchdog
         return ESP_FAIL;
       }
@@ -2457,15 +2481,15 @@ esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
       err = esp_partition_write(m_littlefsPartition, m_otaWrittenBytes, buffer,
                                 received);
       if (err != ESP_OK) {
-        ESP_LOGE(TAG, "esp_partition_write failed: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "esp_partition_write failed: %d", err);
         m_otaInProgress = false;
         m_otaError =
-            "Failed to write LittleFS: " + std::string(esp_err_to_name(err));
+            "Failed to write LittleFS: " + std::to_string(err);
 
         // Broadcast error status
         broadcastOTAStatus();
 
-        free(buffer);
+        heap_caps_free(buffer);
         esp_task_wdt_delete(NULL); // Remove from watchdog
         return ESP_FAIL;
       }
@@ -2496,16 +2520,15 @@ esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
     size_t current_heap = esp_get_free_heap_size();
     size_t largest_free = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
     ESP_LOGD(TAG, "Free heap during OTA: %d bytes, largest free block: %d bytes", current_heap, largest_free);
-    if (current_heap < 20000) {
-        ESP_LOGW(TAG, "Warning: Free heap dropped below 20KB: %d bytes", current_heap);
+    if (current_heap < 16384) {
+        ESP_LOGW(TAG, "Warning: Free heap dropped below 16KB: %d bytes", current_heap);
     }
-    vTaskDelay(pdMS_TO_TICKS(
-        50)); // Slightly longer delay since chunks are much larger
+    vTaskDelay(pdMS_TO_TICKS(50)); // Slightly longer delay since chunks are much larger
   }
 
   ESP_LOGI(TAG, "OTA write completed: %d bytes", m_otaWrittenBytes);
 
-  free(buffer);
+  heap_caps_free(buffer);
 
   // Remove task from watchdog before finalizing
   esp_task_wdt_delete(NULL);
@@ -2514,10 +2537,9 @@ esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
     // Finalize firmware OTA
     err = esp_ota_end(m_otaHandle);
     if (err != ESP_OK) {
-      ESP_LOGE(TAG, "esp_ota_end failed: %s", esp_err_to_name(err));
+      ESP_LOGE(TAG, "esp_ota_end failed: %d", err);
       m_otaInProgress = false;
-      m_otaError = "Failed to finalize firmware OTA: " +
-                   std::string(esp_err_to_name(err));
+      m_otaError = "Failed to finalize firmware OTA: " + errMap[err];
 
       // Broadcast error status
       broadcastOTAStatus();
@@ -2637,8 +2659,7 @@ esp_err_t WebServerManager::handleReboot(httpd_req_t *req) {
 
   // Send response before rebooting
   httpd_resp_set_type(req, "application/json");
-  httpd_resp_send(req, "{\"message\":\"Rebooting device...\"}",
-                  HTTPD_RESP_USE_STRLEN);
+  httpd_resp_sendstr(req, "{\"status\":\"success\",\"message\":\"Rebooting device...\"}"); 
 
   // Reboot after a short delay
   vTaskDelay(pdMS_TO_TICKS(1000));
