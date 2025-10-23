@@ -1038,76 +1038,8 @@ void WebServerManager::queue_ws_frame(int fd, const uint8_t *payload,
 void WebServerManager::ws_send_task(void *arg) {
   WebServerManager *instance = static_cast<WebServerManager *>(arg);
   WsFrame *raw_frame = nullptr;
-#ifdef WEBSERVER_USE_DEDICATED_BROADCAST_QUEUE
-  BroadcastMsg *bmsg = nullptr;
-#endif
 
   while (true) {
-#ifdef WEBSERVER_USE_DEDICATED_BROADCAST_QUEUE
-    // Drain per-fd frames
-    while (xQueueReceive(instance->m_wsQueue, &raw_frame, 0) == pdPASS) {
-      if (!raw_frame)
-        continue;
-
-      WsFramePtr frame(raw_frame);
-
-      int target_fd = -1;
-      {
-        std::unique_lock<std::mutex> lock(instance->m_wsClientsMutex);
-        auto it = std::find_if(
-            instance->m_wsClients.begin(), instance->m_wsClients.end(),
-            [fd = frame->fd](const std::unique_ptr<WsClient> &c) {
-              return c->fd == fd;
-            });
-        if (it != instance->m_wsClients.end())
-          target_fd = frame->fd;
-      }
-
-      if (target_fd != -1) {
-        esp_err_t send_ret =
-            instance->ws_send_frame(instance->m_server, target_fd,
-                                    frame->payload, frame->len, frame->type);
-        if (send_ret != ESP_OK) {
-          const char *err = esp_err_to_name(send_ret);
-          bool is_err =
-              (err && (strstr(err, "masked") || strstr(err, "MASKED"))) ||
-              send_ret == ESP_FAIL;
-          if (is_err || send_ret == ESP_ERR_INVALID_STATE ||
-              send_ret == ESP_ERR_INVALID_ARG) {
-            instance->removeWebSocketClient(frame->fd);
-          }
-        }
-      }
-    }
-
-    // Handle broadcast messages
-    if (xQueueReceive(instance->m_wsBroadcastQueue, &bmsg, pdMS_TO_TICKS(50)) ==
-            pdPASS &&
-        bmsg) {
-      BroadcastMsgPtr msg(bmsg);
-      std::vector<int> fds;
-      {
-        std::lock_guard<std::mutex> lock(instance->m_wsClientsMutex);
-        fds.reserve(instance->m_wsClients.size());
-        for (const auto &c : instance->m_wsClients)
-          fds.push_back(c->fd);
-      }
-      for (int fd : fds) {
-        esp_err_t send_ret = instance->ws_send_frame(
-            instance->m_server, fd, msg->payload, msg->len, msg->type);
-        if (send_ret != ESP_OK) {
-          const char *err = esp_err_to_name(send_ret);
-          bool is_err =
-              (err && (strstr(err, "masked") || strstr(err, "MASKED"))) ||
-              send_ret == ESP_FAIL;
-          if (is_err || send_ret == ESP_ERR_INVALID_STATE ||
-              send_ret == ESP_ERR_INVALID_ARG) {
-            instance->removeWebSocketClient(fd);
-          }
-        }
-      }
-    }
-#else
     if (xQueueReceive(instance->m_wsQueue, &raw_frame, portMAX_DELAY) ==
         pdPASS) {
       if (!raw_frame)
@@ -1143,7 +1075,6 @@ void WebServerManager::ws_send_task(void *arg) {
         }
       }
     }
-#endif
   }
 }
 
@@ -1181,15 +1112,6 @@ esp_err_t WebServerManager::handleWebSocketMessage(httpd_req_t *req,
     response = getDeviceInfo();
   } else if (msg_type == "ota_status") {
     response = getOTAStatus();
-  } else if (msg_type == "echo") {
-    cJSON *echo = cJSON_CreateObject();
-    cJSON_AddStringToObject(echo, "type", "echo");
-    cJSON *data_item = cJSON_GetObjectItem(json, "data");
-    if (data_item)
-      cJSON_AddItemToObject(echo, "data", cJSON_Duplicate(data_item, true));
-    cJSON_AddNumberToObject(echo, "timestamp", esp_timer_get_time() / 1000);
-    cJSON_AddNumberToObject(echo, "uptime", esp_timer_get_time() / 1000000);
-    response = cjson_to_string_and_free(echo);
   } else {
     cJSON *unknown = cJSON_CreateObject();
     cJSON_AddStringToObject(unknown, "type", "error");
