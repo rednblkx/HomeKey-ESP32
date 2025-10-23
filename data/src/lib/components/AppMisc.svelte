@@ -169,7 +169,7 @@
 									<label class="label">
 										<span class="label-text">Setup Code</span>
 									</label>
-									<input type="number" bind:value={miscConfig.setupCode} placeholder="46637726" maxlength="8"
+									<input type="text" bind:value={miscConfig.setupCode} placeholder="46637726" maxlength="8"
 										class="input input-bordered w-full" required inputmode="numeric" />
 								</div>
 								<div class="form-control">
