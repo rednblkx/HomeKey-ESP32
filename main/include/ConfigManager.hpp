@@ -8,18 +8,15 @@
 #include <LittleFS.h>
 #include "msgpack/object.h"
 
-/**
- * @brief Structure containing validated SSL certificates for MQTT configuration
- */
-struct MqttSSLCertificates {
-    std::string caCert;           ///< CA certificate content
-    std::string clientCert;       ///< Client certificate content
-    std::string clientKey;        ///< Private key content
-    bool hasCACert = false;       ///< Whether CA certificate is present
-    bool hasClientCert = false;   ///< Whether client certificate is present
-    bool hasPrivateKey = false;   ///< Whether private key is present
-    bool isValid = false;         ///< Overall validation status
-    std::string errorMessage;     ///< Error message if validation failed
+struct CertificateStatus {
+  std::string type;
+  std::string issuer = "";
+  std::string subject = "";
+  struct {
+    std::string from = "";
+    std::string to = "";
+  } expiration = {};
+  bool keyMatchesCert = false;
 };
 
 class ConfigManager {
@@ -44,21 +41,13 @@ public:
     template <typename ConfigType>
     std::string serializeToJson();
 
-    // Certificate storage methods
     bool saveCertificate(const std::string& certType, const std::string& certContent);
-    bool saveCertificateBundle(const std::string& bundleContent);
-    std::string loadCertificate(const std::string& certType);
     bool deleteCertificate(const std::string& certType);
     
-    // Enhanced certificate validation and information
     bool validateCertificateContent(const std::string& certContent, const std::string& certType);
-    bool validatePrivateKeyMatchesCertificate(const std::string& privateKey, const std::string& certificate);
-    std::string getCertificateIssuer(const std::string& certContent);
-    std::string getCertificateSubject(const std::string& certContent);
-    std::string getCertificateExpiration(const std::string& certContent);
-
-    // Centralized SSL certificate provider for MQTT
-    MqttSSLCertificates getMqttSSLCertificates();
+    bool validatePrivateKeyMatchesCertificate();
+    std::vector<CertificateStatus> getCertificatesStatus();
+    void sslCb(std::function<void(const espConfig::mqtt_ssl_t&)> const&f) const {static bool configured = false; if(not configured) {f(m_mqttSslConfig);configured=true;} else ESP_LOGE(TAG, "Ptr already assigned");};
 
   private:
     using ConfigMapType = std::map<std::string,
@@ -76,7 +65,7 @@ public:
     void loadConfigFromNvs(const char* key);
     bool saveConfigToNvs(const char* key);
 
-    // Helper functions for certificate validation
+    std::string loadCertificate(const std::string& certType);
     bool validateCertificateFormat(const std::string& certContent);
     bool validateCertificateWithMbedTLS(const std::string& certContent, const std::string& certType);
     bool validatePrivateKeyContent(const std::string& keyContent);

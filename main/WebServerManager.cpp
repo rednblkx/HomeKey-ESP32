@@ -1550,8 +1550,17 @@ esp_err_t WebServerManager::handleCertificateUpload(httpd_req_t *req) {
     return ESP_FAIL;
   }
 
-  std::string bundleContent;
-  bundleContent.reserve(content_len + 1);
+  char query[256], type_param[128];
+  if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK ||
+      (httpd_query_key_value(query, "type", type_param, sizeof(type_param)) !=
+          ESP_OK && (strcmp(type_param, "client") || strcmp(type_param, "ca") || strcmp(type_param, "privateKey")))) {
+    httpd_resp_set_status(req, "400 Bad Request");
+    httpd_resp_send(req, "Missing 'type' parameter", HTTPD_RESP_USE_STRLEN);
+    return ESP_FAIL;
+  }
+
+  std::string certBuf;
+  certBuf.reserve(content_len + 1);
   char buffer[1024];
   size_t remaining = content_len;
 
@@ -1565,24 +1574,25 @@ esp_err_t WebServerManager::handleCertificateUpload(httpd_req_t *req) {
       return ESP_FAIL;
     }
     buffer[received] = '\0';
-    bundleContent.append(buffer, received);
+    certBuf.append(buffer, received);
     remaining -= received;
   }
 
-  bool success = instance->m_configManager.saveCertificateBundle(bundleContent);
+  bool success = instance->m_configManager.saveCertificate(std::string(type_param), certBuf);
 
   if (success) {
     cJSON *response = cJSON_CreateObject();
     cJSON_AddStringToObject(response, "status", "success");
-    cJSON_AddStringToObject(response, "message", "Certificate bundle uploaded");
+    cJSON_AddStringToObject(response, "message", fmt::format("Certificate '{}' saved successfully!", type_param).c_str());
     cJSON_AddNumberToObject(response, "size", content_len);
     std::string resp = cjson_to_string_and_free(response);
+    cJSON_Delete(response);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, resp.c_str(), resp.length());
     return ESP_OK;
   }
 
-  httpd_resp_set_status(req, "500 Internal Server Error");
+  httpd_resp_set_status(req, "400 Bad Request");
   httpd_resp_send(req, "Failed to save certificate bundle",
                   HTTPD_RESP_USE_STRLEN);
   return ESP_FAIL;
@@ -1597,63 +1607,26 @@ esp_err_t WebServerManager::handleCertificateStatus(httpd_req_t *req) {
 
   cJSON *response = cJSON_CreateObject();
   cJSON *certificates = cJSON_CreateObject();
-  const char *certTypes[] = {"ca", "client", "privateKey"};
 
-  for (const char *certType : certTypes) {
+  std::vector<CertificateStatus> status = instance->m_configManager.getCertificatesStatus();
+  for (auto cert : status) {
     cJSON *certInfo = cJSON_CreateObject();
-    std::string certContent =
-        instance->m_configManager.loadCertificate(certType);
-    bool exists = !certContent.empty();
-
-    cJSON_AddBoolToObject(certInfo, "exists", exists);
-    cJSON_AddNumberToObject(certInfo, "size", certContent.length());
-
-    if (exists) {
-      bool isValid = instance->m_configManager.validateCertificateContent(
-          certContent, certType);
-      cJSON_AddBoolToObject(certInfo, "valid", isValid);
-
-      if (strcmp(certType, "privateKey") != 0) {
-        std::string issuer =
-            instance->m_configManager.getCertificateIssuer(certContent);
-        std::string subject =
-            instance->m_configManager.getCertificateSubject(certContent);
-        std::string expiration =
-            instance->m_configManager.getCertificateExpiration(certContent);
-
-        if (!issuer.empty())
-          cJSON_AddStringToObject(certInfo, "issuer", issuer.c_str());
-        if (!subject.empty())
-          cJSON_AddStringToObject(certInfo, "subject", subject.c_str());
-        if (!expiration.empty())
-          cJSON_AddStringToObject(certInfo, "expiration", expiration.c_str());
-      }
-
-      if (strcmp(certType, "client") == 0) {
-        std::string privateKeyContent =
-            instance->m_configManager.getConfig<const espConfig::mqtt_ssl_t>()
-                .clientKey;
-        if (!privateKeyContent.empty()) {
-          bool keyMatches =
-              instance->m_configManager.validatePrivateKeyMatchesCertificate(
-                  privateKeyContent, certContent);
-          cJSON_AddBoolToObject(certInfo, "keyMatches", keyMatches);
+      if (cert.type != "privateKey") {
+        if (!cert.issuer.empty())
+          cJSON_AddStringToObject(certInfo, "issuer", cert.issuer.c_str());
+        if (!cert.subject.empty())
+          cJSON_AddStringToObject(certInfo, "subject", cert.subject.c_str());
+        if (!cert.expiration.from.empty() && !cert.expiration.to.empty()){
+          cJSON* expiration = cJSON_CreateObject();
+          cJSON_AddStringToObject(expiration, "from", cert.expiration.from.c_str());
+          cJSON_AddStringToObject(expiration, "to", cert.expiration.to.c_str());
+          cJSON_AddItemToObject(certInfo, "expiration", expiration);
         }
+      } else if (cert.type == "privateKey") {
+        cJSON_AddBoolToObject(certInfo, "exists", true);
       }
 
-      cJSON_AddStringToObject(certInfo, "validationMessage",
-                              isValid ? (strcmp(certType, "privateKey") == 0
-                                             ? "Key is valid"
-                                             : "Certificate is valid")
-                                      : "Validation failed");
-    } else {
-      cJSON_AddBoolToObject(certInfo, "valid", false);
-      cJSON_AddStringToObject(certInfo, "validationMessage",
-                              strcmp(certType, "privateKey") == 0
-                                  ? "Private key not configured"
-                                  : "Certificate not found");
-    }
-    cJSON_AddItemToObject(certificates, certType, certInfo);
+    cJSON_AddItemToObject(certificates, cert.type.c_str(), certInfo);
   }
 
   cJSON_AddItemToObject(response, "certificates", certificates);

@@ -46,9 +46,9 @@
     lastReconnection: null as string | null,
   });
 
-  let uploadProgress = $state({ ca: 0 });
+  let uploadProgress = $state({ ca: 0, client: 0, privateKey: 0 });
 
-  let uploadErrors = $state({ ca: "" });
+  let uploadErrors = $state({ ca: "", client: "", privateKey: "" });
 
   // Set config from props
   onMount(() => {
@@ -71,11 +71,11 @@
   };
 
   const handleCertificateUpload = async (event: Event) => {
+    const type = (event.target as HTMLInputElement).dataset["type"] as keyof typeof uploadErrors;
     const file = (event.target as HTMLInputElement).files?.[0];
     if (!file) return;
-
     // Reset error
-    uploadErrors.ca = "";
+    uploadErrors[type] = "";
 
     // Validate file type
     const validExtensions = [".pem", ".crt", ".cer", ".der", ".key"];
@@ -90,37 +90,28 @@
     }
 
     // Simulate upload progress
-    uploadProgress.ca = 0;
+    uploadProgress[type] = 0;
 
     const reader = new FileReader();
     reader.onloadstart = () => {
-      uploadProgress.ca = 10;
+      uploadProgress[type] = 10;
     };
     reader.onprogress = (e) => {
       if (e.lengthComputable) {
-        uploadProgress.ca = Math.min(90, (e.loaded / e.total) * 100);
+        uploadProgress[type] = Math.min(90, (e.loaded / e.total) * 100);
       }
     };
     reader.onload = async (e) => {
       try {
-        uploadProgress.ca = 95;
+        uploadProgress[type] = 95;
         const content = e.target?.result ?? null;
         if (content === null) {
-          uploadErrors.ca = "Failed to read file content";
-          uploadProgress.ca = 0;
+          uploadErrors[type] = "Failed to read file content";
+          uploadProgress[type] = 0;
           return;
         }
-        const result = await uploadCertificateBundle(content);
-        uploadProgress.ca = 100;
-
-        // Handle reconnection status from response
-        if (result.success) {
-          alert(
-            `Certificate bundle uploaded successfully. ${result.data.message || ''}`,
-          );
-        } else {
-          alert(`Certificate upload failed: ${result.message}`);
-        }
+        const result = await uploadCertificateBundle(type, content);
+        uploadProgress[type] = 100;
 
         // Refresh certificate status
         await fetchCertificateStatus();
@@ -130,16 +121,16 @@
 
         // Reset progress after a delay
         setTimeout(() => {
-          uploadProgress.ca = 0;
+          uploadProgress[type] = 0;
         }, 1000);
       } catch (error) {
-        uploadErrors.ca = `Upload failed: ${(error as Error).message}`;
-        uploadProgress.ca = 0;
+        uploadErrors[type] = `Upload failed: ${(error as Error).message}`;
+        uploadProgress[type] = 0;
       }
     };
     reader.onerror = () => {
-      uploadErrors.ca = "Failed to read file";
-      uploadProgress.ca = 0;
+      uploadErrors[type] = "Failed to read file";
+      uploadProgress[type] = 0;
     };
 
     if (fileExtension === ".der") {
@@ -413,8 +404,8 @@
                               <div class="flex items-center">
                                 <svg
                                   class="w-5 h-5 mr-2"
-                                  class:text-success={certificateStatus?.certificates?.ca?.exists}
-                                  class:text-error={!certificateStatus?.certificates?.ca?.exists}
+                                  class:text-success={certificateStatus?.certificates?.ca}
+                                  class:text-error={!certificateStatus?.certificates?.ca}
                                   fill="none"
                                   viewBox="0 0 24 24"
                                   stroke="currentColor"
@@ -427,8 +418,8 @@
                                 </svg>
                                 <div class="flex flex-col">
                                   <span class="text-sm font-medium">CA Certificate</span>
-                                  <span class="text-sm font-medium text-base-content/75">{certificateStatus?.certificates.ca?.validationMessage}</span>
-                                  <span class="text-sm font-medium text-base-content/75">{certificateStatus?.certificates.ca?.expiration}</span>
+                                  <!-- <span class="text-sm font-medium text-base-content/75">{certificateStatus?.certificates.ca?.validationMessage}</span> -->
+                                  <span class="text-sm font-medium text-base-content/75">{certificateStatus?.certificates.ca?.expiration.from} - {certificateStatus?.certificates.ca?.expiration.to}</span>
                                   <span class="text-sm font-medium text-base-content/50">Subject: {certificateStatus?.certificates.ca?.subject}</span>
                                   <span class="text-sm font-medium text-base-content/50">Issuer: {certificateStatus?.certificates.ca?.issuer}</span>
                                 </div>
@@ -449,8 +440,8 @@
                               <div class="flex items-center">
                                 <svg
                                   class="w-5 h-5 mr-2"
-                                  class:text-success={certificateStatus?.certificates?.client?.exists}
-                                  class:text-error={!certificateStatus?.certificates?.client?.exists}
+                                  class:text-success={certificateStatus?.certificates?.client}
+                                  class:text-error={!certificateStatus?.certificates?.client}
                                   fill="none"
                                   viewBox="0 0 24 24"
                                   stroke="currentColor"
@@ -463,8 +454,8 @@
                                 </svg>
                                 <div class="flex flex-col">
                                   <span class="text-sm font-medium">Client Certificate</span>
-                                  <span class="text-sm font-medium text-base-content/75">{certificateStatus?.certificates.client?.validationMessage}</span>
-                                  <span class="text-sm font-medium text-base-content/75">{certificateStatus?.certificates.client?.expiration}</span>
+                                  <!-- <span class="text-sm font-medium text-base-content/75">{certificateStatus?.certificates.client?.validationMessage}</span> -->
+                                  <span class="text-sm font-medium text-base-content/75">{certificateStatus?.certificates.client?.expiration.from} - {certificateStatus?.certificates.client?.expiration.to}</span>
                                   <span class="text-sm font-medium text-base-content/50">Subject: {certificateStatus?.certificates.client?.subject}</span>
                                   <span class="text-sm font-medium text-base-content/50">Issuer: {certificateStatus?.certificates.client?.issuer}</span>
                                 </div>
@@ -499,7 +490,7 @@
                                 </svg>
                                 <div class="flex flex-col">
                                   <span class="text-sm font-medium">Private Key</span>
-                                  <span class="text-sm font-medium text-base-content/50">{certificateStatus?.certificates.privateKey?.validationMessage}</span>
+                                  <!-- <span class="text-sm font-medium text-base-content/50">{certificateStatus?.certificates.privateKey?.validationMessage}</span> -->
                                 </div>
                               </div>
                               {#if certificateStatus?.certificates?.privateKey}
@@ -518,10 +509,7 @@
                       <!-- Certificate Upload Section -->
                       <div class="form-control">
                         <label class="label">
-                          <span class="label-text"
-                          >Certificate Bundle (CA + Client Certificate + Private
-                            Key)</span
-                          >
+                          <span class="label-text">CA Certificate</span>
                         </label>
                         <input
                           type="file"
@@ -530,6 +518,61 @@
                           class="file-input file-input-bordered w-full"
                           disabled={uploadProgress.ca > 0 &&
                             uploadProgress.ca < 100}
+                          data-type="ca"
+                        />
+                        {#if uploadProgress.ca > 0 && uploadProgress.ca < 100}
+                          <div class="progress progress-info mt-2">
+                            <div
+                              class="progress-bar"
+                              style="width: {uploadProgress.ca}%"
+                            ></div>
+                          </div>
+                        {/if}
+                        {#if uploadErrors.ca}
+                          <div class="text-error text-sm mt-1">
+                            {uploadErrors.ca}
+                          </div>
+                        {/if}
+                      </div>
+                      <div class="form-control">
+                        <label class="label">
+                          <span class="label-text">Client Certificate</span>
+                        </label>
+                        <input
+                          type="file"
+                          onchange={(e) => handleCertificateUpload(e)}
+                          accept=".pem,.crt,.cer,.der,.key"
+                          class="file-input file-input-bordered w-full"
+                          disabled={uploadProgress.ca > 0 &&
+                            uploadProgress.ca < 100}
+                          data-type="client"
+                        />
+                        {#if uploadProgress.ca > 0 && uploadProgress.ca < 100}
+                          <div class="progress progress-info mt-2">
+                            <div
+                              class="progress-bar"
+                              style="width: {uploadProgress.ca}%"
+                            ></div>
+                          </div>
+                        {/if}
+                        {#if uploadErrors.ca}
+                          <div class="text-error text-sm mt-1">
+                            {uploadErrors.ca}
+                          </div>
+                        {/if}
+                      </div>
+                      <div class="form-control">
+                        <label class="label">
+                          <span class="label-text">Private Key</span>
+                        </label>
+                        <input
+                          type="file"
+                          onchange={(e) => handleCertificateUpload(e)}
+                          accept=".pem,.crt,.cer,.der,.key"
+                          class="file-input file-input-bordered w-full"
+                          disabled={uploadProgress.ca > 0 &&
+                            uploadProgress.ca < 100}
+                          data-type="privateKey"
                         />
                         {#if uploadProgress.ca > 0 && uploadProgress.ca < 100}
                           <div class="progress progress-info mt-2">

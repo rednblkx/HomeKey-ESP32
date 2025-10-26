@@ -72,9 +72,9 @@ export async function saveConfig(type: string, data: MqttConfig | MiscConfig): P
 }
 
 // Certificate management endpoints
-export async function uploadCertificateBundle(content: string | ArrayBuffer | null): Promise<ApiResponse<CertificateUploadResponse>> {
+export async function uploadCertificateBundle(type: string, content: string | ArrayBuffer): Promise<ApiResponse<CertificateUploadResponse>> {
   try {
-    const response = await fetchWithRetry(`/certificates/upload`, {
+    const response = await fetchWithRetry(`/certificates/upload?type=${type}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-pem-file',
@@ -89,10 +89,10 @@ export async function uploadCertificateBundle(content: string | ArrayBuffer | nu
     }
 
     const result: CertificateUploadResponse = await response.json();
-    if (result.success) {
-      notifications.addSuccess('Certificate bundle uploaded successfully');
+    if (result.status == "success") {
+      notifications.addSuccess(result.message);
     } else {
-      notifications.addError(`Certificate upload failed: ${result.message || 'Unknown error'}`);
+      notifications.addError(result.message);
     }
     return { success: true, data: result };
   } catch (error) {
@@ -150,7 +150,7 @@ export async function deleteCertificate(type: CertificateType): Promise<ApiRespo
     }
 
     const result: CertificateUploadResponse = await response.json();
-    if (result.success) {
+    if (result.status == "success") {
       notifications.addSuccess(`${type} certificate deleted successfully`);
     } else {
       notifications.addError(`Failed to delete ${type} certificate: ${result.message || 'Unknown error'}`);

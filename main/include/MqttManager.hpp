@@ -91,7 +91,7 @@ private:
     // --- Member Variables ---
     std::string deviceID;
     const espConfig::mqttConfig_t& m_mqttConfig;
-    const espConfig::mqtt_ssl_t& m_mqttSslConfig;
+    const espConfig::mqtt_ssl_t* m_mqttSslConfig;
     esp_mqtt_client_handle_t m_client;
     const std::string &device_name;
     bool m_isConnected;

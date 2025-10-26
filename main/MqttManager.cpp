@@ -23,14 +23,13 @@ const char* MqttManager::TAG = "MqttManager";
  */
 MqttManager::MqttManager(const ConfigManager& configManager)
     : m_mqttConfig(configManager.getConfig<espConfig::mqttConfig_t>()),
-      m_mqttSslConfig(configManager.getConfig<const espConfig::mqtt_ssl_t>()),
       m_client(nullptr),
       device_name(configManager.getConfig<espConfig::misc_config_t>().deviceName),
       m_sslConfigured(false),
       m_healthCheckTimer(nullptr),
       m_lastHealthCheckTime(0)
 {
-    // Initialize TLS configuration
+  configManager.sslCb([this](const espConfig::mqtt_ssl_t& c){m_mqttSslConfig = &c;});
   espp::EventManager::get().add_subscriber(
       "lock/stateChanged", "MqttManager",
       [&](const std::vector<uint8_t> &data) {
@@ -607,9 +606,9 @@ bool MqttManager::configureSSL(esp_mqtt_client_config_t& mqtt_cfg) {
     // Configure TLS settings
     mqtt_cfg.broker.verification.use_global_ca_store = false;
 
-    if (!m_mqttSslConfig.caCert.empty()) {
-        mqtt_cfg.broker.verification.certificate = m_mqttSslConfig.caCert.c_str();
-        mqtt_cfg.broker.verification.certificate_len = m_mqttSslConfig.caCert.length() + 1;
+    if (!m_mqttSslConfig->caCert.empty()) {
+        mqtt_cfg.broker.verification.certificate = m_mqttSslConfig->caCert.c_str();
+        mqtt_cfg.broker.verification.certificate_len = m_mqttSslConfig->caCert.length() + 1;
         mqtt_cfg.broker.verification.skip_cert_common_name_check = m_mqttConfig.allowInsecure;
         ESP_LOGI(TAG, "Server certificate validation: ENABLED - CA certificate configured");
         ESP_LOGI(TAG, "Certificate validation mode: %s", m_mqttConfig.allowInsecure ? "SKIP_COMMON_NAME" : "FULL_VALIDATION");
@@ -627,11 +626,11 @@ bool MqttManager::configureSSL(esp_mqtt_client_config_t& mqtt_cfg) {
         return false;
     }
 
-    if (!m_mqttSslConfig.clientCert.empty() && !m_mqttSslConfig.clientKey.empty()) {
-        mqtt_cfg.credentials.authentication.certificate = m_mqttSslConfig.clientCert.c_str();
-        mqtt_cfg.credentials.authentication.certificate_len = m_mqttSslConfig.clientCert.length() + 1;
-        mqtt_cfg.credentials.authentication.key = m_mqttSslConfig.clientKey.c_str();
-        mqtt_cfg.credentials.authentication.key_len = m_mqttSslConfig.clientKey.length() + 1;
+    if (!m_mqttSslConfig->clientCert.empty() && !m_mqttSslConfig->clientKey.empty()) {
+        mqtt_cfg.credentials.authentication.certificate = m_mqttSslConfig->clientCert.c_str();
+        mqtt_cfg.credentials.authentication.certificate_len = m_mqttSslConfig->clientCert.length() + 1;
+        mqtt_cfg.credentials.authentication.key = m_mqttSslConfig->clientKey.c_str();
+        mqtt_cfg.credentials.authentication.key_len = m_mqttSslConfig->clientKey.length() + 1;
         ESP_LOGI(TAG, "Client authentication: ENABLED - Mutual TLS configured");
         ESP_LOGI(TAG, "TLS handshake state: MUTUAL_AUTH_READY - Client certificate and key configured");
     } else {
@@ -688,9 +687,9 @@ void MqttManager::logSSLError(const char* operation, esp_err_t error) {
         ESP_LOGI(TAG, "SSL Configuration state: useSSL=%s, allowInsecure=%s, hasCACert=%s, hasClientCert=%s, hasClientKey=%s",
                  m_mqttConfig.useSSL ? "true" : "false",
                  m_mqttConfig.allowInsecure ? "true" : "false",
-                 !m_mqttSslConfig.caCert.empty() ? "true" : "false",
-                 !m_mqttSslConfig.clientCert.empty() ? "true" : "false",
-                 !m_mqttSslConfig.clientKey.empty() ? "true" : "false");
+                 !m_mqttSslConfig->caCert.empty() ? "true" : "false",
+                 !m_mqttSslConfig->clientCert.empty() ? "true" : "false",
+                 !m_mqttSslConfig->clientKey.empty() ? "true" : "false");
     }
 }
 

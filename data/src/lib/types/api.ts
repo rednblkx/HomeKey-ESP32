@@ -268,50 +268,34 @@ export interface CertificatesStatus {
   /** CA certificate status */
   certificates: {
     ca?: {
-      /** Whether the certificate exists */
-      exists: boolean;
-      /** Certificate file size in bytes */
-      size: number;
-      /** Whether the certificate is valid */
-      valid: boolean;
       /** Certificate issuer information */
-      issuer?: string;
+      issuer: string;
       /** Certificate subject information */
-      subject?: string;
+      subject: string;
       /** Certificate expiration date */
-      expiration?: string;
-      /** Validation message or error */
-      validationMessage?: string;
+      expiration: {
+        from: string,
+        to: string
+      };
     };
     /** Client certificate status */
     client?: {
-      /** Whether the certificate exists */
-      exists: boolean;
-      /** Certificate file size in bytes */
-      size: number;
-      /** Whether the certificate is valid */
-      valid: boolean;
       /** Certificate issuer information */
-      issuer?: string;
+      issuer: string;
       /** Certificate subject information */
-      subject?: string;
+      subject: string;
       /** Certificate expiration date */
-      expiration?: string;
+      expiration: {
+        from: string,
+        to: string
+      };
       /** Whether the private key matches this certificate */
       keyMatches?: boolean;
-      /** Validation message or error */
-      validationMessage?: string;
     };
     /** Private key status */
     privateKey?: {
       /** Whether the private key exists */
       exists: boolean;
-      /** Key file size in bytes */
-      size: number;
-      /** Whether the private key is valid */
-      valid: boolean;
-      /** Validation message or error */
-      validationMessage?: string;
     };
   };
   status: string;
@@ -376,9 +360,9 @@ export interface DetailedCertificateStatus {
  */
 export interface CertificateUploadResponse {
   /** Whether the upload operation was successful */
-  success: boolean;
+  status: string;
   /** Optional message describing the result or error */
-  message?: string;
+  message: string;
 }
 
 /**

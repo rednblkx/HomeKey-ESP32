@@ -184,9 +184,7 @@ const ConfigType& ConfigManager::getConfig() const {
 
   if constexpr (std::is_same_v<NonConstConfigType, espConfig::mqttConfig_t>) {
     return m_mqttConfig;
-  } else if constexpr (std::is_same_v<NonConstConfigType, espConfig::mqtt_ssl_t>) {
-    return m_mqttSslConfig;
-  }  else if constexpr (std::is_same_v<NonConstConfigType, espConfig::misc_config_t>) {
+  } else if constexpr (std::is_same_v<NonConstConfigType, espConfig::misc_config_t>) {
     return m_miscConfig;
   } else {
     static_assert(std::is_void_v<ConfigType> && false, "Unsupported ConfigType for getConfig");
@@ -194,7 +192,6 @@ const ConfigType& ConfigManager::getConfig() const {
 }
 template const espConfig::mqttConfig_t& ConfigManager::getConfig<espConfig::mqttConfig_t>() const;
 template const espConfig::mqttConfig_t& ConfigManager::getConfig<espConfig::mqttConfig_t const>() const;
-template const espConfig::mqtt_ssl_t& ConfigManager::getConfig<espConfig::mqtt_ssl_t const>() const;
 template const espConfig::misc_config_t& ConfigManager::getConfig<espConfig::misc_config_t>() const;
 template const espConfig::misc_config_t& ConfigManager::getConfig<espConfig::misc_config_t const>() const;
 
@@ -801,139 +798,29 @@ bool ConfigManager::saveCertificate(const std::string& certType, const std::stri
     }
 
     // Validate certificate type
-    if (certType != "ca" && certType != "client" && certType != "privateKey") {
-        ESP_LOGE(TAG, "Invalid certificate type: %s. Must be 'ca', 'client', or 'privateKey'.", certType.c_str());
+    if (certType.compare("ca") && certType.compare("client") && certType.compare("privateKey")) {
+        ESP_LOGE(TAG, "Invalid certificate type: '%s' - Must be 'ca', 'client', or 'privateKey'", certType.c_str());
         return false;
     }
-
-    // Validate certificate format
-    if (!validateCertificateFormat(certContent)) {
-        ESP_LOGE(TAG, "Invalid certificate format for type: %s", certType.c_str());
+ 
+    // Validate the actual content
+    if(!validateCertificateContent(certContent, certType)) { 
+        ESP_LOGE(TAG, "Unable to validate certificate type: %s", certType.c_str());
         return false;
     }
 
     if(certType == "ca"){
-      ESP_LOGI(TAG, "CA CERT: %s", certContent.c_str());
       m_mqttSslConfig.caCert = certContent;
     } else if(certType == "client"){
-      ESP_LOGI(TAG, "CLIENT CERT: %s", certContent.c_str());
       m_mqttSslConfig.clientCert = certContent;
     } else if(certType == "privateKey"){
-      ESP_LOGI(TAG, "PRIVATE KEY: %s", certContent.c_str());
       m_mqttSslConfig.clientKey = certContent;
-    }
-
-    ESP_LOGI(TAG, "Certificate saved successfully: %s", certType.c_str());
-    return true;
-}
-
-bool ConfigManager::saveCertificateBundle(const std::string& bundleContent) {
-    if (!m_isInitialized) {
-        ESP_LOGE(TAG, "Cannot save certificate bundle, ConfigManager not initialized.");
-        return false;
-    }
-
-    if (bundleContent.empty()) {
-        ESP_LOGE(TAG, "Bundle content is empty");
-        return false;
-    }
-
-    // Parse the bundle to extract CA, client cert, and private key
-    std::string caCert, clientCert, privateKey;
-
-    size_t pos = 0;
-    int certCount = 0;
-
-    while (pos < bundleContent.length()) {
-        size_t beginCert = bundleContent.find("-----BEGIN CERTIFICATE-----", pos);
-        size_t beginKey = bundleContent.find("-----BEGIN PRIVATE KEY-----", pos);
-        size_t beginRSAKey = bundleContent.find("-----BEGIN RSA PRIVATE KEY-----", pos);
-        size_t beginECKey = bundleContent.find("-----BEGIN EC PRIVATE KEY-----", pos);
-
-        size_t beginPos = std::string::npos;
-        std::string blockType;
-
-        if (beginCert != std::string::npos && (beginKey == std::string::npos || beginCert < beginKey) &&
-            (beginRSAKey == std::string::npos || beginCert < beginRSAKey) &&
-            (beginECKey == std::string::npos || beginCert < beginECKey)) {
-            beginPos = beginCert;
-            blockType = "CERTIFICATE";
-        } else if (beginKey != std::string::npos) {
-            beginPos = beginKey;
-            blockType = "PRIVATE KEY";
-        } else if (beginRSAKey != std::string::npos) {
-            beginPos = beginRSAKey;
-            blockType = "RSA PRIVATE KEY";
-        } else if (beginECKey != std::string::npos) {
-            beginPos = beginECKey;
-            blockType = "EC PRIVATE KEY";
-        } else {
-            break; // No more blocks
-        }
-
-        // Find the end of this block
-        std::string endMarker = "-----END " + blockType + "-----";
-        size_t endPos = bundleContent.find(endMarker, beginPos);
-        if (endPos == std::string::npos) {
-            ESP_LOGE(TAG, "Invalid bundle: missing end marker for %s", blockType.c_str());
-            return false;
-        }
-        endPos += endMarker.length();
-
-        // Extract the block
-        std::string block = bundleContent.substr(beginPos, endPos - beginPos);
-
-        if (blockType == "CERTIFICATE") {
-            certCount++;
-            if (certCount == 1) {
-                caCert = block;
-            } else if (certCount == 2) {
-                clientCert = block;
-            } else {
-                ESP_LOGW(TAG, "Bundle contains more than 2 certificates, ignoring extra");
-            }
-        } else {
-            // Private key
-            privateKey = block;
-        }
-
-        pos = endPos;
-    }
-
-    if (certCount < 2) {
-        ESP_LOGE(TAG, "Bundle must contain at least 2 certificates (CA and client)");
-        return false;
-    }
-
-    if (privateKey.empty()) {
-        ESP_LOGE(TAG, "Bundle must contain a private key");
-        return false;
-    }
-
-    // Save each component
-    bool success = true;
-    if (!saveCertificate("ca", caCert)) {
-        ESP_LOGE(TAG, "Failed to save CA certificate");
-        success = false;
-    }
-    if (!saveCertificate("client", clientCert)) {
-        ESP_LOGE(TAG, "Failed to save client certificate");
-        success = false;
-    }
-    if (!saveCertificate("privateKey", privateKey)) {
-        ESP_LOGE(TAG, "Failed to save private key");
-        success = false;
     }
 
     saveConfig<espConfig::mqtt_ssl_t>();
 
-    if (success) {
-        ESP_LOGI(TAG, "Certificate bundle saved successfully");
-    } else {
-        ESP_LOGE(TAG, "Failed to save certificate bundle");
-    }
-
-    return success;
+    ESP_LOGI(TAG, "Certificate saved successfully: %s", certType.c_str());
+    return true;
 }
 
 std::string ConfigManager::loadCertificate(const std::string& certType) {
@@ -1264,10 +1151,8 @@ bool ConfigManager::validatePrivateKeyContent(const std::string& keyContent) {
     return true;
 }
 
-bool ConfigManager::validatePrivateKeyMatchesCertificate(const std::string& privateKey, const std::string& certificate) {
-    // Enhanced validation using mbedTLS to check cryptographic compatibility
-
-    if (privateKey.empty() || certificate.empty()) {
+bool ConfigManager::validatePrivateKeyMatchesCertificate() {
+    if (m_mqttSslConfig.clientKey.empty() || m_mqttSslConfig.clientCert.empty()) {
         ESP_LOGE(TAG, "Private key or certificate is empty");
         return false;
     }
@@ -1289,7 +1174,7 @@ bool ConfigManager::validatePrivateKeyMatchesCertificate(const std::string& priv
     // Parse the private key
     mbedtls_pk_context pk;
     mbedtls_pk_init(&pk);
-    ret = mbedtls_pk_parse_key(&pk, reinterpret_cast<const unsigned char*>(privateKey.c_str()), privateKey.length() + 1, nullptr, 0, mbedtls_ctr_drbg_random, &ctr_drbg);
+    ret = mbedtls_pk_parse_key(&pk, reinterpret_cast<const unsigned char*>(m_mqttSslConfig.clientKey.c_str()), m_mqttSslConfig.clientKey.length() + 1, nullptr, 0, mbedtls_ctr_drbg_random, &ctr_drbg);
     if (ret != 0) {
         char error_buf[100];
         mbedtls_strerror(ret, error_buf, sizeof(error_buf));
@@ -1301,7 +1186,7 @@ bool ConfigManager::validatePrivateKeyMatchesCertificate(const std::string& priv
     // Parse the certificate
     mbedtls_x509_crt cert;
     mbedtls_x509_crt_init(&cert);
-    ret = mbedtls_x509_crt_parse(&cert, reinterpret_cast<const unsigned char*>(certificate.c_str()), certificate.length() + 1);
+    ret = mbedtls_x509_crt_parse(&cert, reinterpret_cast<const unsigned char*>(m_mqttSslConfig.clientCert.c_str()), m_mqttSslConfig.clientCert.length() + 1);
     if (ret != 0) {
         char error_buf[100];
         mbedtls_strerror(ret, error_buf, sizeof(error_buf));
@@ -1370,122 +1255,47 @@ bool ConfigManager::validatePrivateKeyMatchesCertificate(const std::string& priv
     return true;
 }
 
-std::string ConfigManager::getCertificateSubject(const std::string& certContent) {
-  mbedtls_x509_crt cert;
-  mbedtls_x509_crt_init(&cert);
+std::vector<CertificateStatus> ConfigManager::getCertificatesStatus(){
+  std::vector<CertificateStatus> certificates;
+  std::array<std::string, 3> types{"ca", "client", "privateKey"};
+  std::string certStr;
+  for (auto c : types) {
+    mbedtls_x509_crt cert;
+    mbedtls_x509_crt_init(&cert);
+    certStr = loadCertificate(c);
+    if(!certStr.empty() && c != "privateKey"){
 
-  int ret = mbedtls_x509_crt_parse(&cert, reinterpret_cast<const unsigned char*>(certContent.c_str()), certContent.length() + 1);
-  char subject[256];
-  ret = mbedtls_x509_dn_gets(subject, sizeof(subject), &cert.subject);
-  if(ret > 0)
-    return subject;
-  return "";
-}
-
-std::string ConfigManager::getCertificateIssuer(const std::string& certContent) {
-  mbedtls_x509_crt cert;
-  mbedtls_x509_crt_init(&cert);
-
-  int ret = mbedtls_x509_crt_parse(&cert, reinterpret_cast<const unsigned char*>(certContent.c_str()), certContent.length() + 1);
-  char issuer[256];
-  ret = mbedtls_x509_dn_gets(issuer, sizeof(issuer), &cert.issuer);
-  if(ret > 0)
-    return issuer;
-  return "";
-}
-
-std::string ConfigManager::getCertificateExpiration(const std::string& certContent) {
-  mbedtls_x509_crt cert;
-  mbedtls_x509_crt_init(&cert);
-
-  int ret = mbedtls_x509_crt_parse(&cert, reinterpret_cast<const unsigned char*>(certContent.c_str()), certContent.length() + 1);
-  mbedtls_x509_time valid_from = cert.valid_from;
-  mbedtls_x509_time valid_to = cert.valid_to;
-  if(!ret)
-    return fmt::format("Valid From={}/{}/{} To={}/{}/{}", valid_from.day, valid_from.mon, valid_from.year, valid_to.day, valid_to.mon, valid_to.year);
-  return "";
-}
-
-/**
- * @brief Provides validated SSL certificates for MQTT configuration
- *
- * This centralized method loads and validates all SSL certificates required for MQTT connections.
- * It performs comprehensive validation including format, content, and cryptographic compatibility checks.
- *
- * @return MqttSSLCertificates struct containing validated certificates and validation status
- */
-MqttSSLCertificates ConfigManager::getMqttSSLCertificates() {
-    MqttSSLCertificates certs;
-
-    ESP_LOGI(TAG, "Loading and validating MQTT SSL certificates...");
-
-    // Load certificates
-    certs.caCert = loadCertificate("ca");
-    certs.clientCert = loadCertificate("client");
-    certs.clientKey = loadCertificate("privateKey");
-
-    // Validate CA certificate if present
-    if (!certs.caCert.empty()) {
-        if (!validateCertificateContent(certs.caCert, "ca")) {
-            ESP_LOGE(TAG, "CA certificate validation failed");
-            certs.isValid = false;
-            certs.errorMessage = "Invalid CA certificate";
-            return certs;
-        }
-        certs.hasCACert = true;
-        ESP_LOGI(TAG, "CA certificate validated successfully");
-    } else {
-        ESP_LOGI(TAG, "No CA certificate configured");
+      int ret = mbedtls_x509_crt_parse(&cert, reinterpret_cast<const unsigned char*>(certStr.c_str()), certStr.length() + 1);
+      if(ret){
+        ESP_LOGE(TAG, "Unable to parse '%s' certificate: %d", c.c_str(), ret);
+        continue;
+      }
+      char subject[256], issuer[256];
+      ret = mbedtls_x509_dn_gets(subject, sizeof(subject), &cert.subject);
+      if(!ret){
+        ESP_LOGE(TAG, "Unable to retrieve DN for '%s' certificate: %d", c.c_str(), ret);
+        continue;
+      }
+      ret = mbedtls_x509_dn_gets(issuer, sizeof(issuer), &cert.issuer);
+      if(!ret){
+        ESP_LOGE(TAG, "Unable to retrieve DN for '%s' certificate: %d", c.c_str(), ret);
+        continue;
+      }
+      mbedtls_x509_time valid_from = cert.valid_from;
+      mbedtls_x509_time valid_to = cert.valid_to;
+      certificates.emplace_back(CertificateStatus{
+          c,
+          issuer,
+          subject,
+          {.from = fmt::format("{}/{}/{}", valid_from.day, valid_from.mon,
+                               valid_from.year),
+           .to = fmt::format("{}/{}/{}", valid_to.day, valid_to.mon,
+                             valid_to.year)},
+          c == "client" ? validatePrivateKeyMatchesCertificate() : false});
+    } else if(not certStr.empty() && c == "privateKey"){ 
+      certificates.emplace_back(CertificateStatus{c});
     }
-
-    // Validate client certificate if present
-    if (!certs.clientCert.empty()) {
-        if (!validateCertificateContent(certs.clientCert, "client")) {
-            ESP_LOGE(TAG, "Client certificate validation failed");
-            certs.isValid = false;
-            certs.errorMessage = "Invalid client certificate";
-            return certs;
-        }
-        certs.hasClientCert = true;
-        ESP_LOGI(TAG, "Client certificate validated successfully");
-    } else {
-        ESP_LOGI(TAG, "No client certificate configured");
-    }
-
-    // Validate private key if present
-    if (!certs.clientKey.empty()) {
-        if (!validateCertificateContent(certs.clientKey, "privateKey")) {
-            ESP_LOGE(TAG, "Private key validation failed");
-            certs.isValid = false;
-            certs.errorMessage = "Invalid private key";
-            return certs;
-        }
-        certs.hasPrivateKey = true;
-        ESP_LOGI(TAG, "Private key validated successfully");
-    } else {
-        ESP_LOGI(TAG, "No private key configured");
-    }
-
-    // Validate certificate-key pair compatibility if both are present
-    if (certs.hasClientCert && certs.hasPrivateKey) {
-        if (!validatePrivateKeyMatchesCertificate(certs.clientKey, certs.clientCert)) {
-            ESP_LOGE(TAG, "Private key does not match client certificate");
-            certs.isValid = false;
-            certs.errorMessage = "Private key does not match client certificate";
-            return certs;
-        }
-        ESP_LOGI(TAG, "Certificate-key pair validation successful");
-    }
-
-    // Check if we have sufficient certificates for SSL
-    if (!certs.hasCACert && !m_mqttConfig.allowInsecure) {
-        ESP_LOGE(TAG, "No CA certificate configured and allowInsecure is false");
-        certs.isValid = false;
-        certs.errorMessage = "CA certificate required when allowInsecure is false";
-        return certs;
-    }
-
-    certs.isValid = true;
-    ESP_LOGI(TAG, "All MQTT SSL certificates validated successfully");
-    return certs;
+    mbedtls_x509_crt_free(&cert);
+  }
+  return certificates;
 }
