@@ -404,8 +404,8 @@
                               <div class="flex items-center">
                                 <svg
                                   class="w-5 h-5 mr-2"
-                                  class:text-success={certificateStatus?.certificates?.ca}
-                                  class:text-error={!certificateStatus?.certificates?.ca}
+                                  class:text-success={certificateStatus?.ca}
+                                  class:text-error={!certificateStatus?.ca}
                                   fill="none"
                                   viewBox="0 0 24 24"
                                   stroke="currentColor"
@@ -418,14 +418,15 @@
                                 </svg>
                                 <div class="flex flex-col">
                                   <span class="text-sm font-medium">CA Certificate</span>
-                                  <!-- <span class="text-sm font-medium text-base-content/75">{certificateStatus?.certificates.ca?.validationMessage}</span> -->
-                                  <span class="text-sm font-medium text-base-content/75">{certificateStatus?.certificates.ca?.expiration.from} - {certificateStatus?.certificates.ca?.expiration.to}</span>
-                                  <span class="text-sm font-medium text-base-content/50">Subject: {certificateStatus?.certificates.ca?.subject}</span>
-                                  <span class="text-sm font-medium text-base-content/50">Issuer: {certificateStatus?.certificates.ca?.issuer}</span>
+                                  <!-- <span class="text-sm font-medium text-base-content/75">{certificateStatus?.ca?.validationMessage}</span> -->
+                                  <span class="text-sm font-medium text-base-content/75">{certificateStatus?.ca?.expiration.from} - {certificateStatus?.ca?.expiration.to}</span>
+                                  <span class="text-sm font-medium text-base-content/50">Subject: {certificateStatus?.ca?.subject}</span>
+                                  <span class="text-sm font-medium text-base-content/50">Issuer: {certificateStatus?.ca?.issuer}</span>
                                 </div>
                               </div>
-                              {#if certificateStatus?.certificates?.ca}
+                              {#if certificateStatus?.ca}
                                 <button
+                                  type="button"
                                   onclick={() => deleteCertificateHandler("ca")}
                                   class="btn btn-ghost btn-xs btn-error"
                                 >Delete</button
@@ -440,8 +441,8 @@
                               <div class="flex items-center">
                                 <svg
                                   class="w-5 h-5 mr-2"
-                                  class:text-success={certificateStatus?.certificates?.client}
-                                  class:text-error={!certificateStatus?.certificates?.client}
+                                  class:text-success={certificateStatus?.client}
+                                  class:text-error={!certificateStatus?.client}
                                   fill="none"
                                   viewBox="0 0 24 24"
                                   stroke="currentColor"
@@ -454,14 +455,15 @@
                                 </svg>
                                 <div class="flex flex-col">
                                   <span class="text-sm font-medium">Client Certificate</span>
-                                  <!-- <span class="text-sm font-medium text-base-content/75">{certificateStatus?.certificates.client?.validationMessage}</span> -->
-                                  <span class="text-sm font-medium text-base-content/75">{certificateStatus?.certificates.client?.expiration.from} - {certificateStatus?.certificates.client?.expiration.to}</span>
-                                  <span class="text-sm font-medium text-base-content/50">Subject: {certificateStatus?.certificates.client?.subject}</span>
-                                  <span class="text-sm font-medium text-base-content/50">Issuer: {certificateStatus?.certificates.client?.issuer}</span>
+                                  <!-- <span class="text-sm font-medium text-base-content/75">{certificateStatus?.client?.validationMessage}</span> -->
+                                  <span class="text-sm font-medium text-base-content/75">{certificateStatus?.client?.expiration.from} - {certificateStatus?.client?.expiration.to}</span>
+                                  <span class="text-sm font-medium text-base-content/50">Subject: {certificateStatus?.client?.subject}</span>
+                                  <span class="text-sm font-medium text-base-content/50">Issuer: {certificateStatus?.client?.issuer}</span>
                                 </div>
                               </div>
-                              {#if certificateStatus?.certificates?.client}
+                              {#if certificateStatus?.client}
                                 <button
+                                  type="button"
                                   onclick={() => deleteCertificateHandler("client")}
                                   class="btn btn-ghost btn-xs btn-error"
                                 >Delete</button
@@ -476,8 +478,8 @@
                               <div class="flex items-center">
                                 <svg
                                   class="w-5 h-5 mr-2"
-                                  class:text-success={certificateStatus?.certificates?.privateKey?.exists}
-                                  class:text-error={!certificateStatus?.certificates?.privateKey?.exists}
+                                  class:text-success={certificateStatus?.privateKey?.exists}
+                                  class:text-error={!certificateStatus?.privateKey?.exists}
                                   fill="none"
                                   viewBox="0 0 24 24"
                                   stroke="currentColor"
@@ -493,8 +495,9 @@
                                   <!-- <span class="text-sm font-medium text-base-content/50">{certificateStatus?.certificates.privateKey?.validationMessage}</span> -->
                                 </div>
                               </div>
-                              {#if certificateStatus?.certificates?.privateKey}
+                              {#if certificateStatus?.privateKey}
                                 <button
+                                  type="button"
                                   onclick={() =>
                                     deleteCertificateHandler("privateKey")}
                                   class="btn btn-ghost btn-xs btn-error"

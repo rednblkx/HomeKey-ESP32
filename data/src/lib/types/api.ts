@@ -273,40 +273,36 @@ export interface OTAStatus {
  */
 export interface CertificatesStatus {
   /** CA certificate status */
-  certificates: {
-    ca?: {
-      /** Certificate issuer information */
-      issuer: string;
-      /** Certificate subject information */
-      subject: string;
-      /** Certificate expiration date */
-      expiration: {
-        from: string,
-        to: string
-      };
-    };
-    /** Client certificate status */
-    client?: {
-      /** Certificate issuer information */
-      issuer: string;
-      /** Certificate subject information */
-      subject: string;
-      /** Certificate expiration date */
-      expiration: {
-        from: string,
-        to: string
-      };
-      /** Whether the private key matches this certificate */
-      keyMatches?: boolean;
-    };
-    /** Private key status */
-    privateKey?: {
-      /** Whether the private key exists */
-      exists: boolean;
+  ca?: {
+    /** Certificate issuer information */
+    issuer: string;
+    /** Certificate subject information */
+    subject: string;
+    /** Certificate expiration date */
+    expiration: {
+      from: string,
+      to: string
     };
   };
-  status: string;
-  timestamp: number;
+  /** Client certificate status */
+  client?: {
+    /** Certificate issuer information */
+    issuer: string;
+    /** Certificate subject information */
+    subject: string;
+    /** Certificate expiration date */
+    expiration: {
+      from: string,
+      to: string
+    };
+    /** Whether the private key matches this certificate */
+    keyMatches?: boolean;
+  };
+  /** Private key status */
+  privateKey?: {
+    /** Whether the private key exists */
+    exists: boolean;
+  };
 }
 
 /**
