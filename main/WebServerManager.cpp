@@ -79,12 +79,6 @@ WebServerManager::~WebServerManager() {
     esp_timer_delete(m_statusTimer);
     m_statusTimer = nullptr;
   }
-#ifdef WEBSERVER_USE_DEDICATED_BROADCAST_QUEUE
-  if (m_wsBroadcastQueue) {
-    vQueueDelete(m_wsBroadcastQueue);
-    m_wsBroadcastQueue = nullptr;
-  }
-#endif
 }
 
 // ============================================================================
@@ -125,24 +119,10 @@ void WebServerManager::begin() {
     return;
   }
 
-#ifdef WEBSERVER_USE_DEDICATED_BROADCAST_QUEUE
-  m_wsBroadcastQueue = xQueueCreate(8, sizeof(BroadcastMsg *));
-  if (!m_wsBroadcastQueue) {
-    ESP_LOGE(TAG, "Failed to create broadcast queue");
-    vQueueDelete(m_wsQueue);
-    httpd_stop(m_server);
-    m_server = nullptr;
-    return;
-  }
-#endif
-
   // Create WebSocket send task
   if (xTaskCreate(ws_send_task, "ws_send_task", 4096, this, 5,
                   &m_wsTaskHandle) != pdPASS) {
     ESP_LOGE(TAG, "Failed to create WebSocket task");
-#ifdef WEBSERVER_USE_DEDICATED_BROADCAST_QUEUE
-    vQueueDelete(m_wsBroadcastQueue);
-#endif
     vQueueDelete(m_wsQueue);
     httpd_stop(m_server);
     m_server = nullptr;
@@ -987,23 +967,6 @@ void WebServerManager::broadcastToWebSocketClients(const char *message) {
 
 void WebServerManager::broadcastWs(const uint8_t *payload, size_t len,
                                    httpd_ws_type_t type) {
-#ifdef WEBSERVER_USE_DEDICATED_BROADCAST_QUEUE
-  size_t total_size = sizeof(BroadcastMsg) + len;
-  BroadcastMsgPtr msg(static_cast<BroadcastMsg *>(malloc(total_size)));
-  if (!msg)
-    return;
-  msg->type = type;
-  msg->len = len;
-  memcpy(msg->payload, payload, len);
-
-  BroadcastMsg *raw_msg = msg.get();
-  if (!m_wsBroadcastQueue ||
-      xQueueSend(m_wsBroadcastQueue, &raw_msg, pdMS_TO_TICKS(10)) != pdPASS) {
-    // msg will be freed by unique_ptr destructor
-  } else {
-    msg.release();
-  }
-#else
   std::vector<int> fds;
   {
     fds.reserve(m_wsClients.size());
@@ -1014,7 +977,6 @@ void WebServerManager::broadcastWs(const uint8_t *payload, size_t len,
     return;
   for (int fd : fds)
     queue_ws_frame(fd, payload, len, type);
-#endif
 }
 
 void WebServerManager::queue_ws_frame(int fd, const uint8_t *payload,
@@ -1553,7 +1515,9 @@ esp_err_t WebServerManager::handleCertificateUpload(httpd_req_t *req) {
   char query[256], type_param[128];
   if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK ||
       (httpd_query_key_value(query, "type", type_param, sizeof(type_param)) !=
-          ESP_OK && (strcmp(type_param, "client") || strcmp(type_param, "ca") || strcmp(type_param, "privateKey")))) {
+           ESP_OK &&
+       (strcmp(type_param, "client") || strcmp(type_param, "ca") ||
+        strcmp(type_param, "privateKey")))) {
     httpd_resp_set_status(req, "400 Bad Request");
     httpd_resp_send(req, "Missing 'type' parameter", HTTPD_RESP_USE_STRLEN);
     return ESP_FAIL;
@@ -1578,12 +1542,16 @@ esp_err_t WebServerManager::handleCertificateUpload(httpd_req_t *req) {
     remaining -= received;
   }
 
-  bool success = instance->m_configManager.saveCertificate(std::string(type_param), certBuf);
+  bool success = instance->m_configManager.saveCertificate(
+      std::string(type_param), certBuf);
 
   if (success) {
     cJSON *response = cJSON_CreateObject();
     cJSON_AddStringToObject(response, "status", "success");
-    cJSON_AddStringToObject(response, "message", fmt::format("Certificate '{}' saved successfully!", type_param).c_str());
+    cJSON_AddStringToObject(
+        response, "message",
+        fmt::format("Certificate '{}' saved successfully!", type_param)
+            .c_str());
     cJSON_AddNumberToObject(response, "size", content_len);
     std::string resp = cjson_to_string_and_free(response);
     cJSON_Delete(response);
@@ -1608,23 +1576,25 @@ esp_err_t WebServerManager::handleCertificateStatus(httpd_req_t *req) {
   cJSON *response = cJSON_CreateObject();
   cJSON *certificates = cJSON_CreateObject();
 
-  std::vector<CertificateStatus> status = instance->m_configManager.getCertificatesStatus();
+  std::vector<CertificateStatus> status =
+      instance->m_configManager.getCertificatesStatus();
   for (auto cert : status) {
     cJSON *certInfo = cJSON_CreateObject();
-      if (cert.type != "privateKey") {
-        if (!cert.issuer.empty())
-          cJSON_AddStringToObject(certInfo, "issuer", cert.issuer.c_str());
-        if (!cert.subject.empty())
-          cJSON_AddStringToObject(certInfo, "subject", cert.subject.c_str());
-        if (!cert.expiration.from.empty() && !cert.expiration.to.empty()){
-          cJSON* expiration = cJSON_CreateObject();
-          cJSON_AddStringToObject(expiration, "from", cert.expiration.from.c_str());
-          cJSON_AddStringToObject(expiration, "to", cert.expiration.to.c_str());
-          cJSON_AddItemToObject(certInfo, "expiration", expiration);
-        }
-      } else if (cert.type == "privateKey") {
-        cJSON_AddBoolToObject(certInfo, "exists", true);
+    if (cert.type != "privateKey") {
+      if (!cert.issuer.empty())
+        cJSON_AddStringToObject(certInfo, "issuer", cert.issuer.c_str());
+      if (!cert.subject.empty())
+        cJSON_AddStringToObject(certInfo, "subject", cert.subject.c_str());
+      if (!cert.expiration.from.empty() && !cert.expiration.to.empty()) {
+        cJSON *expiration = cJSON_CreateObject();
+        cJSON_AddStringToObject(expiration, "from",
+                                cert.expiration.from.c_str());
+        cJSON_AddStringToObject(expiration, "to", cert.expiration.to.c_str());
+        cJSON_AddItemToObject(certInfo, "expiration", expiration);
       }
+    } else if (cert.type == "privateKey") {
+      cJSON_AddBoolToObject(certInfo, "exists", true);
+    }
 
     cJSON_AddItemToObject(certificates, cert.type.c_str(), certInfo);
   }
