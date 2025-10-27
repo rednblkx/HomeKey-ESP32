@@ -1594,7 +1594,6 @@ esp_err_t WebServerManager::handleCertificateUpload(httpd_req_t *req) {
             .c_str());
     cJSON_AddNumberToObject(response, "size", content_len);
     std::string resp = cjson_to_string_and_free(response);
-    cJSON_Delete(response);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, resp.c_str(), resp.length());
     return ESP_OK;
