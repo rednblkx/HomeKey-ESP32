@@ -26,11 +26,11 @@ struct WsFrame {
   int fd;
   httpd_ws_type_t type;
   size_t len;
-  uint8_t payload[];
+  uint8_t *payload;
 };
 
 struct WsFrameDeleter {
-  void operator()(WsFrame *frame) const { free(frame); }
+  void operator()(WsFrame *frame) const { delete frame; }
 };
 
 using WsFramePtr = std::unique_ptr<WsFrame, WsFrameDeleter>;

@@ -15,8 +15,10 @@
 #include "eventStructs.hpp"
 #include "fmt/base.h"
 #include "fmt/ranges.h"
+#include "freertos/projdefs.h"
 #include <LittleFS.h>
 #include <cstdint>
+#include <cstdlib>
 #include <dirent.h>
 #include <esp_app_desc.h>
 #include <event_manager.hpp>
@@ -981,19 +983,18 @@ void WebServerManager::broadcastWs(const uint8_t *payload, size_t len,
 
 void WebServerManager::queue_ws_frame(int fd, const uint8_t *payload,
                                       size_t len, httpd_ws_type_t type) {
-  size_t total_size = sizeof(WsFrame) + len;
-  WsFramePtr frame(static_cast<WsFrame *>(malloc(total_size)));
+  WsFrame *frame = new WsFrame;
   if (!frame)
     return;
 
   frame->fd = fd;
   frame->type = type;
   frame->len = len;
+  frame->payload = new uint8_t[len];
   memcpy(frame->payload, payload, len);
 
-  WsFrame *raw_frame_ptr = frame.get();
-  if (xQueueSend(m_wsQueue, &raw_frame_ptr, pdMS_TO_TICKS(10)) == pdPASS) {
-    frame.release();
+  if (xQueueSend(m_wsQueue, &frame, pdMS_TO_TICKS(100)) != pdTRUE) {
+    delete frame;
   }
 }
 
@@ -1036,6 +1037,7 @@ void WebServerManager::ws_send_task(void *arg) {
           }
         }
       }
+      delete[] frame->payload;
     }
   }
 }
