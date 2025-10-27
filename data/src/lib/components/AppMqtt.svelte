@@ -3,7 +3,7 @@
   import { type CertificatesStatus, type CertificateType, type MqttConfig } from '$lib/types/api';
   import {
     saveConfig,
-    uploadCertificateBundle,
+    uploadCertificate,
     getCertificateStatus,
     deleteCertificate,
   } from "$lib/services/api.js";
@@ -110,7 +110,7 @@
           uploadProgress[type] = 0;
           return;
         }
-        const result = await uploadCertificateBundle(type, content);
+        const result = await uploadCertificate(type, content);
         uploadProgress[type] = 100;
 
         // Refresh certificate status

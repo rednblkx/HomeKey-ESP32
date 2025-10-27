@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { saveConfig } from '$lib/services/api.js';
-	import type { MiscConfig } from '$lib/types/api';
+	import type { ActionsConfig } from '$lib/types/api';
 
-	let { actions, error } : { actions: MiscConfig | null; error?: string | null } = $props();
+	let { actions, error } : { actions: ActionsConfig | null; error?: string | null } = $props();
 
-	let actionsConfig = $state<MiscConfig>(actions ?? {
+	let actionsConfig = $state<ActionsConfig>(actions ?? {
 		neopixelSuccessColor: [[0, 0], [1, 255], [2, 0]],
 		neopixelFailureColor: [[0, 255], [1, 0], [2, 0]], 
 		nfcSuccessPin: 2,
@@ -19,10 +19,6 @@
 		gpioActionMomentaryEnabled: false,
 		hkGpioControlledState: false,
 		gpioActionMomentaryTimeout: 5000,
-		webAuthEnabled: false,
-		webUsername: "",
-		webPassword: "",
-		nfcGpioPins: [5, 18, 19, 23],
 		hkDumbSwitchMode: false,
 		hkAltActionInitPin: 255,
 		hkAltActionInitLedPin: 255,
@@ -30,21 +26,6 @@
 		hkAltActionPin: 255,
 		hkAltActionTimeout: 5000,
 		hkAltActionGpioState: 0,
-		ethernetEnabled: false,
-		ethActivePreset: 255,
-		ethPhyType: 0,
-		ethRmiiConfig: [0, 0, 0, 0, 0],
-		ethSpiConfig: [20, -1, -1, -1, -1, -1, -1],
-		controlPin: 26,
-		hsStatusPin: 2,
-		deviceName: "",
-		otaPasswd: "",
-		hk_key_color: 0,
-		setupCode: "",
-		lockAlwaysUnlock: false,
-		lockAlwaysLock: false,
-		proxBatEnabled: false,
-		btrLowStatusThreshold: 10,
 		nfcNeopixelPin: 8,
 		neoPixelType: 0,
 		neopixelSuccessTime: 1000,
@@ -260,8 +241,29 @@
 												</div>
 											</div>
 											<div>
-												<h3 class="text-base md:text-lg font-bold mb-4">2nd action(on success)</h3>
+												<h3 class="text-base md:text-lg font-bold mb-4">2nd action on success</h3>
 												<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                          <div class="form-control">
+                            <label class="label">
+                              <span class="label-text">Alt action Initiator Pin</span>
+                            </label>
+                            <input type="number" bind:value={actionsConfig.hkAltActionInitPin} placeholder="255" min="0"
+                              max="255" class="input input-bordered w-full" />
+                          </div>
+                          <div class="form-control">
+                            <label class="label">
+                              <span class="label-text">Alt action Initiator Timeout (ms)</span>
+                            </label>
+                            <input type="number" bind:value={actionsConfig.hkAltActionInitTimeout} placeholder="5000" min="0"
+                              max="10000" class="input input-bordered w-full" />
+                          </div>
+                          <div class="form-control">
+                            <label class="label">
+                              <span class="label-text">Feedback LED Pin</span>
+                            </label>
+                            <input type="number" bind:value={actionsConfig.hkAltActionInitLedPin} placeholder="255" min="0"
+                              max="255" class="input input-bordered w-full" />
+                          </div>
 													<div class="form-control">
 														<label class="label">
 															<span class="label-text">GPIO Pin</span>

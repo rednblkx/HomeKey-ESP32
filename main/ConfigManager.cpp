@@ -1,10 +1,13 @@
 #include "ConfigManager.hpp"
 #include "cJSON.h"
 #include "config.hpp"
+#include <iterator>
 #include <ranges>
 #include <string>
 #include <vector>
 #include "esp_log.h"
+#include "esp_log_buffer.h"
+#include "esp_log_level.h"
 #include "mbedtls/x509.h"
 #include "msgpack.h"
 #include <LittleFS.h>
@@ -75,42 +78,46 @@ ConfigManager::ConfigManager() : m_isInitialized(false) {
       {"lockAlwaysLock", &m_miscConfig.lockAlwaysLock},
       {"controlPin", &m_miscConfig.controlPin},
       {"hsStatusPin", &m_miscConfig.hsStatusPin},
-      {"nfcNeopixelPin", &m_miscConfig.nfcNeopixelPin},
-      {"neoPixelType", &m_miscConfig.neoPixelType},
-      {"neopixelSuccessColor", &m_miscConfig.neopixelSuccessColor},
-      {"neopixelFailureColor", &m_miscConfig.neopixelFailureColor},
-      {"neopixelSuccessTime", &m_miscConfig.neopixelSuccessTime},
-      {"neopixelFailTime", &m_miscConfig.neopixelFailTime},
-      {"nfcSuccessPin", &m_miscConfig.nfcSuccessPin},
-      {"nfcSuccessTime", &m_miscConfig.nfcSuccessTime},
-      {"nfcSuccessHL", &m_miscConfig.nfcSuccessHL},
-      {"nfcFailPin", &m_miscConfig.nfcFailPin},
-      {"nfcFailTime", &m_miscConfig.nfcFailTime},
-      {"nfcFailHL", &m_miscConfig.nfcFailHL},
-      {"gpioActionPin", &m_miscConfig.gpioActionPin},
-      {"gpioActionLockState", &m_miscConfig.gpioActionLockState},
-      {"gpioActionUnlockState", &m_miscConfig.gpioActionUnlockState},
-      {"gpioActionMomentaryEnabled", &m_miscConfig.gpioActionMomentaryEnabled},
-      {"hkGpioControlledState", &m_miscConfig.hkGpioControlledState},
-      {"gpioActionMomentaryTimeout", &m_miscConfig.gpioActionMomentaryTimeout},
       {"webAuthEnabled", &m_miscConfig.webAuthEnabled},
       {"webUsername", &m_miscConfig.webUsername},
       {"webPassword", &m_miscConfig.webPassword},
       {"nfcGpioPins", &m_miscConfig.nfcGpioPins},
       {"btrLowStatusThreshold", &m_miscConfig.btrLowStatusThreshold},
       {"proxBatEnabled", &m_miscConfig.proxBatEnabled},
-      {"hkDumbSwitchMode", &m_miscConfig.hkDumbSwitchMode},
-      {"hkAltActionInitPin", &m_miscConfig.hkAltActionInitPin},
-      {"hkAltActionInitLedPin", &m_miscConfig.hkAltActionInitLedPin},
-      {"hkAltActionInitTimeout", &m_miscConfig.hkAltActionInitTimeout},
-      {"hkAltActionPin", &m_miscConfig.hkAltActionPin},
-      {"hkAltActionTimeout", &m_miscConfig.hkAltActionTimeout},
-      {"hkAltActionGpioState", &m_miscConfig.hkAltActionGpioState},
       {"ethernetEnabled", &m_miscConfig.ethernetEnabled},
       {"ethActivePreset", &m_miscConfig.ethActivePreset},
       {"ethPhyType", &m_miscConfig.ethPhyType},
       {"ethRmiiConfig", &m_miscConfig.ethRmiiConfig},
       {"ethSpiConfig", &m_miscConfig.ethSpiConfig}}
+    },
+    {
+      "actions", {
+        {"nfcNeopixelPin", &m_actionsConfig.nfcNeopixelPin},
+        {"neoPixelType", &m_actionsConfig.neoPixelType},
+        {"neopixelSuccessColor", &m_actionsConfig.neopixelSuccessColor},
+        {"neopixelFailureColor", &m_actionsConfig.neopixelFailureColor},
+        {"neopixelSuccessTime", &m_actionsConfig.neopixelSuccessTime},
+        {"neopixelFailTime", &m_actionsConfig.neopixelFailTime},
+        {"nfcSuccessPin", &m_actionsConfig.nfcSuccessPin},
+        {"nfcSuccessTime", &m_actionsConfig.nfcSuccessTime},
+        {"nfcSuccessHL", &m_actionsConfig.nfcSuccessHL},
+        {"nfcFailPin", &m_actionsConfig.nfcFailPin},
+        {"nfcFailTime", &m_actionsConfig.nfcFailTime},
+        {"nfcFailHL", &m_actionsConfig.nfcFailHL},
+        {"gpioActionPin", &m_actionsConfig.gpioActionPin},
+        {"gpioActionLockState", &m_actionsConfig.gpioActionLockState},
+        {"gpioActionUnlockState", &m_actionsConfig.gpioActionUnlockState},
+        {"gpioActionMomentaryEnabled", &m_actionsConfig.gpioActionMomentaryEnabled},
+        {"hkGpioControlledState", &m_actionsConfig.hkGpioControlledState},
+        {"gpioActionMomentaryTimeout", &m_actionsConfig.gpioActionMomentaryTimeout},
+        {"hkDumbSwitchMode", &m_actionsConfig.hkDumbSwitchMode},
+        {"hkAltActionPin", &m_actionsConfig.hkAltActionPin},
+        {"hkAltActionTimeout", &m_actionsConfig.hkAltActionTimeout},
+        {"hkAltActionGpioState", &m_actionsConfig.hkAltActionGpioState},
+        {"hkAltActionInitPin", &m_actionsConfig.hkAltActionInitPin},
+        {"hkAltActionInitLedPin", &m_actionsConfig.hkAltActionInitLedPin},
+        {"hkAltActionInitTimeout", &m_actionsConfig.hkAltActionInitTimeout},
+      }
     }
   };
 }
@@ -186,7 +193,9 @@ const ConfigType& ConfigManager::getConfig() const {
     return m_mqttConfig;
   } else if constexpr (std::is_same_v<NonConstConfigType, espConfig::misc_config_t>) {
     return m_miscConfig;
-  } else {
+  } else if constexpr (std::is_same_v<NonConstConfigType, espConfig::actions_config_t>) {
+    return m_actionsConfig;
+  }else {
     static_assert(std::is_void_v<ConfigType> && false, "Unsupported ConfigType for getConfig");
   }
 }
@@ -194,6 +203,8 @@ template const espConfig::mqttConfig_t& ConfigManager::getConfig<espConfig::mqtt
 template const espConfig::mqttConfig_t& ConfigManager::getConfig<espConfig::mqttConfig_t const>() const;
 template const espConfig::misc_config_t& ConfigManager::getConfig<espConfig::misc_config_t>() const;
 template const espConfig::misc_config_t& ConfigManager::getConfig<espConfig::misc_config_t const>() const;
+template const espConfig::actions_config_t& ConfigManager::getConfig<espConfig::actions_config_t>() const;
+template const espConfig::actions_config_t& ConfigManager::getConfig<espConfig::actions_config_t const>() const;
 
 template <typename ConfigType>
 /**
@@ -212,8 +223,11 @@ bool ConfigManager::deleteConfig() {
     return !nvs_erase_key(m_nvsHandle, "MQTTDATA") && !nvs_erase_key(m_nvsHandle, "MQTTSSLDATA");
   } else if constexpr(std::is_same_v<ConfigType, espConfig::misc_config_t>){
     m_miscConfig = {};
-    return !nvs_erase_key(m_nvsHandle, "MISCDATA");
-  } else {
+    return saveConfig<espConfig::misc_config_t>();
+  } else if constexpr(std::is_same_v<ConfigType, espConfig::actions_config_t>){
+    m_actionsConfig = {};
+    return saveConfig<espConfig::actions_config_t>();
+  }else {
     static_assert(std::is_void_v<ConfigType> && false, "Unsupported ConfigType for deleteConfig");
   }
   return false;
@@ -235,7 +249,7 @@ bool ConfigManager::saveConfig() {
     key = "MQTTDATA";
   } else if constexpr (std::is_same_v<ConfigType, espConfig::mqtt_ssl_t>){
     key = "MQTTSSLDATA";
-  } else if constexpr(std::is_same_v<ConfigType, espConfig::misc_config_t>){
+  } else if constexpr(std::is_same_v<ConfigType, espConfig::misc_config_t> || std::is_same_v<ConfigType, espConfig::actions_config_t>){
     key = "MISCDATA";
   } else {
     static_assert(std::is_void_v<ConfigType> && false, "Unsupported ConfigType for saveConfig");
@@ -250,6 +264,7 @@ bool ConfigManager::saveConfig() {
 }
 template bool ConfigManager::saveConfig<espConfig::mqttConfig_t>();
 template bool ConfigManager::saveConfig<espConfig::misc_config_t>();
+template bool ConfigManager::saveConfig<espConfig::actions_config_t>();
 
 /**
  * @brief Loads and applies a configuration blob from NVS into the in-memory config.
@@ -306,6 +321,7 @@ void ConfigManager::loadConfigFromNvs(const char *key) {
       deserialize(obj, "ssl");
     } else if(!strcmp(key, "MISCDATA")){
       deserialize(obj, "misc");
+      deserialize(obj, "actions");
     } else {ESP_LOGE(TAG, "Key '%s' not valid", key);return;}
   } else {
     ESP_LOGE(TAG, "Failed to parse msgpack for key '%s'. Using defaults.", key);
@@ -420,14 +436,14 @@ void ConfigManager::deserialize(msgpack_object obj, std::string type) {
                 std::ranges::copy(integer_view, arg->begin());
               } else if constexpr (std::is_same_v<PointeeType, std::array<uint8_t, 7>>) {
                 std::ranges::copy(integer_view, arg->begin());
-              } else if constexpr (std::is_same_v<PointeeType, std::map<espConfig::misc_config_t::colorMap, uint8_t>>) {
+              } else if constexpr (std::is_same_v<PointeeType, std::map<espConfig::actions_config_t::colorMap, uint8_t>>) {
                 std::ranges::for_each(msgpack_elements, [&](const msgpack_object& o) {
                     if (o.type == MSGPACK_OBJECT_ARRAY && o.via.array.size >= 2) {
                         const msgpack_object* inner_array_ptr = o.via.array.ptr;
                         uint64_t key_val = inner_array_ptr[0].via.u64;
                         uint64_t value_val = inner_array_ptr[1].via.u64;
                         arg->try_emplace(
-                            static_cast<espConfig::misc_config_t::colorMap>(key_val),
+                            static_cast<espConfig::actions_config_t::colorMap>(key_val),
                             static_cast<uint8_t>(value_val)
                         );
                     }
@@ -475,6 +491,10 @@ std::vector<uint8_t> ConfigManager::serialize() {
   ConfigMapType configMap;
   if constexpr (std::is_same_v<espConfig::misc_config_t, ConfigType>){
     configMap = m_configMap["misc"];
+    configMap.insert(m_configMap["actions"].begin(), m_configMap["actions"].end());
+  } else if constexpr (std::is_same_v<espConfig::actions_config_t, ConfigType>){
+    configMap = m_configMap["actions"];
+    configMap.insert(m_configMap["misc"].begin(), m_configMap["misc"].end());
   } else if constexpr (std::is_same_v<espConfig::mqtt_ssl_t, ConfigType>){
     configMap = m_configMap["ssl"];
   } else if constexpr (std::is_same_v<espConfig::mqttConfig_t, ConfigType>){
@@ -519,7 +539,7 @@ std::vector<uint8_t> ConfigManager::serialize() {
           for (const auto& val : *arg) {
             msgpack_pack_unsigned_char(&pk, val);
           }
-        } else if constexpr (std::is_same_v<PointeeType, std::map<espConfig::misc_config_t::colorMap, uint8_t>>) {
+        } else if constexpr (std::is_same_v<PointeeType, std::map<espConfig::actions_config_t::colorMap, uint8_t>>) {
           msgpack_pack_array(&pk, arg->size()); // Pack as array of arrays for map
           for (const auto& map_pair : *arg) {
             msgpack_pack_array(&pk, 2); // Key-value pair
@@ -567,6 +587,8 @@ std::string ConfigManager::serializeToJson() {
   ConfigMapType configMap;
   if constexpr (std::is_same_v<espConfig::misc_config_t, ConfigType>){
     configMap = m_configMap["misc"];
+  } else if constexpr (std::is_same_v<espConfig::actions_config_t, ConfigType>){
+    configMap = m_configMap["actions"];
   } else if constexpr (std::is_same_v<espConfig::mqttConfig_t, ConfigType>){
     configMap = m_configMap["mqtt"];
   }
@@ -593,7 +615,7 @@ std::string ConfigManager::serializeToJson() {
                         }
                         cJSON_AddItemToObject(root, key.c_str(), array);
                     }
-                } else if constexpr (std::is_same_v<PointeeType, std::map<espConfig::misc_config_t::colorMap, uint8_t>>) {
+                } else if constexpr (std::is_same_v<PointeeType, std::map<espConfig::actions_config_t::colorMap, uint8_t>>) {
                     cJSON *array_of_arrays = cJSON_CreateArray();
                     if (array_of_arrays) {
                         for (const auto& map_pair : *arg) {
@@ -627,6 +649,7 @@ std::string ConfigManager::serializeToJson() {
 }
 
 template std::string ConfigManager::serializeToJson<espConfig::misc_config_t>();
+template std::string ConfigManager::serializeToJson<espConfig::actions_config_t>();
 template std::string ConfigManager::serializeToJson<espConfig::mqttConfig_t>();
 
 template <typename ConfigType>
@@ -657,6 +680,8 @@ bool ConfigManager::deserializeFromJson(const std::string& json_string) {
     ConfigMapType configMap;
     if constexpr (std::is_same_v<ConfigType, espConfig::misc_config_t>){
       configMap = m_configMap["misc"];
+    } else if constexpr (std::is_same_v<ConfigType, espConfig::actions_config_t>){
+      configMap = m_configMap["actions"];
     } else if constexpr (std::is_same_v<ConfigType, espConfig::mqttConfig_t>){
       configMap = m_configMap["mqtt"];
     } else {
@@ -723,7 +748,7 @@ bool ConfigManager::deserializeFromJson(const std::string& json_string) {
                             ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected array.", key.c_str());
                             success = false;
                         }
-                    } else if constexpr (std::is_same_v<PointeeType, std::map<espConfig::misc_config_t::colorMap, uint8_t>>) {
+                    } else if constexpr (std::is_same_v<PointeeType, std::map<espConfig::actions_config_t::colorMap, uint8_t>>) {
                         if (cJSON_IsArray(item)) {
                             arg->clear();
                             int array_size = cJSON_GetArraySize(item);
@@ -737,7 +762,7 @@ bool ConfigManager::deserializeFromJson(const std::string& json_string) {
                                         uint64_t key_val = static_cast<uint64_t>(key_json->valuedouble);
                                         uint64_t value_val = static_cast<uint64_t>(value_json->valuedouble);
                                         arg->try_emplace(
-                                            static_cast<espConfig::misc_config_t::colorMap>(key_val),
+                                            static_cast<espConfig::actions_config_t::colorMap>(key_val),
                                             static_cast<uint8_t>(value_val)
                                         );
                                     } else {
@@ -788,6 +813,7 @@ bool ConfigManager::deserializeFromJson(const std::string& json_string) {
     return success;
 }
 template bool ConfigManager::deserializeFromJson<espConfig::misc_config_t>(const std::string& json_string);
+template bool ConfigManager::deserializeFromJson<espConfig::actions_config_t>(const std::string& json_string);
 template bool ConfigManager::deserializeFromJson<espConfig::mqttConfig_t>(const std::string& json_string);
 
 // Certificate storage implementation

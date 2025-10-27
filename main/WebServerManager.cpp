@@ -7,6 +7,7 @@
 #include "HomeSpan.h"
 #include "MqttManager.hpp"
 #include "ReaderDataManager.hpp"
+#include "cJSON.h"
 #include "config.hpp"
 #include "esp_heap_caps.h"
 #include "esp_http_server.h"
@@ -334,9 +335,12 @@ esp_err_t WebServerManager::handleGetConfig(httpd_req_t *req) {
   if (type == "mqtt") {
     responseJson =
         instance->m_configManager.serializeToJson<espConfig::mqttConfig_t>();
-  } else if (type == "misc" || type == "actions") {
+  } else if (type == "misc") {
     responseJson =
         instance->m_configManager.serializeToJson<espConfig::misc_config_t>();
+  } else if (type == "actions"){
+    responseJson =
+        instance->m_configManager.serializeToJson<espConfig::actions_config_t>();
   } else if (type == "hkinfo") {
     const auto &readerData = instance->m_readerDataManager.getReaderData();
     cJSON *hkInfo = cJSON_CreateObject();
@@ -493,9 +497,14 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
         instance->m_configManager.serializeToJson<espConfig::mqttConfig_t>();
     data = cJSON_Parse(s.c_str());
     configSchema = cJSON_Duplicate(data, true);
-  } else if (type == "misc" || type == "actions") {
+  } else if (type == "misc") {
     std::string s =
         instance->m_configManager.serializeToJson<espConfig::misc_config_t>();
+    data = cJSON_Parse(s.c_str());
+    configSchema = cJSON_Duplicate(data, true);
+  } else if (type == "actions") {
+    std::string s =
+        instance->m_configManager.serializeToJson<espConfig::actions_config_t>();
     data = cJSON_Parse(s.c_str());
     configSchema = cJSON_Duplicate(data, true);
   } else {
@@ -566,10 +575,9 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     it = it->next;
   }
 
-  // Merge and save configuration
+  mergeJson(data, obj);
+  char *data_str = cJSON_PrintUnformatted(data);
   if (type == "mqtt") {
-    mergeJson(data, obj);
-    char *data_str = cJSON_PrintUnformatted(data);
     success =
         instance->m_configManager.deserializeFromJson<espConfig::mqttConfig_t>(
             data_str);
@@ -579,9 +587,7 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
       rebootNeeded = true;
       rebootMsg = "MQTT config saved, reboot needed! Rebooting...";
     }
-  } else if (type == "misc" || type == "actions") {
-    mergeJson(data, obj);
-    char *data_str = cJSON_PrintUnformatted(data);
+  } else if (type == "misc") {
     success =
         instance->m_configManager.deserializeFromJson<espConfig::misc_config_t>(
             data_str);
@@ -589,20 +595,30 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     if (success) {
       success =
           instance->m_configManager.saveConfig<espConfig::misc_config_t>();
-      if (type == "misc") {
-        rebootNeeded = true;
-        rebootMsg = "Misc config saved, reboot needed! Rebooting...";
-      }
+      rebootNeeded = true;
+      rebootMsg = "Misc config saved, reboot needed! Rebooting...";
+    }
+  } else if (type == "actions") {
+    success =
+        instance->m_configManager.deserializeFromJson<espConfig::actions_config_t>(
+            data_str);
+    free(data_str);
+    if (success) {
+      success =
+          instance->m_configManager.saveConfig<espConfig::actions_config_t>();
     }
   }
 
-  cJSON_Delete(data);
   cJSON_Delete(configSchema);
   cJSON_Delete(obj);
 
   if (success) {
-    const char *response =
-        rebootNeeded ? rebootMsg.c_str() : "Saved and applied!";
+    cJSON *res = cJSON_CreateObject();
+    cJSON_AddItemToObject(res, "success", cJSON_CreateBool(true));
+    cJSON_AddItemToObject(res, "message", cJSON_CreateString(rebootNeeded ? rebootMsg.c_str() : "Saved and applied!"));
+    cJSON_AddItemToObject(res, "data", data);
+    const char *response = cJSON_PrintUnformatted(res);
+    cJSON_Delete(res);
     httpd_resp_send(req, response, strlen(response));
     if (rebootNeeded) {
       vTaskDelay(pdMS_TO_TICKS(1000));
@@ -610,7 +626,14 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     }
     return ESP_OK;
   }
-  httpd_resp_send_500(req);
+  cJSON_Delete(data);
+  cJSON *res = cJSON_CreateObject();
+  cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+  cJSON_AddItemToObject(res, "error", cJSON_CreateString("Unable to save config!"));
+  const char *response = cJSON_PrintUnformatted(res);
+  cJSON_Delete(res);
+  httpd_resp_set_status(req, HTTPD_500);
+  httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
   return ESP_FAIL;
 }
 
@@ -1508,8 +1531,13 @@ esp_err_t WebServerManager::handleCertificateUpload(httpd_req_t *req) {
 
   size_t content_len = req->content_len;
   if (content_len == 0 || content_len > 8192) {
+    cJSON *res = cJSON_CreateObject();
+    cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+    cJSON_AddItemToObject(res, "error", cJSON_CreateString("Invalid bundle content length"));
+    const char *response = cJSON_PrintUnformatted(res);
+    cJSON_Delete(res);
     httpd_resp_set_status(req, "400 Bad Request");
-    httpd_resp_send(req, "Invalid bundle content length",
+    httpd_resp_send(req, response,
                     HTTPD_RESP_USE_STRLEN);
     return ESP_FAIL;
   }
@@ -1520,8 +1548,13 @@ esp_err_t WebServerManager::handleCertificateUpload(httpd_req_t *req) {
            ESP_OK &&
        (strcmp(type_param, "client") || strcmp(type_param, "ca") ||
         strcmp(type_param, "privateKey")))) {
+    cJSON *res = cJSON_CreateObject();
+    cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+    cJSON_AddItemToObject(res, "error", cJSON_CreateString("Missing 'type' parameter"));
+    const char *response = cJSON_PrintUnformatted(res);
+    cJSON_Delete(res);
     httpd_resp_set_status(req, "400 Bad Request");
-    httpd_resp_send(req, "Missing 'type' parameter", HTTPD_RESP_USE_STRLEN);
+    httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
     return ESP_FAIL;
   }
 
@@ -1534,8 +1567,13 @@ esp_err_t WebServerManager::handleCertificateUpload(httpd_req_t *req) {
     size_t chunk_size = std::min(remaining, sizeof(buffer) - 1);
     int received = httpd_req_recv(req, buffer, chunk_size);
     if (received <= 0) {
+      cJSON *res = cJSON_CreateObject();
+      cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+      cJSON_AddItemToObject(res, "error", cJSON_CreateString("Failed to receive bundle data"));
+      const char *response = cJSON_PrintUnformatted(res);
+      cJSON_Delete(res);
       httpd_resp_set_status(req, "400 Bad Request");
-      httpd_resp_send(req, "Failed to receive bundle data",
+      httpd_resp_send(req, response,
                       HTTPD_RESP_USE_STRLEN);
       return ESP_FAIL;
     }
@@ -1549,7 +1587,7 @@ esp_err_t WebServerManager::handleCertificateUpload(httpd_req_t *req) {
 
   if (success) {
     cJSON *response = cJSON_CreateObject();
-    cJSON_AddStringToObject(response, "status", "success");
+    cJSON_AddItemToObject(response, "success", cJSON_CreateBool(true));
     cJSON_AddStringToObject(
         response, "message",
         fmt::format("Certificate '{}' saved successfully!", type_param)
@@ -1562,8 +1600,13 @@ esp_err_t WebServerManager::handleCertificateUpload(httpd_req_t *req) {
     return ESP_OK;
   }
 
-  httpd_resp_set_status(req, "400 Bad Request");
-  httpd_resp_send(req, "Failed to save certificate bundle",
+  cJSON *res = cJSON_CreateObject();
+  cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+  cJSON_AddItemToObject(res, "error", cJSON_CreateString("Failed to save certificate"));
+  const char *response = cJSON_PrintUnformatted(res);
+  cJSON_Delete(res);
+  httpd_resp_set_status(req, HTTPD_500);
+  httpd_resp_send(req, response,
                   HTTPD_RESP_USE_STRLEN);
   return ESP_FAIL;
 }
@@ -1601,9 +1644,8 @@ esp_err_t WebServerManager::handleCertificateStatus(httpd_req_t *req) {
     cJSON_AddItemToObject(certificates, cert.type.c_str(), certInfo);
   }
 
-  cJSON_AddItemToObject(response, "certificates", certificates);
-  cJSON_AddStringToObject(response, "status", "success");
-  cJSON_AddNumberToObject(response, "timestamp", time(nullptr));
+  cJSON_AddItemToObject(response, "data", certificates);
+  cJSON_AddItemToObject(response, "success", cJSON_CreateBool(true));
 
   std::string resp = cjson_to_string_and_free(response);
   httpd_resp_set_type(req, "application/json");
@@ -1620,15 +1662,25 @@ esp_err_t WebServerManager::handleCertificateDelete(httpd_req_t *req) {
 
   const char *type_start = strrchr(req->uri, '/');
   if (!type_start || strlen(type_start) <= 1) {
+    cJSON *res = cJSON_CreateObject();
+    cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+    cJSON_AddItemToObject(res, "error", cJSON_CreateString("Missing certificate type"));
+    const char *response = cJSON_PrintUnformatted(res);
+    cJSON_Delete(res);
     httpd_resp_set_status(req, "400 Bad Request");
-    httpd_resp_send(req, "Missing certificate type", HTTPD_RESP_USE_STRLEN);
+    httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
     return ESP_FAIL;
   }
 
   std::string certType = type_start + 1;
   if (certType != "ca" && certType != "client" && certType != "privateKey") {
+    cJSON *res = cJSON_CreateObject();
+    cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+    cJSON_AddItemToObject(res, "error", cJSON_CreateString("Invalid certificate type"));
+    const char *response = cJSON_PrintUnformatted(res);
+    cJSON_Delete(res);
     httpd_resp_set_status(req, "400 Bad Request");
-    httpd_resp_send(req, "Invalid certificate type", HTTPD_RESP_USE_STRLEN);
+    httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
     return ESP_FAIL;
   }
 
@@ -1636,16 +1688,20 @@ esp_err_t WebServerManager::handleCertificateDelete(httpd_req_t *req) {
 
   if (success) {
     cJSON *response = cJSON_CreateObject();
-    cJSON_AddStringToObject(response, "status", "success");
-    cJSON_AddStringToObject(response, "message", "Certificate deleted");
-    cJSON_AddStringToObject(response, "type", certType.c_str());
+    cJSON_AddItemToObject(response, "success", cJSON_CreateBool(true));
+    cJSON_AddStringToObject(response, "message", fmt::format("Certificate '{}' deleted", certType).c_str());
     std::string resp = cjson_to_string_and_free(response);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, resp.c_str(), resp.length());
     return ESP_OK;
   }
 
+  cJSON *res = cJSON_CreateObject();
+  cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+  cJSON_AddItemToObject(res, "error", cJSON_CreateString("Failed to delete certificate"));
+  const char *response = cJSON_PrintUnformatted(res);
+  cJSON_Delete(res);
   httpd_resp_set_status(req, "500 Internal Server Error");
-  httpd_resp_send(req, "Failed to delete certificate", HTTPD_RESP_USE_STRLEN);
+  httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
   return ESP_FAIL;
 }

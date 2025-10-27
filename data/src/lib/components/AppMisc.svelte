@@ -17,35 +17,10 @@
 		lockAlwaysLock: false,
 		proxBatEnabled: false,
 		btrLowStatusThreshold: 10,
-		nfcNeopixelPin: 8,
-		neoPixelType: 0,
-		neopixelSuccessColor: [[0, 0], [1, 255], [2, 0]],
-		neopixelFailureColor: [[0, 255], [1, 0], [2, 0]], 
-		neopixelSuccessTime: 1000,
-		neopixelFailTime: 1000,
-		nfcSuccessPin: 2,
-		nfcSuccessTime: 1000,
-		nfcSuccessHL: false,
-		nfcFailPin: 2,
-		nfcFailTime: 1000,
-		nfcFailHL: false,
-		gpioActionPin: 2,
-		gpioActionLockState: false,
-		gpioActionUnlockState: false,
-		gpioActionMomentaryEnabled: false,
-		hkGpioControlledState: false,
-		gpioActionMomentaryTimeout: 5000,
 		webAuthEnabled: false,
 		webUsername: "",
 		webPassword: "",
 		nfcGpioPins: [5, 18, 19, 23],
-		hkDumbSwitchMode: false,
-		hkAltActionInitPin: 255,
-		hkAltActionInitLedPin: 255,
-		hkAltActionInitTimeout: 5000,
-		hkAltActionPin: 255,
-		hkAltActionTimeout: 5000,
-		hkAltActionGpioState: 0,
 		ethernetEnabled: false,
 		ethActivePreset: 255,
 		ethPhyType: 0,
@@ -207,27 +182,6 @@
 							<input type="checkbox" name="misc-collapse" />
 							<div class="collapse-title font-medium">HomeKey</div>
 							<div class="collapse-content flex flex-col gap-4">
-								<div class="form-control">
-									<label class="label">
-										<span class="label-text">Alt action Initiator Pin</span>
-									</label>
-									<input type="number" bind:value={miscConfig.hkAltActionInitPin} placeholder="255" min="0"
-										max="255" class="input input-bordered w-full" />
-								</div>
-								<div class="form-control">
-									<label class="label">
-										<span class="label-text">Alt action Initiator Timeout (ms)</span>
-									</label>
-									<input type="number" bind:value={miscConfig.hkAltActionInitTimeout} placeholder="5000" min="0"
-										max="10000" class="input input-bordered w-full" />
-								</div>
-								<div class="form-control">
-									<label class="label">
-										<span class="label-text">Feedback LED Pin</span>
-									</label>
-									<input type="number" bind:value={miscConfig.hkAltActionInitLedPin} placeholder="255" min="0"
-										max="255" class="input input-bordered w-full" />
-								</div>
 								<div class="divider">HomeKey Card Finish</div>
 								<div class="flex flex-col items-center">
 									<img src={hkFinishImage()} alt="HomeKey Finish" class="w-36 h-auto" />

@@ -97,6 +97,35 @@ export interface MiscConfig {
   controlPin: number;
   /** GPIO pin for HomeSpan status indicator */
   hsStatusPin: number;
+  /** Enable web authentication */
+  webAuthEnabled: boolean;
+  /** Web interface username */
+  webUsername: string;
+  /** Web interface password */
+  webPassword: string;
+  /** NFC GPIO pin configuration [pin1, pin2, pin3, pin4] */
+  nfcGpioPins: [number, number, number, number];
+  /** Battery low status threshold percentage */
+  btrLowStatusThreshold: number;
+  /** Enable proximity battery monitoring */
+  proxBatEnabled: boolean;
+  /** Enable Ethernet connectivity */
+  ethernetEnabled: boolean;
+  /** Active Ethernet preset index */
+  ethActivePreset: number;
+  /** Ethernet PHY type */
+  ethPhyType: number;
+  /** RMII configuration [phy_addr, pin_mcd, pin_mdio, pin_power, pin_rmii_clock] */
+  ethRmiiConfig: [number, number, number, number, number];
+  /** SPI configuration [freq_mhz, pin_cs, pin_irq, pin_rst, pin_sck, pin_miso, pin_mosi] */
+  ethSpiConfig: [number, number, number, number, number, number, number];
+}
+
+/**
+ * Miscellaneous configuration structure for device settings and hardware configuration
+ * @type {ActionsConfig}
+ */
+export interface ActionsConfig {
   /** GPIO pin for NFC NeoPixel LED */
   nfcNeopixelPin: number;
   /** NeoPixel LED type configuration */
@@ -133,18 +162,6 @@ export interface MiscConfig {
   hkGpioControlledState: boolean;
   /** Timeout in milliseconds for momentary GPIO action */
   gpioActionMomentaryTimeout: number;
-  /** Enable web authentication */
-  webAuthEnabled: boolean;
-  /** Web interface username */
-  webUsername: string;
-  /** Web interface password */
-  webPassword: string;
-  /** NFC GPIO pin configuration [pin1, pin2, pin3, pin4] */
-  nfcGpioPins: [number, number, number, number];
-  /** Battery low status threshold percentage */
-  btrLowStatusThreshold: number;
-  /** Enable proximity battery monitoring */
-  proxBatEnabled: boolean;
   /** Enable HomeKey dumb switch mode */
   hkDumbSwitchMode: boolean;
   /** GPIO pin for HomeKey alternate action initialization */
@@ -159,16 +176,6 @@ export interface MiscConfig {
   hkAltActionTimeout: number;
   /** GPIO state for HomeKey alternate action */
   hkAltActionGpioState: number;
-  /** Enable Ethernet connectivity */
-  ethernetEnabled: boolean;
-  /** Active Ethernet preset index */
-  ethActivePreset: number;
-  /** Ethernet PHY type */
-  ethPhyType: number;
-  /** RMII configuration [phy_addr, pin_mcd, pin_mdio, pin_power, pin_rmii_clock] */
-  ethRmiiConfig: [number, number, number, number, number];
-  /** SPI configuration [freq_mhz, pin_cs, pin_irq, pin_rst, pin_sck, pin_miso, pin_mosi] */
-  ethSpiConfig: [number, number, number, number, number, number, number];
 }
 
 /**
@@ -303,69 +310,6 @@ export interface CertificatesStatus {
 }
 
 /**
- * Detailed certificate status with comprehensive certificate information
- * @type {DetailedCertificateStatus}
- */
-export interface DetailedCertificateStatus {
-  /** CA certificate detailed information */
-  ca?: {
-    /** Whether the certificate is valid */
-    valid: boolean;
-    /** Certificate expiry date */
-    expiry?: string;
-    /** Certificate issuer distinguished name */
-    issuer?: string;
-    /** Certificate subject distinguished name */
-    subject?: string;
-    /** Certificate serial number */
-    serialNumber?: string;
-  };
-  /** Client certificate detailed information */
-  client?: {
-    /** Whether the certificate is valid */
-    valid: boolean;
-    /** Certificate expiry date */
-    expiry?: string;
-    /** Certificate issuer distinguished name */
-    issuer?: string;
-    /** Certificate subject distinguished name */
-    subject?: string;
-    /** Certificate serial number */
-    serialNumber?: string;
-  };
-  /** Private key detailed information */
-  privateKey?: {
-    /** Whether the private key is valid */
-    valid: boolean;
-    /** Key expiry date (if applicable) */
-    expiry?: string;
-    /** Key issuer information (if applicable) */
-    issuer?: string;
-    /** Key subject information (if applicable) */
-    subject?: string;
-    /** Key serial number (if applicable) */
-    serialNumber?: string;
-    /** Type of cryptographic key (e.g., 'RSA', 'EC') */
-    keyType?: string;
-    /** Key size in bits */
-    keySize?: number;
-    /** Whether the private key matches the client certificate */
-    matchesCertificate?: boolean;
-  };
-}
-
-/**
- * Response structure for certificate upload operations
- * @type {CertificateUploadResponse}
- */
-export interface CertificateUploadResponse {
-  /** Whether the upload operation was successful */
-  status: string;
-  /** Optional message describing the result or error */
-  message: string;
-}
-
-/**
  * Certificate type identifiers for SSL/TLS operations
  * @type {CertificateType}
  */
@@ -441,11 +385,7 @@ export interface ApiError {
   /** Always false for error responses */
   success: false;
   /** Error message describing what went wrong */
-  message: string;
-  /** Optional HTTP status code */
-  code?: number;
-  /** Optional additional error details */
-  details?: any;
+  error: string;
 }
 
 /**
@@ -458,6 +398,8 @@ export interface ApiSuccess<T = any> {
   success: true;
   /** The response data payload */
   data: T;
+  /** Message decribing result */
+  message: string;
 }
 
 /**

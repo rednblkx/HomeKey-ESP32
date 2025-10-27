@@ -1,10 +1,11 @@
 #pragma once
+#include "config.hpp"
 #include "esp_timer.h"
 class HardwareManager;
 class ConfigManager;
 class LockApplication;
 
-namespace espConfig { struct misc_config_t; };
+namespace espConfig { struct misc_config_t; struct actions_config_t; };
 
 /**
  * @class LockManager
@@ -36,7 +37,7 @@ public:
      * @param hardwareManager Reference to the manager that controls physical GPIOs.
      * @param configManager Reference to the application configuration manager.
      */
-    LockManager(const espConfig::misc_config_t& miscConfig);
+    LockManager(const espConfig::misc_config_t& miscConfig, const espConfig::actions_config_t& actionsConfig);
 
     /**
      * @brief Initializes the lock state to its default.
@@ -67,6 +68,7 @@ public:
 
 private:
     const espConfig::misc_config_t& m_miscConfig;
+    const espConfig::actions_config_t& m_actionsConfig;
 
     uint8_t m_currentState;
     uint8_t m_targetState;

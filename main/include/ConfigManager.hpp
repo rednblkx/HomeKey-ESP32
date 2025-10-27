@@ -54,7 +54,7 @@ public:
                       std::variant<
                           std::string *, uint16_t *, uint8_t *, bool *,
                           std::map<std::string, uint8_t> *,
-                          std::map<espConfig::misc_config_t::colorMap, uint8_t> *,
+                          std::map<espConfig::actions_config_t::colorMap, uint8_t> *,
                           std::array<uint8_t, 4> *, std::array<uint8_t, 5> *,
                           std::array<uint8_t, 7> *>>;
     void deserialize(msgpack_object obj, std::string key);
@@ -74,6 +74,7 @@ public:
     espConfig::mqttConfig_t m_mqttConfig;
     espConfig::mqtt_ssl_t m_mqttSslConfig;
     espConfig::misc_config_t m_miscConfig;
+    espConfig::actions_config_t m_actionsConfig;
     nvs_handle m_nvsHandle;
     bool m_isInitialized;
     static const char* TAG;

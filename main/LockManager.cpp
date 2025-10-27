@@ -19,8 +19,9 @@ const char* LockManager::TAG = "LockManager";
  *                   timeout and related lock handling flags (e.g. lockAlwaysUnlock,
  *                   lockAlwaysLock, GPIO/momentary source settings).
  */
-LockManager::LockManager(const espConfig::misc_config_t& miscConfig)
+LockManager::LockManager(const espConfig::misc_config_t& miscConfig, const espConfig::actions_config_t& actionsConfig)
     : m_miscConfig(miscConfig),
+      m_actionsConfig(actionsConfig),
       m_currentState(lockStates::LOCKED),
       m_targetState(lockStates::LOCKED)
 {
@@ -170,27 +171,27 @@ void LockManager::setTargetState(uint8_t state, Source source) {
     };
     std::vector<uint8_t> d;
     alpaca::serialize(s, d);
-    if (m_miscConfig.hkDumbSwitchMode) {
+    if (m_actionsConfig.hkDumbSwitchMode) {
       ESP_LOGI(TAG, "Dummy Action is enabled!");
       m_currentState = m_targetState;
       s.currentState = m_targetState;
       d.clear();
       alpaca::serialize(s, d);
-    } else if((source == NFC && m_miscConfig.hkGpioControlledState) || source != NFC) {
+    } else if((source == NFC && m_actionsConfig.hkGpioControlledState) || source != NFC) {
       espp::EventManager::get().publish("lock/action", d);
     }
     espp::EventManager::get().publish("lock/stateChanged", d);
 
-    uint8_t momentarySources = (((m_miscConfig.gpioActionMomentaryEnabled |
-                                  m_miscConfig.gpioActionPin) == 255) &
-                                !m_miscConfig.hkDumbSwitchMode)
+    uint8_t momentarySources = (((m_actionsConfig.gpioActionMomentaryEnabled |
+                                  m_actionsConfig.gpioActionPin) == 255) &
+                                !m_actionsConfig.hkDumbSwitchMode)
                                    ? 0
-                                   : m_miscConfig.gpioActionMomentaryEnabled;
+                                   : m_actionsConfig.gpioActionMomentaryEnabled;
     bool isMomentarySource = ((static_cast<uint8_t>(source) & momentarySources) != 0);
 
     if (m_targetState == lockStates::UNLOCKED && isMomentarySource) {
-        ESP_LOGI(TAG, "Starting momentary unlock timer for %d ms.", m_miscConfig.gpioActionMomentaryTimeout);
-        esp_timer_start_once(momentaryStateTimer, m_miscConfig.gpioActionMomentaryTimeout * 1000);
+        ESP_LOGI(TAG, "Starting momentary unlock timer for %d ms.", m_actionsConfig.gpioActionMomentaryTimeout);
+        esp_timer_start_once(momentaryStateTimer, m_actionsConfig.gpioActionMomentaryTimeout * 1000);
     }
 }
 

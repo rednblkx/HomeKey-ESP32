@@ -27,7 +27,7 @@ const std::array<const char*, 6> pixelTypeMap = { "RGB", "RBG", "BRG", "BGR", "G
  * @param miscConfig Configuration values controlling GPIO pins, NeoPixel type/behavior, and
  *                   timing used by the HardwareManager.
  */
-HardwareManager::HardwareManager(const espConfig::misc_config_t& miscConfig)
+HardwareManager::HardwareManager(const espConfig::actions_config_t& miscConfig)
     : m_miscConfig(miscConfig),
       m_feedbackTaskHandle(nullptr),
       m_feedbackQueue(nullptr),
@@ -437,7 +437,7 @@ void HardwareManager::feedbackTask() {
                     if(esp_timer_is_active(m_pixelSuccessTimer)) esp_timer_stop(m_gpioFailTimer);
                     if (m_pixel != nullptr) {
                         auto color = m_miscConfig.neopixelSuccessColor;
-                        m_pixel->set(m_pixel->RGB(color[espConfig::misc_config_t::R], color[espConfig::misc_config_t::G], color[espConfig::misc_config_t::B]));
+                        m_pixel->set(m_pixel->RGB(color[espConfig::actions_config_t::colorMap::R], color[espConfig::actions_config_t::colorMap::G], color[espConfig::actions_config_t::colorMap::B]));
 
                         esp_timer_start_once(m_pixelSuccessTimer, m_miscConfig.neopixelSuccessTime * 1000);
                     }
@@ -454,7 +454,7 @@ void HardwareManager::feedbackTask() {
                     if(esp_timer_is_active(m_pixelFailTimer)) esp_timer_stop(m_pixelFailTimer);
                     if (m_pixel != nullptr) {
                         auto color = m_miscConfig.neopixelFailureColor;
-                        m_pixel->set(m_pixel->RGB(color[espConfig::misc_config_t::R], color[espConfig::misc_config_t::G], color[espConfig::misc_config_t::B]));
+                        m_pixel->set(m_pixel->RGB(color[espConfig::actions_config_t::colorMap::R], color[espConfig::actions_config_t::colorMap::G], color[espConfig::actions_config_t::colorMap::B]));
 
                         esp_timer_start_once(m_pixelFailTimer, m_miscConfig.neopixelFailTime * 1000);
                     }

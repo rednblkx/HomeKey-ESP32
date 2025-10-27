@@ -7,7 +7,7 @@
 
 class ConfigManager;
 class Pixel;
-namespace espConfig { struct misc_config_t; }
+namespace espConfig { struct actions_config_t; }
 
 /**
  * @class HardwareManager
@@ -23,7 +23,7 @@ public:
      * @brief Constructs the HardwareManager.
      * @param configManager Reference to the application configuration manager.
      */
-    HardwareManager(const espConfig::misc_config_t &);
+    HardwareManager(const espConfig::actions_config_t &);
 
     /**
      * @brief Initializes all hardware pins and starts background tasks for feedback.
@@ -89,7 +89,7 @@ private:
     static void handleTimer(void *instance);
     
     // --- Member Variables ---
-    const espConfig::misc_config_t& m_miscConfig;
+    const espConfig::actions_config_t& m_miscConfig;
 
     Pixel* m_pixel = nullptr;
   

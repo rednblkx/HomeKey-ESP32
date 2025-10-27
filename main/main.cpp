@@ -190,8 +190,8 @@ void setup() {
   configManager = new ConfigManager;
   configManager->begin();
   initializeETH();
-  hardwareManager = new HardwareManager(configManager->getConfig<espConfig::misc_config_t>());
-  lockManager = new LockManager(configManager->getConfig<espConfig::misc_config_t>());
+  hardwareManager = new HardwareManager(configManager->getConfig<espConfig::actions_config_t>());
+  lockManager = new LockManager(configManager->getConfig<espConfig::misc_config_t>(), configManager->getConfig<espConfig::actions_config_t>());
   mqttManager = new MqttManager(*configManager);
   webServerManager = new WebServerManager(*configManager, *readerDataManager);
   homekitLock = new HomeKitLock(lambda, *lockManager, *configManager, *readerDataManager);

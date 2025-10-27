@@ -97,12 +97,6 @@ namespace espConfig
 
   struct misc_config_t
   {
-    enum colorMap
-    {
-      R,
-      G,
-      B
-    };
     std::string deviceName = DEVICE_NAME;
     std::string otaPasswd = OTA_PWD;
     uint8_t hk_key_color = HOMEKEY_COLOR;
@@ -111,6 +105,25 @@ namespace espConfig
     bool lockAlwaysLock = HOMEKEY_ALWAYS_LOCK;
     uint8_t controlPin = HS_PIN;
     uint8_t hsStatusPin = HS_STATUS_LED;
+    bool webAuthEnabled = WEB_AUTH_ENABLED;
+    std::string webUsername = WEB_AUTH_USERNAME;
+    std::string webPassword = WEB_AUTH_PASSWORD;
+    std::array<uint8_t, 4> nfcGpioPins{SS, SCK, MISO, MOSI};
+    uint8_t btrLowStatusThreshold = 10;
+    bool proxBatEnabled = false;
+    bool ethernetEnabled = false;
+    uint8_t ethActivePreset = 255; // 255 for custom pins
+    uint8_t ethPhyType = 1;
+    std::array<uint8_t, 5> ethRmiiConfig = {0, 255, 255, 255, 0};
+    std::array<uint8_t, 7> ethSpiConfig = {20, 255, 255, 255, 255, 255, 255};
+  };
+  struct actions_config_t {
+    enum colorMap
+    {
+      R,
+      G,
+      B
+    };
     uint8_t nfcNeopixelPin = NFC_NEOPIXEL_PIN;
     uint8_t neoPixelType = 5;
     std::map<colorMap, uint8_t> neopixelSuccessColor = { {R, NEOPIXEL_SUCCESS_R}, {G, NEOPIXEL_SUCCESS_G}, {B, NEOPIXEL_SUCCESS_B} };
@@ -129,23 +142,12 @@ namespace espConfig
     uint8_t gpioActionMomentaryEnabled = GPIO_ACTION_MOMENTARY_STATE;
     bool hkGpioControlledState = true;
     uint16_t gpioActionMomentaryTimeout = GPIO_ACTION_MOMENTARY_TIMEOUT;
-    bool webAuthEnabled = WEB_AUTH_ENABLED;
-    std::string webUsername = WEB_AUTH_USERNAME;
-    std::string webPassword = WEB_AUTH_PASSWORD;
-    std::array<uint8_t, 4> nfcGpioPins{SS, SCK, MISO, MOSI};
-    uint8_t btrLowStatusThreshold = 10;
-    bool proxBatEnabled = false;
     bool hkDumbSwitchMode = false;
-    uint8_t hkAltActionInitPin = GPIO_HK_ALT_ACTION_INIT_PIN;
-    uint8_t hkAltActionInitLedPin = GPIO_HK_ALT_ACTION_INIT_LED_PIN;
-    uint16_t hkAltActionInitTimeout = GPIO_HK_ALT_ACTION_INIT_TIMEOUT;
     uint8_t hkAltActionPin = GPIO_HK_ALT_ACTION_PIN;
     uint16_t hkAltActionTimeout = GPIO_HK_ALT_ACTION_TIMEOUT;
     uint8_t hkAltActionGpioState = GPIO_HK_ALT_ACTION_GPIO_STATE;
-    bool ethernetEnabled = false;
-    uint8_t ethActivePreset = 255; // 255 for custom pins
-    uint8_t ethPhyType = 1;
-    std::array<uint8_t, 5> ethRmiiConfig = {0, 255, 255, 255, 0};
-    std::array<uint8_t, 7> ethSpiConfig = {20, 255, 255, 255, 255, 255, 255};
+    uint8_t hkAltActionInitPin = GPIO_HK_ALT_ACTION_INIT_PIN;
+    uint8_t hkAltActionInitLedPin = GPIO_HK_ALT_ACTION_INIT_LED_PIN;
+    uint16_t hkAltActionInitTimeout = GPIO_HK_ALT_ACTION_INIT_TIMEOUT;
   };
 } // namespace espConfig
