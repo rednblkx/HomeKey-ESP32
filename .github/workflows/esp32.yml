@@ -184,7 +184,7 @@ jobs:
         run: bun run build
         working-directory: data
       - name: Create LittleFS Image
-        run: littlefs-python create $(pwd)/dist littlefs.bin -v --fs-size=0x20000 --name-max=64 --block-size=4096
+        run: littlefs-python create $(pwd)/build littlefs.bin -v --fs-size=0x20000 --name-max=64 --block-size=4096
         working-directory: data
       - name: Archive LittleFS image
         uses: actions/upload-artifact@v4
