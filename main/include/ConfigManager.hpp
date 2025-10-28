@@ -47,7 +47,7 @@ public:
     bool validateCertificateContent(const std::string& certContent, const std::string& certType);
     bool validatePrivateKeyMatchesCertificate();
     std::vector<CertificateStatus> getCertificatesStatus();
-    void sslCb(std::function<void(const espConfig::mqtt_ssl_t&)> const&f) const {static bool configured = false; if(not configured) {f(m_mqttSslConfig);configured=true;} else ESP_LOGE(TAG, "Ptr already assigned");};
+    const espConfig::mqtt_ssl_t* getMqttSslConfig() const {static bool configured = false; if(not configured) {return &m_mqttSslConfig;configured=true;} else ESP_LOGE(TAG, "Ptr already assigned");return nullptr;};
 
   private:
     using ConfigMapType = std::map<std::string,

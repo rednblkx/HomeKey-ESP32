@@ -29,7 +29,7 @@ MqttManager::MqttManager(const ConfigManager& configManager)
       m_healthCheckTimer(nullptr),
       m_lastHealthCheckTime(0)
 {
-  configManager.sslCb([this](const espConfig::mqtt_ssl_t& c){m_mqttSslConfig = &c;});
+  m_mqttSslConfig = configManager.getMqttSslConfig();
   espp::EventManager::get().add_subscriber(
       "lock/stateChanged", "MqttManager",
       [&](const std::vector<uint8_t> &data) {
