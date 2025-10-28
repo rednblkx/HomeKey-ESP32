@@ -16,7 +16,7 @@
 		gpioActionPin: 2,
 		gpioActionLockState: false,
 		gpioActionUnlockState: false,
-		gpioActionMomentaryEnabled: false,
+		gpioActionMomentaryEnabled: 0,
 		hkGpioControlledState: false,
 		gpioActionMomentaryTimeout: 5000,
 		hkDumbSwitchMode: false,

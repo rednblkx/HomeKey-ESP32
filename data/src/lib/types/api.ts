@@ -157,7 +157,7 @@ export interface ActionsConfig {
   /** Unlock state when GPIO action is triggered */
   gpioActionUnlockState: boolean;
   /** Enable momentary GPIO action (timed) */
-  gpioActionMomentaryEnabled: boolean;
+  gpioActionMomentaryEnabled: number;
   /** HomeKey GPIO controlled state */
   hkGpioControlledState: boolean;
   /** Timeout in milliseconds for momentary GPIO action */
