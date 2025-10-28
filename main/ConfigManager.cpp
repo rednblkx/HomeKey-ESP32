@@ -1192,9 +1192,10 @@ bool ConfigManager::validatePrivateKeyMatchesCertificate() {
     int ret = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy,
                                   (const unsigned char *)"polaris1", strlen("polaris1"));
     if (ret != 0) {
-        // Handle error
-        fprintf(stderr, "mbedtls_ctr_drbg_seed failed: %d\n", ret);
-        return ret;
+        ESP_LOGE(TAG, "mbedtls_ctr_drbg_seed: %d", ret);
+        mbedtls_ctr_drbg_free(&ctr_drbg);
+        mbedtls_entropy_free(&entropy);
+        return false;
     }
 
     // Parse the private key
