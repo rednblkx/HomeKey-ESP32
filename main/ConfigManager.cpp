@@ -1295,17 +1295,20 @@ std::vector<CertificateStatus> ConfigManager::getCertificatesStatus(){
       int ret = mbedtls_x509_crt_parse(&cert, reinterpret_cast<const unsigned char*>(certStr.c_str()), certStr.length() + 1);
       if(ret){
         ESP_LOGE(TAG, "Unable to parse '%s' certificate: %d", c.c_str(), ret);
+        mbedtls_x509_crt_free(&cert);
         continue;
       }
       char subject[256], issuer[256];
       ret = mbedtls_x509_dn_gets(subject, sizeof(subject), &cert.subject);
       if(!ret){
         ESP_LOGE(TAG, "Unable to retrieve DN for '%s' certificate: %d", c.c_str(), ret);
+        mbedtls_x509_crt_free(&cert);
         continue;
       }
       ret = mbedtls_x509_dn_gets(issuer, sizeof(issuer), &cert.issuer);
       if(!ret){
         ESP_LOGE(TAG, "Unable to retrieve DN for '%s' certificate: %d", c.c_str(), ret);
+        mbedtls_x509_crt_free(&cert);
         continue;
       }
       mbedtls_x509_time valid_from = cert.valid_from;
