@@ -11,6 +11,7 @@
 #include "config.hpp"
 #include "esp_heap_caps.h"
 #include "esp_http_server.h"
+#include "esp_log.h"
 #include "esp_task_wdt.h"
 #include "eth_structs.hpp"
 #include "eventStructs.hpp"
@@ -1335,10 +1336,9 @@ esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
   auto f = std::async(std::launch::async, [this]() { broadcastOTAStatus(); });
 
   // Allocate buffer
-  const size_t preferred_size = 64 * 1024;
+  const size_t preferred_size = heap_caps_get_free_size(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL) * 0.8;
   size_t buffer_size = std::min(preferred_size, content_len);
-  std::unique_ptr<void, decltype(&heap_caps_free)> buffer(
-      heap_caps_malloc(buffer_size, MALLOC_CAP_SPIRAM), heap_caps_free);
+  std::unique_ptr<void, decltype(&heap_caps_free)> buffer(heap_caps_malloc(buffer_size, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL), heap_caps_free);
 
   if (!buffer) {
     size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
