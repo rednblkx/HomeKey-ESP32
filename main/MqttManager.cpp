@@ -449,10 +449,11 @@ void MqttManager::onData(const std::string& topic, const std::string& data) {
         espp::EventManager::get().publish("lock/overrideState", d);
       }
     } else if (topic == m_mqttConfig.btrLvlCmdTopic) { 
+        uint8_t v; if (!to_u8(data, v)) { ESP_LOGW(TAG, "Invalid btrLvlCmdTopic payload: %s", data.c_str()); return; }
         EventValueChanged s{
           .name = "btrLevel",
           .oldValue = 0,
-          .newValue = static_cast<uint8_t>(std::stoi(data)),
+          .newValue = v,
         };
         std::vector<uint8_t> d;
         alpaca::serialize(s, d);
