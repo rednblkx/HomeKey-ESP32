@@ -3,7 +3,6 @@
 	import ws from '$lib/services/ws.js';
     import type { OTAStatus } from '$lib/types/api';
 
-	// Reactive state
 	let firmwareFile = $state<File | null>(null);
 	let littlefsFile = $state<File | null>(null);
 	let uploading = $state(false);
@@ -22,17 +21,13 @@
 		next_update_partition: '',
 		upload_type: ''
 	});
-	/**
-    * @type {any[]}
-    */
+
 	let otaLogs = $state<{ type: string; message: string; timestamp: string }[]>([]);
 	let firmwareInput = $state<HTMLInputElement | null>(null);
 	let littlefsInput = $state<HTMLInputElement | null>(null);
 
-	// Internal state for cleanup
 	let lastLoggedPercent = $state(0);
 
-	// Computed properties for progress tracking
 	let progressPercent = $derived(otaStatus.progress_percent || 0);
 
 	let currentBytes = $derived(otaStatus.bytes_written || 0);
@@ -78,7 +73,6 @@
 		return '';
 	});
 
-	// Utility functions
 	function formatBytes(bytes: number) {
 		if (bytes === 0) return '0 Bytes';
 		const k = 1024;
@@ -91,13 +85,11 @@
 		const timestamp = new Date().toLocaleString();
 		otaLogs.unshift({ type, message, timestamp });
 
-		// Keep only last 20 logs
 		if (otaLogs.length > 20) {
 			otaLogs = otaLogs.slice(0, 20);
 		}
 	}
 
-	// WebSocket message handler
 	function handleWebSocketMessage(evt: { type: string; data: OTAStatus; }) {
 		if (evt.type === 'message' && evt.data.type === 'ota_status') {
 			const previousStatus = { ...otaStatus };
@@ -123,7 +115,6 @@
 		}
 	}
 
-	// File handling
 	function onFirmwareSelected(event: Event) {
 		const file = (event.target as HTMLInputElement).files?.[0];
 		if (!file) return;
@@ -206,7 +197,6 @@
 				addLog('success', result.message || 'Firmware uploaded successfully');
 
 				if (!skipReboot) {
-					// Clear file after successful upload
 					clearFirmwareFile();
 				}
 				return true;
@@ -255,7 +245,6 @@
 				const result = await response.json();
 				addLog('success', result.message || 'LittleFS uploaded successfully');
 
-				// Clear file after successful upload
 				clearLittlefsFile();
 				return true;
 			} else {
@@ -287,16 +276,13 @@
 		addLog('info', 'Starting sequential upload: firmware first, then LittleFS');
 
 		try {
-			// Step 1: Upload firmware with skipReboot=true
 			const firmwareSuccess = await uploadFirmware(true);
 			if (!firmwareSuccess) {
 				throw new Error('Firmware upload failed');
 			}
 
-			// Wait a moment between uploads
 			await new Promise(resolve => setTimeout(resolve, 1000));
 
-			// Step 2: Upload LittleFS (bypass disabled guard since we're in a controlled sequential flow)
 			const littlefsSuccess = await uploadLittleFS(true);
 			if (!littlefsSuccess) {
 				throw new Error('LittleFS upload failed');
@@ -304,17 +290,14 @@
 
 			addLog('success', 'Both uploads completed successfully! Device will reboot now.');
 
-			// Clear both files after successful upload
 			clearFirmwareFile();
 			clearLittlefsFile();
 
-			// Trigger reboot manually after both uploads
 			setTimeout(async () => {
 				addLog('info', 'Rebooting device...');
 				try {
 					await fetch('/reboot_device', { method: 'POST' });
 				} catch (error) {
-					// Expected - device will reboot and connection will be lost
 					console.log('Reboot triggered, connection lost as expected');
 				}
 			}, 2000);
@@ -337,21 +320,17 @@
 
 	let wsUnsubscribe = $state<(() => void) | null>(null);
 
-	// Lifecycle management
 	onMount(() => {
-		// Register WebSocket handler
 		if (ws && typeof ws.on === 'function') {
 			wsUnsubscribe = ws.on(handleWebSocketMessage);
 		} else {
 			addLog('error', 'WebSocket service not available');
 		}
 
-		// Request initial OTA status
 		requestOTAStatus();
 	});
 
 	onDestroy(() => {
-		// Clean up WebSocket handler
 		if (wsUnsubscribe && typeof wsUnsubscribe === 'function') {
 			wsUnsubscribe();
 		}

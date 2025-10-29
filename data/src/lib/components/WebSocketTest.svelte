@@ -108,7 +108,6 @@
 			}
 		} catch (error) {
 			console.error('Error adding message to log:', error);
-			// Add error message instead
 			messages.unshift({
 				type: 'received',
 				content: `Error adding message: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -280,7 +279,6 @@
 		try {
 			updateWebSocketInfo();
 
-			// Listen for WebSocket events with error handling
 			if (ws && typeof ws.on === 'function') {
 				wsOff = ws.on((evt: WebSocketEvent) => {
 					try {
@@ -298,7 +296,6 @@
 				console.warn('WebSocket service on method not available');
 			}
 
-			// Update connection info periodically
 			updateTimer = setInterval(() => {
 				try {
 					updateWebSocketInfo();
@@ -307,7 +304,6 @@
 				}
 			}, 1000);
 
-			// Add some example messages
 			customMessage = '{"type": "ping"}';
 		} catch (error) {
 			console.error('Error in onMount:', error);

@@ -13,23 +13,16 @@
 	 */
 	let { hkInfo, error }: { hkInfo: HKInfo | null; error: string | null } = $props();
 
-	// Promise for lazy-loading WebSocketTest component (only in dev mode)
 	let webSocketTestPromise: Promise<Component> | null = $state(null);
 
-	/**
-	 * Component initialization - sets up loading states and lazy-loads dev components
-	 */
 	onMount(async (): Promise<void> => {
-		// Set system info loading state
 		systemInfo.uptime == 0 && setLoadingState('systemInfoLoading', true);
 
-		// Lazy-load WebSocketTest component only in development mode
 		if (import.meta.env.DEV) {
 			webSocketTestPromise = import('$lib/components/WebSocketTest.svelte').then(module => module.default);
 		}
 	});
 
-	// Optimized reactive WiFi signal calculation
 	let wifi_rssi = $derived(systemInfo?.wifi_rssi);
 	let wifi_signal = $derived.by(() => calculateWifiSignal(wifi_rssi));
 </script>

@@ -50,7 +50,6 @@
 
   let uploadErrors = $state({ ca: "", client: "", privateKey: "" });
 
-  // Set config from props
   onMount(() => {
     if (mqtt) {
       fetchCertificateStatus();
@@ -74,10 +73,8 @@
     const type = (event.target as HTMLInputElement).dataset["type"] as keyof typeof uploadErrors;
     const file = (event.target as HTMLInputElement).files?.[0];
     if (!file) return;
-    // Reset error
     uploadErrors[type] = "";
 
-    // Validate file type
     const validExtensions = [".pem", ".crt", ".cer", ".der", ".key"];
     const fileNameParts = file.name.split(".");
     const extension = fileNameParts.length > 1 ? fileNameParts.pop()! : "";
@@ -89,7 +86,6 @@
       return;
     }
 
-    // Simulate upload progress
     uploadProgress[type] = 0;
 
     const reader = new FileReader();
@@ -113,13 +109,10 @@
         await uploadCertificate(type, content);
         uploadProgress[type] = 100;
 
-        // Refresh certificate status
         await fetchCertificateStatus();
 
-        // Clear file input
         (event.target as HTMLInputElement).value = "";
 
-        // Reset progress after a delay
         setTimeout(() => {
           uploadProgress[type] = 0;
         }, 1000);
@@ -156,7 +149,6 @@
   };
 
   const onSSLToggleChange = () => {
-    // If SSL is disabled, reset allowInsecure to false
     if (!mqttConfig.useSSL) {
       mqttConfig!.allowInsecure = false;
     }
@@ -171,7 +163,7 @@
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      alert(`Error saving config: ${message}`); // Replace with a more user-friendly notification
+      alert(`Error saving config: ${message}`);
     }
   };
 
@@ -385,27 +377,6 @@
 
                       <!-- Certificate Status Display -->
                       <div class="bg-base-200 rounded-lg">
-                        <!-- Reconnection Status Alert -->
-                        {#if reconnectionStatus.isReconnecting}
-                          <div class="alert alert-info mb-4">
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke-width="1.5"
-                              stroke="currentColor"
-                              class="w-6 h-6"
-                            >
-                              <path
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0011.664 0l3.181-3.183m-3.181-4.991v4.99"
-                              />
-                            </svg>
-                            <span>{reconnectionStatus.message}</span>
-                          </div>
-                        {/if}
-
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                           <!-- CA Certificate -->
                           <div class="flex flex-col p-3 bg-base-100 rounded-lg">
@@ -427,7 +398,6 @@
                                 </svg>
                                 <div class="flex flex-col">
                                   <span class="text-sm font-medium">CA Certificate</span>
-                                  <!-- <span class="text-sm font-medium text-base-content/75">{certificateStatus?.ca?.validationMessage}</span> -->
                                   <span class="text-sm font-medium text-base-content/75">{certificateStatus?.ca?.expiration.from} - {certificateStatus?.ca?.expiration.to}</span>
                                   <span class="text-sm font-medium text-base-content/50">Subject: {certificateStatus?.ca?.subject}</span>
                                   <span class="text-sm font-medium text-base-content/50">Issuer: {certificateStatus?.ca?.issuer}</span>
@@ -464,7 +434,6 @@
                                 </svg>
                                 <div class="flex flex-col">
                                   <span class="text-sm font-medium">Client Certificate</span>
-                                  <!-- <span class="text-sm font-medium text-base-content/75">{certificateStatus?.client?.validationMessage}</span> -->
                                   <span class="text-sm font-medium text-base-content/75">{certificateStatus?.client?.expiration.from} - {certificateStatus?.client?.expiration.to}</span>
                                   <span class="text-sm font-medium text-base-content/50">Subject: {certificateStatus?.client?.subject}</span>
                                   <span class="text-sm font-medium text-base-content/50">Issuer: {certificateStatus?.client?.issuer}</span>
@@ -501,7 +470,6 @@
                                 </svg>
                                 <div class="flex flex-col">
                                   <span class="text-sm font-medium">Private Key</span>
-                                  <!-- <span class="text-sm font-medium text-base-content/50">{certificateStatus?.certificates.privateKey?.validationMessage}</span> -->
                                 </div>
                               </div>
                               {#if certificateStatus?.privateKey}

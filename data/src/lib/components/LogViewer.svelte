@@ -6,7 +6,6 @@
 	const LOG_LEVELS = ['ERROR', 'WARN', 'INFO', 'DEBUG'] as const;
 	type UsedLogLevel = typeof LOG_LEVELS[number];
 
-	// FILTERING AND DATA
 	let searchText = $state('');
 	let realtime = $state(true);
 	let autoScroll = $state(true);
@@ -19,13 +18,10 @@
 	});
 	let logs = $state<LogEntry[]>([]);
 
-	// Reactive current time that updates every second for relative time calculations
 	let currentTime = $state(new Date());
 
-	// Media query for mobile detection
 	let isMobile = $state(false);
 
-	// Touch handling
 	let touchStartY = $state(0);
 	let touchEndY = $state(0);
 	let isScrolling = $state(false);
@@ -86,10 +82,8 @@
 	 */
 	let filteredLogs = $derived(() => {
 		return logs.filter(log => {
-			// Normalize log level to uppercase just in case of inconsistent data
 			const logLevel = log.level ? log.level.toUpperCase() : 'UNKNOWN';
 
-			// The level must exist in our filter object AND be set to true.
 			const levelMatch = logLevel in logLevels && logLevels[logLevel as UsedLogLevel];
 
 			const searchMatch = !searchText ||
@@ -181,15 +175,12 @@
 		const container = document.querySelector('.log-container');
 		if (!container) return;
 
-		// Get the current scroll offset and viewable area
 		const scrollOffset = container.scrollTop;
 		const scrollHeight = container.scrollHeight;
 		const clientHeight = container.clientHeight;
 
-		// Apply edge margin for mobile/touch devices
 		const edgeMargin = isMobile ? SCROLL_EDGE_MARGIN : 10;
 
-		// Check if we're at the bottom
 		const isAtBottom = scrollHeight - scrollOffset <= clientHeight + edgeMargin;
 		userHasScrolled = !isAtBottom;
 	}
@@ -207,11 +198,9 @@
 		touchEndY = touchEvent.touches[0].clientY;
 		const touchDiff = touchStartY - touchEndY;
 
-		// Detect scroll gesture
 		if (Math.abs(touchDiff) > 10) {
 			isScrolling = true;
 
-			// If scrolling up, mark user as having scrolled
 			if (touchDiff > 0) {
 				userHasScrolled = true;
 			}
@@ -221,7 +210,6 @@
 	function handleTouchEnd() {
 		if (!isMobile) return;
 
-		// Reset scroll state after a delay
 		setTimeout(() => {
 			isScrolling = false;
 		}, 150);
@@ -234,7 +222,6 @@
 	function handleMediaQueryChange(e: MediaQueryListEvent): void {
 		isMobile = e.matches;
 
-		// Reinitialize scroll behavior when switching between mobile/desktop
 		if (autoScroll && !userHasScrolled) {
 			setTimeout(() => {
 				scrollToBottom();
@@ -242,18 +229,16 @@
 		}
 	}
 
-	// Watch for new logs and auto-scroll if enabled and user hasn't scrolled up.
 	$effect(() => {
 		if (logs.length > 0 && autoScroll && !userHasScrolled) {
 			setTimeout(scrollToBottom, 0);
 		}
 	});
 
-	// If the user toggles auto-scroll on, scroll to the bottom.
 	$effect(() => {
 		if (autoScroll) {
 			setTimeout(scrollToBottom, 0);
-			userHasScrolled = false; // Reset user scroll state
+			userHasScrolled = false;
 		}
 	});
 
@@ -267,12 +252,10 @@
 			logLevels = JSON.parse(savedLogLevels);
 		}
 
-		// Setup media query listener for mobile detection
 		const mobileMediaQuery = window.matchMedia('(max-width: 767px)');
 		mobileMediaQuery.addEventListener("change",handleMediaQueryChange);
 		isMobile = mobileMediaQuery.matches;
 
-		// Initialize scroll handling
 		const container = document.querySelector('.log-container');
 		if (container) {
 			container.addEventListener('scroll', handleScroll);
@@ -281,25 +264,20 @@
 			container.addEventListener('touchend', handleTouchEnd, { passive: true });
 		}
 
-		// WebSocket handling
 		if (ws) {
 			const handleWebSocketMessage = (event: { data: LogMessage; }) => {
 				if (!realtime) return;
 				try {
 					let messageData = event.data;
 
-					// Process log messages
 					if (messageData && (messageData.type === 'log' || messageData.level || messageData.msg)) {
 						const log : LogEntry = {
-							// Add component-specific fields
 							id: Date.now() + Math.floor(Math.random() * 1234),
 							localts: new Date().toISOString(),
 							expanded: false,
-							// Include any additional fields from the message
 							...messageData
 						};
 
-						// Validate log structure
 						if (log.msg && log.level) {
 							logs.push(log);
 						} else {
@@ -308,7 +286,6 @@
 					}
 				} catch (e) {
 					console.error('Error handling WebSocket message:', e);
-					// Try to create a log entry for the error itself
 					try {
 						logs.push({
 							type: 'log',
@@ -326,7 +303,6 @@
 				}
 			};
 			wsUnsubscribe = ws.on ? (ws.on(handleWebSocketMessage) as (() => void) | null) : null;
-		// Set up interval to update current time every second for relative time calculations
 		timeUpdateInterval = setInterval(() => {
 			currentTime = new Date();
 		}, 1000);
@@ -335,11 +311,9 @@
 	});
 
 	onDestroy(() => {
-		// Clean up media query listener
 		const mobileMediaQuery = window.matchMedia('(max-width: 767px)');
 		mobileMediaQuery.removeEventListener("change",handleMediaQueryChange);
 
-		// Clean up event listeners
 		const container = document.querySelector('.log-container');
 		if (container) {
 			container.removeEventListener('scroll', handleScroll);
@@ -348,12 +322,10 @@
 			container.removeEventListener('touchend', handleTouchEnd);
 		}
 
-		// Clean up WebSocket handler
 		if (wsUnsubscribe && typeof wsUnsubscribe === 'function') {
 			wsUnsubscribe();
 		}
 
-		// Clean up time update interval
 		if (timeUpdateInterval) {
 			clearInterval(timeUpdateInterval);
 		}
