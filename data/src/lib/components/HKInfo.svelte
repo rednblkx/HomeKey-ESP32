@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, type Component } from 'svelte';
 	import type { HKInfo } from '$lib/types/api.js';
 	import { systemInfo } from '$lib/stores/system.svelte.js';
 	import { loadingStates, setLoadingState } from '$lib/stores/loading.svelte.js';
@@ -13,11 +13,8 @@
 	 */
 	let { hkInfo, error }: { hkInfo: HKInfo | null; error: string | null } = $props();
 
-	// TypeScript type for the dynamically imported WebSocketTest component
-	type WebSocketTestComponent = typeof import('$lib/components/WebSocketTest.svelte').default;
-
 	// Promise for lazy-loading WebSocketTest component (only in dev mode)
-	let webSocketTestPromise: Promise<WebSocketTestComponent> | null = $state(null);
+	let webSocketTestPromise: Promise<Component> | null = $state(null);
 
 	/**
 	 * Component initialization - sets up loading states and lazy-loads dev components
