@@ -245,6 +245,7 @@
               </div>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div class="form-control">
+                  <!-- svelte-ignore a11y_label_has_associated_control -->
                   <label class="label">
                     <span class="label-text">Address</span>
                   </label>
@@ -257,6 +258,7 @@
                   />
                 </div>
                 <div class="form-control">
+                  <!-- svelte-ignore a11y_label_has_associated_control -->
                   <label class="label">
                     <span class="label-text">Port</span>
                   </label>
@@ -272,6 +274,7 @@
                   />
                 </div>
                 <div class="form-control">
+                  <!-- svelte-ignore a11y_label_has_associated_control -->
                   <label class="label">
                     <span class="label-text">Client ID</span>
                   </label>
@@ -284,6 +287,7 @@
                   />
                 </div>
                 <div class="form-control">
+                  <!-- svelte-ignore a11y_label_has_associated_control -->
                   <label class="label">
                     <span class="label-text">LWT Topic</span>
                   </label>
@@ -296,6 +300,7 @@
                   />
                 </div>
                 <div class="form-control">
+                  <!-- svelte-ignore a11y_label_has_associated_control -->
                   <label class="label">
                     <span class="label-text">Username</span>
                   </label>
@@ -307,6 +312,7 @@
                   />
                 </div>
                 <div class="form-control">
+                  <!-- svelte-ignore a11y_label_has_associated_control -->
                   <label class="label">
                     <span class="label-text">Password</span>
                   </label>
@@ -511,6 +517,7 @@
 
                       <!-- Certificate Upload Section -->
                       <div class="form-control">
+                        <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="label">
                           <span class="label-text">CA Certificate</span>
                         </label>
@@ -538,6 +545,7 @@
                         {/if}
                       </div>
                       <div class="form-control">
+                        <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="label">
                           <span class="label-text">Client Certificate</span>
                         </label>
@@ -565,6 +573,7 @@
                         {/if}
                       </div>
                       <div class="form-control">
+                        <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="label">
                           <span class="label-text">Private Key</span>
                         </label>
@@ -631,6 +640,7 @@
                   <div class="collapse-content">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div class="form-control">
+                        <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="label">
                           <span class="label-text">NFC/HK Topic</span>
                         </label>
@@ -653,6 +663,7 @@
                         </label>
                       </div>
                       <div class="form-control">
+                        <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="label">
                           <span class="label-text">Secondary action Topic</span>
                         </label>
@@ -665,6 +676,7 @@
                         />
                       </div>
                       <div class="form-control">
+                        <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="label">
                           <span class="label-text">Lock State Topic</span>
                         </label>
@@ -677,6 +689,7 @@
                         />
                       </div>
                       <div class="form-control">
+                        <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="label">
                           <span class="label-text">Lock State Cmd Topic</span>
                         </label>
@@ -689,6 +702,7 @@
                         />
                       </div>
                       <div class="form-control">
+                        <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="label">
                           <span class="label-text"
                             >Lock Current State Cmd Topic</span
@@ -703,6 +717,7 @@
                         />
                       </div>
                       <div class="form-control">
+                        <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="label">
                           <span class="label-text"
                             >Lock Target State Cmd Topic</span
@@ -717,6 +732,7 @@
                         />
                       </div>
                       <div class="form-control">
+                        <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="label">
                           <span class="label-text"
                             >SmartLock battery level Cmd Topic</span
@@ -749,6 +765,7 @@
                     </div>
                     {#if mqttConfig.lockEnableCustomState}
                       <div class="form-control mb-4">
+                        <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="label">
                           <span class="label-text">Custom State Topic</span>
                         </label>
@@ -760,6 +777,7 @@
                         />
                       </div>
                       <div class="form-control mb-4">
+                        <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="label">
                           <span class="label-text">Custom State Cmd Topic</span>
                         </label>
@@ -773,6 +791,7 @@
                       <div class="divider">Custom Lock Actions</div>
                       <div class="grid grid-cols-2 gap-6">
                         <div class="form-control">
+                          <!-- svelte-ignore a11y_label_has_associated_control -->
                           <label class="label">
                             <span class="label-text">Unlock</span>
                           </label>
@@ -786,6 +805,7 @@
                           />
                         </div>
                         <div class="form-control">
+                          <!-- svelte-ignore a11y_label_has_associated_control -->
                           <label class="label">
                             <span class="label-text">Lock</span>
                           </label>
@@ -802,6 +822,7 @@
                       <div class="divider">Custom Lock States</div>
                       <div class="grid grid-cols-2 md:grid-cols-3 gap-6">
                         <div class="form-control">
+                          <!-- svelte-ignore a11y_label_has_associated_control -->
                           <label class="label">
                             <span class="label-text">Unlocking</span>
                           </label>
@@ -815,6 +836,7 @@
                           />
                         </div>
                         <div class="form-control">
+                          <!-- svelte-ignore a11y_label_has_associated_control -->
                           <label class="label">
                             <span class="label-text">Locking</span>
                           </label>
@@ -828,6 +850,7 @@
                           />
                         </div>
                         <div class="form-control">
+                          <!-- svelte-ignore a11y_label_has_associated_control -->
                           <label class="label">
                             <span class="label-text">Unlocked</span>
                           </label>
@@ -841,6 +864,7 @@
                           />
                         </div>
                         <div class="form-control">
+                          <!-- svelte-ignore a11y_label_has_associated_control -->
                           <label class="label">
                             <span class="label-text">Locked</span>
                           </label>
@@ -854,6 +878,7 @@
                           />
                         </div>
                         <div class="form-control">
+                          <!-- svelte-ignore a11y_label_has_associated_control -->
                           <label class="label">
                             <span class="label-text">Jammed</span>
                           </label>
@@ -867,6 +892,7 @@
                           />
                         </div>
                         <div class="form-control">
+                          <!-- svelte-ignore a11y_label_has_associated_control -->
                           <label class="label">
                             <span class="label-text">Unknown</span>
                           </label>

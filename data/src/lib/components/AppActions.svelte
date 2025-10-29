@@ -83,6 +83,7 @@
 									<div class="collapse-content">
 										<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 											<div class="form-control">
+												<!-- svelte-ignore a11y_label_has_associated_control -->
 												<label class="label">
 													<span class="label-text">GPIO Pin</span>
 												</label>
@@ -90,6 +91,7 @@
 													class="input input-bordered w-full" />
 											</div>
 											<div class="form-control">
+												<!-- svelte-ignore a11y_label_has_associated_control -->
 												<label class="label">
 													<span class="label-text">Pixel Type</span>
 												</label>
@@ -103,6 +105,7 @@
 												</select>
 											</div>
 											<div class="form-control">
+												<!-- svelte-ignore a11y_label_has_associated_control -->
 												<label class="label">
 													<span class="label-text">Timeout (ms) Auth Success</span>
 												</label>
@@ -110,6 +113,7 @@
 													class="input input-bordered w-full" />
 											</div>
 											<div class="form-control">
+												<!-- svelte-ignore a11y_label_has_associated_control -->
 												<label class="label">
 													<span class="label-text">Timeout (ms) Auth Failed</span>
 												</label>
@@ -123,6 +127,7 @@
 												<h3 class="text-base md:text-md font-bold mb-4">Auth Success Color</h3>
 												<div class="flex gap-4">
 													<div class="form-control">
+														<!-- svelte-ignore a11y_label_has_associated_control -->
 														<label class="label">
 															<span class="label-text">R</span>
 														</label>
@@ -130,6 +135,7 @@
 															placeholder="255" class="input input-bordered w-full" />
 													</div>
 													<div class="form-control">
+														<!-- svelte-ignore a11y_label_has_associated_control -->
 														<label class="label">
 															<span class="label-text">G</span>
 														</label>
@@ -137,6 +143,7 @@
 															placeholder="255" class="input input-bordered w-full" />
 													</div>
 													<div class="form-control">
+														<!-- svelte-ignore a11y_label_has_associated_control -->
 														<label class="label">
 															<span class="label-text">B</span>
 														</label>
@@ -150,6 +157,7 @@
 												<h3 class="text-base md:text-md font-bold mb-4">Auth Failure Color</h3>
 												<div class="flex gap-4">
 													<div class="form-control">
+														<!-- svelte-ignore a11y_label_has_associated_control -->
 														<label class="label">
 															<span class="label-text">R</span>
 														</label>
@@ -157,6 +165,7 @@
 															placeholder="255" class="input input-bordered w-full" />
 													</div>
 													<div class="form-control">
+														<!-- svelte-ignore a11y_label_has_associated_control -->
 														<label class="label">
 															<span class="label-text">G</span>
 														</label>
@@ -164,6 +173,7 @@
 															placeholder="255" class="input input-bordered w-full" />
 													</div>
 													<div class="form-control">
+														<!-- svelte-ignore a11y_label_has_associated_control -->
 														<label class="label">
 															<span class="label-text">B</span>
 														</label>
@@ -190,6 +200,7 @@
 											<div class="flex-1">
 												<h3 class="text-base md:text-lg font-bold mb-4">Auth Success</h3>
 												<div class="form-control mb-4">
+													<!-- svelte-ignore a11y_label_has_associated_control -->
 													<label class="label">
 														<span class="label-text">GPIO Pin</span>
 													</label>
@@ -197,6 +208,7 @@
 														class="input input-bordered w-full" />
 												</div>
 												<div class="form-control mb-4">
+													<!-- svelte-ignore a11y_label_has_associated_control -->
 													<label class="label">
 														<span class="label-text">Timeout (ms)</span>
 													</label>
@@ -204,6 +216,7 @@
 														class="input input-bordered w-full" />
 												</div>
 												<div class="form-control mb-4">
+													<!-- svelte-ignore a11y_label_has_associated_control -->
 													<label class="label">
 														<span class="label-text">GPIO State</span>
 													</label>
@@ -217,6 +230,7 @@
 											<div class="flex-1">
 												<h3 class="text-base md:text-lg font-bold mb-4">Auth Failure</h3>
 												<div class="form-control mb-4">
+													<!-- svelte-ignore a11y_label_has_associated_control -->
 													<label class="label">
 														<span class="label-text">GPIO Pin</span>
 													</label>
@@ -224,6 +238,7 @@
 														class="input input-bordered w-full" />
 												</div>
 												<div class="form-control mb-4">
+													<!-- svelte-ignore a11y_label_has_associated_control -->
 													<label class="label">
 														<span class="label-text">Timeout (ms)</span>
 													</label>
@@ -231,6 +246,7 @@
 														class="input input-bordered w-full" />
 												</div>
 												<div class="form-control mb-4">
+													<!-- svelte-ignore a11y_label_has_associated_control -->
 													<label class="label">
 														<span class="label-text">GPIO State</span>
 													</label>
@@ -244,6 +260,7 @@
 												<h3 class="text-base md:text-lg font-bold mb-4">2nd action on success</h3>
 												<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                           <div class="form-control">
+                            <!-- svelte-ignore a11y_label_has_associated_control -->
                             <label class="label">
                               <span class="label-text">Alt action Initiator Pin</span>
                             </label>
@@ -251,6 +268,7 @@
                               max="255" class="input input-bordered w-full" />
                           </div>
                           <div class="form-control">
+                            <!-- svelte-ignore a11y_label_has_associated_control -->
                             <label class="label">
                               <span class="label-text">Alt action Initiator Timeout (ms)</span>
                             </label>
@@ -258,6 +276,7 @@
                               max="10000" class="input input-bordered w-full" />
                           </div>
                           <div class="form-control">
+                            <!-- svelte-ignore a11y_label_has_associated_control -->
                             <label class="label">
                               <span class="label-text">Feedback LED Pin</span>
                             </label>
@@ -265,6 +284,7 @@
                               max="255" class="input input-bordered w-full" />
                           </div>
 													<div class="form-control">
+														<!-- svelte-ignore a11y_label_has_associated_control -->
 														<label class="label">
 															<span class="label-text">GPIO Pin</span>
 														</label>
@@ -272,6 +292,7 @@
 															class="input input-bordered w-full" />
 													</div>
 													<div class="form-control">
+														<!-- svelte-ignore a11y_label_has_associated_control -->
 														<label class="label">
 															<span class="label-text">Timeout (ms)</span>
 														</label>
@@ -279,6 +300,7 @@
 															class="input input-bordered w-full" />
 													</div>
 													<div class="form-control">
+														<!-- svelte-ignore a11y_label_has_associated_control -->
 														<label class="label">
 															<span class="label-text">GPIO State</span>
 														</label>
@@ -319,6 +341,7 @@
 									<div class="collapse-content">
 										<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 											<div class="form-control">
+												<!-- svelte-ignore a11y_label_has_associated_control -->
 												<label class="label">
 													<span class="label-text">GPIO Pin</span>
 												</label>
@@ -326,6 +349,7 @@
 													class="input input-bordered w-full" />
 											</div>
 											<div class="form-control">
+												<!-- svelte-ignore a11y_label_has_associated_control -->
 												<label class="label">
 													<span class="label-text">GPIO State - Locked</span>
 												</label>
@@ -336,6 +360,7 @@
 												</select>
 											</div>
 											<div class="form-control">
+												<!-- svelte-ignore a11y_label_has_associated_control -->
 												<label class="label">
 													<span class="label-text">GPIO State - Unlocked</span>
 												</label>
@@ -346,6 +371,7 @@
 												</select>
 											</div>
 											<div class="form-control">
+												<!-- svelte-ignore a11y_label_has_associated_control -->
 												<label class="label">
 													<span class="label-text">Actionable by HomeKey</span>
 												</label>
@@ -356,6 +382,7 @@
 												</select>
 											</div>
 											<div class="form-control">
+												<!-- svelte-ignore a11y_label_has_associated_control -->
 												<label class="label">
 													<span class="label-text">Momentary state</span>
 												</label>
@@ -368,6 +395,7 @@
 												</select>
 											</div>
 											<div class="form-control">
+												<!-- svelte-ignore a11y_label_has_associated_control -->
 												<label class="label">
 													<span class="label-text">Momentary timeout (ms)</span>
 												</label>
@@ -383,6 +411,7 @@
 									<div class="collapse-content">
 										<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
 											<div class="form-control">
+												<!-- svelte-ignore a11y_label_has_associated_control -->
 												<label class="label">
 													<span class="label-text">Status</span>
 												</label>
@@ -392,6 +421,7 @@
 												</select>
 											</div>
 											<div class="form-control">
+												<!-- svelte-ignore a11y_label_has_associated_control -->
 												<label class="label">
 													<span class="label-text">Momentary state</span>
 												</label>
@@ -404,6 +434,7 @@
 												</select>
 											</div>
 											<div class="form-control">
+												<!-- svelte-ignore a11y_label_has_associated_control -->
 												<label class="label">
 													<span class="label-text">Momentary timeout (ms)</span>
 												</label>

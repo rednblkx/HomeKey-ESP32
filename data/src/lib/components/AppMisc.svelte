@@ -134,6 +134,7 @@
 							<div class="collapse-title font-medium">HomeKit</div>
 							<div class="collapse-content flex flex-col gap-4">
 								<div class="form-control">
+									<!-- svelte-ignore a11y_label_has_associated_control -->
 									<label class="label">
 										<span class="label-text">Device Name</span>
 									</label>
@@ -141,6 +142,7 @@
 										class="input input-bordered w-full" required />
 								</div>
 								<div class="form-control">
+									<!-- svelte-ignore a11y_label_has_associated_control -->
 									<label class="label">
 										<span class="label-text">Setup Code</span>
 									</label>
@@ -169,6 +171,7 @@
 									</label>
 								</div>
 								<div class="form-control">
+									<!-- svelte-ignore a11y_label_has_associated_control -->
 									<label class="label">
 										<span class="label-text">Battery low status Threshold</span>
 									</label>
@@ -203,6 +206,7 @@
 							<div class="collapse-title font-medium">PN532</div>
 							<div class="collapse-content flex flex-col gap-4">
 								<div class="form-control">
+									<!-- svelte-ignore a11y_label_has_associated_control -->
 									<label class="label">
 										<span class="label-text">SS Pin</span>
 									</label>
@@ -210,6 +214,7 @@
 										class="input input-bordered w-full" />
 								</div>
 								<div class="form-control">
+									<!-- svelte-ignore a11y_label_has_associated_control -->
 									<label class="label">
 										<span class="label-text">SCK Pin</span>
 									</label>
@@ -217,6 +222,7 @@
 										class="input input-bordered w-full" />
 								</div>
 								<div class="form-control">
+									<!-- svelte-ignore a11y_label_has_associated_control -->
 									<label class="label">
 										<span class="label-text">MISO Pin</span>
 									</label>
@@ -224,6 +230,7 @@
 										class="input input-bordered w-full" />
 								</div>
 								<div class="form-control">
+									<!-- svelte-ignore a11y_label_has_associated_control -->
 									<label class="label">
 										<span class="label-text">MOSI Pin</span>
 									</label>
@@ -240,6 +247,7 @@
 								<a href="https://github.com/HomeSpan/HomeSpan/blob/master/docs/GettingStarted.md#adding-a-control-button-and-status-led-optional"
 									class="link link-primary block" target="_blank">HomeSpan Documentation</a>
 								<div class="form-control">
+									<!-- svelte-ignore a11y_label_has_associated_control -->
 									<label class="label">
 										<span class="label-text">OTA Password</span>
 									</label>
@@ -247,6 +255,7 @@
 										class="input input-bordered w-full" required />
 								</div>
 								<div class="form-control">
+									<!-- svelte-ignore a11y_label_has_associated_control -->
 									<label class="label">
 										<span class="label-text">Control GPIO Pin</span>
 									</label>
@@ -254,6 +263,7 @@
 										class="input input-bordered w-full" />
 								</div>
 								<div class="form-control">
+									<!-- svelte-ignore a11y_label_has_associated_control -->
 									<label class="label">
 										<span class="label-text">Status LED GPIO Pin</span>
 									</label>
@@ -278,6 +288,7 @@
 								{#if miscConfig.ethernetEnabled}
 									<div class="flex flex-col gap-4">
 										<div class="form-control">
+											<!-- svelte-ignore a11y_label_has_associated_control -->
 											<label class="label">
 												<span class="label-text">Active Ethernet Preset</span>
 											</label>
@@ -291,6 +302,7 @@
 										</div>
 
 										<div class="form-control">
+											<!-- svelte-ignore a11y_label_has_associated_control -->
 											<label class="label">
 												<span class="label-text">Ethernet PHY Type</span>
 											</label>
@@ -307,6 +319,7 @@
 												<h3 class="text-lg font-bold">RMII Configuration</h3>
 												<div class="flex flex-col gap-4">
 													<div class="form-control">
+														<!-- svelte-ignore a11y_label_has_associated_control -->
 														<label class="label">
 															<span class="label-text">PHY Address</span>
 														</label>
@@ -314,6 +327,7 @@
 															disabled={miscConfig.ethActivePreset !== 255} class="input input-bordered w-full" />
 													</div>
 													<div class="form-control">
+														<!-- svelte-ignore a11y_label_has_associated_control -->
 														<label class="label">
 															<span class="label-text">Pin MCD</span>
 														</label>
@@ -321,6 +335,7 @@
 															disabled={miscConfig.ethActivePreset !== 255} class="input input-bordered w-full" />
 													</div>
 													<div class="form-control">
+														<!-- svelte-ignore a11y_label_has_associated_control -->
 														<label class="label">
 															<span class="label-text">Pin MDIO</span>
 														</label>
@@ -328,6 +343,7 @@
 															disabled={miscConfig.ethActivePreset !== 255} class="input input-bordered w-full" />
 													</div>
 													<div class="form-control">
+														<!-- svelte-ignore a11y_label_has_associated_control -->
 														<label class="label">
 															<span class="label-text">Pin Power</span>
 														</label>
@@ -335,6 +351,7 @@
 															disabled={miscConfig.ethActivePreset !== 255} class="input input-bordered w-full" />
 													</div>
 													<div class="form-control">
+														<!-- svelte-ignore a11y_label_has_associated_control -->
 														<label class="label">
 															<span class="label-text">Pin RMII Clock</span>
 														</label>
@@ -353,6 +370,7 @@
 												<h3 class="text-lg font-bold">SPI Configuration</h3>
 												<div class="flex flex-col gap-4">
 													<div class="form-control">
+														<!-- svelte-ignore a11y_label_has_associated_control -->
 														<label class="label">
 															<span class="label-text">SPI Freq MHz</span>
 														</label>
@@ -360,6 +378,7 @@
 															disabled={miscConfig.ethActivePreset !== 255} class="input input-bordered w-full" />
 													</div>
 													<div class="form-control">
+														<!-- svelte-ignore a11y_label_has_associated_control -->
 														<label class="label">
 															<span class="label-text">Pin CS</span>
 														</label>
@@ -367,6 +386,7 @@
 															disabled={miscConfig.ethActivePreset !== 255} class="input input-bordered w-full" />
 													</div>
 													<div class="form-control">
+														<!-- svelte-ignore a11y_label_has_associated_control -->
 														<label class="label">
 															<span class="label-text">Pin IRQ</span>
 														</label>
@@ -374,6 +394,7 @@
 															disabled={miscConfig.ethActivePreset !== 255} class="input input-bordered w-full" />
 													</div>
 													<div class="form-control">
+														<!-- svelte-ignore a11y_label_has_associated_control -->
 														<label class="label">
 															<span class="label-text">Pin RST</span>
 														</label>
@@ -381,6 +402,7 @@
 															disabled={miscConfig.ethActivePreset !== 255} class="input input-bordered w-full" />
 													</div>
 													<div class="form-control">
+														<!-- svelte-ignore a11y_label_has_associated_control -->
 														<label class="label">
 															<span class="label-text">Pin SCK</span>
 														</label>
@@ -388,6 +410,7 @@
 															disabled={miscConfig.ethActivePreset !== 255} class="input input-bordered w-full" />
 													</div>
 													<div class="form-control">
+														<!-- svelte-ignore a11y_label_has_associated_control -->
 														<label class="label">
 															<span class="label-text">Pin MISO</span>
 														</label>
@@ -395,6 +418,7 @@
 															disabled={miscConfig.ethActivePreset !== 255} class="input input-bordered w-full" />
 													</div>
 													<div class="form-control">
+														<!-- svelte-ignore a11y_label_has_associated_control -->
 														<label class="label">
 															<span class="label-text">Pin MOSI</span>
 														</label>
@@ -421,6 +445,7 @@
 									</label>
 								</div>
 								<div class="form-control mb-4">
+									<!-- svelte-ignore a11y_label_has_associated_control -->
 									<label class="label">
 										<span class="label-text">Username</span>
 									</label>
@@ -428,6 +453,7 @@
 										class="input input-bordered w-full" required />
 								</div>
 								<div class="form-control mb-2">
+									<!-- svelte-ignore a11y_label_has_associated_control -->
 									<label class="label">
 										<span class="label-text">Password</span>
 									</label>
