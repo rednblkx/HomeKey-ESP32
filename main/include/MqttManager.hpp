@@ -2,7 +2,6 @@
 #include "mqtt_client.h"
 #include <string>
 #include <vector>
-#include "esp_timer.h"
 
 class LockManager;
 class ConfigManager;
@@ -83,11 +82,6 @@ private:
     bool configureSSL(esp_mqtt_client_config_t& mqtt_cfg);
     void logSSLError(const char* operation, esp_err_t error);
 
-    // Health check methods
-    void startHealthCheckTimer();
-    void stopHealthCheckTimer();
-    void performHealthCheck();
-
     // --- Member Variables ---
     std::string deviceID;
     const espConfig::mqttConfig_t& m_mqttConfig;
@@ -98,11 +92,6 @@ private:
     
     // SSL/TLS related members
     bool m_sslConfigured;
-    
-    // Health check state
-    esp_timer_handle_t m_healthCheckTimer;
-    uint32_t m_lastHealthCheckTime;
-    static constexpr uint32_t HEALTH_CHECK_INTERVAL_MS = 300000; // 5 minutes
     
     static const char* TAG;
 };

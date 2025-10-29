@@ -28,9 +28,7 @@ MqttManager::MqttManager(const ConfigManager& configManager)
     : m_mqttConfig(configManager.getConfig<espConfig::mqttConfig_t>()),
       m_client(nullptr),
       device_name(configManager.getConfig<espConfig::misc_config_t>().deviceName),
-      m_sslConfigured(false),
-      m_healthCheckTimer(nullptr),
-      m_lastHealthCheckTime(0)
+      m_sslConfigured(false)
 {
   m_mqttSslConfig = configManager.getMqttSslConfig();
   espp::EventManager::get().add_subscriber(
@@ -76,8 +74,6 @@ MqttManager::MqttManager(const ConfigManager& configManager)
 }
 
 MqttManager::~MqttManager() {
-   stopHealthCheckTimer();
-
    // Clean up MQTT client if it exists
    if (m_client) {
        esp_mqtt_client_stop(m_client);
@@ -226,7 +222,6 @@ void MqttManager::onMqttEvent(esp_event_base_t base, int32_t event_id, void* eve
         case MQTT_EVENT_DISCONNECTED:
             ESP_LOGW(TAG, "MQTT_EVENT_DISCONNECTED: Client disconnected from broker");
             // Stop health checks when disconnected
-            stopHealthCheckTimer();
             ESP_LOGI(TAG, "Connection health monitoring: DISABLED - Connection lost");
             break;
         case MQTT_EVENT_SUBSCRIBED:
@@ -321,10 +316,6 @@ void MqttManager::onConnected() {
     if (m_mqttConfig.useSSL) {
         ESP_LOGI(TAG, "SSL/TLS connection established successfully");
     }
-
-    // Start periodic health checks
-    startHealthCheckTimer();
-    ESP_LOGI(TAG, "Connection health monitoring: ENABLED - Health checks every %d minutes", HEALTH_CHECK_INTERVAL_MS / 60000);
 
     publish(m_mqttConfig.lwtTopic, "online", 1, true);
 
@@ -712,64 +703,4 @@ void MqttManager::logSSLError(const char* operation, esp_err_t error) {
 
 bool MqttManager::isConnected() const {
     return m_isConnected;
-}
-
-// --- Health Check Methods ---
-
-void MqttManager::startHealthCheckTimer() {
-    if (m_healthCheckTimer) {
-        ESP_LOGW(TAG, "Health check timer already running");
-        return;
-    }
-
-    ESP_LOGI(TAG, "Starting MQTT connection health check timer (%d minutes interval)", HEALTH_CHECK_INTERVAL_MS / 60000);
-
-    esp_timer_create_args_t timer_args = {
-        .callback = [](void* arg) {
-            MqttManager* instance = static_cast<MqttManager*>(arg);
-            instance->performHealthCheck();
-        },
-        .arg = this,
-        .name = "mqtt_health_check"
-    };
-
-    esp_timer_create(&timer_args, &m_healthCheckTimer);
-    esp_timer_start_periodic(m_healthCheckTimer, HEALTH_CHECK_INTERVAL_MS * 1000); // Convert to microseconds
-    m_lastHealthCheckTime = esp_timer_get_time() / 1000; // Store in milliseconds
-}
-
-void MqttManager::stopHealthCheckTimer() {
-    if (m_healthCheckTimer) {
-        ESP_LOGI(TAG, "Stopping MQTT connection health check timer");
-        esp_timer_stop(m_healthCheckTimer);
-        esp_timer_delete(m_healthCheckTimer);
-        m_healthCheckTimer = nullptr;
-    }
-}
-
-void MqttManager::performHealthCheck() {
-    uint32_t currentTime = esp_timer_get_time() / 1000; // Current time in milliseconds
-    uint32_t timeSinceLastCheck = currentTime - m_lastHealthCheckTime;
-
-    ESP_LOGI(TAG, "MQTT Connection Health Check");
-    ESP_LOGI(TAG, "Connection status: %s", m_isConnected ? "CONNECTED" : "DISCONNECTED");
-    ESP_LOGI(TAG, "SSL/TLS enabled: %s", m_mqttConfig.useSSL ? "YES" : "NO");
-    ESP_LOGI(TAG, "Broker: %s:%d", m_mqttConfig.mqttBroker.c_str(), m_mqttConfig.mqttPort);
-    ESP_LOGI(TAG, "Client ID: %s", m_mqttConfig.mqttClientId.c_str());
-    ESP_LOGI(TAG, "Time since last health check: %d seconds", timeSinceLastCheck / 1000);
-
-    if (m_isConnected) {
-        ESP_LOGI(TAG, "Health status: GOOD - Connection is active");
-
-        // Test connection by publishing a small message (will be logged if it fails)
-        static int healthCheckCounter = 0;
-        healthCheckCounter++;
-        std::string healthTopic = m_mqttConfig.lwtTopic + "/health";
-        publish(healthTopic, std::to_string(healthCheckCounter), 0, false);
-
-        ESP_LOGD(TAG, "Health check ping sent (counter: %d)", healthCheckCounter);
-    }
-
-    m_lastHealthCheckTime = currentTime;
-    ESP_LOGI(TAG, "Health check completed");
 }
