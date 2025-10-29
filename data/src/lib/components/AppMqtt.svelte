@@ -110,7 +110,7 @@
           uploadProgress[type] = 0;
           return;
         }
-        const result = await uploadCertificate(type, content);
+        await uploadCertificate(type, content);
         uploadProgress[type] = 100;
 
         // Refresh certificate status
