@@ -1,5 +1,5 @@
 <script>
-	import '../app.css';
+	import '@/app.css';
 	import { onMount, onDestroy } from 'svelte';
 	import { updateSystemInfo } from '$lib/stores/system.svelte.js';
 	import { getCurrentTheme, toggleTheme, initTheme, logoSrc } from '$lib/stores/theme.svelte.js';
@@ -9,38 +9,33 @@
 	import Logo from '$lib/assets/favicon.png';
 	import NavigationMenu from '$lib/components/NavigationMenu.svelte';
 	import Notification from '$lib/components/Notification.svelte';
-    import { websocketState } from '$lib/stores/websocket.svelte';
+  import { websocketState } from '$lib/stores/websocket.svelte';
+  import { navigating } from '$app/state';
 
 	let { children } = $props();
 
 	/** @type {HTMLDivElement | null} */
 	let sidebarTrigger = $state(null);
-	/** @type {HTMLDivElement | null} */
-	let mobileTrigger = $state(null);
-	// WebSocket message subscription
 	/**
-	     * @type {() => void}
-	     */
+    * @type {() => void}
+    */
 	let unsubscribeMessages;
 
 	onMount(() => {
-    	initTheme();
+    initTheme();
 
-		// Initialize WebSocket
 		if (ws) {
 			ws.connect();
 
-			// Add message listener to update stores
 			unsubscribeMessages = ws.on((/** @type {{ type: string; data: any; }} */ event) => {
 				if (event.type === 'message') {
 					const data = event.data;
 					if (data.type === 'sysinfo' || data.type === 'metrics') {
 						updateSystemInfo(data);
-						// Clear system info loading state when data is received
 						setLoadingState('systemInfoLoading', false);
 					}
 				}
-			    	});
+      });
 		}
 	});
 
@@ -49,6 +44,7 @@
 			unsubscribeMessages();
 		}
 	});
+  $inspect(navigating);
 </script>
 
 <svelte:head>
@@ -113,7 +109,24 @@
 		<div class="drawer-content h-full w-full">
 			<!-- Content -->
 			<main id="main-content" class="px-6 h-full overflow-y-auto">
-				{@render children()}
+        {#await navigating.complete}
+          <div class="flex justify-center items-center min-h-screen" aria-live="polite" aria-label="Loading page">
+            <div class="text-center">
+              <span class="loading loading-spinner loading-lg" aria-label="Loading page content"></span>
+              <p class="mt-4 text-lg">Loading...</p>
+            </div>
+          </div>
+        {:then}
+          {@render children()}
+        {:catch error}
+          <div class="card bg-base-200 shadow-xl" aria-live="assertive" aria-label="Error loading WebSocket Test component">
+            <div class="card-body p-4">
+              <div class="text-center text-error">
+                <p>Failed to load WebSocket Test component: {error.message || 'Unknown error'}</p>
+              </div>
+            </div>
+          </div>
+        {/await}
 			</main>
 		</div>
 	
