@@ -40,12 +40,6 @@
 
   let certificateStatus = $state<CertificatesStatus>();
 
-  let reconnectionStatus = $state({
-    isReconnecting: false,
-    message: "",
-    lastReconnection: null as string | null,
-  });
-
   let uploadProgress = $state({ ca: 0, client: 0, privateKey: 0 });
 
   let uploadErrors = $state({ ca: "", client: "", privateKey: "" });
