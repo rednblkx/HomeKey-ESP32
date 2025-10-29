@@ -90,7 +90,7 @@
 		}
 	}
 
-	function handleWebSocketMessage(evt: { type: string; data: OTAStatus; }) {
+	function handleWebSocketMessage(evt: { type: string; state?: string; data: OTAStatus; }) {
 		if (evt.type === 'message' && evt.data.type === 'ota_status') {
 			const previousStatus = { ...otaStatus };
 			otaStatus = { ...otaStatus, ...evt.data };
@@ -112,7 +112,9 @@
 				}
 				lastLoggedPercent = 0;
 			}
-		}
+		} else if(evt.type == "status" && evt.state == "open") {
+      requestOTAStatus();
+    }
 	}
 
 	function onFirmwareSelected(event: Event) {
