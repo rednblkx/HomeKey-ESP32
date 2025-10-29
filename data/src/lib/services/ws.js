@@ -419,19 +419,8 @@ class WSService {
   _forceConnectionClose(reason) {
     console.log(`Force closing connection: ${reason}`);
     
-    // Try normal close first
-    if (this.socket) {
-      try {
-        this.socket.close(1006, reason);
-      } catch (error) {
-        console.warn('Error during socket.close():', error);
-      }
-    }
-    
-    // Force cleanup regardless of whether close() worked
     setTimeout(() => {
       if (this.connected) {
-        console.log('Normal close failed, forcing cleanup');
         this.connected = false;
         this._stopPingTimer();
         this._stopPingTimeoutTimer();
