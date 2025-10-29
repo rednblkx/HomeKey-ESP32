@@ -118,7 +118,10 @@ bool MqttManager::begin(std::string deviceID) {
         if (m_mqttConfig.useSSL && m_mqttConfig.allowInsecure) {
             ESP_LOGW(TAG, "Security warning: SSL/TLS is enabled but certificate validation is disabled");
         }
-
+        if(!m_mqttSslConfig){
+          ESP_LOGE(TAG, "SSL config ptr is null");
+          return false;
+        }
         if (!configureSSL(mqtt_cfg)) {
             ESP_LOGE(TAG, "Failed to configure SSL/TLS for MQTT connection");
             return false;
