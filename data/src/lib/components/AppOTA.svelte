@@ -185,7 +185,7 @@
 		addLog('info', `Starting firmware upload: ${firmwareFile.name}`);
 
 		try {
-			const url = skipReboot ? '/ota/upload?skipReboot=true' : '/ota/upload';
+			const url = `/ota/upload?skipReboot=${skipReboot}`;
 			const response = await fetch(url, {
 				method: 'POST',
 				body: firmwareFile,
@@ -218,7 +218,7 @@
 		}
 	}
 
-	async function uploadLittleFS(ignoreDisabled = false) {
+	async function uploadLittleFS(ignoreDisabled = false, skipReboot = true) {
 		if (!littlefsFile) {
 			addLog('error', 'Please select a LittleFS file first');
 			return false;
@@ -235,7 +235,7 @@
 		addLog('info', `Starting LittleFS upload: ${littlefsFile.name}`);
 
 		try {
-			const response = await fetch('/ota/littlefs', {
+			const response = await fetch(`/ota/littlefs?skipReboot=${skipReboot}`, {
 				method: 'POST',
 				body: littlefsFile,
 				headers: {
@@ -285,7 +285,7 @@
 
 			await new Promise(resolve => setTimeout(resolve, 1000));
 
-			const littlefsSuccess = await uploadLittleFS(true);
+			const littlefsSuccess = await uploadLittleFS(true, false);
 			if (!littlefsSuccess) {
 				throw new Error('LittleFS upload failed');
 			}

@@ -181,8 +181,7 @@ void WebServerManager::setupRoutes() {
       {"/ws", HTTP_GET, handleWebSocket, this, true},
 
       // OTA endpoints
-      {"/ota/upload", HTTP_POST, handleOTAUpload, this},
-      {"/ota/littlefs", HTTP_POST, handleOTAUpload, this},
+      {"/ota/*", HTTP_POST, handleOTAUpload, this},
 
       // Certificate endpoints
       {"/certificates/upload", HTTP_POST, handleCertificateUpload, this},
@@ -1210,6 +1209,10 @@ void WebServerManager::otaWorkerTask(void *parameter) {
       instance->m_otaWrittenBytes = instance->m_otaTotalBytes = 0;
       instance->m_otaError.clear();
       instance->m_otaHandle = 0;
+      if(!instance->m_skipReboot){
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        esp_restart();
+      }
     } else
       break;
   }
@@ -1244,8 +1247,8 @@ esp_err_t WebServerManager::queueOTARequest(httpd_req_t *req) {
     httpd_req_async_handler_complete(reqCopy);
     return ESP_FAIL;
   }
-
-  OTAUploadType uploadType = (strcmp(req->uri, "/ota/littlefs") == 0)
+  char * type = strrchr(req->uri, '/');
+  OTAUploadType uploadType = (strncmp(type+1, "littlefs", strlen("littlefs")) == 0)
                                  ? OTAUploadType::LITTLEFS
                                  : OTAUploadType::FIRMWARE;
 
@@ -1448,10 +1451,6 @@ esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
     }
     m_otaInProgress = false;
     broadcastOTAStatus();
-    if (!m_skipReboot) {
-      vTaskDelay(pdMS_TO_TICKS(2000));
-      esp_restart();
-    }
   } else {
     m_otaInProgress = false;
     broadcastOTAStatus();
