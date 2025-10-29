@@ -413,8 +413,9 @@
 			<div class="log-container h-full overflow-y-auto font-mono text-sm">
 				{#each filteredLogs() as item (item.id)}
 					<div class="w-full mb-1 last:mb-0">
-						<div
-						class="flex items-center justify-between sm:gap-4 md:gap-6 p-4 cursor-pointer hover:bg-base-200 transition-colors bg-base-100 border border-base-300 rounded-md"
+						<button
+              type="button"
+              class="flex items-center justify-between sm:gap-4 md:gap-6 p-4 cursor-pointer hover:bg-base-200 transition-colors bg-base-100 border border-base-300 rounded-md"
 							onclick={() => item.expanded = !item.expanded}
 							>
 							<div class="flex items-center">
@@ -436,7 +437,7 @@
 							<div class="tooltip tooltip-left" data-tip={item.localts}>
 								<span class="text-xs text-base-content/50 whitespace-wrap">{formatRelativeTime(item.localts)}</span>
 							</div>
-						</div>
+						</button>
 						<div
 							class="bg-base-100/50 w-full flex border-t border-base-300 transition-all duration-200 ease-in-out rounded-b-md"
 							class:max-h-96={item.expanded} class:opacity-100={item.expanded} class:max-h-0={!item.expanded} class:opacity-0={!item.expanded}
