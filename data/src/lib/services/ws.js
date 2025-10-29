@@ -283,11 +283,6 @@ class WSService {
   
   _cleanup() {
     if (this.socket) {
-      try { 
-        this.socket.close(1000, 'Client disconnect'); 
-      } catch(e) {
-        console.warn('Error closing WebSocket:', e);
-      }
       this.socket = null;
     }
     
