@@ -166,6 +166,9 @@
     try {
       if (!mqttConfig) return;
       const result = await saveConfig("mqtt", mqttConfig);
+      if(result.success){
+        mqttConfig = result.data;
+      }
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       alert(`Error saving config: ${message}`); // Replace with a more user-friendly notification

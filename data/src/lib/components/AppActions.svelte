@@ -35,6 +35,9 @@
 	const saveActionsConfig = async (): Promise<void> => {
 		try {
 			const result = await saveConfig('actions', actionsConfig);
+      if(result.success){
+        actionsConfig = result.data;
+      }
 		} catch (e) {
 			const message = e instanceof Error ? e.message : String(e);
 			error = message;

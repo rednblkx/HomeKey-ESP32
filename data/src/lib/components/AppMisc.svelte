@@ -58,6 +58,9 @@
 		try {
 			if (!miscConfig) return;
 			const result = await saveConfig('misc', miscConfig);
+      if(result.success){
+        miscConfig = result.data;
+      }
 		} catch (e) {
 			const message = e instanceof Error ? e.message : String(e);
 			error = message;
