@@ -233,18 +233,16 @@
 				if (typeof ws.disconnect === 'function') {
 					ws.disconnect();
 				}
-				setTimeout(() => {
-					try {
-						if (typeof ws.connect === 'function') {
-							ws.connect();
-						} else {
-							addMessage('received', 'WebSocket connect method not available');
-						}
-					} catch (error) {
-						console.error('Error during reconnection:', error);
-						addMessage('received', `Reconnection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-					}
-				}, 1000);
+        try {
+          if (typeof ws.connect === 'function') {
+            ws.connect();
+          } else {
+            addMessage('received', 'WebSocket connect method not available');
+          }
+        } catch (error) {
+          console.error('Error during reconnection:', error);
+          addMessage('received', `Reconnection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
 			} else {
 				addMessage('received', 'WebSocket service not available');
 			}
