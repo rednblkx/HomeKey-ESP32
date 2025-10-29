@@ -894,7 +894,9 @@ esp_err_t WebServerManager::handleWebSocket(httpd_req_t *req) {
     std::string status = instance->getDeviceInfo();
     instance->queue_ws_frame(sockfd, (const uint8_t *)status.c_str(),
                              status.size(), HTTPD_WS_TYPE_TEXT);
-
+    std::string metrics = instance->getDeviceMetrics();
+    instance->queue_ws_frame(sockfd, (const uint8_t *)metrics.c_str(),
+                             metrics.size(), HTTPD_WS_TYPE_TEXT);
     if (!esp_timer_is_active(instance->m_statusTimer))
       esp_timer_start_periodic(instance->m_statusTimer, 5000 * 1000);
     return ESP_OK;
