@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import type { LogEntry, LogLevel, LogMessage } from '../types/api';
+	import type { LogEntry, LogLevel, LogMessage } from '$lib/types/api';
 	import ws from '$lib/services/ws.js';
 
 	const LOG_LEVELS = ['ERROR', 'WARN', 'INFO', 'DEBUG'] as const;
