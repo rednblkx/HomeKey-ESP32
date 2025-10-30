@@ -49,6 +49,7 @@ public:
   ~WebServerManager();
 
   void begin();
+  bool basicAuth(httpd_req_t* req);
   void setMqttManager(MqttManager *mqttManager) { m_mqttManager = mqttManager; }
   void broadcastWs(const uint8_t *payload, size_t len, httpd_ws_type_t type);
   void broadcastToWebSocketClients(const char *message);

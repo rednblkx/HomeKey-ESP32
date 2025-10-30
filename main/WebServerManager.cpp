@@ -9,6 +9,7 @@
 #include "ReaderDataManager.hpp"
 #include "cJSON.h"
 #include "config.hpp"
+#include "esp_err.h"
 #include "esp_heap_caps.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
@@ -16,16 +17,22 @@
 #include "eth_structs.hpp"
 #include "eventStructs.hpp"
 #include "fmt/base.h"
+#include "fmt/format.h"
 #include "fmt/ranges.h"
 #include "freertos/projdefs.h"
 #include <LittleFS.h>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <dirent.h>
 #include <esp_app_desc.h>
 #include <event_manager.hpp>
 #include <future>
 #include <mutex>
+#include <esp_tls_crypto.h>
+#include <stdbool.h>
+#include <string>
 
 // ============================================================================
 // Constants
@@ -145,6 +152,30 @@ void WebServerManager::begin() {
   ESP_LOGI(TAG, "Web server initialization complete");
 }
 
+bool WebServerManager::basicAuth(httpd_req_t* req){
+  if(!m_configManager.getConfig<espConfig::misc_config_t>().webAuthEnabled){
+    ESP_LOGD(TAG, "HTTP Auth not enabled, skipping...");
+    return true;
+  }
+  size_t hdr_len = httpd_req_get_hdr_value_len(req, "Authorization");
+  if(!(hdr_len > 0)){
+    ESP_LOGE(TAG, "Authorization data not provided");
+    return false;
+  }
+  std::string authReq; authReq.resize(hdr_len + 1);
+  if(httpd_req_get_hdr_value_str(req, "Authorization", authReq.data(), authReq.size()) != ESP_OK){
+    ESP_LOGE(TAG, "Invalid HTTP Header, authorization failed");
+    return false;
+  }
+  const std::string cred = fmt::format("{}:{}", m_configManager.getConfig<espConfig::misc_config_t>().webUsername, m_configManager.getConfig<espConfig::misc_config_t>().webPassword);
+  size_t n = 0;
+  esp_crypto_base64_encode(NULL, 0, &n, (const uint8_t*)cred.c_str(), cred.size());
+  std::string digest = "Basic ";
+  digest.resize(6+n);
+  esp_crypto_base64_encode((uint8_t *)digest.data() + 6, digest.size(), &n, (const uint8_t *)cred.c_str(), cred.size());
+  return authReq == digest;
+}
+
 // ============================================================================
 // Route Setup
 // ============================================================================
@@ -162,8 +193,8 @@ void WebServerManager::setupRoutes() {
 
   RouteConfig routes[] = {
       // Static files
-      {"/static/*", HTTP_GET, handleStaticFiles, (void *)"/static"},
-      {"/_app/*", HTTP_GET, handleStaticFiles, (void *)"/_app"},
+      {"/static/*", HTTP_GET, handleStaticFiles, this},
+      {"/_app/*", HTTP_GET, handleStaticFiles, this},
 
       // Configuration endpoints
       {"/config", HTTP_GET, handleGetConfig, this},
@@ -216,12 +247,20 @@ WebServerManager *WebServerManager::getInstance(httpd_req_t *req) {
 // ============================================================================
 
 esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
-  const char *base_path = (const char *)req->user_ctx;
-  const char *filename = req->uri + strlen(base_path);
+  WebServerManager *instance = getInstance(req);
+  if(!instance->basicAuth(req)){
+    ESP_LOGE(TAG, "HTTP Authorization failed!");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Connection", "keep-alive");
+    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
+    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
+    return ESP_FAIL;
+  }
+  const char *filename = strrchr(req->uri, '/') + 1;
   if (strlen(filename) == 0)
     filename = "/index.html";
 
-  std::string filepath = std::string(base_path) + filename;
+  std::string filepath = req->uri;
   bool use_compressed = false;
 
   // Check for gzip compressed version
@@ -290,6 +329,15 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
 }
 
 esp_err_t WebServerManager::handleRootOrHash(httpd_req_t *req) {
+  WebServerManager* instance = getInstance(req);
+  if(!instance->basicAuth(req)){
+    ESP_LOGE(TAG, "HTTP Authorization failed!");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Connection", "keep-alive");
+    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
+    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
+    return ESP_FAIL;
+  }
   File file = LittleFS.open("/app.html", "r");
   if (!file) {
     httpd_resp_send_404(req);
@@ -316,6 +364,14 @@ esp_err_t WebServerManager::handleRootOrHash(httpd_req_t *req) {
 
 esp_err_t WebServerManager::handleGetConfig(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
+  if(!instance->basicAuth(req)){
+    ESP_LOGE(TAG, "HTTP Authorization failed!");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Connection", "keep-alive");
+    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
+    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
+    return ESP_FAIL;
+  }
   if (!instance) {
     httpd_resp_send_500(req);
     return ESP_FAIL;
@@ -383,6 +439,14 @@ esp_err_t WebServerManager::handleGetConfig(httpd_req_t *req) {
 
 esp_err_t WebServerManager::handleGetEthConfig(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
+  if(!instance->basicAuth(req)){
+    ESP_LOGE(TAG, "HTTP Authorization failed!");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Connection", "keep-alive");
+    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
+    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
+    return ESP_FAIL;
+  }
   if (!instance) {
     httpd_resp_send_500(req);
     return ESP_FAIL;
@@ -449,6 +513,14 @@ esp_err_t WebServerManager::handleGetEthConfig(httpd_req_t *req) {
 
 esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
+  if(!instance->basicAuth(req)){
+    ESP_LOGE(TAG, "HTTP Authorization failed!");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Connection", "keep-alive");
+    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
+    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
+    return ESP_FAIL;
+  }
   if (!instance) {
     httpd_resp_send_500(req);
     return ESP_FAIL;
@@ -784,6 +856,14 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
 
 esp_err_t WebServerManager::handleClearConfig(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
+  if(!instance->basicAuth(req)){
+    ESP_LOGE(TAG, "HTTP Authorization failed!");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Connection", "keep-alive");
+    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
+    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
+    return ESP_FAIL;
+  }
   if (!instance) {
     httpd_resp_send_500(req);
     return ESP_FAIL;
@@ -831,6 +911,14 @@ esp_err_t WebServerManager::handleReboot(httpd_req_t *req) {
 
 esp_err_t WebServerManager::handleHKReset(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
+  if(!instance->basicAuth(req)){
+    ESP_LOGE(TAG, "HTTP Authorization failed!");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Connection", "keep-alive");
+    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
+    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
+    return ESP_FAIL;
+  }
   if (!instance) {
     httpd_resp_send_500(req);
     return ESP_FAIL;
@@ -843,6 +931,15 @@ esp_err_t WebServerManager::handleHKReset(httpd_req_t *req) {
 }
 
 esp_err_t WebServerManager::handleWifiReset(httpd_req_t *req) {
+  WebServerManager* instance = getInstance(req);
+  if(!instance->basicAuth(req)){
+    ESP_LOGE(TAG, "HTTP Authorization failed!");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Connection", "keep-alive");
+    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
+    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
+    return ESP_FAIL;
+  }
   httpd_resp_send(req, "Erasing WiFi credentials and rebooting...",
                   HTTPD_RESP_USE_STRLEN);
   homeSpan.processSerialCommand("X");
@@ -850,6 +947,15 @@ esp_err_t WebServerManager::handleWifiReset(httpd_req_t *req) {
 }
 
 esp_err_t WebServerManager::handleStartConfigAP(httpd_req_t *req) {
+  WebServerManager* instance = getInstance(req);
+  if(!instance->basicAuth(req)){
+    ESP_LOGE(TAG, "HTTP Authorization failed!");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Connection", "keep-alive");
+    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
+    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
+    return ESP_FAIL;
+  }
   httpd_resp_send(req, "Starting AP mode...", HTTPD_RESP_USE_STRLEN);
   vTaskDelay(pdMS_TO_TICKS(1000));
   homeSpan.processSerialCommand("A");
@@ -887,6 +993,14 @@ esp_err_t WebServerManager::handleWebSocket(httpd_req_t *req) {
 
   // Handle WebSocket handshake
   if (req->method == HTTP_GET) {
+    if(!instance->basicAuth(req)){
+      ESP_LOGE(TAG, "HTTP Authorization failed!");
+      httpd_resp_set_type(req, "application/json");
+      httpd_resp_set_hdr(req, "Connection", "keep-alive");
+      httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
+      httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
+      return ESP_FAIL;
+    }
     int sockfd = httpd_req_to_sockfd(req);
     instance->addWebSocketClient(sockfd);
     ESP_LOGI(TAG, "WebSocket client connected: fd=%d", sockfd);
@@ -1476,6 +1590,14 @@ void WebServerManager::cleanupOTAAsync() {
 
 esp_err_t WebServerManager::handleOTAUpload(httpd_req_t *req) {
   WebServerManager *instance = static_cast<WebServerManager *>(req->user_ctx);
+  if(!instance->basicAuth(req)){
+    ESP_LOGE(TAG, "HTTP Authorization failed!");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Connection", "keep-alive");
+    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
+    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
+    return ESP_FAIL;
+  }
   if (!instance->m_otaWorkerHandle)
     instance->initializeOTAWorker();
   return queueOTARequest(req);
@@ -1525,6 +1647,14 @@ void WebServerManager::broadcastOTAStatus() {
 
 esp_err_t WebServerManager::handleCertificateUpload(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
+  if(!instance->basicAuth(req)){
+    ESP_LOGE(TAG, "HTTP Authorization failed!");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Connection", "keep-alive");
+    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
+    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
+    return ESP_FAIL;
+  }
   if (!instance) {
     httpd_resp_send_500(req);
     return ESP_FAIL;
@@ -1613,6 +1743,14 @@ esp_err_t WebServerManager::handleCertificateUpload(httpd_req_t *req) {
 
 esp_err_t WebServerManager::handleCertificateStatus(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
+  if(!instance->basicAuth(req)){
+    ESP_LOGE(TAG, "HTTP Authorization failed!");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Connection", "keep-alive");
+    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
+    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
+    return ESP_FAIL;
+  }
   if (!instance) {
     httpd_resp_send_500(req);
     return ESP_FAIL;
@@ -1655,6 +1793,14 @@ esp_err_t WebServerManager::handleCertificateStatus(httpd_req_t *req) {
 
 esp_err_t WebServerManager::handleCertificateDelete(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
+  if(!instance->basicAuth(req)){
+    ESP_LOGE(TAG, "HTTP Authorization failed!");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Connection", "keep-alive");
+    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
+    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
+    return ESP_FAIL;
+  }
   if (!instance) {
     httpd_resp_send_500(req);
     return ESP_FAIL;
