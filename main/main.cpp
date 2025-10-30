@@ -31,12 +31,14 @@ PN532 *nfc;
 QueueHandle_t gpio_led_handle = nullptr;
 QueueHandle_t neopixel_handle = nullptr;
 QueueHandle_t gpio_lock_handle = nullptr;
+QueueHandle_t buzzer_handle = nullptr;
 TaskHandle_t gpio_led_task_handle = nullptr;
 TaskHandle_t neopixel_task_handle = nullptr;
 TaskHandle_t gpio_lock_task_handle = nullptr;
 TaskHandle_t alt_action_task_handle = nullptr;
 TaskHandle_t nfc_reconnect_task = nullptr;
 TaskHandle_t nfc_poll_task = nullptr;
+TaskHandle_t buzzer_task_handle = nullptr;
 
 nvs_handle savedData;
 readerData_t readerData;
@@ -225,6 +227,11 @@ namespace espConfig
     uint8_t nfcFailPin = NFC_FAIL_PIN;
     uint16_t nfcFailTime = NFC_FAIL_TIME;
     bool nfcFailHL = NFC_FAIL_HL;
+    uint8_t buzzerPin = 255;
+    uint16_t buzzerSuccessTime = 200;
+    uint16_t buzzerFailTime = 500;
+    uint16_t buzzerSuccessFreq = 2000;
+    uint16_t buzzerFailFreq = 500;
     uint8_t gpioActionPin = GPIO_ACTION_PIN;
     bool gpioActionLockState = GPIO_ACTION_LOCK_STATE;
     bool gpioActionUnlockState = GPIO_ACTION_UNLOCK_STATE;
@@ -257,6 +264,7 @@ namespace espConfig
         nfcSuccessPin, nfcSuccessTime, nfcNeopixelPin, neoPixelType,
         neopixelSuccessColor, neopixelFailureColor, neopixelSuccessTime,
         neopixelFailTime, nfcSuccessHL, nfcFailPin, nfcFailTime, nfcFailHL,
+        buzzerPin, buzzerSuccessTime, buzzerFailTime, buzzerSuccessFreq, buzzerFailFreq,
         gpioActionPin, gpioActionLockState, gpioActionUnlockState,
         gpioActionMomentaryEnabled, gpioActionMomentaryTimeout, webAuthEnabled,
         webUsername, webPassword, nfcGpioPins, btrLowStatusThreshold,
@@ -495,6 +503,51 @@ void neopixel_task(void* arg) {
         default:
           vTaskDelete(NULL);
           return;
+          break;
+        }
+      }
+    }
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+  }
+}
+
+struct BuzzerAction {
+  uint8_t type;  // 0=失败, 1=成功, 2=停止任务
+  uint16_t frequency;
+  uint16_t duration;
+};
+
+void buzzer_task(void* arg) {
+  BuzzerAction action;
+  while (1) {
+    if (buzzer_handle != nullptr) {
+      action = {};
+      if (uxQueueMessagesWaiting(buzzer_handle) > 0) {
+        xQueueReceive(buzzer_handle, &action, 0);
+        LOG(D, "Got buzzer action - type=%d freq=%d duration=%d", action.type, action.frequency, action.duration);
+        
+        switch (action.type) {
+        case 0: // 失败
+        case 1: // 成功
+          if (espConfig::miscConfig.buzzerPin != 255) {
+            LOG(D, "BUZZER %s: Pin=%d Freq=%dHz Duration=%dms", 
+                action.type ? "SUCCESS" : "FAIL", 
+                espConfig::miscConfig.buzzerPin, action.frequency, action.duration);
+            
+            // 生成指定频率的蜂鸣声
+            ledcSetup(0, action.frequency, 8);
+            ledcAttachPin(espConfig::miscConfig.buzzerPin, 0);
+            ledcWrite(0, 128); // 50% duty cycle
+            delay(action.duration);
+            ledcWrite(0, 0); // Turn off
+            ledcDetachPin(espConfig::miscConfig.buzzerPin);
+          }
+          break;
+        case 2: // 停止任务
+          LOG(I, "BUZZER STOP");
+          vTaskDelete(NULL);
+          return;
+        default:
           break;
         }
       }
@@ -1324,6 +1377,17 @@ void setupWeb() {
           }
         } else if (it.key() == std::string("hkDumbSwitchMode") && gpio_lock_task_handle == nullptr) {
           xTaskCreate(gpio_task, "gpio_task", 4096, NULL, 2, &gpio_lock_task_handle);
+        } else if (it.key() == std::string("buzzerPin")) {
+          if (espConfig::miscConfig.buzzerPin == 255 && it.value() != 255 && buzzer_task_handle == nullptr) {
+            pinMode(it.value(), OUTPUT);
+            xTaskCreate(buzzer_task, "buzzer_task", 4096, NULL, 2, &buzzer_task_handle);
+          } else if (espConfig::miscConfig.buzzerPin != 255 && it.value() == 255 && buzzer_task_handle != nullptr) {
+            BuzzerAction buzzerAction = {2, 0, 0};
+            xQueueSend(buzzer_handle, &buzzerAction, 0);
+            buzzer_task_handle = nullptr;
+          } else if (it.value() != 255) {
+            pinMode(it.value(), OUTPUT);
+          }
         }
         configData.at(it.key()) = it.value();
       }
@@ -1555,6 +1619,10 @@ void nfc_thread_entry(void* arg) {
           if (espConfig::miscConfig.nfcNeopixelPin != 255) {
             xQueueSend(neopixel_handle, &status, 0);
           }
+          if (espConfig::miscConfig.buzzerPin != 255) {
+            BuzzerAction buzzerAction = {1, espConfig::miscConfig.buzzerSuccessFreq, espConfig::miscConfig.buzzerSuccessTime};
+            xQueueSend(buzzer_handle, &buzzerAction, 0);
+          }
           if ((espConfig::miscConfig.gpioActionPin != 255 && espConfig::miscConfig.hkGpioControlledState) || espConfig::miscConfig.hkDumbSwitchMode) {
             const gpioLockAction action{ .source = gpioLockAction::HOMEKEY, .action = 0 };
             xQueueSend(gpio_lock_handle, &action, 0);
@@ -1612,6 +1680,10 @@ void nfc_thread_entry(void* arg) {
           if (espConfig::miscConfig.nfcNeopixelPin != 255) {
             xQueueSend(neopixel_handle, &status, 0);
           }
+          if (espConfig::miscConfig.buzzerPin != 255) {
+            BuzzerAction buzzerAction = {0, espConfig::miscConfig.buzzerFailFreq, espConfig::miscConfig.buzzerFailTime};
+            xQueueSend(buzzer_handle, &buzzerAction, 0);
+          }
           LOG(W, "We got status FlowFailed, mqtt untouched!");
         }
         nfc->setRFField(0x02, 0x01);
@@ -1623,6 +1695,10 @@ void nfc_thread_entry(void* arg) {
         }
         if (espConfig::miscConfig.nfcNeopixelPin != 255) {
           xQueueSend(neopixel_handle, &status, 0);
+        }
+        if (espConfig::miscConfig.buzzerPin != 255) {
+          BuzzerAction buzzerAction = {0, espConfig::miscConfig.buzzerFailFreq, espConfig::miscConfig.buzzerFailTime};
+          xQueueSend(buzzer_handle, &buzzerAction, 0);
         }
         json payload;
         payload["atqa"] = hex_representation(std::vector<uint8_t>(atqa, atqa + 2));
@@ -1688,6 +1764,7 @@ void setup() {
   gpio_led_handle = xQueueCreate(2, sizeof(uint8_t));
   neopixel_handle = xQueueCreate(2, sizeof(uint8_t));
   gpio_lock_handle = xQueueCreate(2, sizeof(gpioLockAction));
+  buzzer_handle = xQueueCreate(2, sizeof(BuzzerAction));
   size_t len;
   const char* TAG = "SETUP";
   nvs_open("SAVED_DATA", NVS_READWRITE, &savedData);
@@ -1758,6 +1835,10 @@ void setup() {
   if (espConfig::miscConfig.nfcFailPin && espConfig::miscConfig.nfcFailPin != 255) {
     pinMode(espConfig::miscConfig.nfcFailPin, OUTPUT);
     digitalWrite(espConfig::miscConfig.nfcFailPin, !espConfig::miscConfig.nfcFailHL);
+  }
+  if (espConfig::miscConfig.buzzerPin != 255) {
+    pinMode(espConfig::miscConfig.buzzerPin, OUTPUT);
+    digitalWrite(espConfig::miscConfig.buzzerPin, LOW);
   }
   if (espConfig::miscConfig.gpioActionPin && espConfig::miscConfig.gpioActionPin != 255) {
     pinMode(espConfig::miscConfig.gpioActionPin, OUTPUT);
@@ -1876,6 +1957,9 @@ void setup() {
   }
   if (espConfig::miscConfig.nfcSuccessPin != 255 || espConfig::miscConfig.nfcFailPin != 255) {
     xTaskCreate(nfc_gpio_task, "nfc_gpio_task", 4096, NULL, 2, &gpio_led_task_handle);
+  }
+  if (espConfig::miscConfig.buzzerPin != 255) {
+    xTaskCreate(buzzer_task, "buzzer_task", 4096, NULL, 2, &buzzer_task_handle);
   }
   if (espConfig::miscConfig.gpioActionPin != 255 || espConfig::miscConfig.hkDumbSwitchMode) {
     xTaskCreate(gpio_task, "gpio_task", 4096, NULL, 2, &gpio_lock_task_handle);

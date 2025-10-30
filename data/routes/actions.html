@@ -12,6 +12,8 @@
             onclick="switchTab(this)" data-tab-index="0">Neopixel</p>
           <p class="tab-btn" onclick="switchTab(this)"
             data-tab-index="1">Simple GPIO</p>
+          <p class="tab-btn" onclick="switchTab(this)"
+            data-tab-index="2">Buzzer</p>
         </div>
         <span style="height: 1px;border-top: 1px #424242 solid;display: block;margin: 0;padding: 0;"></span>
       </div>
@@ -149,6 +151,55 @@
                   <option value="0">LOW</option>
                   <option value="1">HIGH</option>
                 </select>
+              </div>
+            </div>
+          </fieldset>
+        </div>
+      </div>
+      <div class="nfc-triggers-hidden-body" data-nfc-triggers-body="2">
+        <div>
+          <h5 style="margin-top: 0;margin-bottom: .5rem;">! Buzzer provides audio feedback for authentication results</h5>
+          <h5 style="margin-block: 0;">! Different frequencies and durations for success and failure</h5>
+        </div>
+        <div style="display: flex;flex-wrap: wrap;justify-content: space-between;gap: 10px;">
+          <fieldset>
+            <legend>Buzzer Configuration</legend>
+            <div class="flex-sm flex-col-lg flex-end-sm">
+              <div class="around-sm" style="display: flex;gap: 16px;flex: 2;align-items: flex-end">
+                <div style="display: flex;flex-direction: column;">
+                  <label for="buzzerPin">GPIO Pin</label>
+                  <input type="number" name="buzzerPin" id="buzzerPin" placeholder="255" required min="0" max="255">
+                </div>
+              </div>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Success Sound</legend>
+            <div class="flex-sm flex-col-lg flex-end-sm">
+              <div class="around-sm" style="display: flex;gap: 16px;flex: 2;align-items: flex-end">
+                <div style="display: flex;flex-direction: column;">
+                  <label for="buzzerSuccessFreq">Frequency (Hz)</label>
+                  <input type="number" name="buzzerSuccessFreq" id="buzzerSuccessFreq" placeholder="2000" required min="100" max="5000">
+                </div>
+                <div style="display: flex;flex-direction: column;">
+                  <label for="buzzerSuccessTime">Duration (ms)</label>
+                  <input type="number" name="buzzerSuccessTime" id="buzzerSuccessTime" placeholder="200" required min="50" max="2000">
+                </div>
+              </div>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Failure Sound</legend>
+            <div class="flex-sm flex-col-lg flex-end-sm">
+              <div class="around-sm" style="display: flex;gap: 16px;flex: 2;align-items: flex-end">
+                <div style="display: flex;flex-direction: column;">
+                  <label for="buzzerFailFreq">Frequency (Hz)</label>
+                  <input type="number" name="buzzerFailFreq" id="buzzerFailFreq" placeholder="500" required min="100" max="5000">
+                </div>
+                <div style="display: flex;flex-direction: column;">
+                  <label for="buzzerFailTime">Duration (ms)</label>
+                  <input type="number" name="buzzerFailTime" id="buzzerFailTime" placeholder="500" required min="50" max="2000">
+                </div>
               </div>
             </div>
           </fieldset>
