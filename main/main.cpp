@@ -22,6 +22,7 @@
 #include "NFC_SERV_CHARS.h"
 #include <mbedtls/sha256.h>
 #include <esp_mac.h>
+#include "driver/ledc.h"
 
 const char* TAG = "MAIN";
 
@@ -535,12 +536,27 @@ void buzzer_task(void* arg) {
                 espConfig::miscConfig.buzzerPin, action.frequency, action.duration);
             
             // 生成指定频率的蜂鸣声
-            ledcSetup(0, action.frequency, 8);
-            ledcAttachPin(espConfig::miscConfig.buzzerPin, 0);
-            ledcWrite(0, 128); // 50% duty cycle
+            ledc_timer_config_t timer_config = {
+              .speed_mode = LEDC_LOW_SPEED_MODE,
+              .duty_resolution = LEDC_TIMER_8_BIT,
+              .timer_num = LEDC_TIMER_0,
+              .freq_hz = action.frequency,
+              .clk_cfg = LEDC_AUTO_CLK
+            };
+            ledc_timer_config(&timer_config);
+            
+            ledc_channel_config_t channel_config = {
+              .gpio_num = espConfig::miscConfig.buzzerPin,
+              .speed_mode = LEDC_LOW_SPEED_MODE,
+              .channel = LEDC_CHANNEL_0,
+              .timer_sel = LEDC_TIMER_0,
+              .duty = 128, // 50% duty cycle
+              .hpoint = 0
+            };
+            ledc_channel_config(&channel_config);
+            
             delay(action.duration);
-            ledcWrite(0, 0); // Turn off
-            ledcDetachPin(espConfig::miscConfig.buzzerPin);
+            ledc_stop(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0, 0);
           }
           break;
         case 2: // 停止任务
