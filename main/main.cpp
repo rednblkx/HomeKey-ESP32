@@ -1399,7 +1399,10 @@ void setupWeb() {
             xTaskCreate(buzzer_task, "buzzer_task", 4096, NULL, 2, &buzzer_task_handle);
           } else if (espConfig::miscConfig.buzzerPin != 255 && it.value() == 255 && buzzer_task_handle != nullptr) {
             BuzzerAction buzzerAction = {2, 0, 0};
-            xQueueSend(buzzer_handle, &buzzerAction, 0);
+            if (xQueueSend(buzzer_handle, &buzzerAction, pdMS_TO_TICKS(100)) != pdPASS) {
+                xQueueReset(buzzer_handle);
+                xQueueSend(buzzer_handle, &buzzerAction, portMAX_DELAY);
+             }
             buzzer_task_handle = nullptr;
           } else if (it.value() != 255) {
             pinMode(it.value(), OUTPUT);
