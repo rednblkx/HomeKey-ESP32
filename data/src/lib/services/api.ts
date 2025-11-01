@@ -1,6 +1,74 @@
 import type { CertificatesStatus, CertificateType, MqttConfig, MiscConfig, ApiResponse, ActionsConfig, ApiError, ApiSuccess } from '../types/api';
 import { notifications } from '../stores/notifications.svelte.js';
 
+export async function rebootDevice() {
+  try {
+    const response = await fetch(`/reboot_device`, {
+      method: 'POST'
+    });
+
+    if (!response.ok) {
+      notifications.addError(`Request Failed`);
+    }
+    const result : ApiSuccess = await response.json();
+    notifications.addSuccess(result.message);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    notifications.addError(`Failed to send request: ${message}`);
+  }
+}
+
+export async function resetPairings() {
+  try {
+    const response = await fetch(`/reset_hk_pair`, {
+      method: 'GET'
+    });
+
+    if (!response.ok) {
+      notifications.addError(`Request Failed`);
+    }
+    const result : ApiSuccess = await response.json();
+    notifications.addSuccess(result.message);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    notifications.addError(`Failed to send request: ${message}`);
+  }
+}
+
+export async function resetWifi() {
+  try {
+    const response = await fetch("/reset_wifi_cred", {
+      method: 'GET'
+    });
+
+    if (!response.ok) {
+      notifications.addError(`Request Failed`);
+    }
+    const result : ApiSuccess = await response.json();
+    notifications.addSuccess(result.message);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    notifications.addError(`Failed to send request: ${message}`);
+  }
+}
+
+export async function startConfigAP() {
+  try {
+    const response = await fetch("/start_config_ap", {
+      method: 'GET'
+    });
+
+    if (!response.ok) {
+      notifications.addError(`Request Failed`);
+    }
+    const result : ApiSuccess = await response.json();
+    notifications.addSuccess(result.message);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    notifications.addError(`Failed to send request: ${message}`);
+  }
+}
+
 export async function saveConfig<T = MqttConfig | MiscConfig | ActionsConfig>(type: string, data: T): Promise<ApiResponse<T>> {
   try {
     const response = await fetch(`/config/save?type=${type}`, {

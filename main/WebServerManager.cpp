@@ -903,7 +903,7 @@ esp_err_t WebServerManager::handleClearConfig(httpd_req_t *req) {
 esp_err_t WebServerManager::handleReboot(httpd_req_t *req) {
   httpd_resp_set_type(req, "application/json");
   httpd_resp_sendstr(req,
-                     "{\"status\":\"success\",\"message\":\"Rebooting...\"}");
+                     "{\"success\":\"true\",\"message\":\"Rebooting...\"}");
   vTaskDelay(pdMS_TO_TICKS(1000));
   esp_restart();
   return ESP_OK;
