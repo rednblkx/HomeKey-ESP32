@@ -13,6 +13,7 @@
 #include "esp_heap_caps.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
+#include "esp_log_level.h"
 #include "esp_task_wdt.h"
 #include "eth_structs.hpp"
 #include "eventStructs.hpp"
@@ -1215,6 +1216,12 @@ esp_err_t WebServerManager::handleWebSocketMessage(httpd_req_t *req,
     response = getDeviceInfo();
   } else if (msg_type == "ota_status") {
     response = getOTAStatus();
+  } else if (msg_type == "set_log_level") {  
+    cJSON *level_item = cJSON_GetObjectItem(json, "data");
+    if(level_item && cJSON_IsNumber(level_item)) {
+      esp_log_level_t level = esp_log_level_t(level_item->valueint > 0 && level_item->valueint < 6 ? level_item->valueint : ESP_LOG_WARN);
+      esp_log_level_set("*", level);
+    }
   } else {
     cJSON *unknown = cJSON_CreateObject();
     cJSON_AddStringToObject(unknown, "type", "error");
@@ -1253,6 +1260,7 @@ std::string WebServerManager::getDeviceInfo() {
       info, "eth_enabled",
       m_configManager.getConfig<espConfig::misc_config_t>().ethernetEnabled);
   cJSON_AddStringToObject(info, "wifi_ssid", WiFi.SSID().c_str());
+  cJSON_AddNumberToObject(info, "log_level", esp_log_level_get("*"));
   return cjson_to_string_and_free(info);
 }
 

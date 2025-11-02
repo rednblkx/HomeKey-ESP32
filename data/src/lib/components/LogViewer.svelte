@@ -2,6 +2,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import type { LogEntry, LogLevel, LogMessage } from '$lib/types/api';
 	import ws from '$lib/services/ws.js';
+    import { systemInfo } from '$lib/stores/system.svelte';
 
 	const LOG_LEVELS = ['ERROR', 'WARN', 'INFO', 'DEBUG'] as const;
 	type UsedLogLevel = typeof LOG_LEVELS[number];
@@ -25,7 +26,7 @@
 	let touchStartY = $state(0);
 	let touchEndY = $state(0);
 	let isScrolling = $state(false);
-
+  let sys_log_level = $derived(systemInfo.log_level);
 	const SCROLL_EDGE_MARGIN = 16;
 	const SMOOTH_SCROLL_DURATION = 300;
 
@@ -344,7 +345,7 @@
 				<!-- Log Level Filter -->
 				<div class="form-control">
 					<div class="flex items-center gap-2" role="group" aria-label="Log level filters">
-							<span class="label-text mr-2">Levels:</span>
+            <span class="label-text mr-2">Filter levels:</span>
 						{#each LOG_LEVELS as level}
 							<button onclick={() => toggleLogLevel(level)}
 								class="btn btn-xs" class:btn-accent={logLevels[level]} class:btn-outline={!logLevels[level]} aria-pressed={logLevels[level]}>
@@ -353,6 +354,17 @@
 						{/each}
 					</div>
 				</div>
+        <div class="form-control"> 
+					<div class="flex items-center gap-2" role="group" aria-label="Log level filters">
+            <span class="label-text mr-2">Log Level: </span>
+            <select class="select" value={String(sys_log_level)} onchange={(e) => {ws.send({"type": "set_log_level", "data": Number((e.target as HTMLSelectElement).value)})}}>
+              <option value="1">ERROR</option>
+              <option value="2">WARNING</option>
+              <option value="3">INFO</option>
+              <option value="4">DEBUG</option>
+            </select>
+					</div>
+        </div>
 			</div>
 
 			<div class="flex items-center gap-2 flex-wrap">
