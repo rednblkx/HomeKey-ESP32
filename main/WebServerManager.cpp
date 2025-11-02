@@ -1783,6 +1783,9 @@ esp_err_t WebServerManager::handleCertificateStatus(httpd_req_t *req) {
         cJSON_AddStringToObject(expiration, "to", cert.expiration.to.c_str());
         cJSON_AddItemToObject(certInfo, "expiration", expiration);
       }
+      if(cert.type == "client"){
+        cJSON_AddBoolToObject(certInfo, "keyMatchesCert", cert.keyMatchesCert);
+      }
     } else if (cert.type == "privateKey") {
       cJSON_AddBoolToObject(certInfo, "exists", true);
     }

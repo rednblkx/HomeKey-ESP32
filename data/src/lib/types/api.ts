@@ -296,7 +296,7 @@ export interface CertificatesStatus {
       to: string
     };
     /** Whether the private key matches this certificate */
-    keyMatches?: boolean;
+    keyMatchesCert?: boolean;
   };
   /** Private key status */
   privateKey?: {

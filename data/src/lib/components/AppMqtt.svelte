@@ -360,7 +360,7 @@
                       <div class="space-y-6">
                         <div class="form-control">
                           <label class="label cursor-pointer">
-                            <span class="label-text">Skip server cert validation</span
+                            <span class="label-text">Skip cert CN validation</span
                             >
                             <input
                               type="checkbox"
@@ -443,6 +443,9 @@
                                   >
                                 {/if}
                               </div>
+                              {#if !certificateStatus?.client?.keyMatchesCert && certificateStatus?.privateKey?.exists}
+                                <span class="text-sm font-medium text-error">Private Key doesn't match the certificate public key</span>
+                              {/if}
                             </div>
 
                             <!-- Private Key -->
