@@ -446,6 +446,9 @@
                               {#if !certificateStatus?.client?.keyMatchesCert && certificateStatus?.privateKey?.exists}
                                 <span class="text-sm font-medium text-error">Private Key doesn't match the certificate public key</span>
                               {/if}
+                              {#if certificateStatus?.ca && certificateStatus.ca.subject != certificateStatus.client?.issuer }
+                                <span class="text-sm font-medium text-error">Certificate Issuer doesn't match the CA certificate</span>
+                              {/if}
                             </div>
 
                             <!-- Private Key -->

@@ -57,15 +57,6 @@
 		return then.toLocaleDateString();
 	}
 
-	async function copyLog(log: LogEntry): Promise<void> {
-		const logText = `[${log.localts}] [${log.level}] ${log.msg}`;
-		try {
-			await navigator.clipboard.writeText(logText);
-		} catch (err) {
-			console.error('Failed to copy log:', err);
-		}
-	}
-
 	/**
 	 * Clears all logs from the display.
 	 */
@@ -430,10 +421,6 @@
 							<div class="flex flex-col p-4">
 								<p class="font-mono text-xs wrap-anywhere text-wrap break-all"><strong>Device Timestamp:</strong> {item.ts}</p>
 								<div class="mt-2 text-xs whitespace-pre-wrap break-all">{item.msg}</div>
-								<button onclick={() => copyLog(item)} class="btn btn-xs btn-soft btn-secondary mt-2"
-									aria-label="Copy log message">
-									📋
-								</button>
 							</div>
 						</div>
 					</div>
