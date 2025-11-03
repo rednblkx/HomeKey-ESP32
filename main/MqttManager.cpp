@@ -92,9 +92,6 @@ MqttManager::~MqttManager() {
  * @return true if the MQTT client was started, false if startup was skipped because the broker host was not configured.
  */
 bool MqttManager::begin(std::string deviceID) {
-    ESP_LOGI(TAG, "Initializing...");
-
-    // Do not start if the broker configuration is invalid or default
     if (m_mqttConfig.mqttBroker.empty() || m_mqttConfig.mqttBroker == "0.0.0.0") {
         ESP_LOGW(TAG, "MQTT broker host is not configured. MQTT client will not start.");
         return false;
@@ -106,7 +103,6 @@ bool MqttManager::begin(std::string deviceID) {
     mqtt_cfg.broker.address.hostname = m_mqttConfig.mqttBroker.c_str();
     mqtt_cfg.broker.address.port = m_mqttConfig.mqttPort;
     
-    // Configure SSL/TLS if enabled
     if (m_mqttConfig.useSSL) {
         ESP_LOGI(TAG, "SSL/TLS is enabled for MQTT connection");
         mqtt_cfg.broker.address.transport = MQTT_TRANSPORT_OVER_SSL;
@@ -206,23 +202,16 @@ void MqttManager::mqttEventHandler(void* handler_args, esp_event_base_t base, in
 void MqttManager::onMqttEvent(esp_event_base_t base, int32_t event_id, void* event_data) {
     esp_mqtt_event_handle_t event = (esp_mqtt_event_handle_t)event_data;
 
-    // Log all events with timestamps for monitoring
     ESP_LOGD(TAG, "MQTT Event received: %d", event->event_id);
 
     switch (event->event_id) {
         case MQTT_EVENT_CONNECTED:
             ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED: Connection established successfully");
-            if (m_mqttConfig.useSSL) {
-                ESP_LOGI(TAG, "TLS connection state: SECURE - SSL/TLS handshake completed");
-            } else {
-                ESP_LOGI(TAG, "Connection state: UNSECURE - TCP connection established");
-            }
             onConnected();
             break;
         case MQTT_EVENT_DISCONNECTED:
             ESP_LOGW(TAG, "MQTT_EVENT_DISCONNECTED: Client disconnected from broker");
-            // Stop health checks when disconnected
-            ESP_LOGI(TAG, "Connection health monitoring: DISABLED - Connection lost");
+            m_isConnected = false;
             break;
         case MQTT_EVENT_SUBSCRIBED:
             ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED: Successfully subscribed to topic (msg_id=%d)", event->msg_id);
@@ -243,9 +232,6 @@ void MqttManager::onMqttEvent(esp_event_base_t base, int32_t event_id, void* eve
         case MQTT_EVENT_BEFORE_CONNECT:
             ESP_LOGI(TAG, "MQTT_EVENT_BEFORE_CONNECT: Initiating connection attempt to %s:%d",
                      m_mqttConfig.mqttBroker.c_str(), m_mqttConfig.mqttPort);
-            if (m_mqttConfig.useSSL) {
-                ESP_LOGI(TAG, "TLS handshake state: INITIATING - Starting SSL/TLS connection process");
-            }
             break;
         case MQTT_EVENT_ERROR:
             ESP_LOGE(TAG, "MQTT_EVENT_ERROR: Connection or protocol error occurred");
@@ -255,8 +241,6 @@ void MqttManager::onMqttEvent(esp_event_base_t base, int32_t event_id, void* eve
                 // Categorize and handle different error types with detailed logging
                 switch (event->error_handle->error_type) {
                     case MQTT_ERROR_TYPE_TCP_TRANSPORT:
-                        ESP_LOGE(TAG, "TCP transport error - network connectivity issue");
-                        ESP_LOGE(TAG, "Troubleshooting: Check network connection, broker availability, and firewall settings");
                         if (event->error_handle->esp_transport_sock_errno != 0) {
                             ESP_LOGE(TAG, "Transport socket error: errno=%d (%s)",
                                      event->error_handle->esp_transport_sock_errno,
@@ -265,29 +249,23 @@ void MqttManager::onMqttEvent(esp_event_base_t base, int32_t event_id, void* eve
                         break;
                     case MQTT_ERROR_TYPE_CONNECTION_REFUSED:
                         ESP_LOGE(TAG, "Connection refused - broker may be down or rejecting connection");
-                        ESP_LOGE(TAG, "Troubleshooting: Verify broker address/port, check broker logs, ensure client credentials are correct");
                         break;
                     case MQTT_ERROR_TYPE_SUBSCRIBE_FAILED:
                         ESP_LOGE(TAG, "Subscribe failed - check topic permissions");
-                        ESP_LOGE(TAG, "Troubleshooting: Verify MQTT client has permission to subscribe to configured topics");
                         break;
                     default:
                         ESP_LOGE(TAG, "Unknown MQTT error type: %d", event->error_handle->error_type);
                         break;
                 }
 
-                // Log SSL/TLS specific errors if available
                 if (event->error_handle->esp_tls_last_esp_err != 0) {
                     logSSLError("MQTT SSL/TLS connection", event->error_handle->esp_tls_last_esp_err);
-                    ESP_LOGI(TAG, "TLS handshake state: FAILED - SSL/TLS error occurred");
                 }
 
                 if (event->error_handle->esp_tls_stack_err != 0) {
                     ESP_LOGE(TAG, "TLS stack error: 0x%x", event->error_handle->esp_tls_stack_err);
-                    ESP_LOGE(TAG, "Troubleshooting: Check SSL/TLS configuration, certificates, and cipher suites");
                 }
 
-                // Log connection attempt details
                 ESP_LOGI(TAG, "Connection attempt details: broker=%s:%d, client_id=%s, ssl=%s",
                          m_mqttConfig.mqttBroker.c_str(), m_mqttConfig.mqttPort,
                          m_mqttConfig.mqttClientId.c_str(), m_mqttConfig.useSSL ? "enabled" : "disabled");
@@ -309,17 +287,10 @@ void MqttManager::onMqttEvent(esp_event_base_t base, int32_t event_id, void* eve
  * The retained presence message is published to the configured LWT topic with QoS 1. Subscriptions include lock state/command topics and the battery level command topic; the custom lock state command topic is subscribed only when custom states are enabled. If Home Assistant discovery is enabled in configuration, discovery payloads are published.
  */
 void MqttManager::onConnected() {
-    ESP_LOGI(TAG, "MQTT client connected%s", m_mqttConfig.useSSL ? " with SSL/TLS encryption" : "");
-
     m_isConnected = true;
-
-    if (m_mqttConfig.useSSL) {
-        ESP_LOGI(TAG, "SSL/TLS connection established successfully");
-    }
 
     publish(m_mqttConfig.lwtTopic, "online", 1, true);
 
-    ESP_LOGI(TAG, "Subscribing to command topics...");
     esp_mqtt_client_subscribe(m_client, m_mqttConfig.lockStateCmd.c_str(), 0);
     esp_mqtt_client_subscribe(m_client, m_mqttConfig.lockCStateCmd.c_str(), 0);
     esp_mqtt_client_subscribe(m_client, m_mqttConfig.lockTStateCmd.c_str(), 0);
@@ -608,47 +579,27 @@ void MqttManager::publishHassDiscovery() {
  * @return true if SSL configuration was successful, false otherwise
  */
 bool MqttManager::configureSSL(esp_mqtt_client_config_t& mqtt_cfg) {
-    ESP_LOGI(TAG, "Configuring SSL/TLS for MQTT connection...");
-    ESP_LOGI(TAG, "TLS handshake state: CONFIGURING - Setting up SSL/TLS parameters");
-
-    // Configure TLS settings
-    mqtt_cfg.broker.verification.use_global_ca_store = false;
-
     if (!m_mqttSslConfig->caCert.empty()) {
         mqtt_cfg.broker.verification.certificate = m_mqttSslConfig->caCert.c_str();
-        mqtt_cfg.broker.verification.certificate_len = m_mqttSslConfig->caCert.length() + 1;
         mqtt_cfg.broker.verification.skip_cert_common_name_check = m_mqttConfig.allowInsecure;
-        ESP_LOGI(TAG, "Server certificate validation: ENABLED - CA certificate configured");
         ESP_LOGI(TAG, "Certificate validation mode: %s", m_mqttConfig.allowInsecure ? "SKIP_COMMON_NAME" : "FULL_VALIDATION");
-        ESP_LOGI(TAG, "TLS handshake state: CERTIFICATES_LOADED - CA certificate ready for validation");
     } else if (m_mqttConfig.allowInsecure) {
-        // When allowInsecure is true and no CA cert provided, skip certificate verification entirely
         ESP_LOGW(TAG, "Server certificate validation: DISABLED - No CA certificate provided (allowInsecure=true)");
-        ESP_LOGW(TAG, "Security warning: Server certificate will not be validated - connection is vulnerable to MITM attacks");
-        ESP_LOGI(TAG, "TLS handshake state: INSECURE_MODE - Certificate validation disabled");
     } else {
-        // When allowInsecure is false and no CA cert provided, fail with clear error
         ESP_LOGE(TAG, "Server certificate validation: FAILED - No CA certificate provided and allowInsecure is false");
-        ESP_LOGE(TAG, "Cannot establish secure connection without certificate validation");
-        ESP_LOGI(TAG, "TLS handshake state: ABORTED - Certificate validation requirements not met");
         return false;
     }
 
     if (!m_mqttSslConfig->clientCert.empty() && !m_mqttSslConfig->clientKey.empty()) {
         mqtt_cfg.credentials.authentication.certificate = m_mqttSslConfig->clientCert.c_str();
-        mqtt_cfg.credentials.authentication.certificate_len = m_mqttSslConfig->clientCert.length() + 1;
         mqtt_cfg.credentials.authentication.key = m_mqttSslConfig->clientKey.c_str();
-        mqtt_cfg.credentials.authentication.key_len = m_mqttSslConfig->clientKey.length() + 1;
-        ESP_LOGI(TAG, "Client authentication: ENABLED - Mutual TLS configured");
-        ESP_LOGI(TAG, "TLS handshake state: MUTUAL_AUTH_READY - Client certificate and key configured");
+        ESP_LOGI(TAG, "TLS authentication configured");
     } else {
-        ESP_LOGI(TAG, "Client authentication: DISABLED - No client certificate configured");
-        ESP_LOGI(TAG, "TLS handshake state: SERVER_AUTH_ONLY - One-way TLS authentication");
+        ESP_LOGI(TAG, "No client certificate and/or private key configured");
+        return false;
     }
 
     m_sslConfigured = true;
-    ESP_LOGI(TAG, "SSL/TLS configuration completed successfully");
-    ESP_LOGI(TAG, "TLS handshake state: READY - Configuration complete, ready for connection attempt");
     return true;
 }
 
@@ -661,25 +612,18 @@ void MqttManager::logSSLError(const char* operation, esp_err_t error) {
         switch (error) {
             case ESP_FAIL:
                 ESP_LOGE(TAG, "SSL/TLS operation failed - general failure");
-                ESP_LOGE(TAG, "Troubleshooting: Check certificate validity, expiration dates, and chain completeness");
-                ESP_LOGE(TAG, "Troubleshooting: Verify server certificate matches hostname (unless allowInsecure=true)");
-                ESP_LOGE(TAG, "Troubleshooting: Ensure network connectivity and DNS resolution");
                 break;
             case ESP_ERR_INVALID_ARG:
                 ESP_LOGE(TAG, "Invalid SSL/TLS configuration argument");
-                ESP_LOGE(TAG, "Troubleshooting: Check certificate format (must be PEM), private key format, and configuration parameters");
                 break;
             case ESP_ERR_NO_MEM:
                 ESP_LOGE(TAG, "Insufficient memory for SSL/TLS operation");
-                ESP_LOGE(TAG, "Troubleshooting: Free up system memory or reduce certificate sizes");
                 break;
             case ESP_ERR_INVALID_STATE:
                 ESP_LOGE(TAG, "Invalid SSL/TLS state for operation");
-                ESP_LOGE(TAG, "Troubleshooting: Ensure SSL context is properly initialized before use");
                 break;
             case ESP_ERR_INVALID_SIZE:
                 ESP_LOGE(TAG, "Invalid size in SSL/TLS operation");
-                ESP_LOGE(TAG, "Troubleshooting: Check certificate/key buffer sizes and ensure data is not truncated");
                 break;
             default:
                 ESP_LOGE(TAG, "SSL/TLS error code: 0x%x", error);
