@@ -1208,7 +1208,7 @@ esp_err_t WebServerManager::handleWebSocketMessage(httpd_req_t *req,
   if (msg_type == "ping") {
     cJSON *pong = cJSON_CreateObject();
     cJSON_AddStringToObject(pong, "type", "pong");
-    cJSON_AddNumberToObject(pong, "timestamp", esp_timer_get_time() / 1000);
+    cJSON_AddNumberToObject(pong, "timestamp", static_cast<uint32_t>(esp_timer_get_time() / 1000));
     response = cjson_to_string_and_free(pong);
   } else if (msg_type == "metrics") {
     response = getDeviceMetrics();
@@ -1243,7 +1243,7 @@ esp_err_t WebServerManager::handleWebSocketMessage(httpd_req_t *req,
 std::string WebServerManager::getDeviceMetrics() {
   cJSON *status = cJSON_CreateObject();
   cJSON_AddStringToObject(status, "type", "metrics");
-  cJSON_AddNumberToObject(status, "uptime", esp_timer_get_time() / 1000000);
+  cJSON_AddNumberToObject(status, "uptime", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::duration<int64_t, std::micro>(esp_timer_get_time())).count());
   cJSON_AddNumberToObject(status, "free_heap", esp_get_free_heap_size());
   cJSON_AddNumberToObject(status, "wifi_rssi", WiFi.RSSI());
   return cjson_to_string_and_free(status);

@@ -237,7 +237,7 @@
 	let wsUnsubscribe = $state<(() => void) | null>(null);
 
 	let timeUpdateInterval = $state<NodeJS.Timeout>();
-
+  let logIdCounter = 0;
 	onMount(() => {
 		const savedLogLevels = localStorage.getItem('logviewer-levels');
 		if (savedLogLevels) {
@@ -264,7 +264,7 @@
 
 					if (messageData && (messageData.type === 'log' || messageData.level || messageData.msg)) {
 						const log : LogEntry = {
-							id: Date.now() + Math.floor(Math.random() * 1234),
+							id: Date.now() + logIdCounter++,
 							localts: new Date().toISOString(),
 							expanded: false,
 							...messageData
@@ -284,8 +284,9 @@
 							level: 'ERROR',
 							msg: `WebSocket message processing error: ${e instanceof Error ? e.message : String(e)}`,
 							tag: 'WS_ERROR',
-							ts: new Date().toISOString(),
-							id: Date.now() + Math.floor(Math.random() * 1234),
+							ts: 0,
+              uptime: 0,
+							id: Date.now() + logIdCounter++,
 							localts: new Date().toISOString(),
 							expanded: false,
 						});
@@ -419,7 +420,8 @@
 							style="overflow: hidden;"
 						>
 							<div class="flex flex-col p-4">
-								<p class="font-mono text-xs wrap-anywhere text-wrap break-all"><strong>Device Timestamp:</strong> {item.ts}</p>
+								<p class="font-mono text-xs wrap-anywhere text-wrap break-all"><strong>RTC Timestamp:</strong> {item.ts} ({new Date(new Date().getTime() - item.ts).toLocaleString()})</p>
+								<p class="font-mono text-xs wrap-anywhere text-wrap break-all"><strong>Boot Timestamp:</strong> {item.uptime} ({new Date(new Date().getTime() - item.uptime).toLocaleTimeString()})</p>
 								<div class="mt-2 text-xs whitespace-pre-wrap break-all">{item.msg}</div>
 							</div>
 						</div>

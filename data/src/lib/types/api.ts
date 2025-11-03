@@ -324,8 +324,10 @@ export type LogLevel = 'ERROR' | 'WARN' | 'INFO' | 'DEBUG' | 'VERBOSE' | 'NONE';
  * @type {LogMessage}
  */
 export interface LogMessage {
-  /** Unix timestamp in seconds or ISO string */
-  ts: number | string;
+  /** System Clock Timestamp */
+  ts: number;
+  /** Milliseconds since boot */
+  uptime: number;
   /** Message type identifier */
   type: 'log';
   /** Log severity level */

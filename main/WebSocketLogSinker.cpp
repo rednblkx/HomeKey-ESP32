@@ -1,7 +1,11 @@
 #include "WebSocketLogSinker.h"
 #include "WebServerManager.hpp"
 #include "cJSON.h"
+#include "esp_timer.h"
 #include <chrono>
+#include <cstdint>
+#include <ctime>
+#include <ratio>
 
 namespace loggable {
 
@@ -59,10 +63,8 @@ void WebSocketLogSinker::consume(const LogMessage& message) {
         return; // Failed to create JSON object
     }
     
-    auto timestamp = message.get_timestamp();
-    auto seconds = std::chrono::duration_cast<std::chrono::seconds>(timestamp.time_since_epoch()).count();
-
-    cJSON_AddNumberToObject(root, "ts", seconds);
+    cJSON_AddNumberToObject(root, "ts", std::chrono::duration_cast<std::chrono::milliseconds>(message.get_timestamp().time_since_epoch()).count());
+    cJSON_AddNumberToObject(root, "uptime", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::duration<int64_t, std::micro>(esp_timer_get_time())).count());
     cJSON_AddStringToObject(root, "type", "log");
     cJSON_AddStringToObject(root, "level", level_to_string(message.get_level()));
     cJSON_AddStringToObject(root, "tag", message.get_tag().c_str());
