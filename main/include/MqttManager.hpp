@@ -36,38 +36,36 @@ public:
     bool begin(std::string deviceID);
 
     /**
-     * @brief Publishes the current state of the lock.
-     * Called by the main application loop when a state change is detected.
-     * @param currentState The current physical state of the lock.
-     * @param targetState The intended state of the lock.
-     */
-    void publishLockState(int currentState, int targetState);
-
-    /**
-     * @brief Publishes a successful HomeKey authentication event.
-     * @param issuerId The ID of the authenticated issuer.
-     * @param endpointId The ID of the authenticated endpoint.
-     * @param readerId The ID of this reader device.
-     */
-    void publishHomeKeyTap(const std::vector<uint8_t>& issuerId, const std::vector<uint8_t>& endpointId, const std::vector<uint8_t>& readerId);
-
-    /**
-     * @brief Publishes a generic (non-HomeKey) NFC tag scan event.
-     * @param uid Pointer to the UID byte array.
-     * @param uidLen Length of the UID.
-     * @param atqa Pointer to the ATQA byte array (can be null).
-     * @param sak Pointer to the SAK byte array (can be null).
-     */
-    void publishUidTap(const std::vector<uint8_t>& uid, const std::vector<uint8_t> &atqa, const std::vector<uint8_t> &sak);
-
-    // --- Reconnection and Connection Status ---
-    /**
      * @brief Checks if the MQTT client is currently connected.
      * @return True if connected, false otherwise.
      */
     bool isConnected() const;
 
 private:
+    /**
+      * @brief Publishes the current state of the lock.
+      * Called by the main application loop when a state change is detected.
+      * @param currentState The current physical state of the lock.
+      * @param targetState The intended state of the lock.
+      */
+    void publishLockState(int currentState, int targetState);
+
+    /**
+      * @brief Publishes a successful HomeKey authentication event.
+      * @param issuerId The ID of the authenticated issuer.
+      * @param endpointId The ID of the authenticated endpoint.
+      * @param readerId The ID of this reader device.
+      */
+    void publishHomeKeyTap(const std::vector<uint8_t>& issuerId, const std::vector<uint8_t>& endpointId, const std::vector<uint8_t>& readerId);
+
+    /**
+      * @brief Publishes a generic (non-HomeKey) NFC tag scan event.
+      * @param uid Pointer to the UID byte array.
+      * @param uidLen Length of the UID.
+      * @param atqa Pointer to the ATQA byte array (can be null).
+      * @param sak Pointer to the SAK byte array (can be null).
+      */
+    void publishUidTap(const std::vector<uint8_t>& uid, const std::vector<uint8_t> &atqa, const std::vector<uint8_t> &sak);
     // --- Event Handling ---
     static void mqttEventHandler(void* handler_args, esp_event_base_t base, int32_t event_id, void* event_data);
     void onMqttEvent(esp_event_base_t base, int32_t event_id, void* event_data);
