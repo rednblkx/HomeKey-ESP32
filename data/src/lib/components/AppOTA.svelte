@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
-	import ws from '$lib/services/ws.js';
-    import type { OTAStatus } from '$lib/types/api';
+  import ws, { type WebSocketEvent } from '$lib/services/ws.js';
+  import type { Either, OTAStatus } from '$lib/types/api';
+  import { type WebSocketState } from '$lib/stores/websocket.svelte';
 
 	let firmwareFile = $state<File | null>(null);
 	let littlefsFile = $state<File | null>(null);
@@ -89,30 +90,26 @@
 			otaLogs = otaLogs.slice(0, 20);
 		}
 	}
-
-	function handleWebSocketMessage(evt: { type: string; state?: string; data: OTAStatus; }) {
+	function handleWebSocketMessage(evt: WebSocketEvent<Either<OTAStatus, WebSocketState>>) {
 		if (evt.type === 'message' && evt.data.type === 'ota_status') {
 			const previousStatus = { ...otaStatus };
 			otaStatus = { ...otaStatus, ...evt.data };
 
-			// Log status changes
 			if (evt.data.error && evt.data.error !== previousStatus.error) {
 				addLog('error', `OTA Error: ${evt.data.error}`);
 			} else if (evt.data.in_progress && evt.data.progress_percent !== undefined) {
-				// Log progress milestones (every 10%)
 				const percent = Math.round(evt.data.progress_percent);
 				if (percent > 0 && percent !== lastLoggedPercent && percent % 10 === 0) {
 					addLog('info', `Upload progress: ${percent}%`);
 					lastLoggedPercent = percent;
 				}
 			} else if (!evt.data.in_progress && previousStatus.in_progress) {
-				// OTA completed or stopped
 				if (!evt.data.error) {
 					addLog('success', 'OTA update completed successfully');
 				}
 				lastLoggedPercent = 0;
 			}
-		} else if(evt.type == "status" && evt.state == "open") {
+		} else if(evt.type == "status" && evt.data.state == "open") {
       requestOTAStatus();
     }
 	}

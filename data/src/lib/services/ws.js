@@ -7,19 +7,22 @@ import { updateWebsocketState } from '../stores/websocket.svelte.js';
  */
 
 /**
+ * @template T
  * @typedef {Object} MessageEventData
  * @property {'message'} type
- * @property {object | string} data - The parsed message data (if JSON) or raw data.
+ * @property {T} data - The parsed message data (if JSON) or raw data.
  * @property {string} raw - The raw, unparsed message string.
  */
 
 /**
- * @typedef {StatusEvent | MessageEventData} WebSocketEvent
+ * @template T
+ * @typedef {StatusEvent | MessageEventData<T>} WebSocketEvent
  */
 
 /**
+ * @template T
  * @callback MessageHandler
- * @param {WebSocketEvent} event
+ * @param {WebSocketEvent<T>} event
  * @returns {void}
  */
 
@@ -38,7 +41,9 @@ class WSService {
     this.socket = null;
     /** @type {string} */
     this.url = url;
-    /** @type {Set<MessageHandler>} */
+    /** 
+     * @type {Set<MessageHandler<any>>} 
+     */
     this.handlers = new Set();
     /** @type {boolean} */
     this.connected = false;
@@ -158,7 +163,8 @@ class WSService {
 
   /**
    * Registers a handler for incoming messages.
-   * @param {MessageHandler} handler - The message handler function.
+   * @template T
+   * @param {MessageHandler<T>} handler - The message handler function.
    * @returns {() => void} - A function to unregister the handler.
    */
   on(handler) {
@@ -310,7 +316,7 @@ class WSService {
     this._emit({ type: 'status', data: connectionInfo });
   }
   
-  /** @private @param {WebSocketEvent} event */
+  /** @private @param {WebSocketEvent<object|string>} event */
   _emit(event) {
     for (const handler of this.handlers) {
       try {

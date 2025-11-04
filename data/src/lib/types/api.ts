@@ -406,8 +406,12 @@ export interface ApiSuccess<T = any> {
  * @template T - The type of data in successful responses
  */
 export type ApiResponse<T = any> = ApiSuccess<T> | ApiError;
-
-// Type Guards for Runtime Type Checking
-// Moved to $lib/utils/ for better organization
-
 export { isApiSuccess, isApiError, isLogLevel, isNotificationType, isCertificateType } from '$lib/utils/index.js';
+
+type Only<T, U> = {
+[P in keyof T]: T[P];
+} & {
+  [P in keyof U]?: never;
+};
+
+export type Either<T, U> = Only<T, U> | Only<U, T>;
