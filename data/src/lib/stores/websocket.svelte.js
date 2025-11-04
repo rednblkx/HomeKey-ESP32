@@ -1,20 +1,20 @@
 /**
+ * @typedef {'disconnected' | 'connecting' | 'open' | 'reconnecting' | 'failed' | 'error'} WebSocketConnectionState
+ */
+/**
  * WebSocket connection state interface
  * @typedef {Object} WebSocketState
- * @property {boolean} connected - Whether WebSocket is currently connected
- * @property {string} state - Current connection state
- * @property {string} url - WebSocket URL
- * @property {number} reconnectAttempts - Number of reconnection attempts made
- * @property {number} maxReconnectAttempts - Maximum allowed reconnection attempts
- * @property {number} lastPongTime - Timestamp of last pong received
- * @property {number} lastPingTime - Timestamp of last ping sent
- * @property {number} consecutivePingFailures - Number of consecutive ping failures
- * @property {number} maxPingFailures - Maximum allowed ping failures
- * @property {number} backoffInitialDelay - Initial backoff delay in milliseconds
- * @property {number} backoffMaxDelay - Maximum backoff delay in milliseconds
- * @property {number} backoffMultiplier - Backoff delay multiplier
- * @property {number} backoffCurrentDelay - Current backoff delay
- * @property {number} backoffNextReconnectTime - Timestamp for next reconnection attempt
+ * @property {boolean} connected
+ * @property {WebSocketConnectionState} state
+ * @property {string} url
+ * @property {number} reconnectAttempts
+ * @property {number} maxReconnectAttempts
+ * @property {number} connectionTimeout
+ * @property {number} pingInterval
+ * @property {number} pongTimeout
+ * @property {number} backoffInitialDelay
+ * @property {number} backoffMaxDelay
+ * @property {number} backoffMultiplier
  */
 
 /**
@@ -27,16 +27,12 @@ export const websocketState = $state({
   url: '/ws',
   reconnectAttempts: 0,
   maxReconnectAttempts: 10,
-  lastPongTime: 0,
-  lastPingTime: 0,
-  consecutivePingFailures: 0,
-  maxPingFailures: 3,
-  // Exponential backoff state
-  backoffInitialDelay: 1000, // 1 second
-  backoffMaxDelay: 30000, // 30 seconds
+  connectionTimeout: 5000,
+  pingInterval: 10000,
+  pongTimeout: 3000,
+  backoffInitialDelay: 1000,
+  backoffMaxDelay: 30000,
   backoffMultiplier: 2,
-  backoffCurrentDelay: 1000,
-  backoffNextReconnectTime: 0,
 });
 
 /**

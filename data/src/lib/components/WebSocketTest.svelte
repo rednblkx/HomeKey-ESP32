@@ -1,28 +1,14 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+  import { websocketState, type WebSocketState } from '$lib/stores/websocket.svelte';
 	import ws from '$lib/services/ws.js';
 
 	/**
 	 * WebSocket event types emitted by the WS service.
 	 */
 	type WebSocketEvent =
-		| { type: 'status'; state: string }
-		| { type: 'message'; data: unknown; raw: string };
-
-	/**
-	 * Connection information structure returned by WS service.
-	 */
-	interface ConnectionInfo {
-		connected: boolean;
-		state: string;
-		url: string;
-		reconnectAttempts: number;
-		maxReconnectAttempts: number;
-		lastPongTime: number;
-		lastPingTime: number;
-		consecutivePingFailures: number;
-		maxPingFailures: number;
-	}
+		| { type: 'status'; data: WebSocketState }
+		| { type: 'message'; data: unknown; };
 
 	/**
 	 * Message structure used internally by the component for display.
@@ -33,60 +19,20 @@
 		timestamp: number;
 	}
 
-	/**
-	 * WebSocket state values.
-	 */
-	type WebSocketState = 'connecting' | 'open' | 'closed' | 'failed' | 'error' | 'unknown';
-
 	let messages: ComponentMessage[] = $state([]);
 	let customMessage: string = $state('');
-	let wsState: WebSocketState = $state('connecting');
-	let wsConnected: boolean = $state(false);
-	let wsInfo: ConnectionInfo = $state({
-		connected: false,
-		reconnectAttempts: 0,
-		maxReconnectAttempts: 0,
-		url: '',
-		state: 'disconnected',
-		lastPongTime: 0,
-		lastPingTime: 0,
-		consecutivePingFailures: 0,
-		maxPingFailures: 0
-	});
 	let wsOff: (() => void) | null = $state(null);
-	let updateTimer: ReturnType<typeof setInterval> | null = $state(null);
 
 	let statusColor = $derived((): string => {
-		switch (wsState) {
+		switch (websocketState.state) {
 			case 'open': return 'text-success';
-			case 'closed': return 'text-error';
+			case 'disconnected': return 'text-error';
 			case 'failed': return 'text-error';
 			case 'error': return 'text-warning';
 			case 'connecting': return 'text-info';
 			default: return 'text-base-content';
 		}
 	});
-
-	/**
-	 * Updates WebSocket connection information from the WS service.
-	 * Handles potential errors when accessing WS service methods.
-	 */
-	function updateWebSocketInfo(): void {
-		try {
-			if (ws && typeof ws.getConnectionInfo === 'function') {
-				const info = ws.getConnectionInfo();
-				if (info && typeof info === 'object') {
-					wsInfo = info as ConnectionInfo;
-					wsConnected = wsInfo.connected || false;
-					wsState = (ws.state() as WebSocketState) || 'unknown';
-				}
-			}
-		} catch (error) {
-			console.error('Error updating WebSocket info:', error);
-			wsState = 'error';
-			wsConnected = false;
-		}
-	}
 
 	/**
 	 * Adds a message to the component's message log.
@@ -122,8 +68,8 @@
 	 */
 	function sendPing(): void {
 		try {
-			if (ws && typeof ws.ping === 'function') {
-				const success = ws.ping();
+			if (ws) {
+				const success = ws.send({"type": "ping", "timestamp": new Date().getTime()});
 				if (success) {
 					addMessage('sent', { type: 'ping', timestamp: Date.now() });
 				} else {
@@ -144,8 +90,8 @@
 	 */
 	function requestStatus(): void {
 		try {
-			if (ws && typeof ws.requestStatus === 'function') {
-				const success = ws.requestStatus();
+			if (ws) {
+				const success = ws.send({"type": "metrics"});
 				if (success) {
 					addMessage('sent', { type: 'metrics' });
 				} else {
@@ -157,34 +103,6 @@
 		} catch (error) {
 			console.error('Error requesting status:', error);
 			addMessage('received', `Error requesting status: ${error instanceof Error ? error.message : 'Unknown error'}`);
-		}
-	}
-
-	/**
-	 * Sends an echo message with test data via WebSocket.
-	 * Includes error handling for failed echo attempts.
-	 */
-	function sendEcho(): void {
-		try {
-			const data = {
-				message: 'Hello from WebSocket test!',
-				timestamp: Date.now(),
-				random: Math.random()
-			};
-
-			if (ws && typeof ws.echo === 'function') {
-				const success = ws.echo(data);
-				if (success) {
-					addMessage('sent', { type: 'echo', data });
-				} else {
-					addMessage('received', 'Failed to send echo - WebSocket not connected');
-				}
-			} else {
-				addMessage('received', 'WebSocket service not available');
-			}
-		} catch (error) {
-			console.error('Error sending echo:', error);
-			addMessage('received', `Error sending echo: ${error instanceof Error ? error.message : 'Unknown error'}`);
 		}
 	}
 
@@ -275,14 +193,10 @@
 
 	onMount(() => {
 		try {
-			updateWebSocketInfo();
-
 			if (ws && typeof ws.on === 'function') {
 				wsOff = ws.on((evt: WebSocketEvent) => {
 					try {
-						if (evt.type === 'status') {
-							updateWebSocketInfo();
-						} else if (evt.type === 'message') {
+						if (evt.type === 'message') {
 							addMessage('received', evt.data);
 						}
 					} catch (error) {
@@ -293,14 +207,6 @@
 			} else {
 				console.warn('WebSocket service on method not available');
 			}
-
-			updateTimer = setInterval(() => {
-				try {
-					updateWebSocketInfo();
-				} catch (error) {
-					console.error('Error in periodic update:', error);
-				}
-			}, 1000);
 
 			customMessage = '{"type": "ping"}';
 		} catch (error) {
@@ -319,10 +225,6 @@
 				}
 				wsOff = null;
 			}
-			if (updateTimer) {
-				clearInterval(updateTimer);
-				updateTimer = null;
-			}
 		} catch (error) {
 			console.error('Error in onDestroy:', error);
 		}
@@ -337,26 +239,23 @@
 		<div class="stats shadow mb-4 bg-base-100">
 			<div class="stat">
 				<div class="stat-title">Connection Status</div>
-				<div class="stat-value text-sm {statusColor}">{wsState}</div>
-				<div class="stat-desc">{wsConnected ? 'Connected' : 'Disconnected'}</div>
+				<div class="stat-value text-sm {statusColor}">{websocketState.state}</div>
+				<div class="stat-desc">{websocketState.connected ? 'Connected' : 'Disconnected'}</div>
 			</div>
 			<div class="stat">
 				<div class="stat-title">Reconnect Attempts</div>
-				<div class="stat-value text-sm">{wsInfo.reconnectAttempts || 0}/{wsInfo.maxReconnectAttempts || 0}
+				<div class="stat-value text-sm">{websocketState.reconnectAttempts || 0}/{websocketState.maxReconnectAttempts || 0}
 				</div>
 			</div>
 		</div>
 
 		<!-- Test Buttons -->
 		<div class="flex flex-wrap gap-2 mb-4">
-			<button onclick={sendPing} class="btn btn-primary btn-sm" disabled={!wsConnected}>
+			<button onclick={sendPing} class="btn btn-primary btn-sm" disabled={!websocketState.connected}>
 				Send Ping
 			</button>
-			<button onclick={requestStatus} class="btn btn-secondary btn-sm" disabled={!wsConnected}>
+			<button onclick={requestStatus} class="btn btn-secondary btn-sm" disabled={!websocketState.connected}>
 				Request Status
-			</button>
-			<button onclick={sendEcho} class="btn btn-accent btn-sm" disabled={!wsConnected}>
-				Send Echo
 			</button>
 			<button onclick={reconnect} class="btn btn-warning btn-sm">
 				Reconnect
@@ -373,8 +272,8 @@
 			</label>
 			<div class="join">
 				<input id="custom-message-input" bind:value={customMessage} type="text" placeholder="Enter JSON message..."
-					class="input input-bordered join-item flex-1" disabled={!wsConnected} onkeydown={(e) => e.key === 'Enter' && sendCustomMessage()} />
-				<button onclick={sendCustomMessage} class="btn btn-primary join-item" disabled={!wsConnected}>
+					class="input input-bordered join-item flex-1" disabled={!websocketState.connected} onkeydown={(e) => e.key === 'Enter' && sendCustomMessage()} />
+				<button onclick={sendCustomMessage} class="btn btn-primary join-item" disabled={!websocketState.connected}>
 					Send
 				</button>
 			</div>

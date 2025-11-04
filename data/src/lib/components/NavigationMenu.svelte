@@ -28,10 +28,10 @@
 				<span>HomeKey-ESP32</span>
 				<div class="flex items-center gap-1">
 					<div class="inline-grid *:[grid-area:1/1]">
-						<div class="status animate-ping" class:status-success={websocketState.connected} class:status-error={!websocketState.connected}></div>
-						<div class="status" class:status-success={websocketState.connected} class:status-error={!websocketState.connected}></div>
+						<div class="status animate-ping" class:status-success={websocketState.connected} class:status-error={!websocketState.connected} class:status-warning={websocketState.state == "reconnecting"}></div>
+						<div class="status" class:status-success={websocketState.connected} class:status-error={!websocketState.connected} class:status-warning={websocketState.state == "reconnecting"}></div>
 					</div>
-					<span class="text-sm" class:text-success={websocketState.connected} class:text-error={!websocketState.connected}>{websocketState.connected ? 'Online' : 'Offline'}</span>
+					<span class="text-sm" class:text-success={websocketState.connected} class:text-error={!websocketState.connected} class:text-warning={websocketState.state == "reconnecting"}>{websocketState.state == "open" ? 'Online' : websocketState.state == "reconnecting" ? "Reconnecting" : 'Offline'}</span>
 				</div>
 			</div>
 		</div>
