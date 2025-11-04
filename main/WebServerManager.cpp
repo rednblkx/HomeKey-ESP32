@@ -1460,14 +1460,13 @@ esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
   m_otaError.clear();
   auto f = std::async(std::launch::async, [this]() { broadcastOTAStatus(); });
 
-  // Allocate buffer
-  const size_t preferred_size = heap_caps_get_free_size(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL) * 0.8;
+  const size_t preferred_size = heap_caps_get_free_size(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL) * 0.7;
   size_t buffer_size = std::min(preferred_size, content_len);
   std::unique_ptr<void, decltype(&heap_caps_free)> buffer(heap_caps_malloc(buffer_size, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL), heap_caps_free);
 
   if (!buffer) {
     size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
-    buffer_size = std::min((largest * 80) / 100, content_len);
+    buffer_size = std::min((largest * 60) / 100, content_len);
     buffer.reset(
         heap_caps_malloc(std::max(buffer_size, size_t(4096)), MALLOC_CAP_8BIT));
     if (!buffer) {
