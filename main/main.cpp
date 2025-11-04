@@ -60,6 +60,7 @@ void setup() {
   distributor.set_level(LogLevel::Debug);
   distributor.hook_esp_log(true);
   Serial.begin(115200);
+  logger.set_verbosity(espp::Logger::Verbosity::DEBUG);
   readerDataManager = new ReaderDataManager;
   configManager = new ConfigManager;
   configManager->begin();
@@ -69,10 +70,11 @@ void setup() {
   webServerManager = new WebServerManager(*configManager, *readerDataManager);
   homekitLock = new HomeKitLock(lambda, *lockManager, *configManager, *readerDataManager);
   nfcManager = new NfcManager(*readerDataManager, configManager->getConfig<espConfig::misc_config_t>().nfcGpioPins);
+  readerDataManager->begin();
+  nfcManager->begin();
   homekitLock->begin();
   hardwareManager->begin();
   lockManager->begin();
-  nfcManager->begin();
 }
 
 /**

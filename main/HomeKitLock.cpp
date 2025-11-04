@@ -218,7 +218,6 @@ void HomeKitLock::begin() {
     const std::string macStr = fmt::format("{:02X}{:02X}{:02X}{:02X}", mac[2], mac[3], mac[4], mac[5]);
     homeSpan.setHostNameSuffix(macStr.c_str());
 
-    m_readerDataManager.begin();
     initializeETH();
 
     homeSpan.begin(Category::Locks, miscConfig.deviceName.c_str(), "HK-", "HomeKey-ESP32");
