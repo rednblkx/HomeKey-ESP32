@@ -10,12 +10,12 @@ on:
       - dev
     tags:
       - 'v0.*'
-  pull_request:
     paths-ignore:
       - '.vscode/**'
       - '.gitignore'
       - 'LICENSE'
-      - 'README.md'
+      - '*.md'
+      - 'docs/**'
 
 jobs:
   esp32:
