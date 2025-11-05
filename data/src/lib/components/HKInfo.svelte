@@ -70,7 +70,7 @@
             </div>
 
             {#if hkInfo.issuers && hkInfo.issuers.length > 0}
-              <div class="mt-8">
+              <div class="mt-8 space-y-2">
                 {#each hkInfo.issuers as issuer, index (`issuer-${index}`)}
                   <div class="list-row">
                     <div class="collapse collapse-arrow bg-base-100 shadow">
