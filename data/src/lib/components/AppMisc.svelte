@@ -238,7 +238,7 @@
 							<div class="collapse-content flex flex-col gap-4">
 								<div class="divider">HomeKey Card Finish</div>
 								<div class="flex flex-col items-center">
-									<img src={hkFinishImage()} alt="HomeKey Finish" class="w-36 h-auto" />
+									<img src={hkFinishImage()} alt="HomeKey Finish" class="w-36 h-auto mb-2" />
 									<div class="grid grid-cols-2 gap-2">
 										{#each hkFinishColors as color}
 											<label class="label cursor-pointer">
