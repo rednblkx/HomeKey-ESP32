@@ -15,7 +15,7 @@ Thank you for your interest in contributing to HomeKey-ESP32! We welcome contrib
 
 ### Development Setup
 
-1. **Install ESP-IDF** (see [here](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/get-started/index.html#what-you-need) for details):
+1. **Install ESP-IDF** (see the [ESP-IDF Installation Guide](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/get-started/index.html#what-you-need) for details):
 
 2. **Install web development dependencies**:
    ```bash
