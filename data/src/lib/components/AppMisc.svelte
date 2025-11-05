@@ -61,7 +61,8 @@
 			if (!miscConfig || !misc) return;
 			const result = await saveConfig('misc', diff(miscConfig, misc));
       if(result.success){
-        misc = miscConfig = result.data;
+        miscConfig = result.data;
+        misc = result.data;
       }
 		} catch (e) {
 			const message = e instanceof Error ? e.message : String(e);

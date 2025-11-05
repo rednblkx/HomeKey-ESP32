@@ -39,7 +39,8 @@
       if (!actionsConfig || !actions) return;
 			const result = await saveConfig('actions', diff(actions, actionsConfig));
       if(result.success){
-        actions = actionsConfig = result.data;
+        actionsConfig = result.data;
+        actions = result.data;
       }
 		} catch (e) {
 			const message = e instanceof Error ? e.message : String(e);
@@ -51,7 +52,6 @@
 	const resetForm = (): void => {
 		actionsConfig = actions!;
 	};
-
 </script>
 
 <div class="w-full py-6">

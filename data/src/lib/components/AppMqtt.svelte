@@ -155,7 +155,8 @@
       if (!mqttConfig || !mqtt) return;
       const result = await saveConfig("mqtt", diff(mqtt, mqttConfig));
       if(result.success){
-        mqtt = mqttConfig = result.data;
+        mqttConfig = result.data;
+        mqtt = result.data;
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
@@ -168,7 +169,6 @@
       mqttConfig = mqtt;
     }
   };
-
 </script>
 
 <div class="w-full py-6">
