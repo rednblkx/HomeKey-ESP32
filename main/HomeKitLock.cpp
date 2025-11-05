@@ -13,6 +13,7 @@
 #include "ReaderDataManager.hpp"
 #include "HK_HomeKit.h"
 #include "esp_mac.h"
+#include "fmt/format.h"
 #include "utils.hpp"
 
 const char* HomeKitLock::TAG = "HomeKitBridge";
@@ -89,16 +90,16 @@ HomeKitLock::HomeKitLock(std::function<void(int)> &conn_cb, LockManager& lockMan
  */
 void HomeKitLock::ethEventHandler(arduino_event_id_t event, arduino_event_info_t info) {
   uint8_t mac[6] = { 0, 0, 0, 0, 0, 0 };
-  char macStr[13] = {0};
+  std::string macStr;
   switch (event) {
     case ARDUINO_EVENT_ETH_START:
       ESP_LOGI(TAG,"ETH Started");
-      // ETH.macAddress(mac);
-      // sprintf(macStr, "ESP32_%02X%02X%02X", mac[0], mac[1], mac[2]);
-      // ETH.setHostname(macStr);
+      ETH.macAddress(mac);
+      macStr = fmt::format("ESP32_{:02X}{:02X}{:02X}", mac[0], mac[1], mac[2]);
+      ETH.setHostname(macStr.c_str());
       break;
     case ARDUINO_EVENT_ETH_CONNECTED: ESP_LOGI(TAG,"ETH Connected"); break;
-    case ARDUINO_EVENT_ETH_GOT_IP:    ESP_LOGI(TAG,"ETH Got IP: '{}'\n", esp_netif_get_desc(info.got_ip.esp_netif)); break;
+    case ARDUINO_EVENT_ETH_GOT_IP:    ESP_LOGI(TAG,"ETH Got IP: '%s'", esp_netif_get_desc(info.got_ip.esp_netif)); break;
     case ARDUINO_EVENT_ETH_LOST_IP:
       ESP_LOGI(TAG,"ETH Lost IP");
       break;
