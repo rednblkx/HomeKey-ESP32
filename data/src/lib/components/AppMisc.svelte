@@ -59,7 +59,7 @@
     e.preventDefault();
 		try {
 			if (!miscConfig || !misc) return;
-			const result = await saveConfig('misc', diff(miscConfig, misc));
+			const result = await saveConfig('misc', diff(misc, miscConfig));
       if(result.success){
         miscConfig = result.data;
         misc = result.data;
