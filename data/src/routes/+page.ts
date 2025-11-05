@@ -11,11 +11,12 @@ export const load: PageLoad = async ({ fetch }) => {
     setLoadingState('hkInfoLoading', true);
 
     const hkInfo = await fetch('/config?type=hkinfo');
-    if (!hkInfo.ok) {
-      throw new Error(`HTTP error! status: ${hkInfo.status}`);
+    const res = await hkInfo.json();
+    if (!res.success) {
+      throw new Error(res.error);
     }
 
-    const result = { hkInfo: await hkInfo.json() as HKInfo, error: null };
+    const result = { hkInfo: res.data as HKInfo, error: null };
 
     // Clear loading states on success
     setLoadingState('pageLoading', false);

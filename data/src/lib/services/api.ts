@@ -8,6 +8,8 @@ export async function rebootDevice() {
     });
 
     if (!response.ok) {
+      // the reboot endpoint always sends success=true and message
+      // we don't have an API error message to show
       notifications.addError(`Request Failed`);
     }
     const result : ApiSuccess = await response.json();

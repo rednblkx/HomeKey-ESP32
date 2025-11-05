@@ -1,15 +1,16 @@
 import type { PageLoad } from './$types';
-import type { MiscConfig } from '$lib/types/api';
+import type { ActionsConfig } from '$lib/types/api';
 
 export const ssr = false;
 
 export const load: PageLoad = async ({ fetch }) => {
    try {
      const actions = await fetch('/config?type=actions');
-     if (!actions.ok) {
-       throw new Error(`HTTP error! status: ${actions.status}`);
+     const res = await actions.json();
+     if (!res.success) {
+       throw new Error(res.error);
      }
-     return { actions: await actions.json() as MiscConfig, error: null };
+     return { actions: res.data as ActionsConfig, error: null };
    } catch (error) {
      console.error('Failed to load actions:', error);
      return {

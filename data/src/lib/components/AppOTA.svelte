@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
   import ws, { type WebSocketEvent } from '$lib/services/ws.js';
-  import type { Either, OTAStatus } from '$lib/types/api';
+  import type { ApiResponse, Either, OTAStatus } from '$lib/types/api';
   import { type WebSocketState } from '$lib/stores/websocket.svelte';
 
 	let firmwareFile = $state<File | null>(null);
@@ -191,18 +191,17 @@
 				}
 			});
 
-			if (response.ok) {
-				const result = await response.json();
-				addLog('success', result.message || 'Firmware uploaded successfully');
-
-				if (!skipReboot) {
-					clearFirmwareFile();
-				}
-				return true;
-			} else {
-				const errorText = await response.text();
-				throw new Error(errorText || `HTTP ${response.status}: ${response.statusText}`);
-			}
+      const result : ApiResponse<undefined> = await response.json();
+      if(result.success) {
+        addLog('success', result.message || 'Firmware uploaded successfully');
+        if (!skipReboot) {
+          clearFirmwareFile();
+        }
+        return true;
+      } else {
+        addLog('error', result.error || 'Firmware upload failed');
+        return false;
+      }
 		} catch (error) {
 			console.error('Firmware upload failed:', error);
 			addLog('error', `Firmware upload failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -240,16 +239,15 @@
 				}
 			});
 
-			if (response.ok) {
-				const result = await response.json();
-				addLog('success', result.message || 'LittleFS uploaded successfully');
-
-				clearLittlefsFile();
-				return true;
-			} else {
-				const errorText = await response.text();
-				throw new Error(errorText || `HTTP ${response.status}: ${response.statusText}`);
-			}
+      const result : ApiResponse<undefined> = await response.json();
+      if(result.success) {
+        addLog('success', result.message || 'LittleFS uploaded successfully');
+        clearLittlefsFile();
+        return true;
+      } else {
+        addLog('error', result.error || 'LittleFS upload failed');
+        return false;
+      }
 		} catch (error) {
 			console.error('LittleFS upload failed:', error);
 			addLog('error', `LittleFS upload failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -291,16 +289,6 @@
 
 			clearFirmwareFile();
 			clearLittlefsFile();
-
-			setTimeout(async () => {
-				addLog('info', 'Rebooting device...');
-				try {
-					await fetch('/reboot_device', { method: 'POST' });
-				} catch (error) {
-					console.log('Reboot triggered, connection lost as expected');
-				}
-			}, 2000);
-
 		} catch (error) {
 			console.error('Sequential upload failed:', error);
 			addLog('error', `Sequential upload failed: ${error instanceof Error ? error.message : String(error)}`);

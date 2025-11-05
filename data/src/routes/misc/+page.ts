@@ -10,15 +10,13 @@ export const load: PageLoad = async ({ fetch }) => {
       fetch('/eth_get_config')
     ]);
 
-    if (!miscResponse.ok) {
-      throw new Error(`HTTP error loading misc! status: ${miscResponse.status}`);
-    }
-    if (!ethResponse.ok) {
-      throw new Error(`HTTP error loading eth config! status: ${ethResponse.status}`);
+    const res = await Promise.all([miscResponse.json(), ethResponse.json()]);
+    if (!res[0].success || !res[1].success) {
+      throw new Error(res[0].error || res[1].error);
     }
 
-    const misc = await miscResponse.json() as MiscConfig;
-    const eth = await ethResponse.json() as EthConfig;
+    const misc = res[0].data as MiscConfig;
+    const eth = res[1].data as EthConfig;
 
     return { misc, eth, error: null };
   } catch (error) {
