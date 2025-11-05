@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { saveConfig } from '$lib/services/api.js';
 	import type { ActionsConfig } from '$lib/types/api';
+  import { diff } from '$lib/utils/objDiff';
 
 	let { actions, error } : { actions: ActionsConfig | null; error?: string | null } = $props();
 
@@ -32,11 +33,13 @@
 		neopixelFailTime: 1000
 	});
 
-	const saveActionsConfig = async (): Promise<void> => {
+	const saveActionsConfig = async (e : any): Promise<void> => {
 		try {
-			const result = await saveConfig('actions', actionsConfig);
+      e.preventDefault();
+      if (!actionsConfig || !actions) return;
+			const result = await saveConfig('actions', diff(actions, actionsConfig));
       if(result.success){
-        actionsConfig = result.data;
+        actions = actionsConfig = result.data;
       }
 		} catch (e) {
 			const message = e instanceof Error ? e.message : String(e);

@@ -7,6 +7,7 @@
     getCertificateStatus,
     deleteCertificate,
   } from "$lib/services/api.js";
+    import { diff } from "$lib/utils/objDiff";
 
   let { mqtt, error }: { mqtt: MqttConfig | null, error: string | null } = $props();
 
@@ -148,12 +149,13 @@
     }
   };
 
-  const saveMqttConfig = async () => {
+  const saveMqttConfig = async (e : any) => {
+    e.preventDefault();
     try {
-      if (!mqttConfig) return;
-      const result = await saveConfig("mqtt", mqttConfig);
+      if (!mqttConfig || !mqtt) return;
+      const result = await saveConfig("mqtt", diff(mqtt, mqttConfig));
       if(result.success){
-        mqttConfig = result.data;
+        mqtt = mqttConfig = result.data;
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);

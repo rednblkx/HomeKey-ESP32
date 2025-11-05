@@ -71,7 +71,7 @@ export async function startConfigAP() {
   }
 }
 
-export async function saveConfig<T = MqttConfig | MiscConfig | ActionsConfig>(type: string, data: T): Promise<ApiResponse<T>> {
+export async function saveConfig<T = MqttConfig | MiscConfig | ActionsConfig>(type: string, data: Partial<T>): Promise<ApiResponse<T>> {
   try {
     const response = await fetch(`/config/save?type=${type}`, {
       method: 'POST',

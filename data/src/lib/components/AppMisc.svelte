@@ -5,6 +5,7 @@
 	import HKFinish2 from '$lib/assets/hk-finish-2.webp?inline';
 	import HKFinish3 from '$lib/assets/hk-finish-3.webp?inline';
   import type { EthConfig, MiscConfig } from '$lib/types/api';
+  import { diff } from '$lib/utils/objDiff';
 
 	let { misc, eth, error } : { misc: MiscConfig | null; eth: EthConfig | null; error?: string | null } = $props();
 
@@ -54,12 +55,13 @@
 		return null;
 	});
 
-	const saveMiscConfig = async () => {
+	const saveMiscConfig = async (e : any) => {
+    e.preventDefault();
 		try {
-			if (!miscConfig) return;
-			const result = await saveConfig('misc', miscConfig);
+			if (!miscConfig || !misc) return;
+			const result = await saveConfig('misc', diff(miscConfig, misc));
       if(result.success){
-        miscConfig = result.data;
+        misc = miscConfig = result.data;
       }
 		} catch (e) {
 			const message = e instanceof Error ? e.message : String(e);
