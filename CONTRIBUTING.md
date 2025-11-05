@@ -2,37 +2,26 @@
 
 Thank you for your interest in contributing to HomeKey-ESP32! We welcome contributions from the community and are pleased to have you join us.
 
-## 🚀 How to Contribute
+## How to Contribute
 
 ### Getting Started
 
 1. **Fork the repository** on GitHub
 2. **Clone your fork** locally:
    ```bash
-   git clone https://github.com/your-username/HomeKey-ESP32.git
+   git clone --recursive https://github.com/your-username/HomeKey-ESP32.git
    cd HomeKey-ESP32
-   ```
-3. **Add the upstream remote**:
-   ```bash
-   git remote add upstream https://github.com/rednblkx/HomeKey-ESP32.git
    ```
 
 ### Development Setup
 
-1. **Install ESP-IDF** (if not already installed):
-   ```bash
-   git clone --recursive https://github.com/espressif/esp-idf.git
-   cd esp-idf
-   ./install.sh esp32
-   . ./export.sh
-   cd ..
-   ```
+1. **Install ESP-IDF** (see [here](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/get-started/index.html#what-you-need) for details):
 
 2. **Install web development dependencies**:
    ```bash
    cd data
-   npm install
-   cd ..
+   ## You need Bun instead, feel free to use npm or yarn instead if you prefer
+   bun install
    ```
 
 3. **Update submodules**:
@@ -68,50 +57,46 @@ Thank you for your interest in contributing to HomeKey-ESP32! We welcome contrib
 
 ### Pull Request Process
 
-1. **Fill out the PR template** completely
-2. **Ensure your PR passes all CI checks**
+1. Title your PR with a clear and descriptive title
+2. Provide a detailed description of your changes and the problem you're trying to solve
 3. **Request review** from maintainers
 4. **Address review feedback** promptly
 5. **Squash commits** if requested
 
-## 📋 Types of Contributions
+## Types of Contributions
 
-### 🐛 Bug Reports
+### Bug Reports
 
-- Use the bug report template
 - Include steps to reproduce
 - Provide system information
 - Include relevant logs or screenshots
 
-### 💡 Feature Requests
+### Feature Requests
 
-- Use the feature request template
 - Explain the use case
 - Describe the expected behavior
 - Consider implementation complexity
 
-### 🔧 Code Contributions
+### Code Contributions
 
 - **Firmware**: ESP32 C++ code in `main/`
-- **Web Interface**: Vue.js code in `data/src/`
+- **Web Interface**: Svelte code in `data/`
 - **Documentation**: Markdown files in `docs/`
-- **Examples**: Sample configurations and setups
 
-### 📚 Documentation
+### Documentation
 
 - Fix typos and improve clarity
 - Add missing documentation
 - Update outdated information
-- Translate to other languages
 
-### 🧪 Testing
+### Testing
 
 - Test on different hardware configurations
 - Report compatibility issues
 - Validate new features
 - Performance benchmarking
 
-## 🎯 Coding Standards
+## Coding Standards
 
 ### C++ Code (ESP32 Firmware)
 
@@ -119,41 +104,14 @@ Thank you for your interest in contributing to HomeKey-ESP32! We welcome contrib
 // Use consistent indentation (2 spaces)
 // Use meaningful variable names
 // Add comments for complex logic
-// Follow ESP-IDF conventions
 
 class ExampleClass {
 public:
-  void exampleMethod() {
-    // Implementation
-  }
+  void exampleMethod();
   
 private:
-  int exampleVariable_;
+  int m_exampleVariable;
 };
-```
-
-### JavaScript/Vue.js Code (Web Interface)
-
-```javascript
-// Use modern JavaScript features
-// Follow Vue.js best practices
-// Use consistent formatting
-// Add JSDoc comments
-
-export default {
-  name: 'ExampleComponent',
-  props: {
-    exampleProp: {
-      type: String,
-      required: true
-    }
-  },
-  methods: {
-    exampleMethod() {
-      // Implementation
-    }
-  }
-}
 ```
 
 ### Commit Messages
@@ -184,18 +142,10 @@ fix(web): resolve configuration save issue
 docs: update installation guide for Windows
 ```
 
-## 🧪 Testing Guidelines
-
-### Unit Tests
-
-- Write tests for new features
-- Ensure existing tests pass
-- Add tests for bug fixes
-- Test edge cases
+## Testing Guidelines
 
 ### Integration Tests
 
-- Test with real hardware when possible
 - Verify MQTT functionality
 - Test HomeKit integration
 - Validate web interface
@@ -208,23 +158,7 @@ Test on different ESP32 variants:
 - ESP32-C3
 - ESP32-C6
 
-## 📊 Performance Considerations
-
-### Memory Usage
-
-- Monitor heap usage
-- Avoid memory leaks
-- Use stack allocation when possible
-- Profile memory usage
-
-### Speed Optimization
-
-- Minimize NFC polling overhead
-- Optimize authentication flow
-- Reduce web interface bundle size
-- Profile execution time
-
-## 🔒 Security Guidelines
+## Security Guidelines
 
 ### Code Security
 
@@ -247,7 +181,7 @@ Test on different ESP32 variants:
 - Implement proper authentication
 - Avoid information leakage
 
-## 📋 Issue Templates
+## Issue Templates
 
 ### Bug Report Template
 
@@ -292,17 +226,7 @@ A clear description of any alternative solutions you've considered.
 Add any other context or screenshots about the feature request here.
 ```
 
-## 🏷️ Release Process
-
-1. **Update version numbers** in relevant files
-2. **Update changelog** with new features and fixes
-3. **Test thoroughly** on multiple hardware configurations
-4. **Create release notes** with migration guide if needed
-5. **Tag the release** following semantic versioning
-6. **Build and upload** firmware binaries
-7. **Update documentation** with new features
-
-## 📞 Getting Help
+## Getting Help
 
 ### Before Asking
 
@@ -326,7 +250,7 @@ Add any other context or screenshots about the feature request here.
 - **GitHub Issues**: For bug reports and feature requests
 - **Documentation**: [Read the docs](https://rednblkx.github.io/HomeKey-ESP32/)
 
-## 🏆 Recognition
+## Recognition
 
 Contributors will be:
 - **Given credit** in release notes
@@ -344,4 +268,4 @@ You retain copyright to your contributions. We ask that you license them under t
 
 ---
 
-Thank you for contributing to HomeKey-ESP32! Your efforts help make smart home technology more accessible to everyone. 🏠🔑
+Thank you for contributing to HomeKey-ESP32! Your efforts help make smart home technology more accessible to everyone.

@@ -6,7 +6,7 @@
   **Apple HomeKey functionality for the rest of us**
   
   [![Discord](https://badgen.net/discord/members/VWpZ5YyUcm?icon=discord)](https://discord.com/invite/VWpZ5YyUcm)
-  [![CI](https://github.com/rednblkx/HomeKey-ESP32/actions/workflows/esp32.yml/badge.svg?branch=main)](https://github.com/rednblkx/HomeKey-ESP32/actions/workflows/esp32.yml)
+ http://localhost:8122/4334 [![CI](https://github.com/rednblkx/HomeKey-ESP32/actions/workflows/esp32.yml/badge.svg?branch=main)](https://github.com/rednblkx/HomeKey-ESP32/actions/workflows/esp32.yml)
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
   [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/L3L2UCY8N)
   
@@ -19,28 +19,31 @@ Transform your ordinary door lock into a smart, Apple HomeKey-compatible access 
 
 **No proprietary hardware required** – just an ESP32 and a PN532 NFC module
 
-## ⚡ 60-Second Quick Start
+## Quick Start
 
 ```bash
 # 1. Download firmware from GitHub Releases
 # Visit: https://github.com/rednblkx/HomeKey-ESP32/releases/latest
 # Download: *-firmware-merged.bin (depending on your board)
 
-# 2. Install esptool.py
+# 3. Install esptool.py
 pip install esptool
 
+# 2. Connect the PN532 NFC module to your ESP32 development board
+# See the [NFC Module Wiring](https://rednblkx.github.io/HomeKey-ESP32/setup/#21-nfc-module-wiring) for details
+http://localhost:8122/4334
 # 3. Connect your ESP32 and flash
 esptool.py --port /dev/ttyUSB0 write_flash 0x0 firmware-merged.bin
 
 # 4. Connect to WiFi AP: HomeSpan-Setup / homespan
-# 5. Configure at http://192.168.4.1
-# 6. Pair with HomeKit using code: 466-37-726 (unless you changed it)
+# 5. Wait a couple seconds for the portal to appear or navigate to http://192.168.4.1/hotspot-detect.html and configure the WiFi nad HomeKit setup code
+# 6. Pair with HomeKit using the code setup in step 5 or the default code: 466-37-726
 # 7. Start using HomeKey! 🎉
 ```
 
 **Prefer a GUI?** Use the browser-based flasher at [esptool-js](https://espressif.github.io/esptool-js/) - no command line needed!
 
-## 🏗️ System Architecture
+## System Architecture
 
 <div align="center">
   
@@ -85,9 +88,8 @@ graph TD
 
 ### **Apple HomeKey Integration**
 - **Express Mode**: Unlock without waking your device
-- **Secure Authentication**: Military-grade encryption via Apple Secure Element
-- **Multi-Device Support**: Works with iPhone, Apple Watch, and other Apple devices
-- **Fast Authentication**: Sub-500ms unlock times
+- **Multi-Device Support**: Works with iPhone and Apple Watch
+- **Fast Authentication**: Sub-300ms unlock times
 
 ### **Smart Home Ready**
 - **HomeKit Native**: Full Apple Home ecosystem integration
@@ -96,7 +98,7 @@ graph TD
 - **Custom States**: Support for complex lock states (jamming, unlocking, etc.)
 
 ### **Modern Web Interface**
-- **Vue.js Frontend**: Responsive, modern UI built with Vue 3 + Tailwind CSS
+- **Svelte Frontend**: Responsive, modern UI built with Svelte 5 + Tailwind CSS
 - **Real-time Updates**: WebSocket-powered live status updates
 - **OTA Updates**: Over-the-air firmware updates via web interface
 - **Configuration Management**: Easy setup without recompiling
@@ -107,18 +109,7 @@ graph TD
 - **Event System**: Pub/sub architecture for extensibility
 - **Comprehensive Logging**: Debug and monitor with detailed logs
 
-## 📊 Performance Benchmarks
-
-| Metric | Value | Notes |
-|--------|-------|-------|
-| **Authentication Time** | 150-250ms | End-to-end unlock |
-| **NFC Detection Range** | 0-4cm | Optimal at 2-3cm |
-| **Flash Usage** | 1.63MB | Total firmware size |
-| **RAM Usage** | 181KB | DIRAM (40% of 452KB) on ESP32-C6 |
-| **Free Heap** | ~271KB | Available for runtime on ESP32-C6 |
-| **Power Consumption** | 150-200mA | During active NFC polling |
-
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -126,7 +117,7 @@ graph TD
 - **PN532 NFC Module** (SPI interface)
 - **USB Cable** (for flashing and power)
 - **Computer** (Windows, Mac, or Linux)
-- **Basic Electronics Knowledge** (wiring and safety)
+- **Basic Electronics Knowledge** (not a problem if you're new to this, ask away!)
 
 ### Hardware Requirements
 
@@ -173,97 +164,6 @@ graph TD
    - Hold your iPhone or Apple Watch near the NFC reader
    - Enjoy instant, secure access to your home! 🎉
 
-## 📚 Documentation
-
-<details>
-<summary><b>Configuration Guide</b></summary>
-
-### Web Interface Configuration
-
-Access the web interface at your device's IP address to configure:
-
-- **WiFi Settings**: Connect to your home network
-- **MQTT Broker**: Enable smart home integration
-- **GPIO Pins**: Customize hardware connections
-- **HomeKit Setup**: Configure pairing codes and device info
-- **NFC Settings**: Adjust detection sensitivity and timing
-
-</details>
-
-<details>
-<summary><b>Home Assistant Integration</b></summary>
-
-### Automatic Discovery
-
-HomeKey-ESP32 supports Home Assistant's MQTT discovery protocol. When enabled, your lock will automatically appear in Home Assistant.
-
-### Manual Configuration
-
-```yaml
-lock:
-  - platform: mqtt
-    name: "Front Door"
-    state_topic: "homekey/device/state"
-    command_topic: "homekey/device/set_state"
-    payload_lock: "1"
-    payload_unlock: "0"
-    state_locked: "1"
-    state_unlocked: "0"
-```
-
-### Automation Examples
-
-```yaml
-automation:
-  - alias: "Door Unlocked Notification"
-    trigger:
-      platform: mqtt
-      topic: "homekey/device/state"
-      payload: "0"
-    action:
-      service: notify.mobile_app
-      data:
-        title: "Door Unlocked"
-        message: "Front door was unlocked with HomeKey"
-```
-
-</details>
-
-<details>
-<summary><b>API Reference</b></summary>
-
-### MQTT Topics
-
-| Topic | Type | Description |
-|-------|------|-------------|
-| `{device}/homekit/state` | Publish | Lock state (0=unlocked, 1=locked) |
-| `{device}/homekit/set_state` | Subscribe | Control lock state |
-| `{device}/homekey/auth` | Publish | HomeKey authentication events |
-| `{device}/status` | Publish | Device online/offline status |
-
-### REST API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/config` | GET | Get current configuration |
-| `/config/save` | POST | Save configuration changes |
-| `/reboot_device` | POST | Restart the device |
-| `/reset_hk_pair` | GET | Reset HomeKit pairings |
-
-### WebSocket Events
-
-Connect to `/ws` for real-time updates:
-
-```json
-{
-  "type": "sysinfo",
-  "version": "1.0.0",
-  "wifi_ssid": "HomeNetwork"
-}
-```
-
-</details>
-
 ## 🛠️ Development
 
 ### Project Structure
@@ -272,11 +172,16 @@ Connect to `/ws` for real-time updates:
 HomeKey-ESP32/
 ├── main/                    # Core ESP32 application
 │   ├── main.cpp            # Application entry point
+│   ├── ConfigManager.cpp    # Configuration management
+│   ├── ReaderDataManager.cpp # Reader data management
 │   ├── NfcManager.cpp      # NFC communication
 │   ├── HomeKitLock.cpp     # HomeKit integration
 │   ├── LockManager.cpp     # Lock state management
 │   ├── MqttManager.cpp     # MQTT client
-│   └── WebServerManager.cpp # Web interface
+│   ├── WebServerManager.cpp # Web interface
+│   ├── WebSocketLogSinker.cpp # WebSocket logging sinker
+│   ├── HardwareManager.cpp # Hardware manager
+│   └── HKServices.cpp # HomeKit services
 ├── data/                   # Web interface files
 │   ├── src/               # Vue.js application
 │   └── index.html         # Web UI entry point
@@ -293,9 +198,6 @@ HomeKey-ESP32/
 ```bash
 # Install dependencies
 git submodule update --init --recursive
-
-# Configure build
-idf.py menuconfig
 
 # Build firmware
 idf.py build
@@ -315,13 +217,13 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
 3. Commit your changes (`git commit -m 'Add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+5. Open a Pull Request against the `main` branch
 
 ## 🤝 Community & Support
 
 ### Discord Community
 
-Join our active Discord community for:
+Join our Discord community for:
 - **Real-time support** from developers and users
 - **Feature discussions** and roadmap planning
 - **Troubleshooting help** and best practices
@@ -331,21 +233,9 @@ Join our active Discord community for:
 
 ### GitHub Issues
 
-- **Bug Reports**: Use the bug report template
-- **Feature Requests**: Open a discussion first
+- **Feature Requests**: Open an issuer or a discussion with a clear title and description
 - **Questions**: Check existing issues and docs first
 
-### Contributing Guidelines
-
-We are committed to fostering an inclusive and welcoming community. Please read our [Code of Conduct](CODE_OF_CONDUCT.md) before participating.
-
-## 🗺️ Roadmap
-
-### Future Vision
-- [ ] **Battery Optimization**: Deep sleep support for battery-powered installations
-- [ ] **Enhanced Security**: Additional authentication flows and encryption
-- [ ] **Matter Support**: Integration with Matter/Thread ecosystem
-- [ ] **Plugin System**: Extensible architecture for custom features
 
 ## 💖 Support the Project
 
@@ -386,21 +276,9 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 - **ESP32** is a trademark of Espressif Systems (Shanghai) Co., Ltd.
 - **Home Assistant** is a trademark of Open Home Foundation
 
-## 🙏 Acknowledgments
-
-### Contributors & Inspiration
+## Credits
 
 - **[@kormax](https://github.com/kormax)**: Reverse-engineered the HomeKey NFC protocol and published the foundational [PoC implementation](https://github.com/kormax/apple-home-key-reader)
 - **[@kupa22](https://github.com/kupa22)**: Researched the HAP (HomeKit Accessory Protocol) side of HomeKey
 - **[HomeSpan](https://github.com/HomeSpan/HomeSpan)**: Excellent HomeKit framework that powers our integration
 - **[ESP-IDF](https://github.com/espressif/esp-idf)**: Robust IoT development framework from Espressif
-
----
-
-<div align="center">
-  
-**Made with ❤️ by the HomeKey-ESP32 Community**
-  
-[📖 Documentation](https://rednblkx.github.io/HomeKey-ESP32/) • [🚀 Quick Start](#-60-second-quick-start) • [💬 Discord](https://discord.com/invite/VWpZ5YyUcm)
-
-</div>
