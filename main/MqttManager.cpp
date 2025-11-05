@@ -8,6 +8,7 @@
 #include <esp_log.h>
 #include <esp_app_desc.h>
 #include "eventStructs.hpp"
+#include "fmt/format.h"
 #include <cJSON.h>
 #include <sys/_types.h>
 #include <vector>
@@ -523,6 +524,7 @@ void MqttManager::publishHassDiscovery() {
     uint8_t mac[6];
     esp_read_mac(mac, ESP_MAC_BT);
     const std::string macStr = fmt::format("HK-{:02X}{:02X}{:02X}{:02X}", mac[2], mac[3], mac[4], mac[5]);
+    cJSON_AddStringToObject(device, "configuration_url", fmt::format("http://{}.local", macStr).c_str());
     cJSON_AddStringToObject(device, "serial_number", macStr.c_str());
 
     cJSON *lockPayload = cJSON_CreateObject();
