@@ -1,13 +1,10 @@
 #include "ConfigManager.hpp"
 #include "cJSON.h"
 #include "config.hpp"
-#include <iterator>
 #include <ranges>
 #include <string>
 #include <vector>
 #include "esp_log.h"
-#include "esp_log_buffer.h"
-#include "esp_log_level.h"
 #include "mbedtls/x509.h"
 #include "msgpack.h"
 #include <LittleFS.h>
@@ -565,6 +562,134 @@ std::vector<uint8_t> ConfigManager::serialize() {
 }
 
 template <typename ConfigType>
+std::string ConfigManager::updateFromJson(const std::string& json_string) {
+  cJSON *root = cJSON_Parse(json_string.c_str());
+  if (!root) {
+    ESP_LOGE(TAG, "Failed to parse JSON: invalid format.");
+    return "";
+  }
+
+  if (!cJSON_IsObject(root)) {
+    ESP_LOGE(TAG, "JSON root is not an object.");
+    cJSON_Delete(root);
+    return "";
+  }
+
+  ConfigMapType* configMapPtr = nullptr;
+  if constexpr (std::is_same_v<ConfigType, espConfig::misc_config_t>) {
+    configMapPtr = &m_configMap["misc"];
+  } else if constexpr (std::is_same_v<ConfigType, espConfig::actions_config_t>) {
+    configMapPtr = &m_configMap["actions"];
+  } else if constexpr (std::is_same_v<ConfigType, espConfig::mqttConfig_t>) {
+    configMapPtr = &m_configMap["mqtt"];
+  } else {
+    cJSON_Delete(root);
+    ESP_LOGE(TAG, "Invalid configuration type specified.");
+    return "";
+  }
+  
+  for (cJSON *it = root->child; it != NULL; it = it->next) {
+    std::string keyStr = it->string;
+    auto config_entry = configMapPtr->find(keyStr);
+
+    if (config_entry != configMapPtr->end()) {
+      std::visit([&](auto&& arg) {
+        using T = std::decay_t<decltype(arg)>;
+        if constexpr (std::is_pointer_v<T>) {
+          using PointeeType = std::remove_pointer_t<T>;
+
+          if constexpr (std::is_same_v<PointeeType, std::string>) {
+            if (cJSON_IsString(it)) {
+              arg->assign(it->valuestring);
+            } else {
+              ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected string.", keyStr.c_str());
+            }
+          } else if constexpr (std::is_same_v<PointeeType, bool>) {
+            if (cJSON_IsBool(it)) {
+              *arg = cJSON_IsTrue(it);
+            } else if (cJSON_IsNumber(it)) {
+              *arg = (it->valueint != 0);
+            } else {
+              ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected boolean.", keyStr.c_str());
+            }
+          } else if constexpr (std::is_integral_v<PointeeType>) {
+            if (cJSON_IsNumber(it)) {
+              *arg = static_cast<PointeeType>(it->valueint);
+            } else {
+              ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected number.", keyStr.c_str());
+            }
+          } else if constexpr (std::is_same_v<PointeeType, std::array<uint8_t, 4>> ||
+                               std::is_same_v<PointeeType, std::array<uint8_t, 5>> ||
+                               std::is_same_v<PointeeType, std::array<uint8_t, 7>>) {
+            if (cJSON_IsArray(it)) {
+              int array_size = cJSON_GetArraySize(it);
+              if (array_size == arg->size()) {
+                bool array_success = true;
+                for (int i = 0; i < array_size; ++i) {
+                  cJSON *sub_item = cJSON_GetArrayItem(it, i);
+                  if (cJSON_IsNumber(sub_item)) {
+                    (*arg)[i] = static_cast<uint8_t>(sub_item->valueint);
+                  } else {
+                    array_success = false;
+                    break;
+                  }
+                }
+                if (!array_success) {
+                  ESP_LOGW(TAG, "Validation failed for '%s': array contains non-numeric elements.", keyStr.c_str());
+                }
+              } else {
+                ESP_LOGW(TAG, "Validation failed for '%s': incorrect array size. Expected %zu, got %d.", keyStr.c_str(), arg->size(), array_size);
+              }
+            } else {
+              ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected array.", keyStr.c_str());
+            }
+          } else if constexpr (std::is_same_v<PointeeType, std::map<espConfig::actions_config_t::colorMap, uint8_t>>) {
+            if (cJSON_IsArray(it)) {
+              arg->clear();
+              cJSON *inner_array;
+              cJSON_ArrayForEach(inner_array, it) {
+                if (cJSON_IsArray(inner_array) && cJSON_GetArraySize(inner_array) == 2) {
+                  cJSON *key_json = cJSON_GetArrayItem(inner_array, 0);
+                  cJSON *value_json = cJSON_GetArrayItem(inner_array, 1);
+                  if (cJSON_IsNumber(key_json) && cJSON_IsNumber(value_json)) {
+                    arg->emplace(
+                        static_cast<espConfig::actions_config_t::colorMap>(key_json->valueint),
+                        static_cast<uint8_t>(value_json->valueint)
+                    );
+                  }
+                }
+              }
+            } else {
+              ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected an array of [key, value] pairs.", keyStr.c_str());
+            }
+          } else if constexpr (std::is_same_v<PointeeType, std::map<std::string, uint8_t>>) {
+            if (cJSON_IsObject(it)) {
+              arg->clear();
+              cJSON* sub_obj_item;
+              cJSON_ArrayForEach(sub_obj_item, it) {
+                if (cJSON_IsNumber(sub_obj_item)) {
+                  (*arg)[sub_obj_item->string] = static_cast<uint8_t>(sub_obj_item->valueint);
+                }
+              }
+            } else {
+              ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected an object.", keyStr.c_str());
+            }
+          }
+        }
+      }, config_entry->second);
+    } else {
+      ESP_LOGW(TAG, "'%s' is not a valid configuration key and will be ignored.", keyStr.c_str());
+    }
+  }
+
+  cJSON_Delete(root);
+  return serializeToJson<ConfigType>();
+}
+template std::string ConfigManager::updateFromJson<espConfig::misc_config_t>(const std::string& json_string);
+template std::string ConfigManager::updateFromJson<espConfig::actions_config_t>(const std::string& json_string);
+template std::string ConfigManager::updateFromJson<espConfig::mqttConfig_t>(const std::string& json_string);
+
+template <typename ConfigType>
 /**
  * @brief Convert the selected configuration (MQTT or misc) into a JSON string.
  *
@@ -600,7 +725,11 @@ std::string ConfigManager::serializeToJson() {
                 using PointeeType = std::remove_pointer_t<T>;
 
                 if constexpr (std::is_same_v<PointeeType, std::string>) {
-                    cJSON_AddStringToObject(root, key.c_str(), arg->c_str());
+                    if(key.contains("Password") || key.contains("Passwd")){
+                        cJSON_AddStringToObject(root, key.c_str(), "********");
+                    } else {
+                        cJSON_AddStringToObject(root, key.c_str(), arg->c_str());
+                    }
                 } else if constexpr (std::is_same_v<PointeeType, bool>) {
                     cJSON_AddBoolToObject(root, key.c_str(), *arg);
                 } else if constexpr (std::is_same_v<PointeeType, uint8_t> || std::is_same_v<PointeeType, uint16_t>) {
@@ -639,7 +768,7 @@ std::string ConfigManager::serializeToJson() {
         }, pair.second);
     }
 
-    char *json_string = cJSON_Print(root);
+    char *json_string = cJSON_PrintUnformatted(root);
     std::string result(json_string ? json_string : "");
     cJSON_Delete(root);
     if (json_string) {

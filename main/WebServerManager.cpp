@@ -559,9 +559,10 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     cJSON *res = cJSON_CreateObject();
     cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
     cJSON_AddItemToObject(res, "error", cJSON_CreateString("Missing 'type' parameter"));
-    const char *response = cJSON_PrintUnformatted(res);
+    char *response = cJSON_PrintUnformatted(res);
     cJSON_Delete(res);
     httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
+    cJSON_free(response);
     return ESP_FAIL;
   }
 
@@ -573,9 +574,10 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     cJSON *res = cJSON_CreateObject();
     cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
     cJSON_AddItemToObject(res, "error", cJSON_CreateString("Request body too large"));
-    const char *response = cJSON_PrintUnformatted(res);
+    char *response = cJSON_PrintUnformatted(res);
     cJSON_Delete(res);
     httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
+    cJSON_free(response);
     return ESP_FAIL;
   }
 
@@ -587,9 +589,10 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     cJSON *res = cJSON_CreateObject();
     cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
     cJSON_AddItemToObject(res, "error", cJSON_CreateString("Invalid request body"));
-    const char *response = cJSON_PrintUnformatted(res);
+    char *response = cJSON_PrintUnformatted(res);
     cJSON_Delete(res);
     httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
+    cJSON_free(response);
     return ESP_FAIL;
   }
   content[ret] = '\0';
@@ -601,31 +604,29 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     cJSON *res = cJSON_CreateObject();
     cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
     cJSON_AddItemToObject(res, "error", cJSON_CreateString("Invalid JSON"));
-    const char *response = cJSON_PrintUnformatted(res);
+    char *response = cJSON_PrintUnformatted(res);
     cJSON_Delete(res);
     httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
+    cJSON_free(response);
     return ESP_FAIL;
   }
 
   // Load current configuration
   std::string type = type_param;
-  cJSON *data = nullptr, *configSchema = nullptr;
+  cJSON *configSchema = nullptr;
 
   if (type == "mqtt") {
     std::string s =
         instance->m_configManager.serializeToJson<espConfig::mqttConfig_t>();
-    data = cJSON_Parse(s.c_str());
-    configSchema = cJSON_Duplicate(data, true);
+    configSchema = cJSON_Parse(s.c_str());
   } else if (type == "misc") {
     std::string s =
         instance->m_configManager.serializeToJson<espConfig::misc_config_t>();
-    data = cJSON_Parse(s.c_str());
-    configSchema = cJSON_Duplicate(data, true);
+    configSchema = cJSON_Parse(s.c_str());
   } else if (type == "actions") {
     std::string s =
         instance->m_configManager.serializeToJson<espConfig::actions_config_t>();
-    data = cJSON_Parse(s.c_str());
-    configSchema = cJSON_Duplicate(data, true);
+    configSchema = cJSON_Parse(s.c_str());
   } else {
     cJSON_Delete(obj);
     httpd_resp_set_status(req, "400 Bad Request");
@@ -633,15 +634,14 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     cJSON *res = cJSON_CreateObject();
     cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
     cJSON_AddItemToObject(res, "error", cJSON_CreateString("Invalid 'type' parameter"));
-    const char *response = cJSON_PrintUnformatted(res);
+    char *response = cJSON_PrintUnformatted(res);
     cJSON_Delete(res);
     httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
+    cJSON_free(response);
     return ESP_FAIL;
   }
 
-  // Validate request
   if (!validateRequest(req, configSchema, content.data())) {
-    cJSON_Delete(data);
     cJSON_Delete(configSchema);
     cJSON_Delete(obj);
     return ESP_FAIL;
@@ -652,6 +652,19 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
 
   // Process configuration changes and publish events
   cJSON *it = obj->child;
+  if(it == NULL){
+    cJSON_Delete(obj);
+    httpd_resp_set_status(req, "400 Bad Request");
+    httpd_resp_set_type(req, "application/json");
+    cJSON *res = cJSON_CreateObject();
+    cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+    cJSON_AddItemToObject(res, "error", cJSON_CreateString("Received empty object, nothing to save"));
+    char *response = cJSON_PrintUnformatted(res);
+    cJSON_Delete(res);
+    httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
+    cJSON_free(response);
+    return ESP_FAIL;
+  }
   while (it) {
     cJSON *configSchemaItem = cJSON_GetObjectItem(configSchema, it->string);
     if (cJSON_Compare(it, configSchemaItem, true)) {
@@ -700,39 +713,32 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     it = it->next;
   }
 
-  mergeJson(data, obj);
-  char *data_str = cJSON_PrintUnformatted(data);
+  char *data_str = cJSON_PrintUnformatted(obj);
+  std::string result;
   if (type == "mqtt") {
-    success =
-        instance->m_configManager.deserializeFromJson<espConfig::mqttConfig_t>(
-            data_str);
-    free(data_str);
-    if (success) {
+    result = instance->m_configManager.updateFromJson<espConfig::mqttConfig_t>(data_str);
+    if (!result.empty()) {
       success = instance->m_configManager.saveConfig<espConfig::mqttConfig_t>();
       rebootNeeded = true;
       rebootMsg = "MQTT config saved, reboot needed! Rebooting...";
     }
   } else if (type == "misc") {
-    success =
-        instance->m_configManager.deserializeFromJson<espConfig::misc_config_t>(
-            data_str);
-    free(data_str);
-    if (success) {
+    result = instance->m_configManager.updateFromJson<espConfig::misc_config_t>(data_str);
+    if (!result.empty()) {
       success =
           instance->m_configManager.saveConfig<espConfig::misc_config_t>();
       rebootNeeded = true;
       rebootMsg = "Misc config saved, reboot needed! Rebooting...";
     }
   } else if (type == "actions") {
-    success =
-        instance->m_configManager.deserializeFromJson<espConfig::actions_config_t>(
-            data_str);
-    free(data_str);
-    if (success) {
+    result = instance->m_configManager.updateFromJson<espConfig::actions_config_t>(data_str);
+    if (!result.empty()) {
       success =
           instance->m_configManager.saveConfig<espConfig::actions_config_t>();
     }
   }
+
+  cJSON_free(data_str);
 
   cJSON_Delete(configSchema);
   cJSON_Delete(obj);
@@ -742,40 +748,27 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     cJSON *res = cJSON_CreateObject();
     cJSON_AddItemToObject(res, "success", cJSON_CreateBool(true));
     cJSON_AddItemToObject(res, "message", cJSON_CreateString(rebootNeeded ? rebootMsg.c_str() : "Saved and applied!"));
-    cJSON_AddItemToObject(res, "data", data);
-    const char *response = cJSON_PrintUnformatted(res);
+    cJSON_AddItemToObject(res, "data", cJSON_Parse(result.c_str()));
+    char *response = cJSON_PrintUnformatted(res);
     cJSON_Delete(res);
     httpd_resp_send(req, response, strlen(response));
+    cJSON_free(response);
     if (rebootNeeded) {
       vTaskDelay(pdMS_TO_TICKS(1000));
       esp_restart();
     }
     return ESP_OK;
   }
-  cJSON_Delete(data);
   httpd_resp_set_type(req, "application/json");
   cJSON *res = cJSON_CreateObject();
   cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
   cJSON_AddItemToObject(res, "error", cJSON_CreateString("Unable to save config!"));
-  const char *response = cJSON_PrintUnformatted(res);
+  char *response = cJSON_PrintUnformatted(res);
   cJSON_Delete(res);
   httpd_resp_set_status(req, HTTPD_500);
   httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
+  cJSON_free(response);
   return ESP_FAIL;
-}
-
-static void mergeJson(cJSON *target, cJSON *source) {
-  cJSON *item = source->child;
-  while (item) {
-    cJSON *existing = cJSON_GetObjectItem(target, item->string);
-    if (existing) {
-      cJSON_ReplaceItemInObject(target, item->string,
-                                cJSON_Duplicate(item, true));
-    } else {
-      cJSON_AddItemToObject(target, item->string, cJSON_Duplicate(item, true));
-    }
-    item = item->next;
-  }
 }
 
 bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,

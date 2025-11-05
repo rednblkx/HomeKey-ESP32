@@ -41,6 +41,9 @@ public:
     template <typename ConfigType>
     std::string serializeToJson();
 
+    template <typename ConfigType>
+    std::string updateFromJson(const std::string& json_string);
+
     bool saveCertificate(const std::string& certType, const std::string& certContent);
     bool deleteCertificate(const std::string& certType);
     
