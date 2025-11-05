@@ -151,6 +151,12 @@ void WebServerManager::begin() {
   ESP_LOGI(TAG, "Web server initialization complete");
 }
 
+void WebServerManager::stop() {
+  ESP_LOGI(TAG, "Stopping WebServerManager");
+  httpd_stop(m_server);
+  m_server = nullptr;
+}
+
 bool WebServerManager::basicAuth(httpd_req_t* req){
   if(!m_configManager.getConfig<espConfig::misc_config_t>().webAuthEnabled){
     ESP_LOGD(TAG, "HTTP Auth not enabled, skipping...");
@@ -1034,6 +1040,7 @@ esp_err_t WebServerManager::handleStartConfigAP(httpd_req_t *req) {
   std::string response = cjson_to_string_and_free(res);
   httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
   vTaskDelay(pdMS_TO_TICKS(1000));
+  instance->stop();
   homeSpan.processSerialCommand("A");
   return ESP_OK;
 }
