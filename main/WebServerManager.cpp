@@ -44,10 +44,8 @@ const size_t MAX_WS_PAYLOAD = 8192;
 const size_t MAX_OTA_SIZE = 0x1E0000;
 
 // ============================================================================
-// Forward Declarations & Helper Functions
+// Helper Functions
 // ============================================================================
-
-static void mergeJson(cJSON *target, cJSON *source);
 
 static inline bool str_ends_with(const char *str, const char *suffix) {
   if (!str || !suffix)
@@ -58,7 +56,7 @@ static inline bool str_ends_with(const char *str, const char *suffix) {
 
 static inline std::string cjson_to_string_and_free(cJSON *obj) {
   if (!obj)
-    return {};
+    return "";
   char *raw = cJSON_PrintUnformatted(obj);
   std::string out = raw ? std::string(raw) : std::string{};
   free(raw);
@@ -387,9 +385,8 @@ esp_err_t WebServerManager::handleGetConfig(httpd_req_t *req) {
     cJSON *res = cJSON_CreateObject();
     cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
     cJSON_AddItemToObject(res, "error", cJSON_CreateString("Missing 'type' parameter"));
-    const char *response = cJSON_PrintUnformatted(res);
-    cJSON_Delete(res);
-    httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
+    std::string response = cjson_to_string_and_free(res);
+    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
     return ESP_FAIL;
   }
 
@@ -439,9 +436,8 @@ esp_err_t WebServerManager::handleGetConfig(httpd_req_t *req) {
     cJSON *res = cJSON_CreateObject();
     cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
     cJSON_AddItemToObject(res, "error", cJSON_CreateString("Invalid 'type' parameter"));
-    const char *response = cJSON_PrintUnformatted(res);
-    cJSON_Delete(res);
-    httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
+    std::string response = cjson_to_string_and_free(res);
+    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
     return ESP_FAIL;
   }
 
@@ -449,9 +445,8 @@ esp_err_t WebServerManager::handleGetConfig(httpd_req_t *req) {
   cJSON *res = cJSON_CreateObject();
   cJSON_AddItemToObject(res, "success", cJSON_CreateBool(true));
   cJSON_AddItemToObject(res, "data", cJSON_Parse(responseJson.c_str()));
-  const char *response = cJSON_PrintUnformatted(res);
-  cJSON_Delete(res);
-  httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
+  std::string response = cjson_to_string_and_free(res);
+  httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
   return ESP_OK;
 }
 
@@ -528,9 +523,8 @@ esp_err_t WebServerManager::handleGetEthConfig(httpd_req_t *req) {
   cJSON *res = cJSON_CreateObject();
   cJSON_AddItemToObject(res, "success", cJSON_CreateBool(true));
   cJSON_AddItemToObject(res, "data", cJSON_Parse(payload.c_str()));
-  const char *response = cJSON_PrintUnformatted(res);
-  cJSON_Delete(res);
-  httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
+  std::string response = cjson_to_string_and_free(res);
+  httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
   return ESP_OK;
 }
 
@@ -559,10 +553,8 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     cJSON *res = cJSON_CreateObject();
     cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
     cJSON_AddItemToObject(res, "error", cJSON_CreateString("Missing 'type' parameter"));
-    char *response = cJSON_PrintUnformatted(res);
-    cJSON_Delete(res);
-    httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
-    cJSON_free(response);
+    std::string response = cjson_to_string_and_free(res);
+    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
     return ESP_FAIL;
   }
 
@@ -574,10 +566,8 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     cJSON *res = cJSON_CreateObject();
     cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
     cJSON_AddItemToObject(res, "error", cJSON_CreateString("Request body too large"));
-    char *response = cJSON_PrintUnformatted(res);
-    cJSON_Delete(res);
-    httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
-    cJSON_free(response);
+    std::string response = cjson_to_string_and_free(res);
+    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
     return ESP_FAIL;
   }
 
@@ -589,10 +579,8 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     cJSON *res = cJSON_CreateObject();
     cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
     cJSON_AddItemToObject(res, "error", cJSON_CreateString("Invalid request body"));
-    char *response = cJSON_PrintUnformatted(res);
-    cJSON_Delete(res);
-    httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
-    cJSON_free(response);
+    std::string response = cjson_to_string_and_free(res);
+    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
     return ESP_FAIL;
   }
   content[ret] = '\0';
@@ -604,10 +592,8 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     cJSON *res = cJSON_CreateObject();
     cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
     cJSON_AddItemToObject(res, "error", cJSON_CreateString("Invalid JSON"));
-    char *response = cJSON_PrintUnformatted(res);
-    cJSON_Delete(res);
-    httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
-    cJSON_free(response);
+    std::string response = cjson_to_string_and_free(res);
+    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
     return ESP_FAIL;
   }
 
@@ -634,10 +620,8 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     cJSON *res = cJSON_CreateObject();
     cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
     cJSON_AddItemToObject(res, "error", cJSON_CreateString("Invalid 'type' parameter"));
-    char *response = cJSON_PrintUnformatted(res);
-    cJSON_Delete(res);
-    httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
-    cJSON_free(response);
+    std::string response = cjson_to_string_and_free(res);
+    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
     return ESP_FAIL;
   }
 
@@ -659,10 +643,8 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     cJSON *res = cJSON_CreateObject();
     cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
     cJSON_AddItemToObject(res, "error", cJSON_CreateString("Received empty object, nothing to save"));
-    char *response = cJSON_PrintUnformatted(res);
-    cJSON_Delete(res);
-    httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
-    cJSON_free(response);
+    std::string response = cjson_to_string_and_free(res);
+    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
     return ESP_FAIL;
   }
   while (it) {
@@ -749,10 +731,8 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     cJSON_AddItemToObject(res, "success", cJSON_CreateBool(true));
     cJSON_AddItemToObject(res, "message", cJSON_CreateString(rebootNeeded ? rebootMsg.c_str() : "Saved and applied!"));
     cJSON_AddItemToObject(res, "data", cJSON_Parse(result.c_str()));
-    char *response = cJSON_PrintUnformatted(res);
-    cJSON_Delete(res);
-    httpd_resp_send(req, response, strlen(response));
-    cJSON_free(response);
+    std::string response = cjson_to_string_and_free(res);
+    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
     if (rebootNeeded) {
       vTaskDelay(pdMS_TO_TICKS(1000));
       esp_restart();
@@ -763,11 +743,9 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
   cJSON *res = cJSON_CreateObject();
   cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
   cJSON_AddItemToObject(res, "error", cJSON_CreateString("Unable to save config!"));
-  char *response = cJSON_PrintUnformatted(res);
-  cJSON_Delete(res);
   httpd_resp_set_status(req, HTTPD_500);
-  httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
-  cJSON_free(response);
+  std::string response = cjson_to_string_and_free(res);
+  httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
   return ESP_FAIL;
 }
 
@@ -780,9 +758,8 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
     cJSON *res = cJSON_CreateObject();
     cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
     cJSON_AddItemToObject(res, "error", cJSON_CreateString("Invalid JSON"));
-    const char *response = cJSON_PrintUnformatted(res);
-    cJSON_Delete(res);
-    httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
+    std::string response = cjson_to_string_and_free(res);
+    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
     return false;
   }
 
@@ -798,10 +775,8 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
       cJSON *res = cJSON_CreateObject();
       cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
       cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
-      const char *response = cJSON_PrintUnformatted(res);
-      cJSON_Delete(res);
-      httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
-      cJSON_Delete(obj);
+      std::string response = cjson_to_string_and_free(res);
+      httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
       return false;
     }
 
@@ -831,10 +806,8 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
       cJSON *res = cJSON_CreateObject();
       cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
       cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
-      const char *response = cJSON_PrintUnformatted(res);
-      cJSON_Delete(res);
-      httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
-      cJSON_Delete(obj);
+      std::string response = cjson_to_string_and_free(res);
+      httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
       return false;
     }
 
@@ -860,10 +833,8 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         cJSON *res = cJSON_CreateObject();
         cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
         cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
-        const char *response = cJSON_PrintUnformatted(res);
-        cJSON_Delete(res);
-        httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
-        cJSON_Delete(obj);
+        std::string response = cjson_to_string_and_free(res);
+        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
         return false;
       }
       if (homeSpan.controllerListBegin() != homeSpan.controllerListEnd() &&
@@ -873,10 +844,8 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         cJSON *res = cJSON_CreateObject();
         cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
         cJSON_AddItemToObject(res, "error", cJSON_CreateString("Setup Code can only be set if no devices are paired"));
-        const char *response = cJSON_PrintUnformatted(res);
-        cJSON_Delete(res);
-        httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
-        cJSON_Delete(obj);
+        std::string response = cjson_to_string_and_free(res);
+        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
         return false;
       }
     }
@@ -892,10 +861,8 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         cJSON *res = cJSON_CreateObject();
         cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
         cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
-        const char *response = cJSON_PrintUnformatted(res);
-        cJSON_Delete(res);
-        httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
-        cJSON_Delete(obj);
+        std::string response = cjson_to_string_and_free(res);
+        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
         return false;
       }
       uint8_t pin = incomingValue->valueint;
@@ -908,10 +875,8 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         cJSON *res = cJSON_CreateObject();
         cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
         cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
-        const char *response = cJSON_PrintUnformatted(res);
-        cJSON_Delete(res);
-        httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
-        cJSON_Delete(obj);
+        std::string response = cjson_to_string_and_free(res);
+        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
         return false;
       }
     }
@@ -936,10 +901,8 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         cJSON *res = cJSON_CreateObject();
         cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
         cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
-        const char *response = cJSON_PrintUnformatted(res);
-        cJSON_Delete(res);
-        httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
-        cJSON_Delete(obj);
+        std::string response = cjson_to_string_and_free(res);
+        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
         return false;
       }
     }
@@ -973,9 +936,8 @@ esp_err_t WebServerManager::handleClearConfig(httpd_req_t *req) {
     cJSON *res = cJSON_CreateObject();
     cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
     cJSON_AddItemToObject(res, "error", cJSON_CreateString("Missing 'type' parameter"));
-    const char *response = cJSON_PrintUnformatted(res);
-    cJSON_Delete(res);
-    httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
+    std::string response = cjson_to_string_and_free(res);
+    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
     return ESP_FAIL;
   }
 
@@ -1028,9 +990,8 @@ esp_err_t WebServerManager::handleHKReset(httpd_req_t *req) {
   cJSON *res = cJSON_CreateObject();
   cJSON_AddItemToObject(res, "success", cJSON_CreateBool(true));
   cJSON_AddItemToObject(res, "error", cJSON_CreateString("Erasing HomeKit pairings, device will reboot"));
-  const char *response = cJSON_PrintUnformatted(res);
-  cJSON_Delete(res);
-  httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
+  std::string response = cjson_to_string_and_free(res);
+  httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
   instance->m_readerDataManager.deleteAllReaderData();
   homeSpan.processSerialCommand("H");
   return ESP_OK;
@@ -1050,9 +1011,8 @@ esp_err_t WebServerManager::handleWifiReset(httpd_req_t *req) {
   cJSON *res = cJSON_CreateObject();
   cJSON_AddItemToObject(res, "success", cJSON_CreateBool(true));
   cJSON_AddItemToObject(res, "error", cJSON_CreateString("Erasing WiFi credentials, device will reboot"));
-  const char *response = cJSON_PrintUnformatted(res);
-  cJSON_Delete(res);
-  httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
+  std::string response = cjson_to_string_and_free(res);
+  httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
   homeSpan.processSerialCommand("X");
   return ESP_OK;
 }
@@ -1071,9 +1031,8 @@ esp_err_t WebServerManager::handleStartConfigAP(httpd_req_t *req) {
   cJSON *res = cJSON_CreateObject();
   cJSON_AddItemToObject(res, "success", cJSON_CreateBool(true));
   cJSON_AddItemToObject(res, "error", cJSON_CreateString("Starting AP mode..."));
-  const char *response = cJSON_PrintUnformatted(res);
-  cJSON_Delete(res);
-  httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
+  std::string response = cjson_to_string_and_free(res);
+  httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
   vTaskDelay(pdMS_TO_TICKS(1000));
   homeSpan.processSerialCommand("A");
   return ESP_OK;
@@ -1794,11 +1753,9 @@ esp_err_t WebServerManager::handleCertificateUpload(httpd_req_t *req) {
     cJSON *res = cJSON_CreateObject();
     cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
     cJSON_AddItemToObject(res, "error", cJSON_CreateString("Invalid bundle content length"));
-    const char *response = cJSON_PrintUnformatted(res);
-    cJSON_Delete(res);
     httpd_resp_set_status(req, "400 Bad Request");
-    httpd_resp_send(req, response,
-                    HTTPD_RESP_USE_STRLEN);
+    std::string response = cjson_to_string_and_free(res);
+    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
     return ESP_FAIL;
   }
 
@@ -1812,10 +1769,9 @@ esp_err_t WebServerManager::handleCertificateUpload(httpd_req_t *req) {
     cJSON *res = cJSON_CreateObject();
     cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
     cJSON_AddItemToObject(res, "error", cJSON_CreateString("Missing 'type' parameter"));
-    const char *response = cJSON_PrintUnformatted(res);
-    cJSON_Delete(res);
     httpd_resp_set_status(req, "400 Bad Request");
-    httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
+    std::string response = cjson_to_string_and_free(res);
+    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
     return ESP_FAIL;
   }
 
@@ -1832,11 +1788,9 @@ esp_err_t WebServerManager::handleCertificateUpload(httpd_req_t *req) {
       cJSON *res = cJSON_CreateObject();
       cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
       cJSON_AddItemToObject(res, "error", cJSON_CreateString("Failed to receive bundle data"));
-      const char *response = cJSON_PrintUnformatted(res);
-      cJSON_Delete(res);
       httpd_resp_set_status(req, "400 Bad Request");
-      httpd_resp_send(req, response,
-                      HTTPD_RESP_USE_STRLEN);
+    std::string response = cjson_to_string_and_free(res);
+    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
       return ESP_FAIL;
     }
     buffer[received] = '\0';
@@ -1865,11 +1819,9 @@ esp_err_t WebServerManager::handleCertificateUpload(httpd_req_t *req) {
   cJSON *res = cJSON_CreateObject();
   cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
   cJSON_AddItemToObject(res, "error", cJSON_CreateString("Failed to save certificate"));
-  const char *response = cJSON_PrintUnformatted(res);
-  cJSON_Delete(res);
   httpd_resp_set_status(req, HTTPD_500);
-  httpd_resp_send(req, response,
-                  HTTPD_RESP_USE_STRLEN);
+  std::string response = cjson_to_string_and_free(res);
+  httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
   return ESP_FAIL;
 }
 
@@ -1947,10 +1899,9 @@ esp_err_t WebServerManager::handleCertificateDelete(httpd_req_t *req) {
     cJSON *res = cJSON_CreateObject();
     cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
     cJSON_AddItemToObject(res, "error", cJSON_CreateString("Missing certificate type"));
-    const char *response = cJSON_PrintUnformatted(res);
-    cJSON_Delete(res);
     httpd_resp_set_status(req, "400 Bad Request");
-    httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
+    std::string response = cjson_to_string_and_free(res);
+    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
     return ESP_FAIL;
   }
 
@@ -1960,10 +1911,9 @@ esp_err_t WebServerManager::handleCertificateDelete(httpd_req_t *req) {
     cJSON *res = cJSON_CreateObject();
     cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
     cJSON_AddItemToObject(res, "error", cJSON_CreateString("Invalid certificate type"));
-    const char *response = cJSON_PrintUnformatted(res);
-    cJSON_Delete(res);
     httpd_resp_set_status(req, "400 Bad Request");
-    httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
+    std::string response = cjson_to_string_and_free(res);
+    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
     return ESP_FAIL;
   }
 
@@ -1983,9 +1933,8 @@ esp_err_t WebServerManager::handleCertificateDelete(httpd_req_t *req) {
   cJSON *res = cJSON_CreateObject();
   cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
   cJSON_AddItemToObject(res, "error", cJSON_CreateString("Failed to delete certificate"));
-  const char *response = cJSON_PrintUnformatted(res);
-  cJSON_Delete(res);
-  httpd_resp_set_status(req, "500 Internal Server Error");
-  httpd_resp_send(req, response, HTTPD_RESP_USE_STRLEN);
+  httpd_resp_set_status(req, HTTPD_500);
+  std::string response = cjson_to_string_and_free(res);
+  httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
   return ESP_FAIL;
 }
