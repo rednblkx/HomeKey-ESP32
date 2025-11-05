@@ -108,7 +108,9 @@ You can also buy from Elechouse for best quality but they are typically more exp
     *   **@lollokara's PCB:** This board features an external NFC antenna, RGB LED, and 48V input (alongside USB-C).
         *   **PCB Files:** Available on Github [here](https://github.com/lollokara/HomeKey-ESP32-PCB) and you can manufacture it where you want, or it can be ordered from PCBWay [here](https://www.pcbway.com/project/shareproject/ESP32_Homekey_77a119d7.html).
         *   There's two disconnected pads on the top left to the right of the USB-C that need to be soldered(pad bottom-left SEL1 and pad top-right SEL0) to select SPI mode but a manufacturer like PCBWay can handle this, however, they can sometimes misinterpret, so be prepared to put some solder.
-    *   **@darkside9009's PCB:** This board comes with an integrated NFC antenna. It's not open-source, but they claim the PCBs are manufactured in Germany through their own company and can be ordered from Amazon [here](https://www.amazon.de/CASmo-NFC-HomeKey-Funktionalit%C3%A4t-PN532-NFC-Modul-erm%C3%B6glichen/dp/B0DJT89BYK).
+    *   **@darkside9009's PCB:** This board comes with an integrated NFC antenna. It's not open-source, but they claim the PCBs are manufactured in Germany through their own company and can be ordered on Amazon [here](https://www.amazon.de/CASmo-NFC-HomeKey-Funktionalit%C3%A4t-PN532-NFC-Modul-erm%C3%B6glichen/dp/B0DJT89BYK).
+        * They also have a version with Ethernet and PoE and an external NFC antenna. It can ordered on Amazon [here](https://www.amazon.de/-/en/CASmo-NFC-MB-ETH-HomeKey-authorization-Homekey-functionality/dp/B0FB44T9PS/258-2739647-8545128)
+        * Since there is low demand, they are not keeping a lot of stock so it might not be in stock at the time but you can reach out to them on their [official website](https://casgermany.com) or on the Discord server and ask if you can order one.
 
 **Note:** The project and its owner are not affiliated with the aforementioned products or their creators, just providing solutions and praising community efforts.
 

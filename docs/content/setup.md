@@ -136,7 +136,7 @@ After successfully flashing the firmware, your HomeKey-ESP32 is ready for its fi
     *   **Password:** `homespan`
     Connect your phone or computer to this Wi-Fi network.
 3.  **Access the Captive Portal:** A captive portal should open automatically. If it doesn't, you can open it manually by navigating to `http://192.168.4.1/hotspot-detect.html` in your web browser.
-4.  **Configure Wi-Fi and HomeKit Setup Code:** On the captive portal page, you can configure the device to connect to your home Wi-Fi network. You can also set the HomeKit setup code on this page.
+4.  **Configure Wi-Fi and HomeKit Setup Code:** On the captive portal page, you can configure the device to connect to your home Wi-Fi network. You can also set the HomeKit setup code on this page otherwise it is the one seen below.
 5.  **Access the Web Interface:** After the device is connected to your Wi-Fi network, you can access the full web interface by navigating to the device's IP address in your web browser. The web interface allows you to configure all aspects of the device, including MQTT, actions, and other miscellaneous settings.
 
 ## 5. HomeKit Pairing

@@ -22,6 +22,11 @@ Use the navigation on the left (or use the top-right menu if you're on a mobile 
 ## Maintenance & Troubleshooting
 
 * **[Updates](updates):** Keep your HomeKey-ESP32 running smoothly with the latest features and bug fixes. This guide explains how to update your device's firmware, including the magic of Over-The-Air (OTA) updates. Stay fresh, stay secure!
+* **[Troubleshooting](troubleshooting):** If you encounter any issues or have questions that aren't covered in this documentation, don't hesitate to reach out! You can open an [issue](https://github.com/rednblkx/HomeKey-ESP32/issues) or join the Discord server [here](https://discord.com/invite/VWpZ5YyUcm).
+
+## API Documentation
+
+* **[API Reference](api):** Dive into the codebase and explore the various classes and functions that make up the HomeKey-ESP32 project. Learn how to use them to customize your device's behavior and functionality.
 
 ## Need Help?
 

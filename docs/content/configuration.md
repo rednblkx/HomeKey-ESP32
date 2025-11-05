@@ -15,13 +15,27 @@ The web interface is organized into several sections, accessible via the main na
 
 ---
 
-## 2. HK Info
+## 2. Info
+
+### 2.1. HomeKey
 
 This section provides read-only information about your HomeKey reader, including its Group Identifier (GID), Unique Identifier (ID), and details about any configured issuers and their endpoints. This is useful for debugging and verifying HomeKey functionality.
 
 *   **Reader GID:** The Group Identifier of your HomeKey reader.
 *   **Reader ID:** The Unique Identifier of your HomeKey reader.
-*   **Issuers:** A list of issuers configured on your device, along with their Issuer IDs and Endpoint IDs.
+*   **Issuers List:** A list of HomeKey issuers configured on your device, along with their Issuer IDs and their enrolled Endpoint IDs.
+
+### 2.2. System
+
+This section provides read-only information about your HomeKey-ESP32 device, including its firmware version, device name, and Wi-Fi signal strength.
+
+*   **Version:** The firmware version of HomeKey-ESP32.
+*   **UI Version:** This is the version of the web interface. 
+*   **Device Name:** The name of your device.
+*   **Uptime:** The amount of time in milliseconds that your device has been running since boot.
+*   **Free Heap:** The amount of free memory available on your device.
+*   **Wi-Fi Signal:** The Wi-Fi signal strength as RSSI (Received Signal Strength Indicator) in dBm.
+*   **Ethernet enabled:** Whether Ethernet is enabled or disabled.
 
 ---
 
@@ -29,7 +43,7 @@ This section provides read-only information about your HomeKey reader, including
 
 This section allows you to configure how your HomeKey-ESP32 device communicates with your MQTT broker. MQTT is a lightweight messaging protocol that enables seamless integration with home automation platforms like Home Assistant. Changes in this section will reboot the device.
 
-### 3.1. Broker Connection
+### 3.1. Broker
 
 These settings define how your device connects to your MQTT broker.
 
@@ -38,18 +52,22 @@ These settings define how your device connects to your MQTT broker.
 *   **Client ID:** A unique client ID for your device on the MQTT broker. 
     * By default, a unique ID will be generated.
 *   **LWT Topic:** The Last Will and Testament (LWT) topic. 
-    * The broker will publish an `offline` message to this topic when the device disconnects unexpectedly. 
+    * The broker will publish an `offline` message to this topic when the device disconnects. 
     * When connected, the device will publish `online` to this topic.
 *   **Username:** The username for authenticating with your MQTT broker (if required).
 *   **Password:** The password for authenticating with your MQTT broker (if required).
+    *   **Note:** The password is stored in plain-text and is not encrypted.
+    *   **Note:** The current password is not shown as it is obscured from the backend.
 *   **HASS MQTT Discovery:** Enable or disable Home Assistant MQTT Discovery. 
-    * If enabled, Home Assistant can automatically discover and configure your device's MQTT entities (like NFC tag readers).
+    * If enabled, Home Assistant can automatically discover and configure your device's MQTT entities (the lock and NFC tags entities).
+*   Enable SSL/TLS: Enable or disable SSL/TLS for MQTT communication.
+    * When enabled, a new section called "SSL/TLS Settings" will appear below it to configure the certificates.
 
-### 3.2. MQTT Topics
+### 3.2. Topics
 
 This section is organized into two tabs: **Core Topics** and **Custom Topics**.
 
-#### 3.2.1. Core Topics
+#### 3.2.1. Core
 
 These are the essential MQTT topics used by the HomeKey-ESP32.
 
@@ -62,7 +80,7 @@ These are the essential MQTT topics used by the HomeKey-ESP32.
 *   **Lock Target State Cmd Topic:** The MQTT control topic for the HomeKey-ESP32 lock target state.
 *   **SmartLock battery level Cmd Topic:** The MQTT control topic for setting the battery level to be shown in HomeKit.
 
-#### 3.2.2. Custom Topics
+#### 3.2.2. Custom
 
 These settings allow for more advanced customization of MQTT topics and states.
 
@@ -84,7 +102,7 @@ These actions are executed on successful/failed HomeKey authentications and on N
 
 This section is organized into two tabs: **Neopixel** and **Simple GPIO**.
 
-#### 4.1.1. Neopixel
+#### 4.1.1. Pixel
 
 Configure a Pixel LED for visual feedback.
 
@@ -107,7 +125,10 @@ Configure a simple GPIO pin for visual or physical feedback.
     *   **GPIO Pin:** GPIO Pin pulled HIGH or LOW on failed HomeKey authentication.
     *   **Timeout (ms):** How long (in milliseconds) the fail pin should hold its state.
     *   **GPIO State:** Whether the fail pin should go `LOW` or `HIGH`.
-*   **2nd action (on success):** Configure a secondary action on successful HomeKey authentication.
+*   **2nd action on success:** Configure a secondary action on successful HomeKey authentication.
+    *   **Alt action Initiator GPIO Pin:** GPIO Pin to initialize an alternate action after successful HomeKey authentication.
+    *   **Alt action Initiator Timeout (ms):** Timeout for alternate action initialization.
+    *   **Feedback LED Pin:** GPIO Pin for an LED indicating alternate action initialization.
     *   **GPIO Pin:** GPIO Pin to trigger the alternate action.
     *   **Timeout (ms):** Timeout for the alternate action.
     *   **GPIO State:** GPIO state for the alternate action.
@@ -127,7 +148,7 @@ Configure a simple GPIO pin to trigger for lock/unlock actions. This follows the
 *   **GPIO State - Unlocked:** The electrical level (`LOW`/`HIGH`) for the action pin when the lock is in the "unlocked" state.
 *   **Actionable by HomeKey:** If enabled, HomeKit will directly control the GPIO state.
 *   **Momentary state:** Enables momentary state for the action pin. Options: `Disabled`, `Home App Only`, `Home Key Only`, `Home App + Home Key`.
-*   **Momentary timeout (ms):** Duration (in milliseconds) for the momentary pulse.
+*   **Momentary timeout (ms):** Duration (in milliseconds) for the momentary state.
 
 #### 4.2.2. Dummy
 
@@ -135,7 +156,7 @@ This option follows the "Always Lock/Unlock on HomeKey" option. Momentary state 
 
 *   **Status:** Enable or disable "Dumb Switch" mode for HomeKit.
 *   **Momentary state:** Enables momentary state. Options: `Disabled`, `Home App Only`, `Home Key Only`, `Home App + Home Key`.
-*   **Momentary timeout (ms):** Duration (in milliseconds) for the momentary pulse.
+*   **Momentary timeout (ms):** Duration (in milliseconds) for the momentary state.
 
 ---
 
@@ -145,12 +166,13 @@ This section covers general device behavior, HomeKit parameters, GPIO pin assign
 
 ### 5.1. General settings
 
-This section is organized into several tabs: **HomeKit**, **HomeKey**, **PN532**, **HomeSpan**, and **Ethernet**.
+This section is organized into several subsections: **HomeKit**, **HomeKey**, **PN532**, **HomeSpan**, and **Ethernet**.
 
 #### 5.1.1. HomeKit
 
-*   **Device Name:** The name your HomeKey-ESP32 will display in your Home app and on your network.
-*   **Setup Code:** The 8-digit code used to pair your device with the Apple Home app. **Important: This code is for reference and can be changed during Wi-Fi configuration or from the WebUI.**
+*   **Device Name:** The name your HomeKey-ESP32 will display in your Home app.
+*   **Setup Code:** The 8-digit code used to pair your device with the Apple Home app. 
+    *   **Note:** If you updated the HomeKit Setup Code using the AP configuration page, it will not be updated here due to internal constraints.
 *   **Always Lock on HomeKey:** If enabled, a successful HomeKey authentication will always trigger a "locked" state, regardless of the current state.
 *   **Always Unlock on HomeKey:** If enabled, a successful HomeKey authentication will always trigger an "unlocked" state, regardless of the current state.
 *   **SmartLock battery reporting:** Enable this if you want HomeKey-ESP32 to report the battery level of an *external* smart lock or similar device to HomeKit. This requires your external device to send battery level updates to HomeKey-ESP32 via MQTT.
@@ -162,10 +184,6 @@ This section is organized into several tabs: **HomeKit**, **HomeKey**, **PN532**
 
 #### 5.1.2. HomeKey
 
-*   **Alt action Initiator Button:**
-    *   **GPIO Pin:** GPIO Pin to initialize an alternate action after successful HomeKey authentication.
-    *   **Timeout (ms):** Timeout for alternate action initialization.
-    *   **Feedback LED Pin:** GPIO Pin for an LED indicating alternate action initialization.
 *   **HomeKey Card Finish:** Choose the color of the HomeKey icon that appears in Apple Wallet when you add a HomeKey pass. Options: `Tan`, `Gold`, `Silver`, `Black`.
 
 #### 5.1.3. PN532
@@ -180,6 +198,8 @@ This section allows you to manually assign the GPIO pins for the PN532 NFC modul
 #### 5.1.4. HomeSpan
 
 *   **OTA Password:** The password required for Over-The-Air (OTA) firmware updates.
+    *   **Note:** The password is stored in plain-text and is not encrypted.
+    *   **Note:** The current password is not shown as it is obscured from the backend.
 *   **Control GPIO Pin:** GPIO Pin for a Configuration Mode button. Refer to HomeSpan documentation for more details.
 *   **Status LED GPIO Pin:** GPIO Pin for an LED that indicates the HomeSpan status.
 
@@ -190,7 +210,7 @@ This section allows you to manually assign the GPIO pins for the PN532 NFC modul
 *   **Ethernet chip:** Select the Ethernet PHY chip used.
 
 Rest of the fields are shown depending on the selected PHY chip as there are two protocols available for this:
-  - SPI: 
+  - SPI:
     *   **SPI Frequency:** SPI Frequency for Ethernet communication.
     *   **SS Pin:** Slave Select Pin for SPI Ethernet.
     *   **IRQ Pin:** Interrupt Request Pin for SPI Ethernet.
@@ -213,7 +233,9 @@ Protect your device's configuration by setting up authentication for the web int
 
 *   **Status:** Toggle to enable or disable a username and password for accessing the web interface.
 *   **Username:** The username for accessing the web interface.
-*   **Password:** The password for accessing the web interface.
+*   **Password:** The password for accessing the web interface. 
+    *   **Note:** The password is stored in plain-text and is not encrypted.
+    *   **Note:** The current password is not shown as it is obscured from the backend.
 
 ---
 
