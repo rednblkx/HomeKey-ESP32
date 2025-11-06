@@ -177,6 +177,86 @@ The following chips are supported for Ethernet:
 
 ## Development
 
+<div align="center">
+  
+```mermaid
+graph TD
+  %% External Systems & Hardware
+  subgraph "External World"
+      A[iPhone / Apple Watch]
+      B[Apple Home]
+      C[Web Browser]
+      D[MQTT Broker]
+      E[Physical Lock, Buttons & LEDs]
+  end
+
+  %% Main Application on ESP32
+  subgraph "HomeKey-ESP32 Core"
+      
+      subgraph "Interface Managers (I/O)"
+          direction LR
+          Nfc[NfcManager]
+          HK[HomeKitLock]
+          Web[WebServerManager]
+          Mqtt[MqttManager]
+          Hw[HardwareManager]
+      end
+
+      subgraph "Logic Core (State Machine)"
+          Lock[LockManager]
+      end
+
+      subgraph "Data Services (Persistence)"
+          direction LR
+          Config[ConfigManager]
+          Reader[ReaderDataManager]
+          NVS[(NVS Storage)]
+      end
+
+      %% High-level Data and Control Flow
+      DataServices[Data Services] -- "Provides Config & Reader Data" --> InterfaceManagers[Interface Managers]
+      DataServices -- "Provides Config" --> LogicCore[Logic Core]
+      Config -- "Reads/Writes" --> NVS
+      Reader -- "Reads/Writes" --> NVS
+      
+      InterfaceManagers -- "State Change Requests (e.g., Unlock)" --> Lock
+      Lock -- "Actions & State Updates" --> InterfaceManagers
+  end
+  
+  %% Connections to the External World
+  A -- NFC --> Nfc
+  B -- HomeKit --> HK
+  C -- HTTP/WebSocket --> Web
+  D -- MQTT --> Mqtt
+  E -- GPIO --> Hw
+  
+  Hw -- GPIO --> E
+  HK -- HomeKit --> B
+  Web -- HTTP/WebSocket --> C
+  Mqtt -- MQTT --> D
+
+  %% Styling for clarity
+  style A fill:#1f2937,stroke:#374151,color:#fff
+  style B fill:#1f2937,stroke:#374151,color:#fff
+  style C fill:#1f2937,stroke:#374151,color:#fff
+  style D fill:#1f2937,stroke:#374151,color:#fff
+  style E fill:#1f2937,stroke:#374151,color:#fff
+
+  style Nfc fill:#3b82f6,stroke:#2563eb,color:#fff
+  style HK fill:#059669,stroke:#047857,color:#fff
+  style Web fill:#f59e0b,stroke:#d97706,color:#fff
+  style Mqtt fill:#ef4444,stroke:#dc2626,color:#fff
+  style Hw fill:#8b5cf6,stroke:#7c3aed,color:#fff
+
+  style Lock fill:#ec4899,stroke:#db2777,color:#fff
+  
+  style Config fill:#6b7280,stroke:#4b5563,color:#fff
+  style Reader fill:#6b7280,stroke:#4b5563,color:#fff
+  style NVS fill:#9ca3af,stroke:#6b7280,color:#fff
+```
+
+</div>
+
 ### Project Structure
 
 ```
