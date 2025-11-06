@@ -1,16 +1,18 @@
 <div align="center">
   <img src="https://github.com/user-attachments/assets/fc93a70a-ef1e-4390-9067-6fafb255e5ac" alt="HomeKey-ESP32" width="200"/>
   
-  # HomeKey-ESP32 🏠🔑
+  # HomeKey-ESP32
+  [![Discord](https://badgen.net/discord/members/VWpZ5YyUcm?icon=discord)](https://discord.com/invite/VWpZ5YyUcm)
+  [![CI](https://github.com/rednblkx/HomeKey-ESP32/actions/workflows/esp32.yml/badge.svg?branch=main)](https://github.com/rednblkx/HomeKey-ESP32/actions/workflows/esp32.yml)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
   
   **Apple HomeKey functionality for the rest of us**
   
-  [![Discord](https://badgen.net/discord/members/VWpZ5YyUcm?icon=discord)](https://discord.com/invite/VWpZ5YyUcm)
- http://localhost:8122/4334 [![CI](https://github.com/rednblkx/HomeKey-ESP32/actions/workflows/esp32.yml/badge.svg?branch=main)](https://github.com/rednblkx/HomeKey-ESP32/actions/workflows/esp32.yml)
-  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
+  [Documentation](https://rednblkx.github.io/HomeKey-ESP32/) • [Quick Start](#-60-second-quick-start) • [Setup Guide](docs/setup.md) • [Discord](https://discord.com/invite/VWpZ5YyUcm)
+
   [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/L3L2UCY8N)
   
-  [📖 Documentation](https://rednblkx.github.io/HomeKey-ESP32/) • [🚀 Quick Start](#-60-second-quick-start) • [🛠️ Setup Guide](docs/setup.md) • [💬 Discord](https://discord.com/invite/VWpZ5YyUcm)
 </div>
 
 ## What is HomeKey-ESP32?
@@ -30,13 +32,13 @@ Transform your ordinary door lock into a smart, Apple HomeKey-compatible access 
 pip install esptool
 
 # 2. Connect the PN532 NFC module to your ESP32 development board
-# See the [NFC Module Wiring](https://rednblkx.github.io/HomeKey-ESP32/setup/#21-nfc-module-wiring) for details
-http://localhost:8122/4334
+# See the https://rednblkx.github.io/HomeKey-ESP32/setup/#21-nfc-module-wiring for details
+
 # 3. Connect your ESP32 and flash
 esptool.py --port /dev/ttyUSB0 write_flash 0x0 firmware-merged.bin
 
 # 4. Connect to WiFi AP: HomeSpan-Setup / homespan
-# 5. Wait a couple seconds for the portal to appear or navigate to http://192.168.4.1/hotspot-detect.html and configure the WiFi nad HomeKit setup code
+# 5. Wait a couple seconds for the portal to appear or navigate to http://192.168.4.1/hotspot-detect.html and configure the WiFi and HomeKit setup code
 # 6. Pair with HomeKit using the code setup in step 5 or the default code: 466-37-726
 # 7. Start using HomeKey! 🎉
 ```
@@ -73,21 +75,11 @@ graph TD
 
 </div>
 
-### Core Components
-
-| Component | File | Purpose |
-|-----------|------|---------|
-| **NFC Manager** | [`NfcManager.cpp`](main/NfcManager.cpp) | Handles PN532 communication and HomeKey authentication |
-| **HomeKit Bridge** | [`HomeKitLock.cpp`](main/HomeKitLock.cpp) | Manages Apple HomeKit integration and pairing |
-| **Lock Manager** | [`LockManager.cpp`](main/LockManager.cpp) | Controls lock state transitions and GPIO actions |
-| **MQTT Client** | [`MqttManager.cpp`](main/MqttManager.cpp) | Enables smart home integration via MQTT |
-| **Web Server** | [`WebServerManager.cpp`](main/WebServerManager.cpp) | Provides configuration UI and OTA updates |
-| **Config Manager** | [`ConfigManager.cpp`](main/ConfigManager.cpp) | Handles persistent configuration storage |
-
 ## ✨ Key Features
 
 ### **Apple HomeKey Integration**
 - **Express Mode**: Unlock without waking your device
+- **Power Reserve**: Unlock even when the device needs to be charged
 - **Multi-Device Support**: Works with iPhone and Apple Watch
 - **Fast Authentication**: Sub-300ms unlock times
 
@@ -113,7 +105,7 @@ graph TD
 
 ### Prerequisites
 
-- **ESP32 Development Board** (4MB+ flash recommended)
+- **ESP32 Development Board**
 - **PN532 NFC Module** (SPI interface)
 - **USB Cable** (for flashing and power)
 - **Computer** (Windows, Mac, or Linux)
@@ -121,16 +113,35 @@ graph TD
 
 ### Hardware Requirements
 
-<div align="center">
-
-| Component | Recommended | Alternative |
+| Component | Model | Notes |
 |-----------|-------------|-------------|
-| **ESP32** | ESP32-WROOM-32 | Any 4MB+ variant |
-| **NFC Module** | PN532 SPI | PN532 I2C (currently not supported) |
+| **ESP32** | ESP32-C6     | Any 4MB+ variant works |
+| **NFC Module** | PN532 SPI | I2C currently not supported |
 | **Power Supply** | 5V 1A USB | 5V 0.5A minimum |
-| **Wiring** | Jumper Wires | Soldered connections |
 
-</div>
+#### Ethernet
+
+The following chips are supported for Ethernet:
+
+-  W5500
+-  DM9051
+-  KSZ8851
+-  LAN8720 / LAN8710
+-  TLK110
+-  RTL8201
+-  DP83848
+-  KSZ8041
+-  KSZ8081
+
+> [!IMPORTANT]
+>
+> The following are only supported for ESP32-WROOM-32 boards as other variants lack the internal EMAC needed for the RMII interface:
+> -  LAN8720 / LAN8710
+> -  TLK110
+> -  RTL8201
+> -  DP83848
+> -  KSZ8041
+> -  KSZ8081
 
 ### Installation Steps
 
@@ -164,7 +175,7 @@ graph TD
    - Hold your iPhone or Apple Watch near the NFC reader
    - Enjoy instant, secure access to your home! 🎉
 
-## 🛠️ Development
+## Development
 
 ### Project Structure
 
@@ -193,11 +204,24 @@ HomeKey-ESP32/
     └── content/          # Hugo documentation
 ```
 
+### Core Components
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| **NFC Manager** | [`NfcManager.cpp`](main/NfcManager.cpp) | Handles PN532 communication and HomeKey authentication |
+| **HomeKit Bridge** | [`HomeKitLock.cpp`](main/HomeKitLock.cpp) | Manages Apple HomeKit integration and pairing |
+| **Lock Manager** | [`LockManager.cpp`](main/LockManager.cpp) | Controls lock state transitions and GPIO actions |
+| **MQTT Client** | [`MqttManager.cpp`](main/MqttManager.cpp) | Enables smart home integration via MQTT |
+| **Web Server** | [`WebServerManager.cpp`](main/WebServerManager.cpp) | Provides configuration UI and OTA updates |
+| **Config Manager** | [`ConfigManager.cpp`](main/ConfigManager.cpp) | Handles persistent configuration storage |
+
 ### Building from Source
 
 ```bash
 # Install dependencies
 git submodule update --init --recursive
+
+# Install esp-idf (see https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html#get-started)
 
 # Build firmware
 idf.py build
@@ -211,7 +235,7 @@ idf.py monitor
 
 ### Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+Contributions are welcomed! Please see the [Contributing Guidelines](CONTRIBUTING.md) for details.
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
@@ -219,43 +243,24 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request against the `main` branch
 
-## 🤝 Community & Support
+## Support the Project
 
-### Discord Community
+HomeKey-ESP32 is openly developed and maintained by the community. Your support helps us continue improving the project.
 
-Join our Discord community for:
-- **Real-time support** from developers and users
-- **Feature discussions** and roadmap planning
-- **Troubleshooting help** and best practices
-- **Show and tell** your HomeKey setups
+- **Star the repository** to show your appreciation
+- **Report bugs** to help improve stability
+- **Suggest features** to guide development
+- **Share the project** with your network
+- **Contribute documentation** to help others
 
-[![Discord](https://badgen.net/discord/members/VWpZ5YyUcm?icon=discord)](https://discord.com/invite/VWpZ5YyUcm)
+## Credits
 
-### GitHub Issues
+- **[@kormax](https://github.com/kormax)**: Reverse-engineered the HomeKey NFC protocol and published the foundational [PoC implementation](https://github.com/kormax/apple-home-key-reader)
+- **[@kupa22](https://github.com/kupa22)**: Researched the HAP (HomeKit Accessory Protocol) side of HomeKey
+- **[HomeSpan](https://github.com/HomeSpan/HomeSpan)**: Excellent HomeKit framework that powers our integration
+- **[ESP-IDF](https://github.com/espressif/esp-idf)**: Robust IoT development framework from Espressif
 
-- **Feature Requests**: Open an issuer or a discussion with a clear title and description
-- **Questions**: Check existing issues and docs first
-
-
-## 💖 Support the Project
-
-HomeKey-ESP32 is developed and maintained by the community. Your support helps us continue improving the project.
-
-### Financial Support
-
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/L3L2UCY8N)
-
-- **Ko-fi**: One-time or recurring donations to support development
-
-### Non-Financial Support
-
-- **⭐ Star the repository** to show your appreciation
-- **🐛 Report bugs** to help improve stability
-- **💡 Suggest features** to guide development
-- **📢 Share the project** with your network
-- **📝 Contribute documentation** to help others
-
-## 📄 License & Legal
+## License & Legal
 
 ### License
 
@@ -265,7 +270,7 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 
 **Important**: This project implements Apple HomeKey functionality through reverse engineering. While we strive for security and compatibility:
 
-- **Not officially affiliated** with Apple Inc.
+- **Not affiliated** in any shape or form nor condoned by Apple Inc.
 - **Use at your own risk** for security-critical applications
 - **May lack elements** from Apple's private specifications
 - **Subject to change** as Apple updates their protocols
@@ -275,10 +280,3 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 - **Apple**, **iPhone**, and **Apple Watch** are trademarks of Apple Inc.
 - **ESP32** is a trademark of Espressif Systems (Shanghai) Co., Ltd.
 - **Home Assistant** is a trademark of Open Home Foundation
-
-## Credits
-
-- **[@kormax](https://github.com/kormax)**: Reverse-engineered the HomeKey NFC protocol and published the foundational [PoC implementation](https://github.com/kormax/apple-home-key-reader)
-- **[@kupa22](https://github.com/kupa22)**: Researched the HAP (HomeKit Accessory Protocol) side of HomeKey
-- **[HomeSpan](https://github.com/HomeSpan/HomeSpan)**: Excellent HomeKit framework that powers our integration
-- **[ESP-IDF](https://github.com/espressif/esp-idf)**: Robust IoT development framework from Espressif
