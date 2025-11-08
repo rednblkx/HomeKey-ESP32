@@ -69,20 +69,20 @@
 #define NFC_FAIL_PIN 255  // GPIO Pin pulled HIGH or LOW (see NFC_SUCCESS_HL) on failed HK Auth
 #define NFC_FAIL_HL 1 // Flag to define if NFC_FAIL_PIN should be held High or Low
 #define NFC_FAIL_TIME 1000 // How long should NFC_FAIL_PIN be held High or Low
-#define GPIO_ACTION_PIN 255
-#define GPIO_ACTION_LOCK_STATE 0
-#define GPIO_ACTION_UNLOCK_STATE 1
 #define TAG_EVENT_PIN 255 // GPIO Pin pulled HIGH or LOW (see TAG_EVENT_HL) on tag event
 #define TAG_EVENT_TIMEOUT 1000 // How long should TAG_EVENT_PIN be held High or Low
 #define TAG_EVENT_HL 1  // Flag to define if TAG_EVENT_PIN should be held High or Low
+#define GPIO_ACTION_PIN 255 // GPIO Pin pulled HIGH or LOW (see GPIO_ACTION_HL) on action
+#define GPIO_ACTION_LOCK_STATE 0 // GPIO Pin pulled HIGH or LOW (see GPIO_ACTION_HL) on action
+#define GPIO_ACTION_UNLOCK_STATE 1 // GPIO Pin pulled HIGH or LOW (see GPIO_ACTION_HL) on action
 #define GPIO_ACTION_MOMENTARY_STATE static_cast<uint8_t>(gpioMomentaryStateStatus::M_DISABLED)
-#define GPIO_ACTION_MOMENTARY_TIMEOUT 5000
-#define GPIO_HK_ALT_ACTION_INIT_PIN 255
-#define GPIO_HK_ALT_ACTION_INIT_TIMEOUT 5000
-#define GPIO_HK_ALT_ACTION_INIT_LED_PIN 255
-#define GPIO_HK_ALT_ACTION_PIN 255
-#define GPIO_HK_ALT_ACTION_TIMEOUT 5000
-#define GPIO_HK_ALT_ACTION_GPIO_STATE 1
+#define GPIO_ACTION_MOMENTARY_TIMEOUT 5000 // GPIO Delay time in ms - Action
+#define GPIO_HK_ALT_ACTION_INIT_PIN 255 // GPIO Pin pulled HIGH or LOW (see GPIO_HK_ALT_ACTION_INIT_HL) on action
+#define GPIO_HK_ALT_ACTION_INIT_TIMEOUT 5000 // GPIO Delay time in ms - Action
+#define GPIO_HK_ALT_ACTION_INIT_LED_PIN 255 // GPIO Pin pulled HIGH or LOW (see GPIO_HK_ALT_ACTION_INIT_HL) on action
+#define GPIO_HK_ALT_ACTION_PIN 255 // GPIO Pin pulled HIGH or LOW (see GPIO_HK_ALT_ACTION_HL) on action
+#define GPIO_HK_ALT_ACTION_TIMEOUT 5000 // GPIO Delay time in ms - Action
+#define GPIO_HK_ALT_ACTION_GPIO_STATE 1 // GPIO Pin pulled HIGH or LOW (see GPIO_HK_ALT_ACTION_HL) on action
 
 // WebUI
 #define WEB_AUTH_ENABLED false
