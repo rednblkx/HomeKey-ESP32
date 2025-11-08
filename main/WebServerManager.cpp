@@ -682,6 +682,9 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
       std::vector<uint8_t> d;
       alpaca::serialize(s, d);
       espp::EventManager::get().publish("hardware/gpioPinChanged", d);
+      if (keyStr == "gpioActionPin" && it->valueint != 255 && cJSON_IsTrue(cJSON_GetObjectItem(configSchema, "hkDumbSwitchMode"))) {
+        cJSON_AddBoolToObject(obj, "hkDumbSwitchMode",false);
+      }
     } else if (keyStr == "btrLowStatusThreshold") {
       EventValueChanged s{.name = "btrLowThreshold",
                           .newValue = (uint8_t)it->valueint};
@@ -694,9 +697,6 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     } else if (keyStr == "neoPixelType") {
       rebootNeeded = true;
       rebootMsg = "Pixel Type changed, reboot needed! Rebooting...";
-    } else if (keyStr == "gpioActionPin" && it->valueint != 255) {
-      cJSON_ReplaceItemInObject(obj, "hkDumbSwitchMode",
-                                cJSON_CreateBool(false));
     }
     it = it->next;
   }
