@@ -138,6 +138,10 @@ export interface ActionsConfig {
   neopixelSuccessTime: number;
   /** Duration in milliseconds for failure LED animation */
   neopixelFailTime: number;
+  /** Duration in milliseconds for tag event LED animation */
+  neopixelTagEventTime: number;
+  /** RGB color values for tag event LED animation */
+  neopixelTagEventColor: [number, number][];
   /** GPIO pin for NFC success indicator */
   nfcSuccessPin: number;
   /** Duration in milliseconds for NFC success signal */
@@ -150,6 +154,12 @@ export interface ActionsConfig {
   nfcFailTime: number;
   /** High/Low state for NFC failure signal */
   nfcFailHL: boolean;
+  /** GPIO pin for tag event */
+  tagEventPin: number;
+  /** Duration in milliseconds for tag event signal */
+  tagEventTimeout: number;
+  /** High/Low state for tag event signal */
+  tagEventHL: boolean;
   /** GPIO pin for action button */
   gpioActionPin: number;
   /** Lock state when GPIO action is triggered */

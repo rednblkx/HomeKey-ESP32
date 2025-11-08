@@ -112,26 +112,32 @@ Configure a Pixel LED for visual feedback.
 *   **Timeout (ms) Auth Failed:** Duration in milliseconds for the fail event.
 *   **Auth Success Color (R, G, B):** RGB color for Pixel on successful HomeKey authentication.
 *   **Auth Failure Color (R, G, B):** RGB color for Pixel on failed HomeKey authentication.
+*   **Tag Event Color (R, G, B):** RGB color for Pixel on scanned NFC tag.
 
 #### 4.1.2. Simple GPIO
 
 Configure a simple GPIO pin for visual or physical feedback.
 
-*   **Auth Success:**
-    *   **GPIO Pin:** GPIO Pin pulled HIGH or LOW on successful HomeKey authentication.
-    *   **Timeout (ms):** How long (in milliseconds) the success pin should hold its state.
-    *   **GPIO State:** Whether the success pin should go `LOW` or `HIGH`.
-*   **Auth Failure:**
-    *   **GPIO Pin:** GPIO Pin pulled HIGH or LOW on failed HomeKey authentication.
-    *   **Timeout (ms):** How long (in milliseconds) the fail pin should hold its state.
-    *   **GPIO State:** Whether the fail pin should go `LOW` or `HIGH`.
-*   **2nd action on success:** Configure a secondary action on successful HomeKey authentication.
-    *   **Alt action Initiator GPIO Pin:** GPIO Pin to initialize an alternate action after successful HomeKey authentication.
-    *   **Alt action Initiator Timeout (ms):** Timeout for alternate action initialization.
-    *   **Feedback LED Pin:** GPIO Pin for an LED indicating alternate action initialization.
-    *   **GPIO Pin:** GPIO Pin to trigger the alternate action.
-    *   **Timeout (ms):** Timeout for the alternate action.
-    *   **GPIO State:** GPIO state for the alternate action.
+*   **HomeKey Authentication:**
+  *   **Auth Success:**
+      *   **GPIO Pin:** GPIO Pin pulled HIGH or LOW on successful HomeKey authentication.
+      *   **Timeout (ms):** How long (in milliseconds) the success pin should hold its state.
+      *   **GPIO State:** Whether the success pin should go `LOW` or `HIGH`.
+  *   **Auth Failure:**
+      *   **GPIO Pin:** GPIO Pin pulled HIGH or LOW on failed HomeKey authentication.
+      *   **Timeout (ms):** How long (in milliseconds) the fail pin should hold its state.
+      *   **GPIO State:** Whether the fail pin should go `LOW` or `HIGH`.
+  *   **Seconds action on success:** Configure a secondary action on successful HomeKey authentication.
+      *   **Initiator GPIO Pin:** GPIO Pin to initialize an alternate action after successful HomeKey authentication.
+      *   **Initiator Timeout (ms):** Timeout for alternate action initialization.
+      *   **Feedback LED Pin:** GPIO Pin for an LED indicating alternate action initialization.
+      *   **GPIO Pin:** GPIO Pin to trigger the alternate action.
+      *   **Timeout (ms):** Timeout for the alternate action.
+      *   **GPIO State:** GPIO state for the alternate action.
+*   **NFC Tag Event:**
+    *   **GPIO Pin:** GPIO Pin pulled HIGH or LOW on scanned NFC tag.
+    *   **Timeout (ms):** How long (in milliseconds) the tag event pin should hold its state.
+    *   **GPIO State:** Whether the tag event pin should go `LOW` or `HIGH`.
 
 ### 4.2. State Triggers
 

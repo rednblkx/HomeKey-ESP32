@@ -58,14 +58,17 @@ private:
      */
     enum class FeedbackType {
         SUCCESS,
-        FAILURE
+        FAILURE,
+        TAG_EVENT
     };
 
     enum class TimerSources : uint8_t {
       GPIO_S,
       GPIO_F,
+      TAG_EVENT,
       PIXEL_S,
       PIXEL_F,
+      PIXEL_TAG_EVENT,
       ALT_GPIO,
       ALT_GPIO_INIT
     };
@@ -95,8 +98,10 @@ private:
   
     esp_timer_handle_t m_gpioSuccessTimer;
     esp_timer_handle_t m_gpioFailTimer;
+    esp_timer_handle_t m_tagEventTimer;
     esp_timer_handle_t m_pixelSuccessTimer;
     esp_timer_handle_t m_pixelFailTimer;
+    esp_timer_handle_t m_pixelTagEventTimer;
     esp_timer_handle_t m_altActionTimer;
     esp_timer_handle_t m_altActionInitTimer;
 

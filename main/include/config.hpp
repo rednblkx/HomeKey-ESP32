@@ -128,6 +128,8 @@ namespace espConfig
     uint8_t neoPixelType = 5;
     std::map<colorMap, uint8_t> neopixelSuccessColor = { {R, NEOPIXEL_SUCCESS_R}, {G, NEOPIXEL_SUCCESS_G}, {B, NEOPIXEL_SUCCESS_B} };
     std::map<colorMap, uint8_t> neopixelFailureColor = { {R, NEOPIXEL_FAIL_R}, {G, NEOPIXEL_FAIL_G}, {B, NEOPIXEL_FAIL_B} };
+    std::map<colorMap, uint8_t> neopixelTagEventColor = { {R, NEOPIXEL_TAG_EVENT_R}, {G, NEOPIXEL_TAG_EVENT_G}, {B, NEOPIXEL_TAG_EVENT_B} };
+    uint16_t neopixelTagEventTime = NEOPIXEL_TAG_EVENT_TIME;
     uint16_t neopixelSuccessTime = NEOPIXEL_SUCCESS_TIME;
     uint16_t neopixelFailTime = NEOPIXEL_FAIL_TIME;
     uint8_t nfcSuccessPin = NFC_SUCCESS_PIN;
@@ -136,6 +138,9 @@ namespace espConfig
     uint8_t nfcFailPin = NFC_FAIL_PIN;
     uint16_t nfcFailTime = NFC_FAIL_TIME;
     bool nfcFailHL = NFC_FAIL_HL;
+    uint8_t tagEventPin = TAG_EVENT_PIN;
+    uint16_t tagEventTimeout = TAG_EVENT_TIMEOUT;
+    bool tagEventHL = TAG_EVENT_HL;
     uint8_t gpioActionPin = GPIO_ACTION_PIN;
     bool gpioActionLockState = GPIO_ACTION_LOCK_STATE;
     bool gpioActionUnlockState = GPIO_ACTION_UNLOCK_STATE;

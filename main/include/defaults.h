@@ -57,6 +57,10 @@
 #define NEOPIXEL_FAIL_R 255 // Color value for Red - Fail HK Auth
 #define NEOPIXEL_FAIL_G 0 // Color value for Green - Fail HK Auth
 #define NEOPIXEL_FAIL_B 0 // Color value for Blue - Fail HK Auth
+#define NEOPIXEL_TAG_EVENT_R 0 // Color value for Red - Tag Event
+#define NEOPIXEL_TAG_EVENT_G 0 // Color value for Green - Tag Event
+#define NEOPIXEL_TAG_EVENT_B 0 // Color value for Blue - Tag Event
+#define NEOPIXEL_TAG_EVENT_TIME 1000 // GPIO Delay time in ms - Tag Event
 #define NEOPIXEL_SUCCESS_TIME 1000 // GPIO Delay time in ms - Success HK Auth
 #define NEOPIXEL_FAIL_TIME 1000 // GPIO Delay time in ms - Success HK Auth
 #define NFC_SUCCESS_PIN 255 // GPIO Pin pulled HIGH or LOW (see NFC_SUCCESS_HL) on success HK Auth
@@ -68,6 +72,9 @@
 #define GPIO_ACTION_PIN 255
 #define GPIO_ACTION_LOCK_STATE 0
 #define GPIO_ACTION_UNLOCK_STATE 1
+#define TAG_EVENT_PIN 255 // GPIO Pin pulled HIGH or LOW (see TAG_EVENT_HL) on tag event
+#define TAG_EVENT_TIMEOUT 1000 // How long should TAG_EVENT_PIN be held High or Low
+#define TAG_EVENT_HL 1  // Flag to define if TAG_EVENT_PIN should be held High or Low
 #define GPIO_ACTION_MOMENTARY_STATE static_cast<uint8_t>(gpioMomentaryStateStatus::M_DISABLED)
 #define GPIO_ACTION_MOMENTARY_TIMEOUT 5000
 #define GPIO_HK_ALT_ACTION_INIT_PIN 255

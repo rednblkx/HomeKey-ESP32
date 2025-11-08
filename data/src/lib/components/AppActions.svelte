@@ -8,13 +8,18 @@
 	let actionsConfig = $state<ActionsConfig>(actions ?? {
 		neopixelSuccessColor: [[0, 0], [1, 255], [2, 0]],
 		neopixelFailureColor: [[0, 255], [1, 0], [2, 0]], 
-		nfcSuccessPin: 2,
+    neopixelTagEventColor: [[0, 0], [1, 0], [2, 0]],
+    neopixelTagEventTime: 1000,
+		nfcSuccessPin: 255,
 		nfcSuccessTime: 1000,
 		nfcSuccessHL: false,
-		nfcFailPin: 2,
+		nfcFailPin: 255,
 		nfcFailTime: 1000,
 		nfcFailHL: false,
-		gpioActionPin: 2,
+    tagEventPin: 255,
+    tagEventTimeout: 1000,
+    tagEventHL: false,
+		gpioActionPin: 255,
 		gpioActionLockState: false,
 		gpioActionUnlockState: false,
 		gpioActionMomentaryEnabled: 0,
@@ -127,9 +132,17 @@
                           <input type="number" bind:value={actionsConfig.neopixelFailTime} placeholder="1000"
                             class="input input-bordered w-full" />
                         </div>
+                        <div class="form-control">
+                          <!-- svelte-ignore a11y_label_has_associated_control -->
+                          <label class="label">
+                            <span class="label-text">Timeout (ms) Tag Event</span>
+                          </label>
+                          <input type="number" bind:value={actionsConfig.neopixelTagEventTime} placeholder="1000"
+                            class="input input-bordered w-full" />
+                        </div>
                       </div>
                       <div class="divider">Colors</div>
-                      <div class="flex max-md:flex-col max-md:gap-8">
+                      <div class="flex max-md:flex-col max-md:gap-8 mb-4">
                         <div class="flex-1">
                           <h3 class="text-base md:text-md font-bold mb-4">Auth Success Color</h3>
                           <div class="flex gap-4">
@@ -189,10 +202,40 @@
                             </div>
                           </div>
                         </div>
+                        <div class="divider md:divider-horizontal max-md:hidden"></div>
+                        <div class="flex-1">
+                          <h3 class="text-base md:text-md font-bold mb-4">Tag Event Color</h3>
+                          <div class="flex gap-4">
+                            <div class="form-control">
+                              <!-- svelte-ignore a11y_label_has_associated_control -->
+                              <label class="label">
+                                <span class="label-text">R</span>
+                              </label>
+                              <input type="number" bind:value={actionsConfig.neopixelTagEventColor[0][1]}
+                                placeholder="255" class="input input-bordered w-full" />
+                            </div>
+                            <div class="form-control">
+                              <!-- svelte-ignore a11y_label_has_associated_control -->
+                              <label class="label">
+                                <span class="label-text">G</span>
+                              </label>
+                              <input type="number" bind:value={actionsConfig.neopixelTagEventColor[1][1]}
+                                placeholder="255" class="input input-bordered w-full" />
+                            </div>
+                            <div class="form-control">
+                              <!-- svelte-ignore a11y_label_has_associated_control -->
+                              <label class="label">
+                                <span class="label-text">B</span>
+                              </label>
+                              <input type="number" bind:value={actionsConfig.neopixelTagEventColor[2][1]}
+                                placeholder="255" class="input input-bordered w-full" />
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
-                  <div class="collapse collapse-arrow bg-base-200">
+                  <div class="collapse collapse-arrow bg-base-200 collapse-open">
                     <input type="radio" name="nfc-accordion" />
                     <div class="collapse-title font-medium flex items-center">
                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
@@ -202,16 +245,140 @@
                       </svg>
                       Simple GPIO
                     </div>
-                    <div class="collapse-content">
-                      <div class="flex flex-wrap gap-2">
-                        <div class="flex-1">
-                          <h3 class="text-base md:text-lg font-bold mb-4">Auth Success</h3>
+                    <div class="collapse-content flex flex-col gap-2">
+                      <div class="collapse collapse-plus bg-base-300">
+                        <h3 class="collapse-title ctext-base md:text-lg font-bold">HomeKey Authentication</h3>
+                        <input type="checkbox" name="hk-auth-accordion" />
+                        <div class="collapse-content">
+                          <div class="flex flex-wrap justify-around gap-2 mb-4">
+                            <fieldset class="fieldset border-base-100 rounded-box w-xs border p-4">
+                              <legend class="fieldset-legend">Auth Success</legend>
+                              <div class="form-control mb-4">
+                                <!-- svelte-ignore a11y_label_has_associated_control -->
+                                <label class="label">
+                                  <span class="label-text">GPIO Pin</span>
+                                </label>
+                                <input type="number" bind:value={actionsConfig.nfcSuccessPin} placeholder="2"
+                                  class="input input-bordered w-full" />
+                              </div>
+                              <div class="form-control mb-4">
+                                <!-- svelte-ignore a11y_label_has_associated_control -->
+                                <label class="label">
+                                  <span class="label-text">Timeout (ms)</span>
+                                </label>
+                                <input type="number" bind:value={actionsConfig.nfcSuccessTime} placeholder="1000"
+                                  class="input input-bordered w-full" />
+                              </div>
+                              <div class="form-control mb-4">
+                                <!-- svelte-ignore a11y_label_has_associated_control -->
+                                <label class="label">
+                                  <span class="label-text">GPIO State</span>
+                                </label>
+                                <select bind:value={actionsConfig.nfcSuccessHL} class="select select-bordered w-full">
+                                  <option value={false}>LOW</option>
+                                  <option value={true}>HIGH</option>
+                                </select>
+                              </div>
+                            </fieldset>
+                            <fieldset class="fieldset border-base-100 rounded-box w-xs border p-4">
+                              <legend class="fieldset-legend">Auth Failure</legend>
+                              <div class="form-control mb-4">
+                                <!-- svelte-ignore a11y_label_has_associated_control -->
+                                <label class="label">
+                                  <span class="label-text">GPIO Pin</span>
+                                </label>
+                                <input type="number" bind:value={actionsConfig.nfcFailPin} placeholder="2"
+                                  class="input input-bordered w-full" />
+                              </div>
+                              <div class="form-control mb-4">
+                                <!-- svelte-ignore a11y_label_has_associated_control -->
+                                <label class="label">
+                                  <span class="label-text">Timeout (ms)</span>
+                                </label>
+                                <input type="number" bind:value={actionsConfig.nfcFailTime} placeholder="1000"
+                                  class="input input-bordered w-full" />
+                              </div>
+                              <div class="form-control mb-4">
+                                <!-- svelte-ignore a11y_label_has_associated_control -->
+                                <label class="label">
+                                  <span class="label-text">GPIO State</span>
+                                </label>
+                                <select bind:value={actionsConfig.nfcFailHL} class="select select-bordered w-full">
+                                  <option value={false}>LOW</option>
+                                  <option value={true}>HIGH</option>
+                                </select>
+                              </div>
+                            </fieldset>
+                          </div>
+                          <div class="collapse collapse-plus bg-base-200">
+                            <h3 class="collapse-title ctext-base md:text-lg font-bold">Second action on success</h3>
+                            <input type="checkbox" name="2nd-action-accordion" />
+                            <div class="collapse-content flex flex-col gap-4">
+                              <div class="form-control">
+                                <!-- svelte-ignore a11y_label_has_associated_control -->
+                                <label class="label">
+                                  <span class="label-text">Initiator Pin</span>
+                                </label>
+                                <input type="number" bind:value={actionsConfig.hkAltActionInitPin} placeholder="255" min="0"
+                                  max="255" class="input input-bordered w-full" />
+                              </div>
+                              <div class="form-control">
+                                <!-- svelte-ignore a11y_label_has_associated_control -->
+                                <label class="label">
+                                  <span class="label-text">Initiator Timeout (ms)</span>
+                                </label>
+                                <input type="number" bind:value={actionsConfig.hkAltActionInitTimeout} placeholder="5000" min="0"
+                                  max="10000" class="input input-bordered w-full" />
+                              </div>
+                              <div class="form-control">
+                                <!-- svelte-ignore a11y_label_has_associated_control -->
+                                <label class="label">
+                                  <span class="label-text">Feedback LED Pin</span>
+                                </label>
+                                <input type="number" bind:value={actionsConfig.hkAltActionInitLedPin} placeholder="255" min="0"
+                                  max="255" class="input input-bordered w-full" />
+                              </div>
+                              <div class="form-control">
+                                <!-- svelte-ignore a11y_label_has_associated_control -->
+                                <label class="label">
+                                  <span class="label-text">GPIO Pin</span>
+                                </label>
+                                <input type="number" bind:value={actionsConfig.hkAltActionPin} placeholder="2"
+                                  class="input input-bordered w-full" />
+                              </div>
+                              <div class="form-control">
+                                <!-- svelte-ignore a11y_label_has_associated_control -->
+                                <label class="label">
+                                  <span class="label-text">Timeout (ms)</span>
+                                </label>
+                                <input type="number" bind:value={actionsConfig.hkAltActionTimeout} placeholder="1000"
+                                  class="input input-bordered w-full" />
+                              </div>
+                              <div class="form-control">
+                                <!-- svelte-ignore a11y_label_has_associated_control -->
+                                <label class="label">
+                                  <span class="label-text">GPIO State</span>
+                                </label>
+                                <select bind:value={actionsConfig.hkAltActionGpioState}
+                                  class="select select-bordered w-full">
+                                  <option value={0}>LOW</option>
+                                  <option value={1}>HIGH</option>
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="collapse collapse-plus bg-base-300">
+                        <h3 class="collapse-title ctext-base md:text-lg font-bold">NFC Tag Event</h3>
+                        <input type="checkbox" name="tag-event-accordion" />
+                        <div class="collapse-content">
                           <div class="form-control mb-4">
                             <!-- svelte-ignore a11y_label_has_associated_control -->
                             <label class="label">
                               <span class="label-text">GPIO Pin</span>
                             </label>
-                            <input type="number" bind:value={actionsConfig.nfcSuccessPin} placeholder="2"
+                            <input type="number" bind:value={actionsConfig.tagEventPin} placeholder="2"
                               class="input input-bordered w-full" />
                           </div>
                           <div class="form-control mb-4">
@@ -219,7 +386,7 @@
                             <label class="label">
                               <span class="label-text">Timeout (ms)</span>
                             </label>
-                            <input type="number" bind:value={actionsConfig.nfcSuccessTime} placeholder="1000"
+                            <input type="number" bind:value={actionsConfig.tagEventTimeout} placeholder="1000"
                               class="input input-bordered w-full" />
                           </div>
                           <div class="form-control mb-4">
@@ -227,96 +394,10 @@
                             <label class="label">
                               <span class="label-text">GPIO State</span>
                             </label>
-                            <select bind:value={actionsConfig.nfcSuccessHL} class="select select-bordered w-full">
+                            <select bind:value={actionsConfig.tagEventHL} class="select select-bordered w-full">
                               <option value={false}>LOW</option>
                               <option value={true}>HIGH</option>
                             </select>
-                          </div>
-                        </div>
-                        <div class="divider divider-horizontal px-0 mx-0"></div>
-                        <div class="flex-1">
-                          <h3 class="text-base md:text-lg font-bold mb-4">Auth Failure</h3>
-                          <div class="form-control mb-4">
-                            <!-- svelte-ignore a11y_label_has_associated_control -->
-                            <label class="label">
-                              <span class="label-text">GPIO Pin</span>
-                            </label>
-                            <input type="number" bind:value={actionsConfig.nfcFailPin} placeholder="2"
-                              class="input input-bordered w-full" />
-                          </div>
-                          <div class="form-control mb-4">
-                            <!-- svelte-ignore a11y_label_has_associated_control -->
-                            <label class="label">
-                              <span class="label-text">Timeout (ms)</span>
-                            </label>
-                            <input type="number" bind:value={actionsConfig.nfcFailTime} placeholder="1000"
-                              class="input input-bordered w-full" />
-                          </div>
-                          <div class="form-control mb-4">
-                            <!-- svelte-ignore a11y_label_has_associated_control -->
-                            <label class="label">
-                              <span class="label-text">GPIO State</span>
-                            </label>
-                            <select bind:value={actionsConfig.nfcFailHL} class="select select-bordered w-full">
-                              <option value={false}>LOW</option>
-                              <option value={true}>HIGH</option>
-                            </select>
-                          </div>
-                        </div>
-                        <div>
-                          <h3 class="text-base md:text-lg font-bold mb-4">2nd action on success</h3>
-                          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <div class="form-control">
-                              <!-- svelte-ignore a11y_label_has_associated_control -->
-                              <label class="label">
-                                <span class="label-text">Alt action Initiator Pin</span>
-                              </label>
-                              <input type="number" bind:value={actionsConfig.hkAltActionInitPin} placeholder="255" min="0"
-                                max="255" class="input input-bordered w-full" />
-                            </div>
-                            <div class="form-control">
-                              <!-- svelte-ignore a11y_label_has_associated_control -->
-                              <label class="label">
-                                <span class="label-text">Alt action Initiator Timeout (ms)</span>
-                              </label>
-                              <input type="number" bind:value={actionsConfig.hkAltActionInitTimeout} placeholder="5000" min="0"
-                                max="10000" class="input input-bordered w-full" />
-                            </div>
-                            <div class="form-control">
-                              <!-- svelte-ignore a11y_label_has_associated_control -->
-                              <label class="label">
-                                <span class="label-text">Feedback LED Pin</span>
-                              </label>
-                              <input type="number" bind:value={actionsConfig.hkAltActionInitLedPin} placeholder="255" min="0"
-                                max="255" class="input input-bordered w-full" />
-                            </div>
-                            <div class="form-control">
-                              <!-- svelte-ignore a11y_label_has_associated_control -->
-                              <label class="label">
-                                <span class="label-text">GPIO Pin</span>
-                              </label>
-                              <input type="number" bind:value={actionsConfig.hkAltActionPin} placeholder="2"
-                                class="input input-bordered w-full" />
-                            </div>
-                            <div class="form-control">
-                              <!-- svelte-ignore a11y_label_has_associated_control -->
-                              <label class="label">
-                                <span class="label-text">Timeout (ms)</span>
-                              </label>
-                              <input type="number" bind:value={actionsConfig.hkAltActionTimeout} placeholder="1000"
-                                class="input input-bordered w-full" />
-                            </div>
-                            <div class="form-control">
-                              <!-- svelte-ignore a11y_label_has_associated_control -->
-                              <label class="label">
-                                <span class="label-text">GPIO State</span>
-                              </label>
-                              <select bind:value={actionsConfig.hkAltActionGpioState}
-                                class="select select-bordered w-full">
-                                <option value={0}>LOW</option>
-                                <option value={1}>HIGH</option>
-                              </select>
-                            </div>
                           </div>
                         </div>
                       </div>
