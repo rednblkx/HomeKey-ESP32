@@ -5,7 +5,6 @@
 #include <array>
 #include "defaults.h"
 #include "fmt/format.h"
-#include "pins_arduino.h"
 #include "esp_mac.h"
 
 enum HK_COLOR { TAN, GOLD, SILVER, BLACK };
@@ -81,7 +80,7 @@ namespace espConfig
     /* Flags */
     bool lockEnableCustomState = MQTT_CUSTOM_STATE_ENABLED;
     bool hassMqttDiscoveryEnabled = MQTT_DISCOVERY;
-    bool nfcTagNoPublish = false;
+    bool nfcTagNoPublish = MQTT_NO_TAG_PUBLISH;
     /* SSL/TLS Settings */
     bool useSSL = MQTT_USE_SSL;
     bool allowInsecure = MQTT_ALLOW_INSECURE;
@@ -108,14 +107,14 @@ namespace espConfig
     bool webAuthEnabled = WEB_AUTH_ENABLED;
     std::string webUsername = WEB_AUTH_USERNAME;
     std::string webPassword = WEB_AUTH_PASSWORD;
-    std::array<uint8_t, 4> nfcGpioPins{SS, SCK, MISO, MOSI};
-    uint8_t btrLowStatusThreshold = 10;
-    bool proxBatEnabled = false;
-    bool ethernetEnabled = false;
-    uint8_t ethActivePreset = 255; // 255 for custom pins
-    uint8_t ethPhyType = 1;
-    std::array<uint8_t, 5> ethRmiiConfig = {0, 255, 255, 255, 0};
-    std::array<uint8_t, 7> ethSpiConfig = {20, 255, 255, 255, 255, 255, 255};
+    std::array<uint8_t, 4> nfcGpioPins{SS_PIN, SCK_PIN, MISO_PIN, MOSI_PIN};
+    uint8_t btrLowStatusThreshold = BTR_PROX_BAT_LOW_THRESHOLD;
+    bool proxBatEnabled = BTR_PROX_BAT_ENABLED;
+    bool ethernetEnabled = ETH_ENABLED;
+    uint8_t ethActivePreset = ETH_ACTIVE_PRESET;
+    uint8_t ethPhyType = ETH_PHY_TYPE;
+    std::array<uint8_t, 5> ethRmiiConfig = {ETH_RMII_CONF_PHY_ADDR, ETH_RMII_CONF_MDC_PIN, ETH_RMII_CONF_MDIO_PIN, ETH_RMII_CONF_POWER_PIN, ETH_RMII_CONF_RMII_CLOCK_MODE};
+    std::array<uint8_t, 7> ethSpiConfig = {ETH_SPI_CONF_SPI_FREQ_MHZ, ETH_SPI_CONF_PIN_CS, ETH_SPI_CONF_PIN_IRQ, ETH_SPI_CONF_PIN_RST, ETH_SPI_CONF_PIN_SCK, ETH_SPI_CONF_PIN_MISO, ETH_SPI_CONF_PIN_MOSI};
   };
   struct actions_config_t {
     enum colorMap
@@ -125,7 +124,7 @@ namespace espConfig
       B
     };
     uint8_t nfcNeopixelPin = NFC_NEOPIXEL_PIN;
-    uint8_t neoPixelType = 5;
+    uint8_t neoPixelType = NEOPIXEL_TYPE;
     std::map<colorMap, uint8_t> neopixelSuccessColor = { {R, NEOPIXEL_SUCCESS_R}, {G, NEOPIXEL_SUCCESS_G}, {B, NEOPIXEL_SUCCESS_B} };
     std::map<colorMap, uint8_t> neopixelFailureColor = { {R, NEOPIXEL_FAIL_R}, {G, NEOPIXEL_FAIL_G}, {B, NEOPIXEL_FAIL_B} };
     std::map<colorMap, uint8_t> neopixelTagEventColor = { {R, NEOPIXEL_TAG_EVENT_R}, {G, NEOPIXEL_TAG_EVENT_G}, {B, NEOPIXEL_TAG_EVENT_B} };
@@ -145,9 +144,9 @@ namespace espConfig
     bool gpioActionLockState = GPIO_ACTION_LOCK_STATE;
     bool gpioActionUnlockState = GPIO_ACTION_UNLOCK_STATE;
     uint8_t gpioActionMomentaryEnabled = GPIO_ACTION_MOMENTARY_STATE;
-    bool hkGpioControlledState = true;
+    bool hkGpioControlledState = GPIO_HK_CONTROLLED_STATE;
     uint16_t gpioActionMomentaryTimeout = GPIO_ACTION_MOMENTARY_TIMEOUT;
-    bool hkDumbSwitchMode = false;
+    bool hkDumbSwitchMode = HK_DUMB_SWITCH_MODE;
     uint8_t hkAltActionPin = GPIO_HK_ALT_ACTION_PIN;
     uint16_t hkAltActionTimeout = GPIO_HK_ALT_ACTION_TIMEOUT;
     uint8_t hkAltActionGpioState = GPIO_HK_ALT_ACTION_GPIO_STATE;
