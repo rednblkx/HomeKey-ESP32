@@ -1,22 +1,16 @@
 import { updateWebsocketState } from '../stores/websocket.svelte.js';
 
 /**
- * @typedef {Object} StatusEvent
- * @property {'status'} type
- * @property {import('../stores/websocket.svelte.js').WebSocketState} data
- */
-
-/**
  * @template T
  * @typedef {Object} MessageEventData
- * @property {'message'} type
+ * @property {'message' | 'status'} type
  * @property {T} data - The parsed message data (if JSON) or raw data.
  * @property {string} raw - The raw, unparsed message string.
  */
 
 /**
  * @template T
- * @typedef {StatusEvent | MessageEventData<T>} WebSocketEvent
+ * @typedef {MessageEventData<T>} WebSocketEvent
  */
 
 /**
@@ -313,7 +307,7 @@ class WSService {
     const connectionInfo = this.getConnectionInfo();
 
     updateWebsocketState(connectionInfo);
-    this._emit({ type: 'status', data: connectionInfo });
+    this._emit({ type: 'status', data: connectionInfo, raw: JSON.stringify(connectionInfo) });
   }
   
   /** @private @param {WebSocketEvent<object|string>} event */

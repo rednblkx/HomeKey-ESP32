@@ -53,11 +53,8 @@ public:
   bool basicAuth(httpd_req_t* req);
   void setMqttManager(MqttManager *mqttManager) { m_mqttManager = mqttManager; }
   void broadcastWs(const uint8_t *payload, size_t len, httpd_ws_type_t type);
-  void broadcastToWebSocketClients(const char *message);
 
 private:
-  friend class loggable::WebSocketLogSinker;
-
   // ------------------------------------------------------------------------
   // Internal Types & Enums
   // ------------------------------------------------------------------------
@@ -75,20 +72,6 @@ private:
     OTAUploadType uploadType;
     bool skipReboot = false;
   };
-
-#ifdef WEBSERVER_USE_DEDICATED_BROADCAST_QUEUE
-  struct BroadcastMsg {
-    httpd_ws_type_t type;
-    size_t len;
-    uint8_t payload[];
-  };
-
-  struct BroadcastMsgDeleter {
-    void operator()(BroadcastMsg *msg) const { free(msg); }
-  };
-
-  using BroadcastMsgPtr = std::unique_ptr<BroadcastMsg, BroadcastMsgDeleter>;
-#endif
 
   // ------------------------------------------------------------------------
   // Static Task Callbacks
@@ -170,10 +153,7 @@ private:
   std::vector<std::unique_ptr<WsClient>> m_wsClients;
   std::mutex m_wsClientsMutex;
   esp_timer_handle_t m_statusTimer;
-
-#ifdef WEBSERVER_USE_DEDICATED_BROADCAST_QUEUE
-  QueueHandle_t m_wsBroadcastQueue = nullptr;
-#endif
+  std::vector<std::vector<uint8_t>> m_wsBroadcastBuffer;
 
   // OTA state
   esp_ota_handle_t m_otaHandle = 0;

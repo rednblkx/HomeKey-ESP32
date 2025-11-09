@@ -1,7 +1,6 @@
 #include <memory>
 #define FMT_HEADER_ONLY
 #include "config.hpp"
-#include "logger.hpp"
 #include "HomeKitLock.hpp"
 #include "LockManager.hpp"
 #include "NfcManager.hpp"
@@ -17,9 +16,6 @@
 #include "loggable.hpp"
 #include "WebSocketLogSinker.h"
 
-const char* TAG = "LockApp";
-espp::Logger logger({.tag = "LockApp"});
-
 LockManager *lockManager;
 ReaderDataManager *readerDataManager;
 ConfigManager *configManager;
@@ -34,11 +30,7 @@ std::function<void(int)> lambda = [](int status) {
     char identifier[18];
     sprintf(identifier, "%.2s%.2s%.2s%.2s%.2s%.2s", HAPClient::accessory.ID, HAPClient::accessory.ID + 3, HAPClient::accessory.ID + 6, HAPClient::accessory.ID + 9, HAPClient::accessory.ID + 12, HAPClient::accessory.ID + 15);
     mqttManager->begin(std::string(identifier));
-    webServerManager->begin();
-    
-    auto& distributor = loggable::Sinker::instance();
-    distributor.add_sinker(std::make_shared<loggable::WebSocketLogSinker>(webServerManager));
-    ESP_LOGI("WebServerManager", "WebSocketLogSinker registered successfully");
+    webServerManager->begin(); 
   }
 };
 using namespace loggable;
@@ -60,14 +52,14 @@ void setup() {
   distributor.set_level(LogLevel::Debug);
   distributor.hook_esp_log(true);
   Serial.begin(115200);
-  logger.set_verbosity(espp::Logger::Verbosity::DEBUG);
   readerDataManager = new ReaderDataManager;
   configManager = new ConfigManager;
   configManager->begin();
+  webServerManager = new WebServerManager(*configManager, *readerDataManager);
+  distributor.add_sinker(std::make_shared<loggable::WebSocketLogSinker>(webServerManager));
   hardwareManager = new HardwareManager(configManager->getConfig<espConfig::actions_config_t>());
   lockManager = new LockManager(configManager->getConfig<espConfig::misc_config_t>(), configManager->getConfig<espConfig::actions_config_t>());
   mqttManager = new MqttManager(*configManager);
-  webServerManager = new WebServerManager(*configManager, *readerDataManager);
   homekitLock = new HomeKitLock(lambda, *lockManager, *configManager, *readerDataManager);
   nfcManager = new NfcManager(*readerDataManager, configManager->getConfig<espConfig::misc_config_t>().nfcGpioPins);
   readerDataManager->begin();

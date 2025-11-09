@@ -1,14 +1,14 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import type { LogEntry, LogLevel, LogMessage } from '$lib/types/api';
+	import type { LogLevel } from '$lib/types/api';
 	import ws from '$lib/services/ws.js';
-    import { systemInfo } from '$lib/stores/system.svelte';
+  import { systemInfo } from '$lib/stores/system.svelte';
+  import { clearLogs, logs } from '$lib/stores/logs.svelte';
 
 	const LOG_LEVELS = ['ERROR', 'WARN', 'INFO', 'DEBUG'] as const;
 	type UsedLogLevel = typeof LOG_LEVELS[number];
 
 	let searchText = $state('');
-	let realtime = $state(true);
 	let autoScroll = $state(true);
 	let userHasScrolled = $state(false);
 	let logLevels = $state<Record<UsedLogLevel, boolean>>({
@@ -17,7 +17,6 @@
 		INFO: true,
 		DEBUG: true,
 	});
-	let logs = $state<LogEntry[]>([]);
 
 	let currentTime = $state(new Date());
 
@@ -55,13 +54,6 @@
 		if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}m ago`;
 		if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}h ago`;
 		return then.toLocaleDateString();
-	}
-
-	/**
-	 * Clears all logs from the display.
-	 */
-	function clearLogs() {
-		logs = [];
 	}
 
 	function toggleLogLevel(level: UsedLogLevel): void {
@@ -234,10 +226,9 @@
 		}
 	});
 
-	let wsUnsubscribe = $state<(() => void) | null>(null);
+	// let wsUnsubscribe = $state<(() => void) | null>(null);
 
 	let timeUpdateInterval = $state<NodeJS.Timeout>();
-  let logIdCounter = 0;
 	onMount(() => {
 		const savedLogLevels = localStorage.getItem('logviewer-levels');
 		if (savedLogLevels) {
@@ -256,51 +247,9 @@
 			container.addEventListener('touchend', handleTouchEnd, { passive: true });
 		}
 
-		if (ws) {
-			const handleWebSocketMessage = (event: { data: LogMessage; }) => {
-				if (!realtime) return;
-				try {
-					let messageData = event.data;
-
-					if (messageData && (messageData.type === 'log' || messageData.level || messageData.msg)) {
-						const log : LogEntry = {
-							id: Date.now() + logIdCounter++,
-							localts: new Date().toISOString(),
-							expanded: false,
-							...messageData
-						};
-
-						if (log.msg && log.level) {
-							logs.push(log);
-						} else {
-							console.warn('Invalid log message structure:', messageData);
-						}
-					}
-				} catch (e) {
-					console.error('Error handling WebSocket message:', e);
-					try {
-						logs.push({
-							type: 'log',
-							level: 'ERROR',
-							msg: `WebSocket message processing error: ${e instanceof Error ? e.message : String(e)}`,
-							tag: 'WS_ERROR',
-							ts: 0,
-              uptime: 0,
-							id: Date.now() + logIdCounter++,
-							localts: new Date().toISOString(),
-							expanded: false,
-						});
-					} catch (logError) {
-						console.error('Failed to log WebSocket error:', logError);
-					}
-				}
-			};
-			wsUnsubscribe = ws.on ? (ws.on(handleWebSocketMessage) as (() => void) | null) : null;
-		timeUpdateInterval = setInterval(() => {
-			currentTime = new Date();
-		}, 1000);
-
-		}
+    timeUpdateInterval = setInterval(() => {
+      currentTime = new Date();
+    }, 1000);
 	});
 
 	onDestroy(() => {
@@ -313,10 +262,6 @@
 			container.removeEventListener('touchstart',handleTouchStart);
 			container.removeEventListener('touchmove',handleTouchMove);
 			container.removeEventListener('touchend', handleTouchEnd);
-		}
-
-		if (wsUnsubscribe && typeof wsUnsubscribe === 'function') {
-			wsUnsubscribe();
 		}
 
 		if (timeUpdateInterval) {
@@ -361,13 +306,6 @@
 
 			<div class="flex items-center gap-2 flex-wrap">
 				<div class="flex gap-2">
-					<div class="form-control">
-						<label class="label cursor-pointer p-0">
-							<span class="label-text mr-2">Real-time</span>
-							<input type="checkbox" class="toggle toggle-sm" bind:checked={realtime}
-								aria-label="Toggle real-time log updates" />
-						</label>
-					</div>
 					<div class="form-control">
 						<label class="label cursor-pointer p-0">
 							<span class="label-text mr-2">Auto-scroll</span>
@@ -420,8 +358,8 @@
 							style="overflow: hidden;"
 						>
 							<div class="flex flex-col p-4">
-								<p class="font-mono text-xs wrap-anywhere text-wrap break-all"><strong>RTC Timestamp:</strong> {item.ts} ({new Date(new Date().getTime() - item.ts).toLocaleString()})</p>
-								<p class="font-mono text-xs wrap-anywhere text-wrap break-all"><strong>Boot Timestamp:</strong> {item.uptime} ({new Date(new Date().getTime() - item.uptime).toLocaleTimeString()})</p>
+								<p class="font-mono text-xs wrap-anywhere text-wrap break-all"><strong>RTC Timestamp:</strong> {item.ts}</p>
+								<p class="font-mono text-xs wrap-anywhere text-wrap break-all"><strong>Boot Timestamp:</strong> {item.uptime}</p>
 								<div class="mt-2 text-xs whitespace-pre-wrap break-all">{item.msg}</div>
 							</div>
 						</div>

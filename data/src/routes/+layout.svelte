@@ -1,25 +1,23 @@
-<script>
+<script lang="ts">
 	import '@/app.css';
 	import { onMount, onDestroy } from 'svelte';
 	import { updateSystemInfo } from '$lib/stores/system.svelte.js';
 	import { getCurrentTheme, toggleTheme, initTheme, logoSrc } from '$lib/stores/theme.svelte.js';
 	import { uiState, closeDrawer } from '$lib/stores/ui.svelte.js';
 	import { setLoadingState } from '$lib/stores/loading.svelte.js';
-	import ws from '$lib/services/ws.js';
+	import ws, { type WebSocketEvent } from '$lib/services/ws.js';
 	import Logo from '$lib/assets/favicon.png';
 	import NavigationMenu from '$lib/components/NavigationMenu.svelte';
 	import Notification from '$lib/components/Notification.svelte';
   import { websocketState } from '$lib/stores/websocket.svelte';
   import { navigating } from '$app/state';
+  import type { LogEntry } from '$lib/types/api';
+  import { logIdIncrement, logs } from '$lib/stores/logs.svelte';
 
 	let { children } = $props();
 
-	/** @type {HTMLDivElement | null} */
 	let sidebarTrigger = $state(null);
-	/**
-    * @type {() => void}
-    */
-	let unsubscribeMessages;
+	let unsubscribeMessages : (() => void) | null = null;
 
 	onMount(() => {
     initTheme();
@@ -27,13 +25,27 @@
 		if (ws) {
 			ws.connect();
 
-			unsubscribeMessages = ws.on((/** @type {{ type: string; data: any; }} */ event) => {
+			unsubscribeMessages = ws.on((event : WebSocketEvent<any>) => {
 				if (event.type === 'message') {
 					const data = event.data;
 					if (data.type === 'sysinfo' || data.type === 'metrics') {
 						updateSystemInfo(data);
 						setLoadingState('systemInfoLoading', false);
 					}
+          if (data.type === 'log') {
+						const log : LogEntry = {
+							id: Date.now() + logIdIncrement(),
+							localts: new Date().toISOString(),
+							expanded: false,
+							...data
+						};
+
+						if (log.msg && log.level) {
+							logs.push(log);
+						} else {
+							console.warn('Invalid log message structure:', data);
+						}
+          }
 				}
       });
 		}

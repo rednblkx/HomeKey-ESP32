@@ -72,7 +72,8 @@ void WebSocketLogSinker::consume(const LogMessage& message) {
 
     char* json_string = cJSON_PrintUnformatted(root);
     if (json_string) {
-        m_webServerManager->broadcastToWebSocketClients(json_string);
+        m_webServerManager->broadcastWs(reinterpret_cast<const uint8_t *>(json_string), strlen(json_string),
+              HTTPD_WS_TYPE_TEXT);
         cJSON_free(json_string);
     }
 

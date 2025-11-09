@@ -1086,8 +1086,14 @@ esp_err_t WebServerManager::handleWebSocket(httpd_req_t *req) {
       return ESP_FAIL;
     }
     int sockfd = httpd_req_to_sockfd(req);
-    instance->addWebSocketClient(sockfd);
     ESP_LOGI(TAG, "WebSocket client connected: fd=%d", sockfd);
+    instance->addWebSocketClient(sockfd);
+    if (!instance->m_wsBroadcastBuffer.empty()) {
+      for (auto &c : instance->m_wsBroadcastBuffer) {
+        instance->queue_ws_frame(sockfd, c.data(), c.size(), HTTPD_WS_TYPE_TEXT);
+      }
+      instance->m_wsBroadcastBuffer.clear();
+    }
 
     std::string status = instance->getDeviceInfo();
     instance->queue_ws_frame(sockfd, (const uint8_t *)status.c_str(),
@@ -1095,6 +1101,7 @@ esp_err_t WebServerManager::handleWebSocket(httpd_req_t *req) {
     std::string metrics = instance->getDeviceMetrics();
     instance->queue_ws_frame(sockfd, (const uint8_t *)metrics.c_str(),
                              metrics.size(), HTTPD_WS_TYPE_TEXT);
+
     if (!esp_timer_is_active(instance->m_statusTimer))
       esp_timer_start_periodic(instance->m_statusTimer, 5000 * 1000);
     return ESP_OK;
@@ -1161,8 +1168,6 @@ void WebServerManager::addWebSocketClient(int fd) {
       [fd](const std::unique_ptr<WsClient> &c) { return c->fd == fd; });
   if (it == m_wsClients.end()) {
     m_wsClients.emplace_back(std::make_unique<WsClient>(fd));
-    ESP_LOGI(TAG, "Added WebSocket client fd=%d, total: %zu", fd,
-             m_wsClients.size());
   }
 }
 
@@ -1185,11 +1190,6 @@ void WebServerManager::removeWebSocketClient(int fd) {
   }
 }
 
-void WebServerManager::broadcastToWebSocketClients(const char *message) {
-  broadcastWs(reinterpret_cast<const uint8_t *>(message), strlen(message),
-              HTTPD_WS_TYPE_TEXT);
-}
-
 void WebServerManager::broadcastWs(const uint8_t *payload, size_t len,
                                    httpd_ws_type_t type) {
   std::vector<int> fds;
@@ -1198,10 +1198,13 @@ void WebServerManager::broadcastWs(const uint8_t *payload, size_t len,
     for (const auto &c : m_wsClients)
       fds.push_back(c->fd);
   }
-  if (fds.empty())
+  if (fds.empty()) {
+    m_wsBroadcastBuffer.push_back(std::vector<uint8_t>(payload, payload + len));
     return;
-  for (int fd : fds)
+  }
+  for (int fd : fds){
     queue_ws_frame(fd, payload, len, type);
+  }
 }
 
 void WebServerManager::queue_ws_frame(int fd, const uint8_t *payload,
