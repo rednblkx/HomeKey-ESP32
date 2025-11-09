@@ -359,8 +359,8 @@
 											</label>
 											<select bind:value={miscConfig.ethPhyType} disabled={miscConfig.ethActivePreset !== 255}
 												class="select select-bordered w-full">
-												{#each ethConfig!.supportedChips || [] as chip, i}
-													<option value={i}>{chip.name}</option>
+												{#each ethConfig!.supportedChips as chip}
+													<option value={chip.phy_type}>{chip.name}</option>
 												{/each}
 											</select>
 										</div>

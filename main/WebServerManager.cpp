@@ -495,7 +495,7 @@ esp_err_t WebServerManager::handleGetEthConfig(httpd_req_t *req) {
     cJSON_AddBoolToObject(chip, "emac", v.ethChip.emac);
     cJSON_AddNumberToObject(chip, "phy_type", v.ethChip.phy_type);
     cJSON_AddItemToObject(preset, "ethChip", chip);
-
+    if(v.ethChip.emac){
 #if CONFIG_ETH_USE_ESP32_EMAC
     cJSON *rmii_conf = cJSON_CreateObject();
     cJSON_AddNumberToObject(rmii_conf, "phy_addr", v.rmii_conf.phy_addr);
@@ -506,16 +506,17 @@ esp_err_t WebServerManager::handleGetEthConfig(httpd_req_t *req) {
                             v.rmii_conf.pin_rmii_clock);
     cJSON_AddItemToObject(preset, "rmii_conf", rmii_conf);
 #endif
-
-    cJSON *spi_conf = cJSON_CreateObject();
-    cJSON_AddNumberToObject(spi_conf, "spi_freq_mhz", v.spi_conf.spi_freq_mhz);
-    cJSON_AddNumberToObject(spi_conf, "pin_cs", v.spi_conf.pin_cs);
-    cJSON_AddNumberToObject(spi_conf, "pin_irq", v.spi_conf.pin_irq);
-    cJSON_AddNumberToObject(spi_conf, "pin_rst", v.spi_conf.pin_rst);
-    cJSON_AddNumberToObject(spi_conf, "pin_sck", v.spi_conf.pin_sck);
-    cJSON_AddNumberToObject(spi_conf, "pin_miso", v.spi_conf.pin_miso);
-    cJSON_AddNumberToObject(spi_conf, "pin_mosi", v.spi_conf.pin_mosi);
-    cJSON_AddItemToObject(preset, "spi_conf", spi_conf);
+    } else {
+      cJSON *spi_conf = cJSON_CreateObject();
+      cJSON_AddNumberToObject(spi_conf, "spi_freq_mhz", v.spi_conf.spi_freq_mhz);
+      cJSON_AddNumberToObject(spi_conf, "pin_cs", v.spi_conf.pin_cs);
+      cJSON_AddNumberToObject(spi_conf, "pin_irq", v.spi_conf.pin_irq);
+      cJSON_AddNumberToObject(spi_conf, "pin_rst", v.spi_conf.pin_rst);
+      cJSON_AddNumberToObject(spi_conf, "pin_sck", v.spi_conf.pin_sck);
+      cJSON_AddNumberToObject(spi_conf, "pin_miso", v.spi_conf.pin_miso);
+      cJSON_AddNumberToObject(spi_conf, "pin_mosi", v.spi_conf.pin_mosi);
+      cJSON_AddItemToObject(preset, "spi_conf", spi_conf);
+    }
     cJSON_AddItemToArray(boardPresetsArray, preset);
   }
   cJSON_AddItemToObject(eth_config, "boardPresets", boardPresetsArray);
