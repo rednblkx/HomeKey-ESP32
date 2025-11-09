@@ -1307,6 +1307,8 @@ esp_err_t WebServerManager::handleWebSocketMessage(httpd_req_t *req,
     if(level_item && cJSON_IsNumber(level_item)) {
       esp_log_level_t level = esp_log_level_t(level_item->valueint > 0 && level_item->valueint < 6 ? level_item->valueint : ESP_LOG_WARN);
       esp_log_level_set("*", level);
+      m_configManager.updateFromJson<espConfig::misc_config_t>("{\"logLevel\":" + std::to_string(level) + "}");
+      m_configManager.saveConfig<espConfig::misc_config_t>();
     }
   } else {
     cJSON *unknown = cJSON_CreateObject();

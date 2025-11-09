@@ -55,6 +55,7 @@ void setup() {
   readerDataManager = new ReaderDataManager;
   configManager = new ConfigManager;
   configManager->begin();
+  esp_log_level_set("*", static_cast<esp_log_level_t>(configManager->getConfig<espConfig::misc_config_t>().logLevel));
   webServerManager = new WebServerManager(*configManager, *readerDataManager);
   distributor.add_sinker(std::make_shared<loggable::WebSocketLogSinker>(webServerManager));
   hardwareManager = new HardwareManager(configManager->getConfig<espConfig::actions_config_t>());

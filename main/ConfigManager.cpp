@@ -85,7 +85,9 @@ ConfigManager::ConfigManager() : m_isInitialized(false) {
       {"ethActivePreset", &m_miscConfig.ethActivePreset},
       {"ethPhyType", &m_miscConfig.ethPhyType},
       {"ethRmiiConfig", &m_miscConfig.ethRmiiConfig},
-      {"ethSpiConfig", &m_miscConfig.ethSpiConfig}}
+      {"ethSpiConfig", &m_miscConfig.ethSpiConfig},
+      {"logLevel", &m_miscConfig.logLevel}
+    }
     },
     {
       "actions", {

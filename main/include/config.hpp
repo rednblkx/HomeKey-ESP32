@@ -4,6 +4,7 @@
 #include <map>
 #include <array>
 #include "defaults.h"
+#include "esp_log_level.h"
 #include "fmt/format.h"
 #include "esp_mac.h"
 
@@ -115,6 +116,7 @@ namespace espConfig
     uint8_t ethPhyType = ETH_PHY_TYPE;
     std::array<uint8_t, 5> ethRmiiConfig = {ETH_RMII_CONF_PHY_ADDR, ETH_RMII_CONF_MDC_PIN, ETH_RMII_CONF_MDIO_PIN, ETH_RMII_CONF_POWER_PIN, ETH_RMII_CONF_RMII_CLOCK_MODE};
     std::array<uint8_t, 7> ethSpiConfig = {ETH_SPI_CONF_SPI_FREQ_MHZ, ETH_SPI_CONF_PIN_CS, ETH_SPI_CONF_PIN_IRQ, ETH_SPI_CONF_PIN_RST, ETH_SPI_CONF_PIN_SCK, ETH_SPI_CONF_PIN_MISO, ETH_SPI_CONF_PIN_MOSI};
+    uint8_t logLevel = ESP_LOG_INFO;
   };
   struct actions_config_t {
     enum colorMap
