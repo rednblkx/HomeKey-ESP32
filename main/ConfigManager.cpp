@@ -452,7 +452,7 @@ void ConfigManager::deserialize(msgpack_object obj, std::string type) {
                         );
                     }
                 });
-              } else if constexpr (std::is_same_v<PointeeType, std::map<std::string, uint8_t>>) { // For mqttConfigMap's customLockStates/Actions
+              } else if constexpr (std::is_same_v<PointeeType, std::map<std::string, uint8_t>>) {
                 std::ranges::for_each(msgpack_elements, [&](const msgpack_object& o) {
                     if (o.type == MSGPACK_OBJECT_ARRAY && o.via.array.size >= 2) {
                         const msgpack_object* inner_array_ptr = o.via.array.ptr;
@@ -464,8 +464,23 @@ void ConfigManager::deserialize(msgpack_object obj, std::string type) {
               }
               break;
             }
+            case MSGPACK_OBJECT_MAP: {
+              if constexpr (std::is_same_v<PointeeType, std::map<std::string, uint8_t>>) {
+                arg->clear();
+                msgpack_object_kv *sub_map = v.val.via.map.ptr;
+                msgpack_object_kv *const sub_end = v.val.via.map.ptr + v.val.via.map.size;
+                for (; sub_map != sub_end; ++sub_map) {
+                  if (sub_map->key.type == MSGPACK_OBJECT_STR && sub_map->val.type == MSGPACK_OBJECT_POSITIVE_INTEGER) {
+                    std::string sub_key(sub_map->key.via.str.ptr, sub_map->key.via.str.size);
+                    uint8_t sub_value = static_cast<uint8_t>(sub_map->val.via.u64);
+                    arg->emplace(sub_key, sub_value);
+                  }
+                }
+              }
+              break;
+            }
             default:
-              ESP_LOGW(TAG, "DON'T KNOW THIS ONE!");
+              ESP_LOGW(TAG, "DON'T KNOW THIS ONE! - %s (%d) = %d", key.c_str(), v.val.type, v.val.via.u64);
             }
           }
         }, m_configMap[type][key]);
@@ -544,21 +559,19 @@ std::vector<uint8_t> ConfigManager::serialize() {
             msgpack_pack_unsigned_char(&pk, val);
           }
         } else if constexpr (std::is_same_v<PointeeType, std::map<espConfig::actions_config_t::colorMap, uint8_t>>) {
-          msgpack_pack_array(&pk, arg->size()); // Pack as array of arrays for map
+          msgpack_pack_array(&pk, arg->size());
           for (const auto& map_pair : *arg) {
-            msgpack_pack_array(&pk, 2); // Key-value pair
-            msgpack_pack_unsigned_char(&pk, static_cast<uint8_t>(map_pair.first)); // Enum key as integer
+            msgpack_pack_array(&pk, 2);
+            msgpack_pack_unsigned_char(&pk, static_cast<uint8_t>(map_pair.first));
             msgpack_pack_unsigned_char(&pk, map_pair.second);
           }
         } else if constexpr (std::is_same_v<PointeeType, std::map<std::string, uint8_t>>) {
-          msgpack_pack_array(&pk, arg->size()); // Pack as array of arrays for map
+          msgpack_pack_map(&pk, arg->size());
           for (const auto& map_pair : *arg) {
-            msgpack_pack_array(&pk, 2); // Key-value pair
-            msgpack_pack_str(&pk, map_pair.first.size()); // String key size
-            msgpack_pack_str_body(&pk, map_pair.first.data(), map_pair.first.size()); // String key body
+            msgpack_pack_str(&pk, map_pair.first.size());
+            msgpack_pack_str_body(&pk, map_pair.first.data(), map_pair.first.size());
             msgpack_pack_unsigned_char(&pk, map_pair.second);
-          }
-        }
+          }     }
       }
     }, pair.second);
   }
