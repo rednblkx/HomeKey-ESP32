@@ -72,7 +72,10 @@ namespace eth_config_ns {
                           .rmii_conf{0, 23, 18, 12, ETH_CLOCK_GPIO17_OUT}},
       eth_board_presets_t{.name = "T-ETH-Lite-ESP32",
                           .ethChip = supportedChips.at(ETH_PHY_RTL8201),
-                          .rmii_conf{0, 23, 18, 12, ETH_CLOCK_GPIO0_IN}}
+                          .rmii_conf{0, 23, 18, 12, ETH_CLOCK_GPIO0_IN}},
+      eth_board_presets_t{.name = "CASmo-NFC-MB-ETH",
+                          .ethChip = supportedChips.at(ETH_PHY_LAN8720),
+                          .rmii_conf{0, 23, 18, -1, ETH_CLOCK_GPIO17_OUT}},
   #endif
   };
 }; // namespace eth_config_ns
