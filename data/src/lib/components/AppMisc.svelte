@@ -4,10 +4,10 @@
 	import HKFinish1 from '$lib/assets/hk-finish-1.webp?inline';
 	import HKFinish2 from '$lib/assets/hk-finish-2.webp?inline';
 	import HKFinish3 from '$lib/assets/hk-finish-3.webp?inline';
-  import type { EthConfig, MiscConfig } from '$lib/types/api';
+  import type { EthConfig, MiscConfig, NfcGpioPinsPreset } from '$lib/types/api';
   import { diff } from '$lib/utils/objDiff';
 
-	let { misc, eth, error } : { misc: MiscConfig | null; eth: EthConfig | null; error?: string | null } = $props();
+	let { misc, eth, nfcPresets, error } = $props();
 
 	let miscConfig = $state<MiscConfig>(misc ?? {
 		deviceName: "",
@@ -21,6 +21,7 @@
 		webAuthEnabled: false,
 		webUsername: "",
 		webPassword: "",
+    nfcPinsPreset: 255,
 		nfcGpioPins: [5, 18, 19, 23],
 		ethernetEnabled: false,
 		ethActivePreset: 255,
@@ -35,6 +36,9 @@
 		boardPresets: [],
 		ethEnabled: false
 	});
+  let nfcPresetsList = $state<NfcGpioPinsPreset>(nfcPresets ?? {
+    presets: []
+  });
 
 	const hkFinishColors = [
 		{ name: 'Tan', value: 0, image: HKFinish0 },
@@ -70,6 +74,22 @@
 			alert(`Error saving config: ${message}`);
 		}
 	};
+
+  const handleNfcPresetChange = () => {
+    if (miscConfig.nfcPinsPreset !== undefined && miscConfig.nfcPinsPreset !== 255 && nfcPresets) {
+      const preset = nfcPresets.presets[miscConfig.nfcPinsPreset];
+      if (preset) {
+        miscConfig.nfcGpioPins = [
+          preset.gpioPins[0],
+          preset.gpioPins[1],
+          preset.gpioPins[2],
+          preset.gpioPins[3],
+        ];
+      }
+    } else if (miscConfig.nfcPinsPreset === 255) {
+      miscConfig.nfcGpioPins = misc.nfcGpioPins;
+    }
+  };
 
 	const handleEthPresetChange = () => {
 		if (miscConfig.ethActivePreset !== undefined && miscConfig.ethActivePreset !== 255 && ethConfig!.boardPresets) {
@@ -256,12 +276,24 @@
 							<input type="checkbox" name="misc-collapse" />
 							<div class="collapse-title font-medium">PN532</div>
 							<div class="collapse-content flex flex-col gap-4">
+                <div class="form-control">
+                  <!-- svelte-ignore a11y_label_has_associated_control -->
+                  <label class="label">
+                    <span class="label-text">Preset</span>
+                  </label>
+                  <select bind:value={miscConfig.nfcPinsPreset} onchange={handleNfcPresetChange} class="select select-bordered w-full">
+                    {#each nfcPresetsList.presets as preset, i}
+                      <option value={i}>{preset.name}</option>
+                    {/each}
+                    <option value={255}>Custom</option>
+                  </select>
+                </div>
 								<div class="form-control">
 									<!-- svelte-ignore a11y_label_has_associated_control -->
 									<label class="label">
 										<span class="label-text">SS Pin</span>
 									</label>
-									<input type="number" bind:value={miscConfig.nfcGpioPins![0]} placeholder="5" min="0" max="255"
+									<input type="number" disabled={miscConfig.nfcPinsPreset !== 255} bind:value={miscConfig.nfcGpioPins![0]} placeholder="5" min="0" max="255"
 										class="input input-bordered w-full" />
 								</div>
 								<div class="form-control">
@@ -269,7 +301,7 @@
 									<label class="label">
 										<span class="label-text">SCK Pin</span>
 									</label>
-									<input type="number" bind:value={miscConfig.nfcGpioPins![1]} placeholder="18" min="0" max="255"
+									<input type="number" disabled={miscConfig.nfcPinsPreset !== 255} bind:value={miscConfig.nfcGpioPins![1]} placeholder="18" min="0" max="255"
 										class="input input-bordered w-full" />
 								</div>
 								<div class="form-control">
@@ -277,7 +309,7 @@
 									<label class="label">
 										<span class="label-text">MISO Pin</span>
 									</label>
-									<input type="number" bind:value={miscConfig.nfcGpioPins![2]} placeholder="19" min="0" max="255"
+									<input type="number" disabled={miscConfig.nfcPinsPreset !== 255} bind:value={miscConfig.nfcGpioPins![2]} placeholder="19" min="0" max="255"
 										class="input input-bordered w-full" />
 								</div>
 								<div class="form-control">
@@ -285,7 +317,7 @@
 									<label class="label">
 										<span class="label-text">MOSI Pin</span>
 									</label>
-									<input type="number" bind:value={miscConfig.nfcGpioPins![3]} placeholder="23" min="0" max="255"
+									<input type="number" disabled={miscConfig.nfcPinsPreset !== 255} bind:value={miscConfig.nfcGpioPins![3]} placeholder="23" min="0" max="255"
 										class="input input-bordered w-full" />
 								</div>
 							</div>

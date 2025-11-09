@@ -4,4 +4,4 @@
 	let { data } = $props();
 </script>
 
-<AppMisc misc={data.misc} eth={data.eth} error={data.error} />
+<AppMisc misc={data.misc} eth={data.eth} error={data.error} nfcPresets={data.nfcPresets} />

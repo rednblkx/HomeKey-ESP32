@@ -103,6 +103,8 @@ export interface MiscConfig {
   webUsername: string;
   /** Web interface password */
   webPassword: string;
+  /** NFC GPIO pin configuration preset index */
+  nfcPinsPreset: number;
   /** NFC GPIO pin configuration [pin1, pin2, pin3, pin4] */
   nfcGpioPins: [number, number, number, number];
   /** Battery low status threshold percentage */
@@ -248,6 +250,13 @@ export interface EthConfig {
   }>;
   /** Whether Ethernet is enabled */
   ethEnabled: boolean;
+}
+
+export interface NfcGpioPinsPreset {
+  presets: {
+    name: string;
+    gpioPins: number[];
+  }[];
 }
 
 /**

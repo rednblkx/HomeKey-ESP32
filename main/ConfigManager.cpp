@@ -79,6 +79,7 @@ ConfigManager::ConfigManager() : m_isInitialized(false) {
       {"webUsername", &m_miscConfig.webUsername},
       {"webPassword", &m_miscConfig.webPassword},
       {"nfcGpioPins", &m_miscConfig.nfcGpioPins},
+      {"nfcPinsPreset", &m_miscConfig.nfcPinsPreset},
       {"btrLowStatusThreshold", &m_miscConfig.btrLowStatusThreshold},
       {"proxBatEnabled", &m_miscConfig.proxBatEnabled},
       {"ethernetEnabled", &m_miscConfig.ethernetEnabled},

@@ -35,6 +35,21 @@ static const std::string platform_create_id_string(void) {
   const std::string macStr = fmt::format("ESP_{:02X}{:02X}{:02X}{:02X}", mac[2], mac[3], mac[4], mac[5]);
   return macStr;
 }
+
+struct nfcGpioPins_t {
+  std::string name;
+  std::array<uint8_t, 4> gpioPins;
+};
+
+static const std::array<nfcGpioPins_t,4> nfcGpioPinsPresets = {
+    {
+    {"Default", {SS_PIN, SCK_PIN, MISO_PIN, MOSI_PIN}},
+    {"@lollokara's board", {6, 5, 4, 7}},
+    {"CASmo-NFC", {5, 18, 19, 23}},
+    {"CASmo-NFC-MB-ETH", {5, 14, 12, 13}}
+    }
+};
+
 namespace espConfig
 {
   struct mqttConfig_t
@@ -108,6 +123,7 @@ namespace espConfig
     bool webAuthEnabled = WEB_AUTH_ENABLED;
     std::string webUsername = WEB_AUTH_USERNAME;
     std::string webPassword = WEB_AUTH_PASSWORD;
+    uint8_t nfcPinsPreset = 255;
     std::array<uint8_t, 4> nfcGpioPins{SS_PIN, SCK_PIN, MISO_PIN, MOSI_PIN};
     uint8_t btrLowStatusThreshold = BTR_PROX_BAT_LOW_THRESHOLD;
     bool proxBatEnabled = BTR_PROX_BAT_ENABLED;

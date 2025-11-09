@@ -206,6 +206,7 @@ void WebServerManager::setupRoutes() {
       {"/config/clear", HTTP_POST, handleClearConfig, this},
       {"/config/save", HTTP_POST, handleSaveConfig, this},
       {"/eth_get_config", HTTP_GET, handleGetEthConfig, this},
+      {"/nfc_get_presets", HTTP_GET, handleGetNfcPresets, this},
 
       // Action endpoints
       {"/reboot_device", HTTP_POST, handleReboot, this},
@@ -453,6 +454,42 @@ esp_err_t WebServerManager::handleGetConfig(httpd_req_t *req) {
   cJSON_AddItemToObject(res, "data", cJSON_Parse(responseJson.c_str()));
   std::string response = cjson_to_string_and_free(res);
   httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+  return ESP_OK;
+}
+
+esp_err_t WebServerManager::handleGetNfcPresets(httpd_req_t *req) {
+  WebServerManager *instance = getInstance(req);
+  if(!instance->basicAuth(req)){
+    ESP_LOGE(TAG, "HTTP Authorization failed!");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Connection", "keep-alive");
+    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
+    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
+    return ESP_FAIL;
+  }
+  if (!instance) {
+    httpd_resp_send_500(req);
+    return ESP_FAIL;
+  }
+
+  cJSON *response = cJSON_CreateObject();
+  cJSON *presetsArray = cJSON_CreateArray();
+  for (auto &&v : nfcGpioPinsPresets) {
+    cJSON *preset = cJSON_CreateObject();
+    cJSON_AddStringToObject(preset, "name", v.name.c_str());
+    cJSON* gpioArray = cJSON_AddArrayToObject(preset, "gpioPins");
+    for (auto &&pin : v.gpioPins) {
+      cJSON_AddItemToArray(gpioArray, cJSON_CreateNumber(pin));
+    }
+    cJSON_AddItemToArray(presetsArray, preset);
+  }
+  cJSON *nfcPresets = cJSON_CreateObject();
+  cJSON_AddItemToObject(nfcPresets, "presets", presetsArray);
+  cJSON_AddItemToObject(response, "data", nfcPresets);
+  cJSON_AddItemToObject(response, "success", cJSON_CreateBool(true));
+  std::string resp = cjson_to_string_and_free(response);
+  httpd_resp_set_type(req, "application/json");
+  httpd_resp_send(req, resp.c_str(), HTTPD_RESP_USE_STRLEN);
   return ESP_OK;
 }
 

@@ -20,6 +20,7 @@ export default defineConfig(({ mode }) => {
         "/certificates": "http://localhost:8000",
         "/config": "http://localhost:8000",
         "/eth_get_config": "http://localhost:8000",
+        "/nfc_get_presets": "http://localhost:8000",
         "/ws": { target: "ws://localhost:8000", ws: true },
       },
     },
