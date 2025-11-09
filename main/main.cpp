@@ -64,11 +64,12 @@ void setup() {
   homekitLock = new HomeKitLock(lambda, *lockManager, *configManager, *readerDataManager);
   espConfig::misc_config_t miscConfig = configManager->getConfig<espConfig::misc_config_t>();
   static const char* TAG = "Main";
-  ESP_LOGI(TAG, "NFC Custom GPIO pins: %d, %d, %d, %d", miscConfig.nfcGpioPins[0], miscConfig.nfcGpioPins[1], miscConfig.nfcGpioPins[2], miscConfig.nfcGpioPins[3]);
-  ESP_LOGI(TAG, "NFC GPIO pins preset: %d", miscConfig.nfcPinsPreset);
   if(miscConfig.nfcPinsPreset != 255){
     ESP_LOGI(TAG, "NFC GPIO pins preset: %s", nfcGpioPinsPresets[miscConfig.nfcPinsPreset].name.c_str());
-    ESP_LOGI(TAG, "NFC GPIO pins preset pins: %d, %d, %d, %d", nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins[0], nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins[1], nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins[2], nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins[3]);
+    ESP_LOGI(TAG, "NFC preset pins: %d, %d, %d, %d", nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins[0], nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins[1], nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins[2], nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins[3]);
+  } else {
+    ESP_LOGI(TAG, "NFC GPIO pins preset: Custom");
+    ESP_LOGI(TAG, "NFC Custom GPIO pins: %d, %d, %d, %d", miscConfig.nfcGpioPins[0], miscConfig.nfcGpioPins[1], miscConfig.nfcGpioPins[2], miscConfig.nfcGpioPins[3]);
   }
   nfcManager = new NfcManager(*readerDataManager, miscConfig.nfcPinsPreset == 255 ? miscConfig.nfcGpioPins : nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins);
   readerDataManager->begin();
