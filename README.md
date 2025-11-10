@@ -11,8 +11,6 @@
 
   [Documentation](https://rednblkx.github.io/HomeKey-ESP32/) • [Quick Start](#-60-second-quick-start) • [Setup Guide](docs/setup.md) • [Discord](https://discord.com/invite/VWpZ5YyUcm)
 
-  [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/L3L2UCY8N)
-  
 </div>
 
 ## What is HomeKey-ESP32?
@@ -152,7 +150,7 @@ The following chips are supported for Ethernet:
 
 2. **Connect Your Hardware**
    - Wire your PN532 NFC module to your ESP32 using the default pins
-   - Refer to the [detailed wiring guide](docs/content/setup.md#21-nfc-module-wiring) for your specific setup
+   - Refer to the [detailed wiring guide](https://rednblkx.github.io/HomeKey-ESP32/setup/#21-nfc-module-wiring) for your specific setup
 
 3. **Flash the Firmware**
    ```bash
