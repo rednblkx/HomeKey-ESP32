@@ -32,15 +32,30 @@ Before flashing, you need to connect your PN532 NFC module to your ESP32 develop
 > [!NOTE]
 >  Both the ESP32 and the PN532 must use the same power supply to communicate.
 
+
 #### 2.1.1. Integrated PCB BOARDS
 
 When using an Integrated PCB, all the physical connections between the PN532 and the ESP32 have already been made, however, you might still have to update the pins used within the firmware from the [WebUI](../configuration#pn532).
+
+The web interface contains presets for the following boards:
 
 1.  **@lollokara's board (ESP32-C3)**
     *   SS: GPIO6
     *   SCK: GPIO5
     *   MISO: GPIO4
     *   MOSI: GPIO7
+
+2.  **CASmo-NFC**
+    *   SS: GPIO5
+    *   SCK: GPIO18
+    *   MISO: GPIO19
+    *   MOSI: GPIO23
+    
+3.  **CASmo-NFC-MB-ETH**
+    *   SS: GPIO5
+    *   SCK: GPIO14
+    *   MISO: GPIO12
+    *   MOSI: GPIO13
 
 #### 2.1.2. Default GPIO Pinouts
 
