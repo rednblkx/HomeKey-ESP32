@@ -21,6 +21,7 @@
 #include "fmt/format.h"
 #include "fmt/ranges.h"
 #include "freertos/projdefs.h"
+#include "sodium/randombytes.h"
 #include <LittleFS.h>
 #include <cstddef>
 #include <cstdint>
@@ -34,6 +35,7 @@
 #include <esp_tls_crypto.h>
 #include <stdbool.h>
 #include <string>
+#include <vector>
 
 // ============================================================================
 // Constants
@@ -97,6 +99,10 @@ WebServerManager::~WebServerManager() {
 
 void WebServerManager::begin() {
   ESP_LOGI(TAG, "Initializing...");
+
+  std::vector<uint8_t> sessionIdBytes(32);
+  randombytes_buf(sessionIdBytes.data(), sessionIdBytes.size());
+  m_sessionId = fmt::format("{:02x}", fmt::join(sessionIdBytes, ""));
 
   // Mount filesystem
   if (!LittleFS.begin()) {
@@ -164,12 +170,12 @@ bool WebServerManager::basicAuth(httpd_req_t* req){
   }
   size_t hdr_len = httpd_req_get_hdr_value_len(req, "Authorization");
   if(!(hdr_len > 0)){
-    ESP_LOGE(TAG, "Authorization data not provided");
+    ESP_LOGD(TAG, "Authorization data not provided");
     return false;
   }
   std::string authReq; authReq.resize(hdr_len + 1);
   if(httpd_req_get_hdr_value_str(req, "Authorization", authReq.data(), authReq.size()) != ESP_OK){
-    ESP_LOGE(TAG, "Invalid HTTP Header, authorization failed");
+    ESP_LOGD(TAG, "Invalid HTTP Header, authorization failed");
     return false;
   }
   const std::string cred = fmt::format("{}:{}", m_configManager.getConfig<espConfig::misc_config_t>().webUsername, m_configManager.getConfig<espConfig::misc_config_t>().webPassword);
@@ -336,14 +342,25 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
 
 esp_err_t WebServerManager::handleRootOrHash(httpd_req_t *req) {
   WebServerManager* instance = getInstance(req);
+  char *sessionId = new char[65];
+  size_t sessionIdLen = 65;
+  esp_err_t err = httpd_req_get_cookie_val(req, "sessionId", sessionId, &sessionIdLen);
   if(!instance->basicAuth(req)){
     ESP_LOGE(TAG, "HTTP Authorization failed!");
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Connection", "keep-alive");
     httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
     httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
+    delete[] sessionId;
     return ESP_FAIL;
   }
+  std::string sessionCookie;
+  if(instance->m_sessionId.compare(sessionId) != 0){
+    sessionCookie = fmt::format("sessionId={};", instance->m_sessionId);
+    httpd_resp_set_hdr(req, "Set-Cookie", sessionCookie.c_str());
+  }
+  delete[] sessionId;
+
   File file = LittleFS.open("/app.html", "r");
   if (!file) {
     httpd_resp_send_404(req);
@@ -1111,17 +1128,20 @@ esp_err_t WebServerManager::handleWebSocket(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
   if (!instance)
     return ESP_FAIL;
-
-  // Handle WebSocket handshake
   if (req->method == HTTP_GET) {
-    if(!instance->basicAuth(req)){
+    char *sessionId = new char[65];
+    size_t sessionIdLen = 65;
+    esp_err_t err = httpd_req_get_cookie_val(req, "sessionId", sessionId, &sessionIdLen);
+    if(!instance->basicAuth(req) && (err != ESP_OK || strncmp(sessionId, instance->m_sessionId.c_str(), sessionIdLen) != 0)){
       ESP_LOGE(TAG, "HTTP Authorization failed!");
       httpd_resp_set_type(req, "application/json");
       httpd_resp_set_hdr(req, "Connection", "keep-alive");
       httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
       httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
+      delete[] sessionId;
       return ESP_FAIL;
     }
+    delete[] sessionId;
     int sockfd = httpd_req_to_sockfd(req);
     ESP_LOGI(TAG, "WebSocket client connected: fd=%d", sockfd);
     instance->addWebSocketClient(sockfd);

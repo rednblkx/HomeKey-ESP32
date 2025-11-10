@@ -142,6 +142,7 @@ private:
   // HTTP Server
   httpd_handle_t m_server;
   static const char *TAG;
+  std::string m_sessionId;
 
   // Dependencies
   ConfigManager &m_configManager;
