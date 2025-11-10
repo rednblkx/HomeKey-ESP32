@@ -166,15 +166,13 @@ This option follows the "Always Lock/Unlock on HomeKey" option. Momentary state 
 
 ---
 
-## 5. Misc (Miscellaneous)
+## 5. System
 
-This section covers general device behavior, HomeKit parameters, GPIO pin assignments, and web interface authentication. Changes in this section will reboot the device.
-
-### 5.1. General settings
+This section covers general device behavior, HomeKit parameters, and web interface authentication. Changes in this section will reboot the device.
 
 This section is organized into several subsections: **HomeKit**, **HomeKey**, **PN532**, **HomeSpan**, and **Ethernet**.
 
-#### 5.1.1. HomeKit
+### 5.1. HomeKit
 
 *   **Device Name:** The name your HomeKey-ESP32 will display in your Home app.
 *   **Setup Code:** The 8-digit code used to pair your device with the Apple Home app. 
@@ -188,20 +186,23 @@ This section is organized into several subsections: **HomeKit**, **HomeKey**, **
 > If using `Always Lock/Unlock on HomeKey`, HomeKit might not react if the new state is the same as the current
 > and if you are using HomeKit Automations those will not get triggered
 
-#### 5.1.2. HomeKey
+### 5.2. HomeKey
 
 *   **HomeKey Card Finish:** Choose the color of the HomeKey icon that appears in Apple Wallet when you add a HomeKey pass. Options: `Tan`, `Gold`, `Silver`, `Black`.
 
-#### 5.1.3. PN532
+### 5.3. PN532
 
 This section allows you to manually assign the GPIO pins for the PN532 NFC module's SPI communication. You typically only need to adjust these if you're using a custom wiring setup or a non-standard ESP32 board.
 
+*   **Preset:** Choose from a set of pre-defined GPIO pins for the PN532 SPI communication.
 *   **SS Pin:** Slave Select Pin for PN532 SPI communication.
 *   **SCK Pin:** Serial Clock Pin for PN532 SPI communication.
 *   **MISO Pin:** Master In, Slave Out Pin for PN532 SPI communication.
 *   **MOSI Pin:** Master Out, Slave In Pin for PN532 SPI communication.
 
-#### 5.1.4. HomeSpan
+### 5.4. HomeSpan
+
+See [HomeSpan documentation](https://github.com/HomeSpan/HomeSpan/blob/master/docs/GettingStarted.md#adding-a-control-button-and-status-led-optional) for more details.
 
 *   **OTA Password:** The password required for Over-The-Air (OTA) firmware updates.
     *   **Note:** The password is stored in plain-text and is not encrypted.
@@ -209,11 +210,11 @@ This section allows you to manually assign the GPIO pins for the PN532 NFC modul
 *   **Control GPIO Pin:** GPIO Pin for a Configuration Mode button. Refer to HomeSpan documentation for more details.
 *   **Status LED GPIO Pin:** GPIO Pin for an LED that indicates the HomeSpan status.
 
-#### 5.1.5. Ethernet
+### 5.5. Ethernet
 
-*   **Status:** Enable or disable Ethernet connectivity.
-*   **Board Preset:** Choose from predefined Ethernet configurations for various boards, or select "Custom" if you have specific pin assignments.
-*   **Ethernet chip:** Select the Ethernet PHY chip used.
+*   **Ethernet Enabled:** Enable or disable Ethernet connectivity.
+*   **Active Ethernet Preset:** Choose from predefined Ethernet configurations for various boards, or select "Custom" if you have specific pin assignments.
+*   **Ethernet PHY Type:** Select the Ethernet PHY chip used.
 
 Rest of the fields are shown depending on the selected PHY chip as there are two protocols available for this:
   - SPI:
@@ -231,17 +232,49 @@ Rest of the fields are shown depending on the selected PHY chip as there are two
     *   **Power Pin:** Power Pin for RMII Ethernet.
     *   **RMII Clock Mode:** RMII Clock Mode for Ethernet.
 
-### 5.2. WebUI
+### 5.6. WebUI
 
 Protect your device's configuration by setting up authentication for the web interface. This section is organized into one tab: **Authentication**.
 
-#### 5.2.1. Authentication
+#### 5.6.1. Authentication
 
-*   **Status:** Toggle to enable or disable a username and password for accessing the web interface.
+*   **Authentication Enabled:** Toggle to enable or disable a username and password for accessing the web interface.
 *   **Username:** The username for accessing the web interface.
 *   **Password:** The password for accessing the web interface. 
     *   **Note:** The password is stored in plain-text and is not encrypted.
     *   **Note:** The current password is not shown as it is obscured from the backend.
+
+### 5.7. OTA Update
+
+This section is pretty much straightforward. 
+
+-   **Current Version:** The current firmware version of your device.
+-   **Running Partition:** The partition where the current firmware is running.
+-   **Update Partition:** The partition where the firmware update will be written.
+
+On `Firmware File` you select the `firmware.bin` file that you want to flash to your device.
+
+On `LittleFS File` you select the `littlefs.bin` file that you want to flash to your device.
+
+### 5.8. Logs
+
+This sections allows to view the logs of the device. 
+
+- **Log Level:** The log level of the device. 
+    -   `ERROR`: Only errors are logged.
+    -   `WARN`: Errors and warnings are logged.
+    -   `INFO`: Errors, warnings, and informational messages are logged.
+    -   `DEBUG`: Errors, warnings, informational messages, and debug messages are logged.
+- **Filter Levels**: The log levels that are filtered out. By default, all log levels are shown. Click on the ones you want to hide.
+    -   `ERROR`: Only errors are shown.
+    -   `WARN`: Errors and warnings are shown.
+    -   `INFO`: Errors, warnings, and informational messages are shown.
+    -   `DEBUG`: Errors, warnings, informational messages, and debug messages are shown.
+    -   `VERBOSE`: Errors, warnings, informational messages, debug messages, and verbose messages are logged.
+
+Export the logs to a file by clicking on the `Export` button.
+
+Click on the `Clear Logs` button to clear the logs.
 
 ---
 
