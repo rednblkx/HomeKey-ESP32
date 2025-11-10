@@ -7,17 +7,25 @@ weight: 5
 
 This document outlines different methods for updating the firmware on your HomeKey-ESP32 device. Keeping your device up-to-date ensures you have the latest features, bug fixes, and security enhancements.
 
+> [!NOTE]
+> If you are satisfied with your current setup, you probably don't need to update your firmware.
+>
+> However, if you're interested in what the new version brings, this guide is for you.
+
 **Required Files for Updates:**
 
 *   `*-firmware.bin`: The main application firmware file.
 *   `littlefs.bin`: Contains the web interface files (LittleFS filesystem).
-*   `*-firmware-merged.bin`: A combined file containing the bootloader, application, and LittleFS, primarily used for initial flashing or full re-flashes via USB.
+*   `*-firmware-merged.bin`: A combined file containing the bootloader, application, and LittleFS, used for initial flashing via USB. This erases the entire flash memory, so it is not to be used for updates.
 
 ## 1. Over-The-Air (OTA) Updates
 
 The primary method for Over-The-Air (OTA) updates is through the WebUI. This allows you to update your device wirelessly.
 
 ### 1.1. WebUI Updates
+
+> [!NOTE]
+> This is available starting with version `v0.7`.
 
 The easiest way to update your device is through the web interface. Simply navigate to the device's IP address in your web browser and nvaigate to the "OTA Update" page.
 
