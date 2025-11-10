@@ -515,15 +515,16 @@ void MqttManager::publishHassDiscovery() {
 
     cJSON *device = cJSON_CreateObject();
     cJSON *identifiers = cJSON_CreateArray();
+    uint8_t mac[6];
+    esp_read_mac(mac, ESP_MAC_BT);
+    std::string macStr = fmt::format("HK-{:02X}{:02X}{:02X}{:02X}", mac[2], mac[3], mac[4], mac[5]);
     cJSON_AddItemToArray(identifiers, cJSON_CreateString(deviceID.c_str()));
+    cJSON_AddItemToArray(identifiers, cJSON_CreateString(macStr.c_str()));
     cJSON_AddItemToObject(device, "identifiers", identifiers);
     cJSON_AddStringToObject(device, "name", device_name.c_str());
     cJSON_AddStringToObject(device, "manufacturer", "rednblkx");
     cJSON_AddStringToObject(device, "model", "HomeKey-ESP32");
     cJSON_AddStringToObject(device, "sw_version", esp_app_get_description()->version);
-    uint8_t mac[6];
-    esp_read_mac(mac, ESP_MAC_BT);
-    const std::string macStr = fmt::format("HK-{:02X}{:02X}{:02X}{:02X}", mac[2], mac[3], mac[4], mac[5]);
     cJSON_AddStringToObject(device, "configuration_url", fmt::format("http://{}.local", macStr).c_str());
     cJSON_AddStringToObject(device, "serial_number", macStr.c_str());
 
@@ -581,6 +582,7 @@ void MqttManager::publishHassDiscovery() {
  * @return true if SSL configuration was successful, false otherwise
  */
 bool MqttManager::configureSSL(esp_mqtt_client_config_t& mqtt_cfg) {
+    mqtt_cfg.broker.verification.use_global_ca_store = false;
     if (!m_mqttSslConfig->caCert.empty()) {
         mqtt_cfg.broker.verification.certificate = m_mqttSslConfig->caCert.c_str();
         mqtt_cfg.broker.verification.skip_cert_common_name_check = m_mqttConfig.allowInsecure;
