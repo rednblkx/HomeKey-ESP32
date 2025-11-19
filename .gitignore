@@ -11,3 +11,4 @@ managed_components/
 .gemini/
 gha-creds-*.json
 docs/public
+.direnv/
