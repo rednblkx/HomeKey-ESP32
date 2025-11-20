@@ -89,11 +89,23 @@
 	$effect(() => {
 		const currentLogCount = filteredLogs().length;
 		if (currentLogCount > previousLogCount && autoScrollActive) {
-			virtualListRef.scroll({
-				index: currentLogCount - 1,
-				smoothScroll: true,
-				align: "bottom",
-			});
+      const isInitialScroll = previousLogCount === 0;
+      
+      const scrollToBottom = () => {
+        if (virtualListRef) {
+          virtualListRef.scroll({
+            index: currentLogCount - 1,
+            smoothScroll: false,
+            align: "bottom",
+          });
+        }
+      };
+      
+      if (isInitialScroll) {
+        setTimeout(scrollToBottom, 200);
+      } else {
+        scrollToBottom();
+      }
 		}
 		previousLogCount = currentLogCount;
 	});
