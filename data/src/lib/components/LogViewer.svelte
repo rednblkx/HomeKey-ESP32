@@ -30,7 +30,7 @@
 
 	let currentTime = $state(new Date());
 
-	let sys_log_level = $derived(systemInfo.log_level);
+	let sys_log_level = $derived(() => String(systemInfo.log_level));
 	function getLogLevelColor(level: LogLevel): string {
 		const colors: Record<LogLevel, string> = {
 			ERROR: "text-error",
@@ -257,7 +257,7 @@
 						<span class="label-text mr-2">Log Level: </span>
 						<select
 							class="select"
-							value={String(sys_log_level)}
+							value={sys_log_level()}
 							onchange={(e) => {
 								ws.send({
 									type: "set_log_level",
