@@ -85,7 +85,7 @@
   {:else if actions}
     <form onsubmit={saveActionsConfig} class="flex flex-col items-center">
       <div class="flex flex-col max-w-4xl">
-        <div class="card bg-base-200 shadow-xl">
+        <div class="card bg-base-300 shadow-xl">
           <div class="card-body p-2">
             <div role="tablist" class="tabs tabs-lift">
               <label class="tab">
@@ -382,7 +382,7 @@
                       Simple GPIO
                     </div>
                     <div class="collapse-content flex flex-col gap-2">
-                      <div class="collapse collapse-plus bg-base-300">
+                      <div class="collapse collapse-plus bg-base-100">
                         <h3
                           class="collapse-title ctext-base md:text-lg font-bold"
                         >
@@ -392,7 +392,7 @@
                         <div class="collapse-content">
                           <div class="flex flex-wrap justify-around gap-2 mb-4">
                             <fieldset
-                              class="fieldset border-base-100 rounded-box w-xs border p-4"
+                              class="fieldset border-base-300 rounded-box w-xs border p-4"
                             >
                               <legend class="fieldset-legend"
                                 >Auth Success</legend
@@ -436,7 +436,7 @@
                               </div>
                             </fieldset>
                             <fieldset
-                              class="fieldset border-base-100 rounded-box w-xs border p-4"
+                              class="fieldset border-base-300 rounded-box w-xs border p-4"
                             >
                               <legend class="fieldset-legend"
                                 >Auth Failure</legend
@@ -581,7 +581,7 @@
                           </div>
                         </div>
                       </div>
-                      <div class="collapse collapse-plus bg-base-300">
+                      <div class="collapse collapse-plus bg-base-100">
                         <h3
                           class="collapse-title ctext-base md:text-lg font-bold"
                         >
