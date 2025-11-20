@@ -95,7 +95,7 @@
         if (virtualListRef) {
           virtualListRef.scroll({
             index: currentLogCount - 1,
-            smoothScroll: false,
+            smoothScroll: true,
             align: "bottom",
           });
         }
