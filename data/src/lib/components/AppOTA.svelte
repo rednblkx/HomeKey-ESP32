@@ -3,6 +3,8 @@
 	import ws, { type WebSocketEvent } from "$lib/services/ws.js";
 	import type { ApiResponse, Either, OTAStatus } from "$lib/types/api";
 	import { type WebSocketState } from "$lib/stores/websocket.svelte";
+    import { systemInfo } from "$lib/stores/system.svelte";
+    import { getChipModelString } from "$lib/utils/chipModel";
 
 	let firmwareFile = $state<File | null>(null);
 	let littlefsFile = $state<File | null>(null);
@@ -22,6 +24,7 @@
 		next_update_partition: "",
 		upload_type: "",
 	});
+  let chipModel = $derived(systemInfo.chip_model || 0);
 
 	let otaLogs = $state<
 		{ type: string; message: string; timestamp: string }[]
@@ -381,6 +384,12 @@
 						{otaStatus.compile_time}
 					</div>
 				</div>
+        <div class="stat">
+            <div class="stat-title">Chip Model</div>
+            <div class="stat-value text-lg">
+                {getChipModelString(chipModel)}
+            </div>
+        </div>
 				<div class="stat">
 					<div class="stat-title">Running Partition</div>
 					<div class="stat-value text-lg">

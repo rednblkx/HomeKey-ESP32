@@ -1428,6 +1428,10 @@ std::string WebServerManager::getDeviceInfo() {
       m_configManager.getConfig<espConfig::misc_config_t>().ethernetEnabled);
   cJSON_AddStringToObject(info, "wifi_ssid", WiFi.SSID().c_str());
   cJSON_AddNumberToObject(info, "log_level", esp_log_level_get("*"));
+  esp_chip_info_t chipInfo;
+  esp_chip_info(&chipInfo);
+  cJSON_AddNumberToObject(info, "chip_model", chipInfo.model);
+  cJSON_AddNumberToObject(info, "log_level", esp_log_level_get("*"));
   return cjson_to_string_and_free(info);
 }
 

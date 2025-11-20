@@ -9,6 +9,7 @@
  * @property {number} wifi_rssi - WiFi signal strength (RSSI)
  * @property {boolean} eth_enabled - Whether Ethernet is enabled
  * @property {number} log_level - System log level
+ * @property {number} chip_model - Chip model
  */
 
 /**
@@ -23,7 +24,8 @@ export const systemInfo = $state({
   wifi_ssid: '',
   wifi_rssi: 0,
   eth_enabled: false,
-  log_level: 2
+  log_level: 2,
+  chip_model: 0
 });
 
 /**
