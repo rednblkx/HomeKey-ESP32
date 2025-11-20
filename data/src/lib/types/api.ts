@@ -335,7 +335,7 @@ export type CertificateType = 'ca' | 'client' | 'privateKey';
 /**
  * Log level enumeration matching the backend loggable library.
  */
-export type LogLevel = 'ERROR' | 'WARN' | 'INFO' | 'DEBUG' | 'VERBOSE' | 'NONE';
+export type LogLevel = 'ERROR' | 'WARN' | 'INFO' | 'DEBUG' | 'VERBOSE';
 
 /**
  * Log message format received from WebSocket

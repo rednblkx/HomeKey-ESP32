@@ -56,16 +56,11 @@
 			unsubscribeMessages();
 		}
 	});
-  $inspect(navigating);
 </script>
 
 <svelte:head>
-	<link rel="icon" href={logoSrc()} type="image/svg+xml" sizes="any" />
-	<link rel="shortcut icon" href={logoSrc()} type="image/svg+xml" sizes="any" />
-	<link rel="apple-touch-icon" href={logoSrc()} type="image/svg+xml" sizes="any" />
-	<link rel="mask-icon" href={logoSrc()} color="#000000" sizes="any" />
-	<link rel="shortcut icon" href={Logo} type="image/png" />
-	<link rel="apple-touch-icon" href={Logo} type="image/png" />
+	<link rel="icon" href={logoSrc()} type="image/svg+xml" />
+	<link rel="apple-touch-icon" href={Logo} />
 	<title>HomeKey-ESP32</title>
 </svelte:head>
 
@@ -73,7 +68,7 @@
 	<!-- Mobile Navbar -->
 	<div class="navbar bg-base-100 lg:hidden sticky top-[0] z-[9999]">
 		<div class="navbar-start">
-			<label for="main-content-drawer" class="btn btn-ghost drawer-button lg:hidden">
+			<label for="main-content-drawer" class="btn btn-ghost drawer-button lg:hidden" aria-label="Menu">
 				<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
 					stroke="currentColor">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h8m-8 6h16" />
@@ -95,7 +90,7 @@
 		</div>
 		<div class="navbar-end">
 			<label class="swap swap-rotate mr-4">
-				<input type="checkbox" onclick={toggleTheme} checked={getCurrentTheme() !== 'dracula'} />
+				<input type="checkbox" onclick={toggleTheme} checked={getCurrentTheme() !== 'dracula'} aria-label="Toggle theme" />
 				<svg class="swap-on w-6 h-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
 					stroke="currentColor" stroke-width="2">
 					<path stroke-linecap="round" stroke-linejoin="round"
@@ -116,7 +111,7 @@
 		<!-- Sidebar -->
 		<div class="drawer-side max-lg:top-auto">
 			<label for="main-content-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
-			<NavigationMenu onClose={closeDrawer} isMobile={false} bind:triggerElement={sidebarTrigger} id="main-navigation" />
+			<NavigationMenu onClose={closeDrawer} bind:triggerElement={sidebarTrigger} id="main-navigation" />
 		</div>
 		<div class="drawer-content h-full w-full">
 			<!-- Content -->

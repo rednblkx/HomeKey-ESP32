@@ -338,6 +338,10 @@ void HomeKitLock::setupDebugCommands() {
     });
     new SpanUserCommand('M', "Erase MQTT Config and restart", [](const char*){s_instance->m_configManager.deleteConfig<espConfig::mqttConfig_t>();});
     new SpanUserCommand('N', "Btr status low", [](const char* arg) {
+      if (!s_instance->m_statusLowBattery) {
+        ESP_LOGW(TAG, "Battery service is disabled");
+        return;
+      }
       const char* TAG = "BTR_LOW";
       if (strncmp(arg + 1, "0", 1) == 0) {
         s_instance->m_statusLowBattery->setVal(0);
@@ -348,6 +352,10 @@ void HomeKitLock::setupDebugCommands() {
       }
     });
     new SpanUserCommand('B', "Btr level", [](const char* arg) {
+      if (!s_instance->m_batteryLevel) {
+        ESP_LOGW(TAG, "Battery service is disabled");
+        return;
+      }
       uint8_t level = atoi(static_cast<const char *>(arg + 1));
       s_instance->m_batteryLevel->setVal(level);
     });

@@ -8,12 +8,30 @@ export default defineConfig(({ mode }) => {
   const isDev = mode === "development";
 
   return {
-    plugins: [sveltekit(), tailwindcss(), devtoolsJson()],
+    plugins: [
+      sveltekit(),
+      tailwindcss(),
+      ...(isDev ? [devtoolsJson()] : [])
+    ],
     define: { __DEV__: isDev },
     resolve: {
       alias: {
         "@": fileURLToPath(new URL("./src", import.meta.url)),
       },
+    },
+    build: {
+      cssMinify: 'lightningcss',
+      minify: 'esbuild',
+      target: 'es2020',
+      rollupOptions: {
+        output: {
+          manualChunks: undefined,
+        },
+      },
+    },
+    esbuild: {
+      drop: isDev ? [] : ['console', 'debugger'],
+      legalComments: 'none',
     },
     server: {
       proxy: {

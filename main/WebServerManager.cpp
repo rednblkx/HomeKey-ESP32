@@ -24,6 +24,7 @@
 #include "freertos/projdefs.h"
 #include "sodium/randombytes.h"
 #include <LittleFS.h>
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -1270,6 +1271,13 @@ void WebServerManager::broadcastWs(const uint8_t *payload, size_t len,
       fds.push_back(c->fd);
   }
   if (fds.empty()) {
+    ESP_LOGW(TAG, "No websocket clients, buffering, current size: %zu",
+             m_wsBroadcastBuffer.size());
+    if(m_wsBroadcastBuffer.size() >= 64){
+      ESP_LOGW(TAG, "WS Broadcast buffer full, dropping oldest frame");
+      std::shift_left(m_wsBroadcastBuffer.begin(), m_wsBroadcastBuffer.end(), 1);
+      m_wsBroadcastBuffer.pop_back();
+    }
     m_wsBroadcastBuffer.push_back(std::vector<uint8_t>(payload, payload + len));
     return;
   }

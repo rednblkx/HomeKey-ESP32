@@ -49,8 +49,6 @@ ConfigManager::ConfigManager() : m_isInitialized(false) {
       {"lockCustomStateTopic", &m_mqttConfig.lockCustomStateTopic},
       {"lockCustomStateCmd", &m_mqttConfig.lockCustomStateCmd},
       {"lockEnableCustomState", &m_mqttConfig.lockEnableCustomState},
-      {"hassMqttDiscoveryEnabled",
-        &m_mqttConfig.hassMqttDiscoveryEnabled},
       {"nfcTagNoPublish", &m_mqttConfig.nfcTagNoPublish},
       {"useSSL", &m_mqttConfig.useSSL},
       {"allowInsecure", &m_mqttConfig.allowInsecure},
@@ -436,10 +434,22 @@ void ConfigManager::deserialize(msgpack_object obj, std::string type) {
               auto integer_view = msgpack_elements | std::ranges::views::transform([](const msgpack_object& o){return o.via.u64;});
 
               if constexpr (std::is_same_v<PointeeType, std::array<uint8_t, 4>>) {
+                if (msgpack_elements.size() != 4) {
+                  ESP_LOGW(TAG, "Validation failed for '%s': array size is not 4.", key.c_str());
+                  break;
+                }
                 std::ranges::copy(integer_view, arg->begin());
               } else if constexpr (std::is_same_v<PointeeType, std::array<uint8_t, 5>>) {
+                if (msgpack_elements.size() != 5) {
+                  ESP_LOGW(TAG, "Validation failed for '%s': array size is not 5.", key.c_str());
+                  break;
+                }
                 std::ranges::copy(integer_view, arg->begin());
               } else if constexpr (std::is_same_v<PointeeType, std::array<uint8_t, 7>>) {
+                if (msgpack_elements.size() != 7) {
+                  ESP_LOGW(TAG, "Validation failed for '%s': array size is not 7.", key.c_str());
+                  break;
+                }
                 std::ranges::copy(integer_view, arg->begin());
               } else if constexpr (std::is_same_v<PointeeType, std::map<espConfig::actions_config_t::colorMap, uint8_t>>) {
                 std::ranges::for_each(msgpack_elements, [&](const msgpack_object& o) {

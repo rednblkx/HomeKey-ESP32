@@ -49,5 +49,8 @@
     "test:coverage": "vitest run --coverage",
     "test:unit": "vitest"
   },
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "@humanspeak/svelte-virtual-list": "^0.3.6"
+  }
 }

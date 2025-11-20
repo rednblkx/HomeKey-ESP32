@@ -63,6 +63,9 @@ These settings define how your device connects to your MQTT broker.
 *   Enable SSL/TLS: Enable or disable SSL/TLS for MQTT communication.
     * When enabled, a new section called "SSL/TLS Settings" will appear below it to configure the certificates.
 
+> [!WARNING]
+> TLS communication is currently not available on the ESP32 chip model due to memory constraints (and some poor decisions).
+
 ### 3.2. Topics
 
 This section is organized into two tabs: **Core Topics** and **Custom Topics**.

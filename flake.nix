@@ -23,7 +23,7 @@
       ];
 
       shellHook = ''
-        export CLANGD_FLAGS="--query-driver=`which riscv32-esp-elf-g++`"
+        export CLANGD_FLAGS="--query-driver=`which riscv32-esp-elf-g++`,`which riscv32-esp-elf-gcc`,`which xtensa-esp32-elf-g++`,`which xtensa-esp32-elf-gcc` --clang-tidy --background-index --suggest-missing-includes"
       '';
     };
   };

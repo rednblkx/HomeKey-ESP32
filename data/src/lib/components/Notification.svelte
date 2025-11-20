@@ -1,5 +1,5 @@
 <script>
-  import { notifications } from '../stores/notifications.svelte.js';
+  import { notifications } from "../stores/notifications.svelte.js";
 
   /**
    * @param {import('../types/api.js').NotificationType} type
@@ -7,21 +7,26 @@
    */
   function getAlertClass(type) {
     switch (type) {
-      case 'success':
-        return 'alert-success';
-      case 'error':
-        return 'alert-error';
-      case 'warning':
-        return 'alert-warning';
-      case 'info':
-        return 'alert-info';
+      case "success":
+        return "alert-success";
+      case "error":
+        return "alert-error";
+      case "warning":
+        return "alert-warning";
+      case "info":
+        return "alert-info";
       default:
-        return 'alert-info';
+        return "alert-info";
     }
   }
 </script>
 
-<div class="toast toast-bottom" role="region" aria-live="polite" aria-label="Notifications">
+<div
+  class="toast toast-bottom"
+  role="region"
+  aria-live="polite"
+  aria-label="Notifications"
+>
   {#each notifications.notifications as notification (notification.id)}
     <div
       class="alert {getAlertClass(notification.type)} shadow-lg"

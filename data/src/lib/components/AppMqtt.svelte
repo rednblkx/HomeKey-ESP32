@@ -1,43 +1,50 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { type CertificatesStatus, type CertificateType, type MqttConfig } from '$lib/types/api';
+  import {
+    type CertificatesStatus,
+    type CertificateType,
+    type MqttConfig,
+  } from "$lib/types/api";
   import {
     saveConfig,
     uploadCertificate,
     getCertificateStatus,
     deleteCertificate,
   } from "$lib/services/api.js";
-    import { diff } from "$lib/utils/objDiff";
+  import { diff } from "$lib/utils/objDiff";
 
-  let { mqtt, error }: { mqtt: MqttConfig | null, error: string | null } = $props();
+  let { mqtt, error }: { mqtt: MqttConfig | null; error: string | null } =
+    $props();
 
-  let mqttConfig = $state<MqttConfig>(mqtt ?? {
-    mqttBroker: "",
-    mqttPort: 1883,
-    mqttClientId: "",
-    mqttUsername: "",
-    mqttPassword: "",
-    hassMqttDiscoveryEnabled: false,
-    lwtTopic: "",
-    hkTopic: "",
-    lockStateTopic: "",
-    lockStateCmd: "",
-    lockCStateCmd: "",
-    lockTStateCmd: "",
-    btrLvlCmdTopic: "",
-    hkAltActionTopic: "",
-    lockCustomStateTopic: "",
-    lockCustomStateCmd: "",
-    lockEnableCustomState: false,
-    nfcTagNoPublish: false,
-    useSSL: false,
-    caCert: "",
-    clientCert: "",
-    clientKey: "",
-    allowInsecure: false,
-    customLockStates: {}, 
-    customLockActions: {}
-  });
+  let mqttConfig = $state<MqttConfig>(
+    mqtt ?? {
+      mqttBroker: "",
+      mqttPort: 1883,
+      mqttClientId: "",
+      mqttUsername: "",
+      mqttPassword: "",
+      hassMqttDiscoveryEnabled: false,
+      lwtTopic: "",
+      hkTopic: "",
+      lockStateTopic: "",
+      lockStateCmd: "",
+      lockCStateCmd: "",
+      lockTStateCmd: "",
+      btrLvlCmdTopic: "",
+      hkAltActionTopic: "",
+      lockCustomStateTopic: "",
+      lockCustomStateCmd: "",
+      lockEnableCustomState: false,
+      nfcTagNoPublish: false,
+      useSSL: false,
+      caCert: "",
+      clientCert: "",
+      clientKey: "",
+      allowInsecure: false,
+      customLockStates: {},
+      customLockActions: {},
+    },
+  );
 
   let certificateStatus = $state<CertificatesStatus>();
 
@@ -65,7 +72,9 @@
   };
 
   const handleCertificateUpload = async (event: Event) => {
-    const type = (event.target as HTMLInputElement).dataset["type"] as keyof typeof uploadErrors;
+    const type = (event.target as HTMLInputElement).dataset[
+      "type"
+    ] as keyof typeof uploadErrors;
     const file = (event.target as HTMLInputElement).files?.[0];
     if (!file) return;
     uploadErrors[type] = "";
@@ -149,12 +158,12 @@
     }
   };
 
-  const saveMqttConfig = async (e : any) => {
+  const saveMqttConfig = async (e: any) => {
     e.preventDefault();
     try {
       if (!mqttConfig || !mqtt) return;
       const result = await saveConfig("mqtt", diff(mqtt, mqttConfig));
-      if(result.success){
+      if (result.success) {
         mqttConfig = result.data;
         mqtt = result.data;
       }
@@ -362,7 +371,8 @@
                       <div class="space-y-6">
                         <div class="form-control">
                           <label class="label cursor-pointer">
-                            <span class="label-text">Skip cert CN validation</span
+                            <span class="label-text"
+                              >Skip cert CN validation</span
                             >
                             <input
                               type="checkbox"
@@ -376,8 +386,12 @@
                         <div class="bg-base-200 rounded-lg">
                           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <!-- CA Certificate -->
-                            <div class="flex flex-col p-3 bg-base-100 rounded-lg">
-                              <div class="flex items-center justify-between mb-2">
+                            <div
+                              class="flex flex-col p-3 bg-base-100 rounded-lg"
+                            >
+                              <div
+                                class="flex items-center justify-between mb-2"
+                              >
                                 <div class="flex items-center">
                                   <svg
                                     class="w-5 h-5 mr-2"
@@ -394,26 +408,46 @@
                                     />
                                   </svg>
                                   <div class="flex flex-col">
-                                    <span class="text-sm font-medium">CA Certificate</span>
-                                    <span class="text-sm font-medium text-base-content/75">{certificateStatus?.ca?.expiration.from} - {certificateStatus?.ca?.expiration.to}</span>
-                                    <span class="text-sm font-medium text-base-content/50">Subject: {certificateStatus?.ca?.subject}</span>
-                                    <span class="text-sm font-medium text-base-content/50">Issuer: {certificateStatus?.ca?.issuer}</span>
+                                    <span class="text-sm font-medium"
+                                      >CA Certificate</span
+                                    >
+                                    <span
+                                      class="text-sm font-medium text-base-content/75"
+                                      >{certificateStatus?.ca?.expiration.from} -
+                                      {certificateStatus?.ca?.expiration
+                                        .to}</span
+                                    >
+                                    <span
+                                      class="text-sm font-medium text-base-content/50"
+                                      >Subject: {certificateStatus?.ca
+                                        ?.subject}</span
+                                    >
+                                    <span
+                                      class="text-sm font-medium text-base-content/50"
+                                      >Issuer: {certificateStatus?.ca
+                                        ?.issuer}</span
+                                    >
                                   </div>
                                 </div>
                                 {#if certificateStatus?.ca}
                                   <button
                                     type="button"
-                                    onclick={() => deleteCertificateHandler("ca")}
+                                    onclick={() =>
+                                      deleteCertificateHandler("ca")}
                                     class="btn btn-ghost btn-xs btn-error"
-                                  >Delete</button
+                                    >Delete</button
                                   >
                                 {/if}
                               </div>
                             </div>
 
                             <!-- Client Certificate -->
-                            <div class="flex flex-col p-3 bg-base-100 rounded-lg">
-                              <div class="flex items-center justify-between mb-2">
+                            <div
+                              class="flex flex-col p-3 bg-base-100 rounded-lg"
+                            >
+                              <div
+                                class="flex items-center justify-between mb-2"
+                              >
                                 <div class="flex items-center">
                                   <svg
                                     class="w-5 h-5 mr-2"
@@ -430,37 +464,65 @@
                                     />
                                   </svg>
                                   <div class="flex flex-col">
-                                    <span class="text-sm font-medium">Client Certificate</span>
-                                    <span class="text-sm font-medium text-base-content/75">{certificateStatus?.client?.expiration.from} - {certificateStatus?.client?.expiration.to}</span>
-                                    <span class="text-sm font-medium text-base-content/50">Subject: {certificateStatus?.client?.subject}</span>
-                                    <span class="text-sm font-medium text-base-content/50">Issuer: {certificateStatus?.client?.issuer}</span>
+                                    <span class="text-sm font-medium"
+                                      >Client Certificate</span
+                                    >
+                                    <span
+                                      class="text-sm font-medium text-base-content/75"
+                                      >{certificateStatus?.client?.expiration
+                                        .from} - {certificateStatus?.client
+                                        ?.expiration.to}</span
+                                    >
+                                    <span
+                                      class="text-sm font-medium text-base-content/50"
+                                      >Subject: {certificateStatus?.client
+                                        ?.subject}</span
+                                    >
+                                    <span
+                                      class="text-sm font-medium text-base-content/50"
+                                      >Issuer: {certificateStatus?.client
+                                        ?.issuer}</span
+                                    >
                                   </div>
                                 </div>
                                 {#if certificateStatus?.client}
                                   <button
                                     type="button"
-                                    onclick={() => deleteCertificateHandler("client")}
+                                    onclick={() =>
+                                      deleteCertificateHandler("client")}
                                     class="btn btn-ghost btn-xs btn-error"
-                                  >Delete</button
+                                    >Delete</button
                                   >
                                 {/if}
                               </div>
                               {#if !certificateStatus?.client?.keyMatchesCert && certificateStatus?.privateKey?.exists}
-                                <span class="text-sm font-medium text-error">Private Key doesn't match the certificate public key</span>
+                                <span class="text-sm font-medium text-error"
+                                  >Private Key doesn't match the certificate
+                                  public key</span
+                                >
                               {/if}
-                              {#if certificateStatus?.ca && certificateStatus.ca.subject != certificateStatus.client?.issuer }
-                                <span class="text-sm font-medium text-error">Certificate Issuer doesn't match the CA certificate</span>
+                              {#if certificateStatus?.ca && certificateStatus.ca.subject != certificateStatus.client?.issuer}
+                                <span class="text-sm font-medium text-error"
+                                  >Certificate Issuer doesn't match the CA
+                                  certificate</span
+                                >
                               {/if}
                             </div>
 
                             <!-- Private Key -->
-                            <div class="flex flex-col p-3 bg-base-100 rounded-lg">
-                              <div class="flex items-center justify-between mb-2">
+                            <div
+                              class="flex flex-col p-3 bg-base-100 rounded-lg"
+                            >
+                              <div
+                                class="flex items-center justify-between mb-2"
+                              >
                                 <div class="flex items-center">
                                   <svg
                                     class="w-5 h-5 mr-2"
-                                    class:text-success={certificateStatus?.privateKey?.exists}
-                                    class:text-error={!certificateStatus?.privateKey?.exists}
+                                    class:text-success={certificateStatus
+                                      ?.privateKey?.exists}
+                                    class:text-error={!certificateStatus
+                                      ?.privateKey?.exists}
                                     fill="none"
                                     viewBox="0 0 24 24"
                                     stroke="currentColor"
@@ -472,7 +534,9 @@
                                     />
                                   </svg>
                                   <div class="flex flex-col">
-                                    <span class="text-sm font-medium">Private Key</span>
+                                    <span class="text-sm font-medium"
+                                      >Private Key</span
+                                    >
                                   </div>
                                 </div>
                                 {#if certificateStatus?.privateKey}
@@ -481,7 +545,7 @@
                                     onclick={() =>
                                       deleteCertificateHandler("privateKey")}
                                     class="btn btn-ghost btn-xs btn-error"
-                                  >Delete</button
+                                    >Delete</button
                                   >
                                 {/if}
                               </div>
@@ -581,7 +645,6 @@
               </div>
             </div>
 
-
             <div class="collapse collapse-arrow bg-base-100">
               <input type="checkbox" name="mqtt-accordion" />
               <div class="collapse-title font-medium flex items-center">
@@ -626,7 +689,7 @@
                             required
                           />
                         </div>
-                        <div class="form-control">
+                        <div class="form-control self-center">
                           <label class="label cursor-pointer">
                             <span class="label-text">Ignore NFC Tags</span>
                             <input
@@ -639,7 +702,9 @@
                         <div class="form-control">
                           <!-- svelte-ignore a11y_label_has_associated_control -->
                           <label class="label">
-                            <span class="label-text">Secondary action Topic</span>
+                            <span class="label-text"
+                              >Secondary action Topic</span
+                            >
                           </label>
                           <input
                             type="text"
@@ -679,7 +744,7 @@
                           <!-- svelte-ignore a11y_label_has_associated_control -->
                           <label class="label">
                             <span class="label-text"
-                            >Lock Current State Cmd Topic</span
+                              >Lock Current State Cmd Topic</span
                             >
                           </label>
                           <input
@@ -694,7 +759,7 @@
                           <!-- svelte-ignore a11y_label_has_associated_control -->
                           <label class="label">
                             <span class="label-text"
-                            >Lock Target State Cmd Topic</span
+                              >Lock Target State Cmd Topic</span
                             >
                           </label>
                           <input
@@ -709,7 +774,7 @@
                           <!-- svelte-ignore a11y_label_has_associated_control -->
                           <label class="label">
                             <span class="label-text"
-                            >SmartLock battery level Cmd Topic</span
+                              >SmartLock battery level Cmd Topic</span
                             >
                           </label>
                           <input
@@ -753,7 +818,9 @@
                         <div class="form-control mb-4">
                           <!-- svelte-ignore a11y_label_has_associated_control -->
                           <label class="label">
-                            <span class="label-text">Custom State Cmd Topic</span>
+                            <span class="label-text"
+                              >Custom State Cmd Topic</span
+                            >
                           </label>
                           <input
                             type="text"
@@ -802,7 +869,9 @@
                             </label>
                             <input
                               type="number"
-                              bind:value={mqttConfig.customLockStates!.C_UNLOCKING}
+                              bind:value={
+                                mqttConfig.customLockStates!.C_UNLOCKING
+                              }
                               placeholder="255"
                               class="input input-bordered w-full"
                               min="0"
@@ -816,7 +885,9 @@
                             </label>
                             <input
                               type="number"
-                              bind:value={mqttConfig.customLockStates!.C_LOCKING}
+                              bind:value={
+                                mqttConfig.customLockStates!.C_LOCKING
+                              }
                               placeholder="255"
                               class="input input-bordered w-full"
                               min="0"
@@ -830,7 +901,9 @@
                             </label>
                             <input
                               type="number"
-                              bind:value={mqttConfig.customLockStates!.C_UNLOCKED}
+                              bind:value={
+                                mqttConfig.customLockStates!.C_UNLOCKED
+                              }
                               placeholder="255"
                               class="input input-bordered w-full"
                               min="0"
@@ -872,7 +945,9 @@
                             </label>
                             <input
                               type="number"
-                              bind:value={mqttConfig.customLockStates!.C_UNKNOWN}
+                              bind:value={
+                                mqttConfig.customLockStates!.C_UNKNOWN
+                              }
                               placeholder="255"
                               class="input input-bordered w-full"
                               min="0"
@@ -890,10 +965,11 @@
         </div>
         <div class="card-actions mt-6 px-2 self-end">
           <button type="submit" class="btn btn-primary">Save & Apply</button>
-          <button type="button" class="btn btn-ghost" onclick={resetForm}>Reset Form</button>
+          <button type="button" class="btn btn-ghost" onclick={resetForm}
+            >Reset Form</button
+          >
         </div>
       </div>
     </form>
   {/if}
 </div>
-

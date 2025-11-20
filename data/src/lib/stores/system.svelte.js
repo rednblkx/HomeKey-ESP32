@@ -8,7 +8,7 @@
  * @property {string} wifi_ssid - WiFi network SSID
  * @property {number} wifi_rssi - WiFi signal strength (RSSI)
  * @property {boolean} eth_enabled - Whether Ethernet is enabled
- * @property {number} log_level - Whether Ethernet is enabled
+ * @property {number} log_level - System log level
  */
 
 /**
