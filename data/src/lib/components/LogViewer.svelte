@@ -135,6 +135,7 @@
 		URL.revokeObjectURL(url);
 	}
 	let timeUpdateInterval = $state<NodeJS.Timeout>();
+  var resizeObserver : ResizeObserver;
 
 	onMount(() => {
 		const savedLogLevels = localStorage.getItem("logviewer-levels");
@@ -148,7 +149,7 @@
 			document.querySelector("#virtual-list-viewport")?.scrollTop || 0;
 		const contentList = document.getElementById("virtual-list-content");
 		if (contentList) {
-			const resizeObserver = new ResizeObserver(() => {
+			resizeObserver = new ResizeObserver(() => {
 				atBottom =
 					document.querySelector("#virtual-list-viewport")!
 						.scrollTop >=
@@ -215,6 +216,9 @@
 		if (scrollDebounceTimer) {
 			clearTimeout(scrollDebounceTimer);
 		}
+    if (resizeObserver) {
+      resizeObserver.disconnect();
+    }
 	});
 </script>
 
