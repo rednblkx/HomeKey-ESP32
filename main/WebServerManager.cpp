@@ -1389,6 +1389,7 @@ esp_err_t WebServerManager::handleWebSocketMessage(httpd_req_t *req,
       m_configManager.updateFromJson<espConfig::misc_config_t>("{\"logLevel\":" + std::to_string(level) + "}");
       m_configManager.saveConfig<espConfig::misc_config_t>();
     }
+    response = getDeviceInfo();
   } else {
     cJSON *unknown = cJSON_CreateObject();
     cJSON_AddStringToObject(unknown, "type", "error");
