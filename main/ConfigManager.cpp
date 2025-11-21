@@ -316,6 +316,13 @@ void ConfigManager::loadConfigFromNvs(const char *key) {
 
   msgpack_unpacked unpacked;
   msgpack_unpacked_init(&unpacked);
+  
+  // RAII guard to ensure cleanup on all code paths
+  struct UnpackedGuard {
+    msgpack_unpacked* ptr;
+    ~UnpackedGuard() { if(ptr) msgpack_unpacked_destroy(ptr); }
+  } guard{&unpacked};
+  
   bool success = msgpack_unpack((const char*)buffer.data(), buffer.size(), NULL, unpacked.zone, &unpacked.data);
   if(success) {
     msgpack_object obj = unpacked.data;
@@ -330,7 +337,6 @@ void ConfigManager::loadConfigFromNvs(const char *key) {
   } else {
     ESP_LOGE(TAG, "Failed to parse msgpack for key '%s'. Using defaults.", key);
   }
-  msgpack_unpacked_destroy(&unpacked);
 }
 
 /**
