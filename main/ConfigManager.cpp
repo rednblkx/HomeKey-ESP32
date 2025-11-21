@@ -305,6 +305,14 @@ void ConfigManager::loadConfigFromNvs(const char *key) {
     return;
   }
 
+  // Validate size to prevent heap exhaustion on ESP32
+  const size_t MAX_CONFIG_SIZE = 8192; // 8KB max config size
+  if (required_size > MAX_CONFIG_SIZE) {
+    ESP_LOGE(TAG, "Config size too large for key '%s': %zu bytes (max: %zu)", 
+             key, required_size, MAX_CONFIG_SIZE);
+    return;
+  }
+
   std::vector<uint8_t> buffer(required_size);
   err = nvs_get_blob(m_nvsHandle, key, buffer.data(), &required_size);
 
