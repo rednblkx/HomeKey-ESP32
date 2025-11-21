@@ -23,6 +23,14 @@ class ConfigManager {
 public:
     ConfigManager();
     ~ConfigManager();
+    
+    // Prevent copying (NVS handle cannot be safely copied)
+    ConfigManager(const ConfigManager&) = delete;
+    ConfigManager& operator=(const ConfigManager&) = delete;
+    
+    // Prevent moving (mutex cannot be moved)
+    ConfigManager(ConfigManager&&) = delete;
+    ConfigManager& operator=(ConfigManager&&) = delete;
 
     bool begin();
 
