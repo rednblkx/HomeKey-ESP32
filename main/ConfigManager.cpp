@@ -4,6 +4,7 @@
 #include <ranges>
 #include <string>
 #include <vector>
+#include <limits>
 #include "esp_log.h"
 #include "mbedtls/x509.h"
 #include "msgpack.h"
@@ -425,7 +426,12 @@ void ConfigManager::deserialize(msgpack_object obj, std::string type) {
             }
             case MSGPACK_OBJECT_POSITIVE_INTEGER: {
               if constexpr (std::is_same_v<PointeeType, uint8_t> || std::is_same_v<PointeeType, uint16_t>) {
-                *arg = v.val.via.u64;
+                if (v.val.via.u64 > std::numeric_limits<PointeeType>::max()) {
+                  ESP_LOGW(TAG, "Value overflow for '%s': %llu exceeds max %u", 
+                           key.c_str(), v.val.via.u64, std::numeric_limits<PointeeType>::max());
+                  break;
+                }
+                *arg = static_cast<PointeeType>(v.val.via.u64);
               }
               break;
             }
@@ -645,7 +651,11 @@ std::string ConfigManager::updateFromJson(const std::string& json_string) {
             }
           } else if constexpr (std::is_integral_v<PointeeType>) {
             if (cJSON_IsNumber(it)) {
-              *arg = static_cast<PointeeType>(it->valueint);
+              if (it->valueint < 0 || it->valueint > std::numeric_limits<PointeeType>::max()) {
+                ESP_LOGW(TAG, "Value out of range for '%s': %d", keyStr.c_str(), it->valueint);
+              } else {
+                *arg = static_cast<PointeeType>(it->valueint);
+              }
             } else {
               ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected number.", keyStr.c_str());
             }
@@ -875,7 +885,12 @@ bool ConfigManager::deserializeFromJson(const std::string& json_string) {
                         }
                     } else if constexpr (std::is_same_v<PointeeType, uint8_t> || std::is_same_v<PointeeType, uint16_t>) {
                         if (cJSON_IsNumber(item)) {
-                            *arg = static_cast<PointeeType>(item->valuedouble);
+                            if (item->valuedouble < 0 || item->valuedouble > std::numeric_limits<PointeeType>::max()) {
+                                ESP_LOGW(TAG, "Value out of range for '%s': %f", key.c_str(), item->valuedouble);
+                                success = false;
+                            } else {
+                                *arg = static_cast<PointeeType>(item->valuedouble);
+                            }
                         } else {
                             ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected number.", key.c_str());
                             success = false;
