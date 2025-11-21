@@ -424,13 +424,13 @@
 										class="font-mono text-xs wrap-anywhere text-wrap break-all"
 									>
 										<strong>RTC Timestamp:</strong>
-										{item.ts}
+										{item.uptime}
 									</p>
 									<p
 										class="font-mono text-xs wrap-anywhere text-wrap break-all"
 									>
 										<strong>Boot Timestamp:</strong>
-										{item.uptime}
+										{item.ts}
 									</p>
 									<div
 										class="mt-2 text-xs whitespace-pre-wrap break-all"

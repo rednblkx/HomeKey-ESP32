@@ -49,7 +49,7 @@ using namespace loggable;
 void setup() {
   auto& distributor = Sinker::instance();
 
-  distributor.set_level(LogLevel::Debug);
+  distributor.set_level(LogLevel::Verbose);
   distributor.hook_esp_log(true);
   Serial.begin(115200);
   readerDataManager = new ReaderDataManager;
