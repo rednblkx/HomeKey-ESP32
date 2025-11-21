@@ -984,7 +984,7 @@ bool ConfigManager::saveCertificate(const std::string& certType, const std::stri
     }
 
     // Validate certificate type
-    if (certType.compare("ca") && certType.compare("client") && certType.compare("privateKey")) {
+    if (certType != "ca" && certType != "client" && certType != "privateKey") {
         ESP_LOGE(TAG, "Invalid certificate type: '%s' - Must be 'ca', 'client', or 'privateKey'", certType.c_str());
         return false;
     }
