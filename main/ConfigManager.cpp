@@ -134,6 +134,8 @@ ConfigManager::ConfigManager() : m_isInitialized(false) {
 ConfigManager::~ConfigManager() {
   if (m_isInitialized) {
     nvs_close(m_nvsHandle);
+    m_isInitialized = false;
+    m_nvsHandle = 0; // Invalidate handle
   }
 }
 
