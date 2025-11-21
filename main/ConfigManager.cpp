@@ -1333,10 +1333,15 @@ bool ConfigManager::validateCertificateWithMbedTLS(const std::string& certConten
     if (isValid) {
         char subject[256];
         char issuer[256];
-        mbedtls_x509_dn_gets(subject, sizeof(subject), &cert.subject);
-        mbedtls_x509_dn_gets(issuer, sizeof(issuer), &cert.issuer);
-
-        ESP_LOGI(TAG, "Certificate validated successfully - Subject: %s, Issuer: %s", subject, issuer);
+        int ret_subject = mbedtls_x509_dn_gets(subject, sizeof(subject), &cert.subject);
+        int ret_issuer = mbedtls_x509_dn_gets(issuer, sizeof(issuer), &cert.issuer);
+        
+        if (ret_subject < 0 || ret_issuer < 0) {
+            ESP_LOGE(TAG, "Failed to get certificate DN strings (subject: %d, issuer: %d)", 
+                     ret_subject, ret_issuer);
+        } else {
+            ESP_LOGI(TAG, "Certificate validated successfully - Subject: %s, Issuer: %s", subject, issuer);
+        }
     }
 
     mbedtls_x509_crt_free(&cert);
@@ -1518,14 +1523,14 @@ std::vector<CertificateStatus> ConfigManager::getCertificatesStatus(){
       }
       char subject[256], issuer[256];
       ret = mbedtls_x509_dn_gets(subject, sizeof(subject), &cert.subject);
-      if(!ret){
-        ESP_LOGE(TAG, "Unable to retrieve DN for '%s' certificate: %d", c.c_str(), ret);
+      if(ret < 0){
+        ESP_LOGE(TAG, "Unable to retrieve subject DN for '%s' certificate: %d", c.c_str(), ret);
         mbedtls_x509_crt_free(&cert);
         continue;
       }
       ret = mbedtls_x509_dn_gets(issuer, sizeof(issuer), &cert.issuer);
-      if(!ret){
-        ESP_LOGE(TAG, "Unable to retrieve DN for '%s' certificate: %d", c.c_str(), ret);
+      if(ret < 0){
+        ESP_LOGE(TAG, "Unable to retrieve issuer DN for '%s' certificate: %d", c.c_str(), ret);
         mbedtls_x509_crt_free(&cert);
         continue;
       }
