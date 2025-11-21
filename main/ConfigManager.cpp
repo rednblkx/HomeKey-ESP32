@@ -614,15 +614,23 @@ std::vector<uint8_t> ConfigManager::serialize() {
 
 template <typename ConfigType>
 std::string ConfigManager::updateFromJson(const std::string& json_string) {
-  cJSON *root = cJSON_Parse(json_string.c_str());
+  // RAII guard for cJSON cleanup
+  struct cJSONGuard {
+    cJSON* ptr;
+    cJSONGuard(cJSON* p) : ptr(p) {}
+    ~cJSONGuard() { if(ptr) cJSON_Delete(ptr); }
+    cJSON* get() { return ptr; }
+    operator bool() const { return ptr != nullptr; }
+  };
+  
+  cJSONGuard root(cJSON_Parse(json_string.c_str()));
   if (!root) {
     ESP_LOGE(TAG, "Failed to parse JSON: invalid format.");
     return "";
   }
 
-  if (!cJSON_IsObject(root)) {
+  if (!cJSON_IsObject(root.get())) {
     ESP_LOGE(TAG, "JSON root is not an object.");
-    cJSON_Delete(root);
     return "";
   }
 
@@ -634,12 +642,11 @@ std::string ConfigManager::updateFromJson(const std::string& json_string) {
   } else if constexpr (std::is_same_v<ConfigType, espConfig::mqttConfig_t>) {
     configMapPtr = &m_configMap["mqtt"];
   } else {
-    cJSON_Delete(root);
     ESP_LOGE(TAG, "Invalid configuration type specified.");
     return "";
   }
   
-  for (cJSON *it = root->child; it != NULL; it = it->next) {
+  for (cJSON *it = root.get()->child; it != NULL; it = it->next) {
     std::string keyStr = it->string;
     auto config_entry = configMapPtr->find(keyStr);
 
@@ -737,7 +744,6 @@ std::string ConfigManager::updateFromJson(const std::string& json_string) {
     }
   }
 
-  cJSON_Delete(root);
   return serializeToJson<ConfigType>();
 }
 template std::string ConfigManager::updateFromJson<espConfig::misc_config_t>(const std::string& json_string);
@@ -759,7 +765,16 @@ template <typename ConfigType>
  * @return std::string JSON representation of the configuration; returns an empty string if serialization fails.
  */
 std::string ConfigManager::serializeToJson() {
-  cJSON *root = cJSON_CreateObject();
+  // RAII guard for cJSON cleanup
+  struct cJSONGuard {
+    cJSON* ptr;
+    cJSONGuard(cJSON* p) : ptr(p) {}
+    ~cJSONGuard() { if(ptr) cJSON_Delete(ptr); }
+    cJSON* get() { return ptr; }
+    operator bool() const { return ptr != nullptr; }
+  };
+  
+  cJSONGuard root(cJSON_CreateObject());
   if (!root) {
       return ""; // Error creating JSON object
   }
@@ -781,14 +796,14 @@ std::string ConfigManager::serializeToJson() {
 
                 if constexpr (std::is_same_v<PointeeType, std::string>) {
                     if(key.contains("Password") || key.contains("Passwd")){
-                        cJSON_AddStringToObject(root, key.c_str(), "********");
+                        cJSON_AddStringToObject(root.get(), key.c_str(), "********");
                     } else {
-                        cJSON_AddStringToObject(root, key.c_str(), arg->c_str());
+                        cJSON_AddStringToObject(root.get(), key.c_str(), arg->c_str());
                     }
                 } else if constexpr (std::is_same_v<PointeeType, bool>) {
-                    cJSON_AddBoolToObject(root, key.c_str(), *arg);
+                    cJSON_AddBoolToObject(root.get(), key.c_str(), *arg);
                 } else if constexpr (std::is_same_v<PointeeType, uint8_t> || std::is_same_v<PointeeType, uint16_t>) {
-                    cJSON_AddNumberToObject(root, key.c_str(), static_cast<double>(*arg));
+                    cJSON_AddNumberToObject(root.get(), key.c_str(), static_cast<double>(*arg));
                 } else if constexpr (std::is_same_v<PointeeType, std::array<uint8_t, 4>> ||
                                      std::is_same_v<PointeeType, std::array<uint8_t, 5>> ||
                                      std::is_same_v<PointeeType, std::array<uint8_t, 7>>) {
@@ -797,7 +812,7 @@ std::string ConfigManager::serializeToJson() {
                         for (const auto& val : *arg) {
                             cJSON_AddItemToArray(array, cJSON_CreateNumber(static_cast<double>(val)));
                         }
-                        cJSON_AddItemToObject(root, key.c_str(), array);
+                        cJSON_AddItemToObject(root.get(), key.c_str(), array);
                     }
                 } else if constexpr (std::is_same_v<PointeeType, std::map<espConfig::actions_config_t::colorMap, uint8_t>>) {
                     cJSON *array_of_arrays = cJSON_CreateArray();
@@ -808,7 +823,7 @@ std::string ConfigManager::serializeToJson() {
                             cJSON_AddItemToArray(inner_array, cJSON_CreateNumber(static_cast<double>(map_pair.second)));
                             cJSON_AddItemToArray(array_of_arrays, inner_array);
                         }
-                        cJSON_AddItemToObject(root, key.c_str(), array_of_arrays);
+                        cJSON_AddItemToObject(root.get(), key.c_str(), array_of_arrays);
                     }
                 } else if constexpr (std::is_same_v<PointeeType, std::map<std::string, uint8_t>>) {
                     cJSON *map_obj = cJSON_CreateObject();
@@ -816,16 +831,15 @@ std::string ConfigManager::serializeToJson() {
                         for (const auto& map_pair : *arg) {
                             cJSON_AddNumberToObject(map_obj, map_pair.first.c_str(), static_cast<double>(map_pair.second));
                         }
-                        cJSON_AddItemToObject(root, key.c_str(), map_obj);
+                        cJSON_AddItemToObject(root.get(), key.c_str(), map_obj);
                     }
                 }
             }
         }, pair.second);
     }
 
-    char *json_string = cJSON_PrintUnformatted(root);
+    char *json_string = cJSON_PrintUnformatted(root.get());
     std::string result(json_string ? json_string : "");
-    cJSON_Delete(root);
     if (json_string) {
         free(json_string);
     }
@@ -849,15 +863,23 @@ template <typename ConfigType>
  * @return bool `true` if the JSON was parsed and all processed keys were valid and applied; `false` if parsing failed or one or more processed keys failed validation.
  */
 bool ConfigManager::deserializeFromJson(const std::string& json_string) {
-    cJSON *root = cJSON_Parse(json_string.c_str());
+    // RAII guard for cJSON cleanup
+    struct cJSONGuard {
+      cJSON* ptr;
+      cJSONGuard(cJSON* p) : ptr(p) {}
+      ~cJSONGuard() { if(ptr) cJSON_Delete(ptr); }
+      cJSON* get() { return ptr; }
+      operator bool() const { return ptr != nullptr; }
+    };
+    
+    cJSONGuard root(cJSON_Parse(json_string.c_str()));
     if (!root) {
         ESP_LOGE(TAG, "Failed to parse JSON: invalid format.");
-        return false; // Error parsing JSON
+        return false;
     }
 
-    if (!cJSON_IsObject(root)) {
+    if (!cJSON_IsObject(root.get())) {
         ESP_LOGE(TAG, "JSON root is not an object.");
-        cJSON_Delete(root);
         return false;
     }
 
@@ -872,7 +894,7 @@ bool ConfigManager::deserializeFromJson(const std::string& json_string) {
       static_assert(std::is_void_v<ConfigType> && false, "Unsupported ConfigType for deserializeFromJson");
     }
     bool success = true;
-    cJSON *item = root->child;
+    cJSON *item = root.get()->child;
     while (item) {
         std::string key = item->string;
         if (configMap.contains(key)) {
@@ -998,7 +1020,6 @@ bool ConfigManager::deserializeFromJson(const std::string& json_string) {
         item = item->next;
     }
 
-    cJSON_Delete(root);
     return success;
 }
 template bool ConfigManager::deserializeFromJson<espConfig::misc_config_t>(const std::string& json_string);
