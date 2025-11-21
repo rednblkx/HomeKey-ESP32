@@ -1350,7 +1350,7 @@ bool ConfigManager::validatePrivateKeyMatchesCertificate() {
     mbedtls_ctr_drbg_init(&ctr_drbg);
 
     int ret = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy,
-                                  (const unsigned char *)"polaris1", strlen("polaris1"));
+                                  nullptr, 0);
     if (ret != 0) {
         ESP_LOGE(TAG, "mbedtls_ctr_drbg_seed: %d", ret);
         mbedtls_ctr_drbg_free(&ctr_drbg);
