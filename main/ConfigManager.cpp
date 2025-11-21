@@ -989,6 +989,14 @@ bool ConfigManager::saveCertificate(const std::string& certType, const std::stri
         return false;
     }
  
+    // Validate certificate content length to prevent heap exhaustion
+    const size_t MAX_CERT_SIZE = 16384; // 16KB max certificate size
+    if (certContent.length() > MAX_CERT_SIZE) {
+        ESP_LOGE(TAG, "Certificate too large: %zu bytes (max: %zu)", 
+                 certContent.length(), MAX_CERT_SIZE);
+        return false;
+    }
+
     // Validate the actual content
     if(!validateCertificateContent(certContent, certType)) { 
         ESP_LOGE(TAG, "Unable to validate certificate type: %s", certType.c_str());
