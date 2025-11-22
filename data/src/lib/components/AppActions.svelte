@@ -384,7 +384,7 @@
                     <div class="collapse-content flex flex-col gap-2">
                       <div class="collapse collapse-plus bg-base-100">
                         <h3
-                          class="collapse-title ctext-base md:text-lg font-bold"
+                          class="collapse-title text-base md:text-lg font-bold"
                         >
                           HomeKey Authentication
                         </h3>
@@ -482,7 +482,7 @@
                           </div>
                           <div class="collapse collapse-plus bg-base-200">
                             <h3
-                              class="collapse-title ctext-base md:text-lg font-bold"
+                              class="collapse-title text-base md:text-lg font-bold"
                             >
                               Second action on success
                             </h3>
@@ -583,7 +583,7 @@
                       </div>
                       <div class="collapse collapse-plus bg-base-100">
                         <h3
-                          class="collapse-title ctext-base md:text-lg font-bold"
+                          class="collapse-title text-base md:text-lg font-bold"
                         >
                           NFC Tag Event
                         </h3>
