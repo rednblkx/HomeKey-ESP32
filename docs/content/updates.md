@@ -27,7 +27,7 @@ The primary method for Over-The-Air (OTA) updates is through the WebUI. This all
 > [!NOTE]
 > This is available starting with version `v0.7`.
 
-The easiest way to update your device is through the web interface. Simply navigate to the device's IP address in your web browser and nvaigate to the "OTA Update" page.
+The easiest way to update your device is through the web interface. Simply navigate to the device's IP address in your web browser and navigate to the "OTA Update" page.
 
 1.  **Access the Web Interface:** Navigate to the device's IP address in your web browser.
 2.  **Navigate to OTA Update section:** Click the "OTA Update" button on the left-hand side of the page.
