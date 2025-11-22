@@ -1,7 +1,8 @@
 {
   inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     nixpkgs-esp-dev = {
-      url = "github:mirrexagon/nixpkgs-esp-dev";
+      url = "github:rednblkx/nixpkgs-esp-dev";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
