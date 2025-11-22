@@ -5,12 +5,17 @@ name: CI
 # Controls when the action will run. Triggers the workflow on push or pull request
 on:
   workflow_dispatch:
-  pull_request:
+  push:
+    branches:
+      - dev
+    tags:
+      - 'v0.*'
     paths-ignore:
       - '.vscode/**'
       - '.gitignore'
       - 'LICENSE'
-      - 'README.md'
+      - '*.md'
+      - 'docs/**'
 
 jobs:
   esp32:
@@ -30,18 +35,14 @@ jobs:
             managed_components
             sdkconfig
           key: ${{ runner.os }}-esp32-build
-      - name: Cache Docker images.
-        uses: ScribeMD/docker-cache@0.5.0
-        with:
-          key: docker-${{ runner.os }}-espidf
       - name: ESP32 Build
         uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: v5.3.2
+          esp_idf_version: v5.5.1
           target: esp32
           path: '.'
           extra_docker_args: -v ~/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
-          command: idf.py --ccache build && idf.py merge-bin
+          command: CI=true idf.py --ccache build && idf.py merge-bin
       - name: Archive firmware
         uses: actions/upload-artifact@v4
         with:
@@ -50,7 +51,7 @@ jobs:
       - name: Archive merged binary
         uses: actions/upload-artifact@v4
         with:
-          name: esp32-firmware-merged
+          name: esp32-firmware-factory
           path: build/merged-binary.bin
   esp32c3:
     runs-on: ubuntu-latest
@@ -69,18 +70,14 @@ jobs:
             managed_components
             sdkconfig
           key: ${{ runner.os }}-esp32c3-build
-      - name: Cache Docker images.
-        uses: ScribeMD/docker-cache@0.5.0
-        with:
-          key: docker-${{ runner.os }}-espidf
       - name: ESP32C3 Build
         uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: v5.3.2
+          esp_idf_version: v5.5.1
           target: esp32c3
           path: '.'
           extra_docker_args: -v ~/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
-          command: idf.py --ccache build && idf.py merge-bin
+          command: CI=true idf.py --ccache build && idf.py merge-bin
       - name: Archive firmware
         uses: actions/upload-artifact@v4
         with:
@@ -89,7 +86,42 @@ jobs:
       - name: Archive merged binary
         uses: actions/upload-artifact@v4
         with:
-          name: esp32c3-firmware-merged
+          name: esp32c3-firmware-factory
+          path: build/merged-binary.bin
+  esp32c6:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          submodules: 'recursive'
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.ccache
+            build
+            managed_components
+            sdkconfig
+          key: ${{ runner.os }}-esp32c6-build
+      - name: ESP32C6 Build
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.5.1
+          target: esp32c6
+          path: '.'
+          extra_docker_args: -v ~/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
+          command: CI=true idf.py --ccache build && idf.py merge-bin
+      - name: Archive firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32c6-firmware
+          path: build/HomeKey-ESP32.bin
+      - name: Archive merged binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32c6-firmware-factory
           path: build/merged-binary.bin
   esp32s3:
     runs-on: ubuntu-latest
@@ -108,18 +140,14 @@ jobs:
             managed_components
             sdkconfig
           key: ${{ runner.os }}-esp32s3-build
-      - name: Cache Docker images.
-        uses: ScribeMD/docker-cache@0.5.0
-        with:
-          key: docker-${{ runner.os }}-espidf
       - name: ESP32S3 Build
         uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: v5.3.2
+          esp_idf_version: v5.5.1
           target: esp32s3
           path: '.'
           extra_docker_args: -v ~/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
-          command: idf.py --ccache build && idf.py merge-bin
+          command: CI=true idf.py --ccache build && idf.py merge-bin
       - name: Archive firmware
         uses: actions/upload-artifact@v4
         with:
@@ -128,7 +156,7 @@ jobs:
       - name: Archive merged binary
         uses: actions/upload-artifact@v4
         with:
-          name: esp32s3-firmware-merged
+          name: esp32s3-firmware-factory
           path: build/merged-binary.bin
   littlefs:
     runs-on: ubuntu-latest
@@ -142,10 +170,27 @@ jobs:
           python-version: '3.11'
       - name: Install LittleFS Tool
         run: pip install littlefs-python
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install dependencies
+        run: bun install
+        working-directory: data
+      - name: Run tests
+        run: bun run test:run
+        working-directory: data
+      - name: Build
+        run: bun run build
+        working-directory: data
+      - name: Remove extra, only keep compressed
+        run: find build -regex ".*\.\(html.gz\|css\|br\|js\|json.gz\)" -delete
+        working-directory: data
       - name: Create LittleFS Image
-        run: littlefs-python create $(pwd)/data littlefs.bin -v --fs-size=0x20000 --name-max=64 --block-size=4096
+        run: littlefs-python create $(pwd)/build littlefs.bin -v --fs-size=0x20000 --name-max=64 --block-size=4096
+        working-directory: data
       - name: Archive LittleFS image
         uses: actions/upload-artifact@v4
         with:
           name: littlefs-binary
-          path: littlefs.bin
+          path: data/littlefs.bin

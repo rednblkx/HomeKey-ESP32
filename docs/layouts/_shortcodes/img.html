@@ -1,0 +1,7 @@
+{{ $src := .Get "src" }}
+{{ $width := .Get "width" }}
+{{ with .Parent }}
+<img src="{{ $src }}" class="{{ .Get "class" }}-image" width="{{ $width }}">
+{{ else }}
+<img src="{{ $src }}" width="{{ $width }}">
+{{ end }}

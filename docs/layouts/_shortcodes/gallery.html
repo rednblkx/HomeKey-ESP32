@@ -1,0 +1,9 @@
+<div class="{{ .Get "class" }} hx:flex hx:border hx:rounded-xl hx:flex-col">
+  <div class="hx:flex hx:flex-wrap">
+    {{ .Inner }}
+  </div>
+  <div class="hx:bg-gray-100 hx:dark:bg-neutral-800 hx:dark:hover:bg-neutral-700 hx:flex hx:flex-col hx:text-center hx:p-2 hx:rounded-xl hx:rounded-t">
+    <span>{{ .Get "title" }}</span>
+    <span>{{ .Get "subtitle" }}</span>
+  </div>
+</div>

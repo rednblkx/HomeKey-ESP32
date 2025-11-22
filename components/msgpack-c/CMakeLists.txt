@@ -1,0 +1,12 @@
+set(BUILD_SHARED_LIBS OFF)
+set(MSGPACK_BUILD_EXAMPLES OFF CACHE BOOL "Disable msgpack examples")
+set(MSGPACK_BUILD_TESTS OFF CACHE BOOL "Disable msgpack tests")
+set(CMAKE_SKIP_INSTALL_RULES ON)
+function(export)
+    # This empty function will be called instead of the real 'export' command.
+endfunction()
+idf_component_register(INCLUDE_DIRS "upstream/include")
+add_subdirectory(upstream)
+target_include_directories(${COMPONENT_LIB} INTERFACE "${CMAKE_CURRENT_BINARY_DIR}/upstream/include")
+target_include_directories(${COMPONENT_LIB} INTERFACE "${CMAKE_CURRENT_BINARY_DIR}/upstream/include/msgpack")
+target_link_libraries(${COMPONENT_LIB} INTERFACE msgpack-c)

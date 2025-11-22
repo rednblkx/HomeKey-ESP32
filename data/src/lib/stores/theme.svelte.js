@@ -1,0 +1,39 @@
+/**
+ * Available theme names
+ * @typedef {'dracula' | 'autumn'} ThemeName
+ */
+
+/**
+ * Current theme state
+ * @type {ThemeName}
+ */
+let currentTheme = $state('dracula');
+
+/**
+ * Get the current theme
+ * @returns {ThemeName}
+ */
+function getCurrentTheme() {
+	return currentTheme;
+}
+
+/**
+ * Toggle between available themes
+ */
+function toggleTheme() {
+	currentTheme = currentTheme === 'dracula' ? 'autumn' : 'dracula';
+	localStorage.setItem('theme', currentTheme);
+	document.documentElement.setAttribute('data-theme', currentTheme);
+}
+
+/**
+ * Initialize theme system and load saved theme
+ */
+function initTheme() {
+	currentTheme = /** @type {ThemeName} */ (localStorage.getItem('theme') || 'dracula');
+	document.documentElement.setAttribute('data-theme', currentTheme);
+}
+
+const logo = $derived(`data:image/svg+xml;charset=utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" style="fill:${currentTheme==="dracula"?"#fff":"#000"}" viewBox="0 0 20.787 24.567"><g id="logo" stroke="#000"><g stroke-width=".037"><use href="#B"/><use href="#C"/><path d="M5.688 5.688V7.54H7.54V5.688zm1.889-1.89V5.65H9.43V3.798zm1.89-1.89v1.853h1.853V1.908zm1.89 1.89V5.65h1.853V3.798z"/><use href="#D"/><use href="#C" x="11.338"/><use href="#B" x="15.118"/><use href="#E"/><use href="#E" x="15.118"/><use href="#E" y="1.89"/><use href="#E" x="15.118" y="1.89"/><use href="#E" y="3.779"/><use href="#E" y="5.669"/><use href="#E" x="15.118" y="3.779"/><use href="#E" x="15.118" y="5.669"/><use href="#E" y="7.559"/><use href="#E" y="9.449"/><use href="#E" x="15.118" y="7.559"/><use href="#E" x="15.118" y="9.449"/><path d="M5.688 22.695v1.853H7.54v-1.853zm1.889 0v1.853H9.43v-1.853z"/><use href="#E" x="7.559" y="11.338"/><use href="#E" x="9.449" y="11.338"/><use href="#E" x="11.339" y="11.338"/><use href="#E" x="1.89" y="11.338"/><use href="#E" x="13.228" y="11.338"/><use href="#B" x="-1.89"/><use href="#C" x="-1.89"/><use href="#D" x="-9.449"/><path d="M5.688 3.798V5.65H7.54V3.798zm1.889-1.89v1.853H9.43V1.908zm3.78 0v1.853h1.853V1.908zm1.89 1.89V5.65H15.1V3.798z"/><use href="#D" x="1.889"/><use href="#C" x="13.228"/><use href="#B" x="17.008"/><path d="M9.467.018v1.853h1.853V.018zM8.988 10.57v.937H8.05v.938.937.938h.938v.938h.938.937.938v-.938h.937v-.938-.937-.938H11.8v-.937h-.938-.937zm.938.937h.937v.938h.938v.937h-.938v.938h-.937v-.938h-.938v-.937h.938z"/></g><path d="M9.915 15.257v.945.945.945.945h-.932-.932v.945h.932v.945H8.05v.945h.932.932.932v-.945-.945-.945-.945-.945-.945-.945z" stroke-width=".038"/><g stroke-width=".037"><path d="M8.05 10.375v-.926h.937v-.926h.937.937.937v.926h.937v.926H11.8v-.926H8.987v.926zm-.945-1.103V8.34h.94v-.932h.94v-.932h1.879.94v.932h.94v.932h.94v.932h-.94V8.34h-.94v-.932h-2.82v.932h-.94v.932z"/><use href="#E" x="1.89" y="9.449"/><use href="#E" y="11.338"/><use href="#E" x="15.118" y="11.338"/><use href="#E" x="13.228" y="9.449"/><use href="#B" x="1.89"/><use href="#B" x="13.228"/></g></g><defs ><path id="B" d="M1.908 9.467v1.853h1.853V9.467z"/><path id="C" d="M3.798 7.577V9.43h1.853V7.577z"/><path id="D" d="M13.247 5.688V7.54h1.853V5.688z"/><path id="E" d="M1.908 11.357v1.853h1.853v-1.853z"/></defs></svg>`)}`)
+let logoSrc = () => logo;
+export { getCurrentTheme, toggleTheme, initTheme, logoSrc};
