@@ -167,7 +167,6 @@ void WebServerManager::stop() {
 
 bool WebServerManager::basicAuth(httpd_req_t* req){
   if(!m_configManager.getConfig<espConfig::misc_config_t>().webAuthEnabled){
-    ESP_LOGD(TAG, "HTTP Auth not enabled, skipping...");
     return true;
   }
   size_t hdr_len = httpd_req_get_hdr_value_len(req, "Authorization");
