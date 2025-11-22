@@ -11,7 +11,7 @@ Welcome to the exciting part! This guide will walk you through the process of ge
 
 First things first, let's get the brains of your HomeKey-ESP32 onto your computer. We provide pre-compiled firmware binaries, so you don't need to worry about compiling anything yourself!
 
-1. **Visit the GitHub Releases Page:** Head over to the official HomeKey-ESP32 GitHub releases page: {{< badge content="Releases" link="<https://github.com/rednblkx/HomeKey-ESP32/releases/latest>" icon="github" >}}
+1. **Visit the GitHub Releases Page:** Head over to the official HomeKey-ESP32 GitHub releases page: {{< badge content="Releases" link="https://github.com/rednblkx/HomeKey-ESP32/releases/latest" icon="github" >}}
 2. **Download the Latest Release:** Look for the "Latest release" tag. Under the "Assets" section, you'll find several firmware files:
 
     * **`*-firmware-merged.bin`**: This is the file used to flash a new device for the first time. It contains the bootloader, application, and LittleFS filesystem all merged into one, ready to be flashed at address `0x0`.
