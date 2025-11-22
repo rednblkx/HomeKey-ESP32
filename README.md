@@ -15,89 +15,9 @@
 
 ## What is HomeKey-ESP32?
 
-Transform your ordinary door lock into a smart, Apple HomeKey-compatible access system. HomeKey-ESP32 brings Apple's secure NFC-based unlocking to any ESP32-powered device, enabling you to unlock doors with a simple tap of your iPhone or Apple Watch.
+The project aims to be the easy DIY solution for using Apple's HomeKey feature without the need to purchase a compatible smart lock that you probably don't want. HomeKey-ESP32 brings Apple's secure NFC-based unlocking to an ESP32 module near you, enabling you to unlock doors and whatnot with a simple tap of your iPhone or Apple Watch.
 
 **No proprietary hardware required** – just an ESP32 and a PN532 NFC module
-
-## Quick Start
-
-```bash
-# 1. Download firmware from GitHub Releases
-# Visit: https://github.com/rednblkx/HomeKey-ESP32/releases/latest
-# Download: *-firmware-merged.bin (depending on your board)
-
-# 3. Install esptool.py
-pip install esptool
-
-# 2. Connect the PN532 NFC module to your ESP32 development board
-# See the https://rednblkx.github.io/HomeKey-ESP32/setup/#21-nfc-module-wiring for details
-
-# 3. Connect your ESP32 and flash
-esptool.py --port /dev/ttyUSB0 write_flash 0x0 firmware-merged.bin
-
-# 4. Connect to WiFi AP: HomeSpan-Setup / homespan
-# 5. Wait a couple seconds for the portal to appear or navigate to http://192.168.4.1/hotspot-detect.html and configure the WiFi and HomeKit setup code
-# 6. Pair with HomeKit using the code setup in step 5 or the default code: 466-37-726
-# 7. Start using HomeKey! 🎉
-```
-
-**Prefer a GUI?** Use the browser-based flasher at [esptool-js](https://espressif.github.io/esptool-js/) - no command line needed!
-
-## System Architecture
-
-<div align="center">
-  
-```mermaid
-graph TD
-    A[iPhone/Apple Watch] -->|NFC| B[PN532 Module]
-    B -->|SPI| C[ESP32]
-    C -->|MQTT| D[Home Assistant/Broker]
-    C -->|HomeKit| E[Apple Home]
-    C -->|HTTP| F[Web Interface]
-    C -->|GPIO| G[Physical Lock]
-    
-    subgraph "HomeKey-ESP32 Core"
-        C
-        H[ConfigManager]
-        I[LockManager]
-        J[NfcManager]
-        K[HomeKitLock]
-        L[WebServerManager]
-        M[MqttManager]
-    end
-    
-    style A fill:#1f2937,stroke:#374151,color:#fff
-    style C fill:#059669,stroke:#047857,color:#fff
-    style B fill:#3b82f6,stroke:#2563eb,color:#fff
-```
-
-</div>
-
-## ✨ Key Features
-
-### **Apple HomeKey Integration**
-- **Express Mode**: Unlock without waking your device
-- **Power Reserve**: Unlock even when the device needs to be charged
-- **Multi-Device Support**: Works with iPhone and Apple Watch
-- **Fast Authentication**: Sub-300ms unlock times
-
-### **Smart Home Ready**
-- **HomeKit Native**: Full Apple Home ecosystem integration
-- **MQTT Support**: Connect to Home Assistant, OpenHAB, and other platforms
-- **Home Assistant Discovery**: Automatic device detection and configuration
-- **Custom States**: Support for complex lock states (jamming, unlocking, etc.)
-
-### **Modern Web Interface**
-- **Svelte Frontend**: Responsive, modern UI built with Svelte 5 + Tailwind CSS
-- **Real-time Updates**: WebSocket-powered live status updates
-- **OTA Updates**: Over-the-air firmware updates via web interface
-- **Configuration Management**: Easy setup without recompiling
-
-### **Developer Friendly**
-- **Open Source**: MIT licensed, community-driven development
-- **Modular Architecture**: Clean separation of concerns
-- **Event System**: Pub/sub architecture for extensibility
-- **Comprehensive Logging**: Debug and monitor with detailed logs
 
 ## Getting Started
 
@@ -108,14 +28,6 @@ graph TD
 - **USB Cable** (for flashing and power)
 - **Computer** (Windows, Mac, or Linux)
 - **Basic Electronics Knowledge** (not a problem if you're new to this, ask away!)
-
-### Hardware Requirements
-
-| Component | Model | Notes |
-|-----------|-------------|-------------|
-| **ESP32** | ESP32-C6     | Any 4MB+ variant works |
-| **NFC Module** | PN532 SPI | I2C currently not supported |
-| **Power Supply** | 5V 1A USB | 5V 0.5A minimum |
 
 #### Ethernet
 
@@ -172,6 +84,62 @@ The following chips are supported for Ethernet:
 5. **Start Using HomeKey!**
    - Hold your iPhone or Apple Watch near the NFC reader
    - Enjoy instant, secure access to your home! 🎉
+
+## System Architecture
+
+<div align="center">
+  
+```mermaid
+graph TD
+    A[iPhone/Apple Watch] -->|NFC| B[PN532 Module]
+    B -->|SPI| C[ESP32]
+    C -->|MQTT| D[Home Assistant/Broker]
+    C -->|HomeKit| E[Apple Home]
+    C -->|HTTP| F[Web Interface]
+    C -->|GPIO| G[Physical Lock]
+    
+    subgraph "HomeKey-ESP32 Core"
+        C
+        H[ConfigManager]
+        I[LockManager]
+        J[NfcManager]
+        K[HomeKitLock]
+        L[WebServerManager]
+        M[MqttManager]
+    end
+    
+    style A fill:#1f2937,stroke:#374151,color:#fff
+    style C fill:#059669,stroke:#047857,color:#fff
+    style B fill:#3b82f6,stroke:#2563eb,color:#fff
+```
+
+</div>
+
+## ✨ Key Features
+
+### **Apple HomeKey Integration**
+- **Express Mode**: Unlock without waking your device
+- **Power Reserve**: Unlock even when the device needs to be charged
+- **Multi-Device Support**: Works with iPhone and Apple Watch
+- **Fast Authentication**: Sub-300ms unlock times
+
+### **Smart Home Ready**
+- **HomeKit Native**: Full Apple Home ecosystem integration
+- **MQTT Support**: Connect to Home Assistant, OpenHAB, and other platforms
+- **Home Assistant Discovery**: Automatic device detection and configuration
+- **Custom States**: Support for complex lock states (jamming, unlocking, etc.)
+
+### **Modern Web Interface**
+- **Svelte Frontend**: Responsive, modern UI built with Svelte 5 + Tailwind CSS
+- **Real-time Updates**: WebSocket-powered live status updates
+- **OTA Updates**: Over-the-air firmware updates via web interface
+- **Configuration Management**: Easy setup without recompiling
+
+### **Developer Friendly**
+- **Open Source**: MIT licensed, community-driven development
+- **Modular Architecture**: Clean separation of concerns
+- **Event System**: Pub/sub architecture for extensibility
+- **Comprehensive Logging**: Debug and monitor with detailed logs
 
 ## Development
 
@@ -317,7 +285,7 @@ Contributions are welcomed! Please see the [Contributing Guidelines](CONTRIBUTIN
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
+3. Commit your changes (`git commit -m 'feat: Add amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request against the `main` branch
 
