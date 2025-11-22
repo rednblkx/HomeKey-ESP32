@@ -51,7 +51,7 @@ jobs:
       - name: Archive merged binary
         uses: actions/upload-artifact@v4
         with:
-          name: esp32-firmware-merged
+          name: esp32-firmware-factory
           path: build/merged-binary.bin
   esp32c3:
     runs-on: ubuntu-latest
@@ -86,7 +86,7 @@ jobs:
       - name: Archive merged binary
         uses: actions/upload-artifact@v4
         with:
-          name: esp32c3-firmware-merged
+          name: esp32c3-firmware-factory
           path: build/merged-binary.bin
   esp32c6:
     runs-on: ubuntu-latest
@@ -121,7 +121,7 @@ jobs:
       - name: Archive merged binary
         uses: actions/upload-artifact@v4
         with:
-          name: esp32c6-firmware-merged
+          name: esp32c6-firmware-factory
           path: build/merged-binary.bin
   esp32s3:
     runs-on: ubuntu-latest
@@ -156,7 +156,7 @@ jobs:
       - name: Archive merged binary
         uses: actions/upload-artifact@v4
         with:
-          name: esp32s3-firmware-merged
+          name: esp32s3-firmware-factory
           path: build/merged-binary.bin
   littlefs:
     runs-on: ubuntu-latest
