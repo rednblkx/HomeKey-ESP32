@@ -492,7 +492,7 @@ void HardwareManager::feedbackTask() {
                     }
                     break;
                 case FeedbackType::TAG_EVENT: 
-                    ESP_LOGD(TAG, "Executing FAILURE feedback sequence.");
+                    ESP_LOGD(TAG, "Executing TAG_EVENT feedback sequence.");
                     if(esp_timer_is_active(m_tagEventTimer)) esp_timer_stop(m_tagEventTimer);
                     if(esp_timer_is_active(m_pixelTagEventTimer)) esp_timer_stop(m_pixelTagEventTimer);
                     if (m_pixel != nullptr) {
