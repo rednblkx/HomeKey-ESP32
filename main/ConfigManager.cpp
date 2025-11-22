@@ -255,9 +255,37 @@ template <typename ConfigType>
  * @note Instantiating this template with an unsupported `ConfigType` produces a compile-time error.
  */
 bool ConfigManager::deleteConfig() {
+  if (!m_isInitialized) {
+    ESP_LOGE(TAG, "Cannot delete config, NVS not initialized.");
+    return false;
+  }
+
   if constexpr (std::is_same_v<ConfigType, espConfig::mqttConfig_t>){
     m_mqttConfig = {}; 
-    return !nvs_erase_key(m_nvsHandle, "MQTTDATA") && !nvs_erase_key(m_nvsHandle, "MQTTSSLDATA");
+    
+    esp_err_t err_mqtt = nvs_erase_key(m_nvsHandle, "MQTTDATA");
+    esp_err_t err_ssl = nvs_erase_key(m_nvsHandle, "MQTTSSLDATA");
+
+    bool mqtt_ok = (err_mqtt == ESP_OK || err_mqtt == ESP_ERR_NVS_NOT_FOUND);
+    bool ssl_ok = (err_ssl == ESP_OK || err_ssl == ESP_ERR_NVS_NOT_FOUND);
+
+    if (!mqtt_ok) {
+      ESP_LOGE(TAG, "Failed to erase MQTTDATA: %s", esp_err_to_name(err_mqtt));
+    }
+    if (!ssl_ok) {
+      ESP_LOGE(TAG, "Failed to erase MQTTSSLDATA: %s", esp_err_to_name(err_ssl));
+    }
+
+    if (mqtt_ok && ssl_ok) {
+      esp_err_t commit_err = nvs_commit(m_nvsHandle);
+      if (commit_err == ESP_OK) {
+        return true;
+      }
+      ESP_LOGE(TAG, "Failed to commit deleteConfig: %s", esp_err_to_name(commit_err));
+      return false;
+    }
+    return false;
+
   } else if constexpr(std::is_same_v<ConfigType, espConfig::misc_config_t>){
     m_miscConfig = {};
     return saveConfig<espConfig::misc_config_t>();
