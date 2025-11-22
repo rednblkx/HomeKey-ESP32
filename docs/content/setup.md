@@ -14,8 +14,8 @@ First things first, let's get the brains of your HomeKey-ESP32 onto your compute
 1. **Visit the GitHub Releases Page:** Head over to the official HomeKey-ESP32 GitHub releases page: {{< badge content="Releases" link="https://github.com/rednblkx/HomeKey-ESP32/releases/latest" icon="github" >}}
 2. **Download the Latest Release:** Look for the "Latest release" tag. Under the "Assets" section, you'll find several firmware files:
 
-    * **`*-firmware-merged.bin`**: This is the file used to flash a new device for the first time. It contains the bootloader, application, and LittleFS filesystem all merged into one, ready to be flashed at address `0x0`.
-    * **`*-firmware.bin`**: This file contains only the application firmware and is primarily used for Over-The-Air (OTA) updates.
+    * **`*.firmware.factory.bin`**: This is the file used to flash a new device for the first time. It contains the bootloader, application, and LittleFS filesystem all merged into one, ready to be flashed at address `0x0`.
+    * **`*.firmware.bin`**: This file contains only the application firmware and is primarily used for Over-The-Air (OTA) updates.
     * **`littlefs.bin`**: This file contains the web interface files and is also used for OTA updates of the filesystem.
 
     More details on OTA updates can be found in the [Updates Guide](../updates).
@@ -109,16 +109,16 @@ Now for the magic moment! You have two main options for flashing the firmware: c
     * **Linux:** Typically `/dev/ttyUSB0` or `/dev/ttyACM0`. You can check with `ls /dev/tty*`.
     * **macOS:** Typically `/dev/cu.usbserial-XXXX` or `/dev/cu.SLAB_USBtoUART`. You can check with `ls /dev/cu.*`.
     * **Windows:** Check Device Manager for "USB Serial Device" or "CP210x USB to UART Bridge" under "Ports (COM & LPT)". Note the COM port number (e.g., `COM3`).
-4. **Open Terminal/Command Prompt:** Navigate to the directory where you downloaded the `esptool.py` script (if you downloaded it manually) and the `*-firmware-merged.bin` file.
-5. **Run the Flash Command:** Execute the following command, replacing `YOUR_PORT` with your serial port and `MERGED_FIRMWARE_FILE.bin` with the name of your downloaded `esp32XX-firmware-merged.bin` file:
+4. **Open Terminal/Command Prompt:** Navigate to the directory where you downloaded the `esptool.py` script (if you downloaded it manually) and the `*.firmware.factory.bin` file.
+5. **Run the Flash Command:** Execute the following command, replacing `YOUR_PORT` with your serial port and `FACTORY_FIRMWARE_FILE.bin` with the name of your downloaded `esp32XX.firmware.factory.bin` file:
 
     ```bash
-    esptool.py --port YOUR_PORT write_flash 0x0 MERGED_FIRMWARE_FILE.bin
+    esptool.py --port YOUR_PORT write_flash 0x0 FACTORY_FIRMWARE_FILE.bin
     ```
 
     * **`--port YOUR_PORT`**: Your ESP32's serial port.
     * **`write_flash 0x0`**: The command to write the flash, starting at address `0x0`. **Crucially, use `0x0` for the merged firmware files and only for those.**
-    * **`MERGED_FIRMWARE_FILE.bin`**: The path to your downloaded `esp32XX-firmware-merged.bin` binary.
+    * **`FACTORY_FIRMWARE_FILE.bin`**: The path to your downloaded `esp32XX.firmware.factory.bin` binary.
 
 6. (If any issues) **Erase Flash :** If you encounter any issues, such as a reset loop, you can try erasing the flash before flashing the firmware:
 
@@ -142,7 +142,7 @@ This is the easiest way to flash if you're using a Chromium-based browser!
 1. **Connect ESP32:** Connect your ESP32 development board to your computer using a USB cable.
 2. **Open esptool-js Page:** Navigate to the page below in your Chromium-based browser (Chrome, Edge, Brave, etc.):
     [https://espressif.github.io/esptool-js/](https://espressif.github.io/esptool-js/)
-3. **Select Firmware File:** On the web page, you'll find an option to select your firmware file. Click "Choose File" and select the appropriate `*-firmware-merged.bin` file you downloaded earlier.
+3. **Select Firmware File:** On the web page, you'll find an option to select your firmware file. Click "Choose File" and select the appropriate `*.firmware.factory.bin` file you downloaded earlier.
 4. **Select Serial Port:** Click the "Connect" button. A pop-up will appear asking you to select the serial port for your ESP32. Choose the correct port and click "Connect".
 5. **Change Flash Address:** Ensure the Flash Address is set to `0x0`.
 6. **Flash Device:** Once connected, click the "Program" button.

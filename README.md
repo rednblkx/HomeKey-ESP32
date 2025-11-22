@@ -57,7 +57,7 @@ The following chips are supported for Ethernet:
 
 1. **Download Firmware**
    - Visit [GitHub Releases](https://github.com/rednblkx/HomeKey-ESP32/releases/latest)
-   - Download the `*-firmware-merged.bin` file
+   - Download the `*.firmware.factory.bin` file
    - This contains everything you need - no compilation required!
 
 2. **Connect Your Hardware**
@@ -70,7 +70,7 @@ The following chips are supported for Ethernet:
    pip install esptool
    
    # Flash the firmware (replace YOUR_PORT)
-   esptool.py --port /dev/ttyUSB0 write_flash 0x0 firmware-merged.bin
+   esptool.py --port /dev/ttyUSB0 write_flash 0x0 firmware.factory.bin
    ```
    
    **Prefer a GUI?** Use the [browser-based flasher](https://espressif.github.io/esptool-js/) - no command line needed!

@@ -14,9 +14,8 @@ This document outlines different methods for updating the firmware on your HomeK
 
 **Required Files for Updates:**
 
-*   `*-firmware.bin`: The main application firmware file.
+*   `*.firmware.bin`: The main application firmware file.
 *   `littlefs.bin`: Contains the web interface files (LittleFS filesystem).
-*   `*-firmware-merged.bin`: A combined file containing the bootloader, application, and LittleFS, used for initial flashing via USB. This erases the entire flash memory, so it is not to be used for updates.
 
 ## 1. Over-The-Air (OTA) Updates
 
