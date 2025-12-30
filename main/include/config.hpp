@@ -125,6 +125,7 @@ namespace espConfig
     std::string webPassword = WEB_AUTH_PASSWORD;
     uint8_t nfcPinsPreset = 255;
     std::array<uint8_t, 4> nfcGpioPins{SS_PIN, SCK_PIN, MISO_PIN, MOSI_PIN};
+    uint8_t doorSensorPin = 32;
     uint8_t btrLowStatusThreshold = BTR_PROX_BAT_LOW_THRESHOLD;
     bool proxBatEnabled = BTR_PROX_BAT_ENABLED;
     bool ethernetEnabled = ETH_ENABLED;

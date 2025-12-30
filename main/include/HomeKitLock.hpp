@@ -58,8 +58,12 @@ private:
       LockManager& m_lockManager;
       SpanCharacteristic* m_lockTargetState;
       SpanCharacteristic* m_lockCurrentState;
-      LockMechanismService(HomeKitLock& bridge, LockManager& lockManager);
+      SpanCharacteristic* m_doorState;
+      int m_doorSensorPin = 32;
+      int m_lastDoorState = -1;
+      LockMechanismService(HomeKitLock& bridge, LockManager& lockManager, const espConfig::misc_config_t& config);
       boolean update() override;
+      void loop() override;
     };
     struct NFCAccessService : Service::NFCAccess {
         ReaderDataManager& m_readerDataManager;

@@ -97,6 +97,8 @@ export interface MiscConfig {
   controlPin: number;
   /** GPIO pin for HomeSpan status indicator */
   hsStatusPin: number;
+  /** GPIO pin for Door Sensor */
+  doorSensorPin: number;
   /** Enable web authentication */
   webAuthEnabled: boolean;
   /** Web interface username */

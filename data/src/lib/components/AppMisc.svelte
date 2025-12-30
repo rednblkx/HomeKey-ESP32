@@ -41,6 +41,7 @@
 			ethSpiConfig: [20, -1, -1, -1, -1, -1, -1],
 			controlPin: 26,
 			hsStatusPin: 2,
+			doorSensorPin: 32,
 		},
 	);
 	let ethConfig = $state<EthConfig>(
@@ -595,6 +596,20 @@
 										type="number"
 										bind:value={miscConfig.hsStatusPin}
 										placeholder="2"
+										class="input input-bordered w-full"
+									/>
+								</div>
+								<div class="form-control">
+									<!-- svelte-ignore a11y_label_has_associated_control -->
+									<label class="label">
+										<span class="label-text"
+											>Door Sensor GPIO Pin</span
+										>
+									</label>
+									<input
+										type="number"
+										bind:value={miscConfig.doorSensorPin}
+										placeholder="32"
 										class="input input-bordered w-full"
 									/>
 								</div>

@@ -96,10 +96,15 @@ HomeKitLock::LockManagementService::LockManagementService() {
  * @param bridge HomeKit bridge instance whose characteristic pointers will be set to the newly created characteristics.
  * @param lockManager Lock manager providing current and target lock state values and the HOMEKIT source identifier.
  */
-HomeKitLock::LockMechanismService::LockMechanismService(HomeKitLock& bridge, LockManager& lockManager) : m_lockManager(lockManager) {
+HomeKitLock::LockMechanismService::LockMechanismService(HomeKitLock& bridge, LockManager& lockManager, const espConfig::misc_config_t& config) : m_lockManager(lockManager) {
     espp::EventManager::get().add_publisher("lock/overrideState", "LockMechanismService");
     espp::EventManager::get().add_publisher("lock/targetStateChanged", "LockMechanismService");
     ESP_LOGI(HomeKitLock::TAG, "Configuring LockMechanism");
+    
+    m_doorSensorPin = config.doorSensorPin;
+    m_doorState = new Characteristic::CurrentDoorState(1); // Default Closed
+    pinMode(m_doorSensorPin, INPUT_PULLUP);
+    
     m_lockCurrentState = bridge.m_lockCurrentState = new Characteristic::LockCurrentState(m_lockManager.getCurrentState(), true);
     m_lockTargetState = bridge.m_lockTargetState = new Characteristic::LockTargetState(m_lockManager.getTargetState(), true);
     EventLockState s{
@@ -132,6 +137,18 @@ boolean HomeKitLock::LockMechanismService::update() {
       espp::EventManager::get().publish("lock/targetStateChanged", d);
     }
     return true;
+}
+
+void HomeKitLock::LockMechanismService::loop() {
+    int currentState = digitalRead(m_doorSensorPin);
+    if (currentState != m_lastDoorState) {
+        m_lastDoorState = currentState;
+        if (currentState == LOW) {
+            m_doorState->setVal(1); // Closed
+        } else {
+            m_doorState->setVal(0); // Open
+        }
+    }
 }
 
 /**

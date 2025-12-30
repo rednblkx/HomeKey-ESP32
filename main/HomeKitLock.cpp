@@ -228,7 +228,7 @@ void HomeKitLock::begin() {
       new Service::HAPProtocolInformation();
       new Characteristic::Version();
       new LockManagementService();
-      new LockMechanismService(*this, m_lockManager);
+      new LockMechanismService(*this, m_lockManager, miscConfig);
       new NFCAccessService(m_readerDataManager);
       if(miscConfig.proxBatEnabled) {
           new PhysicalLockBatteryService(*this);

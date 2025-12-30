@@ -110,6 +110,7 @@ ConfigManager::ConfigManager() : m_isInitialized(false) {
       {"webPassword", &m_miscConfig.webPassword},
       {"nfcGpioPins", &m_miscConfig.nfcGpioPins},
       {"nfcPinsPreset", &m_miscConfig.nfcPinsPreset},
+      {"doorSensorPin", &m_miscConfig.doorSensorPin},
       {"btrLowStatusThreshold", &m_miscConfig.btrLowStatusThreshold},
       {"proxBatEnabled", &m_miscConfig.proxBatEnabled},
       {"ethernetEnabled", &m_miscConfig.ethernetEnabled},
