@@ -111,6 +111,7 @@ ConfigManager::ConfigManager() : m_isInitialized(false) {
       {"nfcGpioPins", &m_miscConfig.nfcGpioPins},
       {"nfcPinsPreset", &m_miscConfig.nfcPinsPreset},
       {"doorSensorPin", &m_miscConfig.doorSensorPin},
+      {"doorSensorInvert", &m_miscConfig.doorSensorInvert},
       {"btrLowStatusThreshold", &m_miscConfig.btrLowStatusThreshold},
       {"proxBatEnabled", &m_miscConfig.proxBatEnabled},
       {"ethernetEnabled", &m_miscConfig.ethernetEnabled},
