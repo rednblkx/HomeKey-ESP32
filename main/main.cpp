@@ -1,5 +1,10 @@
 #include <memory>
+#include <cstdio>
 #define FMT_HEADER_ONLY
+
+extern "C" void flockfile(FILE* file) {}
+extern "C" void funlockfile(FILE* file) {}
+
 #include "config.hpp"
 #include "HomeKitLock.hpp"
 #include "LockManager.hpp"

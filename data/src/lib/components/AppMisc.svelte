@@ -42,6 +42,7 @@
 			controlPin: 26,
 			hsStatusPin: 2,
 			doorSensorPin: 32,
+			doorSensorInvert: false,
 		},
 	);
 	let ethConfig = $state<EthConfig>(
@@ -599,11 +600,20 @@
 										class="input input-bordered w-full"
 									/>
 								</div>
+							</div>
+						</div>
+
+						<div class="collapse collapse-arrow bg-base-100">
+							<input type="checkbox" name="misc-collapse" />
+							<div class="collapse-title font-medium">
+								Door Sensor
+							</div>
+							<div class="collapse-content flex flex-col gap-4">
 								<div class="form-control">
 									<!-- svelte-ignore a11y_label_has_associated_control -->
 									<label class="label">
 										<span class="label-text"
-											>Door Sensor GPIO Pin</span
+											>GPIO Pin</span
 										>
 									</label>
 									<input
@@ -612,6 +622,26 @@
 										placeholder="32"
 										class="input input-bordered w-full"
 									/>
+								</div>
+								<div class="form-control">
+									<label class="label cursor-pointer">
+										<span class="label-text"
+											>Invert Logic (HIGH = Closed)</span
+										>
+										<input
+											type="checkbox"
+											bind:checked={
+												miscConfig.doorSensorInvert
+											}
+											class="toggle toggle-primary"
+										/>
+									</label>
+									<label class="label">
+										<span class="label-text-alt text-xs opacity-70">
+											Default: LOW = Closed, HIGH = Open<br />
+											When inverted: HIGH = Closed, LOW = Open
+										</span>
+									</label>
 								</div>
 							</div>
 						</div>

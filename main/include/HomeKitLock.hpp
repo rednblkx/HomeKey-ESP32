@@ -60,6 +60,7 @@ private:
       SpanCharacteristic* m_lockCurrentState;
       SpanCharacteristic* m_doorState;
       int m_doorSensorPin = 32;
+      bool m_doorSensorInvert = false;
       int m_lastDoorState = -1;
       LockMechanismService(HomeKitLock& bridge, LockManager& lockManager, const espConfig::misc_config_t& config);
       boolean update() override;

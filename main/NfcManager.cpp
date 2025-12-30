@@ -105,7 +105,7 @@ bool NfcManager::initializeReader() {
         m_nfc->stop();
         return false;
     }
-    ESP_LOGI(TAG, "Found chip PN5%x, Firmware ver. %d.%d", (versiondata >> 24) & 0xFF, (versiondata >> 16) & 0xFF, (versiondata >> 8) & 0xFF);
+    ESP_LOGI(TAG, "Found chip PN5%x, Firmware ver. %u.%u", (unsigned int)((versiondata >> 24) & 0xFF), (unsigned int)((versiondata >> 16) & 0xFF), (unsigned int)((versiondata >> 8) & 0xFF));
     m_nfc->SAMConfig();
     m_nfc->setRFField(0x02, 0x01);
     m_nfc->setPassiveActivationRetries(0);

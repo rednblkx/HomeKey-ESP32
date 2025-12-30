@@ -100,11 +100,12 @@ HomeKitLock::LockMechanismService::LockMechanismService(HomeKitLock& bridge, Loc
     espp::EventManager::get().add_publisher("lock/overrideState", "LockMechanismService");
     espp::EventManager::get().add_publisher("lock/targetStateChanged", "LockMechanismService");
     ESP_LOGI(HomeKitLock::TAG, "Configuring LockMechanism");
-    
+
     m_doorSensorPin = config.doorSensorPin;
+    m_doorSensorInvert = config.doorSensorInvert;
     m_doorState = new Characteristic::CurrentDoorState(1); // Default Closed
     pinMode(m_doorSensorPin, INPUT_PULLUP);
-    
+
     m_lockCurrentState = bridge.m_lockCurrentState = new Characteristic::LockCurrentState(m_lockManager.getCurrentState(), true);
     m_lockTargetState = bridge.m_lockTargetState = new Characteristic::LockTargetState(m_lockManager.getTargetState(), true);
     EventLockState s{
@@ -143,11 +144,9 @@ void HomeKitLock::LockMechanismService::loop() {
     int currentState = digitalRead(m_doorSensorPin);
     if (currentState != m_lastDoorState) {
         m_lastDoorState = currentState;
-        if (currentState == LOW) {
-            m_doorState->setVal(1); // Closed
-        } else {
-            m_doorState->setVal(0); // Open
-        }
+        // Apply invert logic: if inverted, swap the interpretation
+        bool isClosed = m_doorSensorInvert ? (currentState == HIGH) : (currentState == LOW);
+        m_doorState->setVal(isClosed ? 1 : 0); // 1 = Closed, 0 = Open
     }
 }
 
