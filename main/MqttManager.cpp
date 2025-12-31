@@ -40,12 +40,12 @@ MqttManager::MqttManager(const ConfigManager& configManager)
         if(!ec) {
           publishLockState(s.currentState, s.targetState);
         }
-      },3072);
+      },4096);
   espp::EventManager::get().add_subscriber(
       "lock/altAction", "MqttManager",
       [&](const std::vector<uint8_t> &data) {
         publish(m_mqttConfig.hkAltActionTopic, "1");
-      },3072);
+      },4096);
   espp::EventManager::get().add_publisher("lock/targetStateChanged", "MqttManager");
   espp::EventManager::get().add_publisher("lock/overrideState", "MqttManager");
   espp::EventManager::get().add_publisher("homekit/event", "MqttManager");
@@ -71,7 +71,7 @@ MqttManager::MqttManager(const ConfigManager& configManager)
       default:
         break;
     }
-  }, 3072);
+  }, 4096);
 }
 
 MqttManager::~MqttManager() {

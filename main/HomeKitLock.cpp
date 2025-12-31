@@ -49,7 +49,7 @@ HomeKitLock::HomeKitLock(std::function<void(int)> &conn_cb, LockManager& lockMan
           if(!ec) {
             updateLockState(s.currentState, s.targetState);
           }
-        }, 3072); 
+        }, 4096); 
     espp::EventManager::get().add_subscriber(
         "homekit/event", "HomeKitLock",
         [&](const std::vector<uint8_t> &data) {
@@ -72,7 +72,7 @@ HomeKitLock::HomeKitLock(std::function<void(int)> &conn_cb, LockManager& lockMan
             default:
             break;
           }
-        }, 3072); 
+        }, 4096); 
 }
 
 /**
