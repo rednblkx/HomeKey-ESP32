@@ -1,5 +1,6 @@
 name: Attach Artifacts to Release
 on:
+  workflow_dispatch:
   release:
     types: [published]
 
