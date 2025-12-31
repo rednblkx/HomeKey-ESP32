@@ -91,7 +91,7 @@ jobs:
           extra_docker_args: -v ~/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
           command: CI=true idf.py --ccache build && idf.py merge-bin
       - name: Rename firmware
-        run: mv build/HomeKey-ESP32.bin build/esp32.firmware.bin && mv build/merged-binary.bin build/esp32.firmware.factory.bin
+        run: sudo chown -R $USER:$USER build/ && mv build/HomeKey-ESP32.bin build/esp32.firmware.bin && mv build/merged-binary.bin build/esp32.firmware.factory.bin
       - name: Archive firmware
         uses: actions/upload-artifact@v4
         with:
@@ -134,7 +134,7 @@ jobs:
           extra_docker_args: -v ~/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
           command: CI=true idf.py --ccache build && idf.py merge-bin
       - name: Rename firmware
-        run: mv build/HomeKey-ESP32.bin build/esp32c3.firmware.bin && mv build/merged-binary.bin build/esp32c3.firmware.factory.bin
+        run: sudo chown -R $USER:$USER build/ && mv build/HomeKey-ESP32.bin build/esp32c3.firmware.bin && mv build/merged-binary.bin build/esp32c3.firmware.factory.bin
       - name: Archive firmware
         uses: actions/upload-artifact@v4
         with:
@@ -176,7 +176,7 @@ jobs:
           path: '.'
           command: CI=true idf.py --ccache build && idf.py merge-bin
       - name: Rename firmware
-        run: mv build/HomeKey-ESP32.bin build/esp32c6.firmware.bin && mv build/merged-binary.bin build/esp32c6.firmware.factory.bin
+        run: sudo chown -R $USER:$USER build/ && mv build/HomeKey-ESP32.bin build/esp32c6.firmware.bin && mv build/merged-binary.bin build/esp32c6.firmware.factory.bin
       - name: Archive firmware
         uses: actions/upload-artifact@v4
         with:
@@ -219,7 +219,7 @@ jobs:
           extra_docker_args: -v ~/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
           command: CI=true idf.py --ccache build && idf.py merge-bin
       - name: Rename firmware
-        run: mv build/HomeKey-ESP32.bin build/esp32s3.firmware.bin && mv build/merged-binary.bin build/esp32s3.firmware.factory.bin
+        run: sudo chown -R $USER:$USER build/ && mv build/HomeKey-ESP32.bin build/esp32s3.firmware.bin && mv build/merged-binary.bin build/esp32s3.firmware.factory.bin
       - name: Archive firmware
         uses: actions/upload-artifact@v4
         with:
