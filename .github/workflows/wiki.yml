@@ -2,8 +2,9 @@
 name: Deploy Wiki to Pages
 
 on:
-  tags:
-    - 'v0.*'
+  push:
+    tags:
+      - 'v0.*'
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
