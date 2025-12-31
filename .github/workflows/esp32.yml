@@ -18,8 +18,51 @@ on:
       - 'docs/**'
 
 jobs:
+  littlefs:
+    runs-on: ubuntu-latest
+    container:
+      image: oven/bun:debian
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: 'data'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: apt update && apt install -y git
+      - name: Install LittleFS Tool
+        run: pip install littlefs-python
+      - name: Install dependencies
+        run: bun install
+        working-directory: data
+      - name: Build
+        run: bun run build
+        working-directory: data
+      - name: Remove extra, only keep compressed
+        run: find build -regex ".*\.\(html.gz\|css\|br\|js\|json.gz\)" -delete
+        working-directory: data
+      - name: Create LittleFS Image
+        run: littlefs-python create $(pwd)/build littlefs.bin -v --fs-size=0x20000 --name-max=64 --block-size=4096
+        working-directory: data
+      - name: Archive build directory
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-build-directory
+          path: data/build
+          retention-days: 1
+      - name: Archive LittleFS image
+        uses: actions/upload-artifact@v4
+        with:
+          name: littlefs-binary
+          path: data/littlefs.bin
   esp32:
     runs-on: ubuntu-latest
+    needs: littlefs
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,6 +70,11 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
           submodules: 'recursive'
+      - name: Get UI Build Directory
+        uses: actions/download-artifact@v5
+        with:
+          name: ui-build-directory
+          path: data/build
       - uses: actions/cache@v4
         with:
           path: |
@@ -43,18 +91,21 @@ jobs:
           path: '.'
           extra_docker_args: -v ~/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
           command: CI=true idf.py --ccache build && idf.py merge-bin
+      - name: Rename firmware
+        run: mv build/HomeKey-ESP32.bin build/esp32.firmware.bin && mv build/merged-binary.bin build/esp32.firmware.factory.bin
       - name: Archive firmware
         uses: actions/upload-artifact@v4
         with:
           name: esp32-firmware
-          path: build/HomeKey-ESP32.bin
+          path: build/esp32.firmware.bin
       - name: Archive merged binary
         uses: actions/upload-artifact@v4
         with:
           name: esp32-firmware-factory
-          path: build/merged-binary.bin
+          path: build/esp32.firmware.factory.bin
   esp32c3:
     runs-on: ubuntu-latest
+    needs: littlefs
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -62,6 +113,11 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
           submodules: 'recursive'
+      - name: Get UI Build Directory
+        uses: actions/download-artifact@v5
+        with:
+          name: ui-build-directory
+          path: data/build
       - uses: actions/cache@v4
         with:
           path: |
@@ -78,18 +134,21 @@ jobs:
           path: '.'
           extra_docker_args: -v ~/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
           command: CI=true idf.py --ccache build && idf.py merge-bin
+      - name: Rename firmware
+        run: mv build/HomeKey-ESP32.bin build/esp32c3.firmware.bin && mv build/merged-binary.bin build/esp32c3.firmware.factory.bin
       - name: Archive firmware
         uses: actions/upload-artifact@v4
         with:
           name: esp32c3-firmware
-          path: build/HomeKey-ESP32.bin
+          path: build/esp32c3.firmware.bin
       - name: Archive merged binary
         uses: actions/upload-artifact@v4
         with:
           name: esp32c3-firmware-factory
-          path: build/merged-binary.bin
+          path: build/esp32c3.firmware.factory.bin
   esp32c6:
     runs-on: ubuntu-latest
+    needs: littlefs
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -97,6 +156,11 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
           submodules: 'recursive'
+      - name: Get UI Build Directory
+        uses: actions/download-artifact@v5
+        with:
+          name: ui-build-directory
+          path: data/build
       - uses: actions/cache@v4
         with:
           path: |
@@ -108,23 +172,25 @@ jobs:
       - name: ESP32C6 Build
         uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: v5.5.1
+          esp_idf_version: v5.5.2
           target: esp32c6
           path: '.'
-          extra_docker_args: -v ~/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
           command: CI=true idf.py --ccache build && idf.py merge-bin
+      - name: Rename firmware
+        run: mv build/HomeKey-ESP32.bin build/esp32c6.firmware.bin && mv build/merged-binary.bin build/esp32c6.firmware.factory.bin
       - name: Archive firmware
         uses: actions/upload-artifact@v4
         with:
           name: esp32c6-firmware
-          path: build/HomeKey-ESP32.bin
+          path: build/esp32c6.firmware.bin
       - name: Archive merged binary
         uses: actions/upload-artifact@v4
         with:
           name: esp32c6-firmware-factory
-          path: build/merged-binary.bin
+          path: build/esp32c6.firmware.factory.bin
   esp32s3:
     runs-on: ubuntu-latest
+    needs: littlefs
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -132,6 +198,11 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
           submodules: 'recursive'
+      - name: Get UI Build Directory
+        uses: actions/download-artifact@v5
+        with:
+          name: ui-build-directory
+          path: data/build
       - uses: actions/cache@v4
         with:
           path: |
@@ -148,49 +219,15 @@ jobs:
           path: '.'
           extra_docker_args: -v ~/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
           command: CI=true idf.py --ccache build && idf.py merge-bin
+      - name: Rename firmware
+        run: mv build/HomeKey-ESP32.bin build/esp32s3.firmware.bin && mv build/merged-binary.bin build/esp32s3.firmware.factory.bin
       - name: Archive firmware
         uses: actions/upload-artifact@v4
         with:
           name: esp32s3-firmware
-          path: build/HomeKey-ESP32.bin
+          path: build/esp32s3.firmware.bin
       - name: Archive merged binary
         uses: actions/upload-artifact@v4
         with:
           name: esp32s3-firmware-factory
-          path: build/merged-binary.bin
-  littlefs:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          sparse-checkout: 'data'
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Install LittleFS Tool
-        run: pip install littlefs-python
-      - name: Install Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - name: Install dependencies
-        run: bun install
-        working-directory: data
-      - name: Run tests
-        run: bun run test:run
-        working-directory: data
-      - name: Build
-        run: bun run build
-        working-directory: data
-      - name: Remove extra, only keep compressed
-        run: find build -regex ".*\.\(html.gz\|css\|br\|js\|json.gz\)" -delete
-        working-directory: data
-      - name: Create LittleFS Image
-        run: littlefs-python create $(pwd)/build littlefs.bin -v --fs-size=0x20000 --name-max=64 --block-size=4096
-        working-directory: data
-      - name: Archive LittleFS image
-        uses: actions/upload-artifact@v4
-        with:
-          name: littlefs-binary
-          path: data/littlefs.bin
+          path: build/esp32s3.firmware.factory.bin

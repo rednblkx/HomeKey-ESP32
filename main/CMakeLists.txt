@@ -12,6 +12,6 @@ if(NOT DEFINED ENV{CI})
     COMMAND sh -c "find build -regex '.*\\.\\(html\\.gz\\|css\\|br\\|js\\|json\\.gz\\)' -delete"
     VERBATIM
   )
-  littlefs_create_partition_image(spiffs ../data/build FLASH_IN_PROJECT DEPENDS webui)
 endif()
+littlefs_create_partition_image(spiffs ../data/build FLASH_IN_PROJECT DEPENDS webui)
 target_compile_definitions(${COMPONENT_LIB} PUBLIC "-DLOG_LOCAL_LEVEL=ESP_LOG_VERBOSE")
