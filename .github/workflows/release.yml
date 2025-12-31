@@ -24,7 +24,7 @@ jobs:
           gh run download --name "esp32-firmware-factory" --repo ${{ github.repository }} && \
           gh run download --name "esp32s3-firmware-factory" --repo ${{ github.repository }} && \
           gh run download --name "esp32c3-firmware-factory" --repo ${{ github.repository }} && \
-          gh run download --name "esp32c6-firmware-factory" --repo ${{ github.repository }} && \
+          gh run download --name "esp32c6-firmware-factory" --repo ${{ github.repository }}
 
       - name: Upload to Release
         env:
