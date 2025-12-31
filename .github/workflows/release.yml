@@ -1,0 +1,40 @@
+name: Attach Artifacts to Release
+on:
+  release:
+    types: [published]
+
+jobs:
+  release-assets:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Artifacts from latest CI run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh run download --name "esp32-firmware" --repo ${{ github.repository }} && \
+          gh run download --name "esp32s3-firmware" --repo ${{ github.repository }} && \
+          gh run download --name "esp32c3-firmware" --repo ${{ github.repository }} && \
+          gh run download --name "esp32c6-firmware" --repo ${{ github.repository }} && \
+          gh run download --name "esp32-firmware-factory" --repo ${{ github.repository }} && \
+          gh run download --name "esp32s3-firmware-factory" --repo ${{ github.repository }} && \
+          gh run download --name "esp32c3-firmware-factory" --repo ${{ github.repository }} && \
+          gh run download --name "esp32c6-firmware-factory" --repo ${{ github.repository }} && \
+
+      - name: Upload to Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${{ github.event.release.tag_name }} ./esp32.firmware.bin && \
+          gh release upload ${{ github.event.release.tag_name }} ./esp32s3.firmware.bin && \
+          gh release upload ${{ github.event.release.tag_name }} ./esp32c3.firmware.bin && \
+          gh release upload ${{ github.event.release.tag_name }} ./esp32c6.firmware.bin && \
+          gh release upload ${{ github.event.release.tag_name }} ./esp32.firmware.factory.bin && \
+          gh release upload ${{ github.event.release.tag_name }} ./esp32s3.firmware.factory.bin && \
+          gh release upload ${{ github.event.release.tag_name }} ./esp32c3.firmware.factory.bin && \
+          gh release upload ${{ github.event.release.tag_name }} ./esp32c6.firmware.factory.bin
