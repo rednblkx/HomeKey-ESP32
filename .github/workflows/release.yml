@@ -25,7 +25,8 @@ jobs:
           gh run download --name "esp32-firmware-factory" --repo ${{ github.repository }} && \
           gh run download --name "esp32s3-firmware-factory" --repo ${{ github.repository }} && \
           gh run download --name "esp32c3-firmware-factory" --repo ${{ github.repository }} && \
-          gh run download --name "esp32c6-firmware-factory" --repo ${{ github.repository }}
+          gh run download --name "esp32c6-firmware-factory" --repo ${{ github.repository }} && \
+          gh run download --name "littlefs-binary" --repo ${{ github.repository }}
 
       - name: Upload to Release
         env:
@@ -38,4 +39,5 @@ jobs:
           gh release upload ${{ github.event.release.tag_name }} ./esp32.firmware.factory.bin && \
           gh release upload ${{ github.event.release.tag_name }} ./esp32s3.firmware.factory.bin && \
           gh release upload ${{ github.event.release.tag_name }} ./esp32c3.firmware.factory.bin && \
-          gh release upload ${{ github.event.release.tag_name }} ./esp32c6.firmware.factory.bin
+          gh release upload ${{ github.event.release.tag_name }} ./esp32c6.firmware.factory.bin && \
+          gh release upload ${{ github.event.release.tag_name }} ./littlefs.bin
