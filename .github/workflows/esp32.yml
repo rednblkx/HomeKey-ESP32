@@ -20,8 +20,6 @@ on:
 jobs:
   littlefs:
     runs-on: ubuntu-latest
-    container:
-      image: oven/bun:debian
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -33,8 +31,9 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-      - name: Install dependencies
-        run: apt update && apt install -y git
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
       - name: Install LittleFS Tool
         run: pip install littlefs-python
       - name: Install dependencies
