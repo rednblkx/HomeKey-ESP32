@@ -30,6 +30,14 @@ void NfcManager::initAuthPrecompute() {
   m_authCtxReadyQueue = xQueueCreate(kAuthCtxCacheSize, sizeof(AuthCtxCacheItem*));
   if (!m_authCtxFreeQueue || !m_authCtxReadyQueue) {
     ESP_LOGE(TAG, "Failed to create auth precompute queues.");
+    if (m_authCtxFreeQueue) {
+      vQueueDelete(m_authCtxFreeQueue);
+      m_authCtxFreeQueue = nullptr;
+    }
+    if (m_authCtxReadyQueue) {
+      vQueueDelete(m_authCtxReadyQueue);
+      m_authCtxReadyQueue = nullptr;
+    }
     return;
   }
 
@@ -60,6 +68,10 @@ void NfcManager::initAuthPrecompute() {
   if (ok != pdPASS || !m_authPrecomputeTaskHandle) {
     ESP_LOGE(TAG, "Failed to start auth precompute task.");
     m_authPrecomputeTaskHandle = nullptr;
+    vQueueDelete(m_authCtxFreeQueue);
+    m_authCtxFreeQueue = nullptr;
+    vQueueDelete(m_authCtxReadyQueue);
+    m_authCtxReadyQueue = nullptr;
     return;
   }
 
@@ -499,10 +511,18 @@ void NfcManager::handleHomeKeyAuth() {
     const uint32_t genNow = m_readerDataGeneration.load(std::memory_order_relaxed);
 
     AuthCtxCacheItem* item = nullptr;
-    const bool gotCached =
-        m_authCtxReadyQueue &&
-        (xQueueReceive(m_authCtxReadyQueue, &item, 0) == pdTRUE) &&
-        item && item->ctx;
+    bool gotCached = false;
+    if (m_authCtxReadyQueue && xQueueReceive(m_authCtxReadyQueue, &item, 0) == pdTRUE) {
+      if (item && item->ctx) {
+        gotCached = true;
+      } else if (item) {
+        ESP_LOGW(TAG, "Auth cache item dequeued without context, returning to free queue.");
+        if (m_authCtxFreeQueue) {
+          xQueueSend(m_authCtxFreeQueue, &item, 0);
+        }
+        item = nullptr;
+      }
+    }
 
     if (gotCached) {
       const bool genMatch = (item->generation == genNow);
