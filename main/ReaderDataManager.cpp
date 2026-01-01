@@ -154,7 +154,11 @@ void ReaderDataManager::load() {
  *
  * Serializes the current in-memory readerData_t and writes it to NVS under the class's configured key, then commits the change.
  *
- * @return const readerData_t* Pointer to the in-memory reader data after a successful save; `nullptr` on failure (for example, if the manager is not initialized or an NVS error occurs).
+ * @return const readerData_t* Pointer to the current in-memory reader data on success, or `nullptr` on failure (for example, if the manager is not initialized or an NVS error occurs).
+ *
+ * @note This function persists a snapshot of the in-memory data to NVS. The returned pointer refers to the manager's
+ *       current in-memory state, which may change concurrently. If you need a consistent snapshot, call
+ *       getReaderDataCopy().
  */
 const readerData_t* ReaderDataManager::saveData() {
     if (!m_isInitialized) {
