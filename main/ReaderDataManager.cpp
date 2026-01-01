@@ -65,6 +65,16 @@ const readerData_t& ReaderDataManager::getReaderData() const {
 }
 
 /**
+ * @brief Returns a thread-safe snapshot copy of the current in-memory reader data.
+ *
+ * @return readerData_t Copy of the stored reader data.
+ */
+readerData_t ReaderDataManager::getReaderDataCopy() const {
+    std::lock_guard<std::mutex> lock(m_readerDataMutex);
+    return m_readerData;
+}
+
+/**
  * @brief Accesses the reader's group identifier.
  *
  * @return const std::vector<uint8_t>& Reference to the stored group identifier bytes.
@@ -104,6 +114,7 @@ void ReaderDataManager::load() {
 
     if (err == ESP_ERR_NVS_NOT_FOUND) {
         ESP_LOGI(TAG, "Reader data not found in NVS. Starting with a clean slate.");
+        std::lock_guard<std::mutex> lock(m_readerDataMutex);
         m_readerData = {}; // Reset to default
         return;
     }
@@ -128,7 +139,10 @@ void ReaderDataManager::load() {
     bool success = msgpack_unpack_next(&unpacked, (const char*)buffer.data(), buffer.size(), NULL);
     if(success) {
         msgpack_object obj = unpacked.data;
-        unpack_readerData_t(obj, m_readerData);
+        readerData_t loadedReaderData{};
+        unpack_readerData_t(obj, loadedReaderData);
+        std::lock_guard<std::mutex> lock(m_readerDataMutex);
+        m_readerData = std::move(loadedReaderData);
     } else {
         ESP_LOGE(TAG, "Failed to parse msgpack for reader data. Data may be corrupt.");
     }
@@ -147,11 +161,12 @@ const readerData_t* ReaderDataManager::saveData() {
         ESP_LOGE(TAG, "Cannot save, not initialized.");
         return nullptr;
     }
+    const readerData_t readerDataSnapshot = getReaderDataCopy();
     msgpack_sbuffer sbuf;
     msgpack_packer pk;
     msgpack_sbuffer_init(&sbuf);
     msgpack_packer_init(&pk, &sbuf, msgpack_sbuffer_write);
-    pack_readerData_t(&pk, m_readerData);
+    pack_readerData_t(&pk, readerDataSnapshot);
 
     esp_err_t set_err = nvs_set_blob(m_nvsHandle, NVS_KEY, sbuf.data, sbuf.size);
     msgpack_sbuffer_destroy(&sbuf);
@@ -168,7 +183,7 @@ const readerData_t* ReaderDataManager::saveData() {
     }
 
     ESP_LOGI(TAG, "Reader data successfully saved to NVS.");
-    return &getReaderData();
+    return &m_readerData;
 }
 
 /**
@@ -178,7 +193,10 @@ const readerData_t* ReaderDataManager::saveData() {
  * @return const readerData_t* Pointer to the stored reader data after a successful save, or `nullptr` on error.
  */
 const readerData_t* ReaderDataManager::updateReaderData(const readerData_t& newData) {
-    m_readerData = newData;
+    {
+        std::lock_guard<std::mutex> lock(m_readerDataMutex);
+        m_readerData = newData;
+    }
     return saveData();
 }
 
@@ -195,11 +213,14 @@ bool ReaderDataManager::eraseReaderKey() {
         return false;
     }
     
-    m_readerData.reader_gid = {};
-    m_readerData.reader_id = {};
-    m_readerData.reader_pk = {};
-    m_readerData.reader_pk_x = {};
-    m_readerData.reader_sk = {};
+    {
+        std::lock_guard<std::mutex> lock(m_readerDataMutex);
+        m_readerData.reader_gid = {};
+        m_readerData.reader_id = {};
+        m_readerData.reader_pk = {};
+        m_readerData.reader_pk_x = {};
+        m_readerData.reader_sk = {};
+    }
     ESP_LOGI(TAG, "In-memory reader key cleared.");
 
     saveData();
@@ -222,7 +243,10 @@ bool ReaderDataManager::deleteAllReaderData() {
         return false;
     }
     
-    m_readerData = {};
+    {
+        std::lock_guard<std::mutex> lock(m_readerDataMutex);
+        m_readerData = {};
+    }
     ESP_LOGI(TAG, "In-memory reader data cleared.");
 
     esp_err_t erase_err = nvs_erase_key(m_nvsHandle, NVS_KEY);
@@ -252,6 +276,7 @@ bool ReaderDataManager::deleteAllReaderData() {
  * @return true if a new issuer was appended, false if an issuer with the same identifier already existed.
  */
 bool ReaderDataManager::addIssuerIfNotExists(const std::vector<uint8_t>& issuerId, const uint8_t* publicKey) {
+    std::lock_guard<std::mutex> lock(m_readerDataMutex);
     for (const auto& issuer : m_readerData.issuers) {
         if (issuer.issuer_id.size() == issuerId.size() && 
             std::equal(issuer.issuer_id.begin(), issuer.issuer_id.end(), issuerId.begin())) {
