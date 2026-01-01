@@ -67,6 +67,9 @@ void NfcManager::initAuthPrecompute() {
 }
 
 void NfcManager::invalidateAuthCache() {
+  if (!m_hkAuthPrecomputeEnabled) {
+    return;
+  }
   m_readerDataGeneration.fetch_add(1, std::memory_order_relaxed);
 
   if (!m_authCtxReadyQueue || !m_authCtxFreeQueue) {
@@ -185,9 +188,10 @@ void NfcManager::authPrecomputeTask() {
  * @param readerDataManager Reference to the ReaderDataManager used to read and persist reader data.
  * @param nfcGpioPins Four GPIO pin numbers used to construct the PN532 SPI interface.
  */
-NfcManager::NfcManager(ReaderDataManager& readerDataManager,const std::array<uint8_t, 4> &nfcGpioPins)
+NfcManager::NfcManager(ReaderDataManager& readerDataManager, const std::array<uint8_t, 4> &nfcGpioPins, bool hkAuthPrecomputeEnabled)
     : nfcGpioPins(nfcGpioPins),
       m_readerDataManager(readerDataManager),
+      m_hkAuthPrecomputeEnabled(hkAuthPrecomputeEnabled),
       m_pollingTaskHandle(nullptr),
       m_retryTaskHandle(nullptr),
       m_ecpData({ 0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0 })
@@ -225,7 +229,11 @@ NfcManager::NfcManager(ReaderDataManager& readerDataManager,const std::array<uin
 bool NfcManager::begin() {
     m_pn532spi = new PN532_SPI(nfcGpioPins[0], nfcGpioPins[1], nfcGpioPins[2], nfcGpioPins[3]); 
     m_nfc = new PN532 (*m_pn532spi);
-    initAuthPrecompute();
+    if (m_hkAuthPrecomputeEnabled) {
+        initAuthPrecompute();
+    } else {
+        ESP_LOGI(TAG, "Auth precompute disabled.");
+    }
     ESP_LOGI(TAG, "Starting NFC polling task...");
     xTaskCreateUniversal(pollingTaskEntry, "nfc_poll_task", 8192, this, 2, &m_pollingTaskHandle, 1);
     return true;
@@ -427,6 +435,65 @@ void NfcManager::handleTagPresence() {
  * @note This method has side effects: it may update ReaderDataManager and will publish an event via EventManager.
  */
 void NfcManager::handleHomeKeyAuth() {
+    auto publishAuthResult = [this](
+        const std::tuple<std::vector<uint8_t>, std::vector<uint8_t>, KeyFlow>& authResult,
+        const std::vector<uint8_t>& readerId
+    ) {
+        if (std::get<2>(authResult) != kFlowFailed) {
+            ESP_LOGI(TAG, "HomeKey authentication successful!");
+            EventHKTap s{.status = true, .issuerId = std::get<0>(authResult), .endpointId = std::get<1>(authResult), .readerId = readerId };
+            std::vector<uint8_t> d;
+            alpaca::serialize(s, d);
+            NfcEvent event{.type=HOMEKEY_TAP, .data=d};
+            std::vector<uint8_t> event_data;
+            alpaca::serialize(event, event_data);
+            espp::EventManager::get().publish("nfc/event", event_data);
+        } else {
+            ESP_LOGW(TAG, "HomeKey authentication failed.");
+            EventHKTap s{.status = false, .issuerId = {}, .endpointId = {}, .readerId = {} };
+            std::vector<uint8_t> d;
+            alpaca::serialize(s, d);
+            NfcEvent event{.type=HOMEKEY_TAP, .data=d};
+            std::vector<uint8_t> event_data;
+            alpaca::serialize(event, event_data);
+            espp::EventManager::get().publish("nfc/event", event_data);
+        }
+    };
+
+    auto authenticateCold = [this, &publishAuthResult]() {
+        readerData_t readerData = m_readerDataManager.getReaderDataCopy();
+
+        // IMPORTANT: HKAuthenticationContext stores references to std::function objects.
+        // Do NOT pass lambdas directly (would bind to temporaries and dangle).
+        std::function<bool(std::vector<uint8_t>&, std::vector<uint8_t>&, bool)> nfcFn =
+            [this](std::vector<uint8_t>& send, std::vector<uint8_t>& recv, bool isLong) -> bool {
+                if (send.size() > 255) {
+                    return false;
+                }
+                uint8_t sendLength = static_cast<uint8_t>(send.size());
+                uint8_t responseBuffer[256];
+                uint16_t responseLength = sizeof(responseBuffer);
+                bool ok = m_nfc->inDataExchange(send.data(), sendLength, responseBuffer, &responseLength, isLong);
+                if (ok) {
+                    recv.assign(responseBuffer, responseBuffer + responseLength);
+                }
+                return ok;
+            };
+        std::function<void(const readerData_t&)> saveFn = [this](const readerData_t& data) {
+            m_readerDataManager.updateReaderData(data);
+            invalidateAuthCache();
+        };
+
+        HKAuthenticationContext authCtx(nfcFn, readerData, saveFn);
+        auto authResult = authCtx.authenticate(authFlow);
+        publishAuthResult(authResult, readerData.reader_id);
+    };
+
+    if (!m_hkAuthPrecomputeEnabled) {
+        authenticateCold();
+        return;
+    }
+
     const UBaseType_t readyBefore = m_authCtxReadyQueue ? uxQueueMessagesWaiting(m_authCtxReadyQueue) : 0;
     const UBaseType_t freeBefore = m_authCtxFreeQueue ? uxQueueMessagesWaiting(m_authCtxFreeQueue) : 0;
     const uint32_t genNow = m_readerDataGeneration.load(std::memory_order_relaxed);
@@ -459,26 +526,7 @@ void NfcManager::handleHomeKeyAuth() {
         delete item->ctx;
         item->ctx = nullptr;
         xQueueSend(m_authCtxFreeQueue, &item, 0);
-
-        if (std::get<2>(authResult) != kFlowFailed) {
-          ESP_LOGI(TAG, "HomeKey authentication successful!");
-          EventHKTap s{.status = true, .issuerId = std::get<0>(authResult), .endpointId = std::get<1>(authResult), .readerId = readerId };
-          std::vector<uint8_t> d;
-          alpaca::serialize(s, d);
-          NfcEvent event{.type=HOMEKEY_TAP, .data=d};
-          std::vector<uint8_t> event_data;
-          alpaca::serialize(event, event_data);
-          espp::EventManager::get().publish("nfc/event", event_data);
-        } else {
-          ESP_LOGW(TAG, "HomeKey authentication failed.");
-          EventHKTap s{.status = false, .issuerId = {}, .endpointId = {}, .readerId = {} };
-          std::vector<uint8_t> d;
-          alpaca::serialize(s, d);
-          NfcEvent event{.type=HOMEKEY_TAP, .data=d};
-          std::vector<uint8_t> event_data;
-          alpaca::serialize(event, event_data);
-          espp::EventManager::get().publish("nfc/event", event_data);
-        }
+        publishAuthResult(authResult, readerId);
         return;
       }
     }
@@ -487,52 +535,7 @@ void NfcManager::handleHomeKeyAuth() {
     if (m_authPrecomputeTaskHandle) {
       xTaskNotifyGive(m_authPrecomputeTaskHandle);
     }
-
-    readerData_t readerData = m_readerDataManager.getReaderDataCopy();
-
-    // IMPORTANT: HKAuthenticationContext stores references to std::function objects.
-    // Do NOT pass lambdas directly (would bind to temporaries and dangle).
-    std::function<bool(std::vector<uint8_t>&, std::vector<uint8_t>&, bool)> nfcFn =
-        [this](std::vector<uint8_t>& send, std::vector<uint8_t>& recv, bool isLong) -> bool {
-          if (send.size() > 255) {
-            return false;
-          }
-          uint8_t sendLength = static_cast<uint8_t>(send.size());
-          uint8_t responseBuffer[256];
-          uint16_t responseLength = sizeof(responseBuffer);
-          bool ok = m_nfc->inDataExchange(send.data(), sendLength, responseBuffer, &responseLength, isLong);
-          if (ok) {
-            recv.assign(responseBuffer, responseBuffer + responseLength);
-          }
-          return ok;
-        };
-    std::function<void(const readerData_t&)> saveFn = [this](const readerData_t& data) {
-      m_readerDataManager.updateReaderData(data);
-      invalidateAuthCache();
-    };
-
-    HKAuthenticationContext authCtx(nfcFn, readerData, saveFn);
-    auto authResult = authCtx.authenticate(authFlow);
-
-    if (std::get<2>(authResult) != kFlowFailed) {
-        ESP_LOGI(TAG, "HomeKey authentication successful!");
-        EventHKTap s{.status = true, .issuerId = std::get<0>(authResult), .endpointId = std::get<1>(authResult), .readerId = readerData.reader_id };
-        std::vector<uint8_t> d;
-        alpaca::serialize(s, d);
-        NfcEvent event{.type=HOMEKEY_TAP, .data=d};
-        std::vector<uint8_t> event_data;
-        alpaca::serialize(event, event_data);
-        espp::EventManager::get().publish("nfc/event", event_data);
-    } else {
-        ESP_LOGW(TAG, "HomeKey authentication failed.");
-        EventHKTap s{.status = false, .issuerId = {}, .endpointId = {}, .readerId = {} };
-        std::vector<uint8_t> d;
-        alpaca::serialize(s, d);
-        NfcEvent event{.type=HOMEKEY_TAP, .data=d};
-        std::vector<uint8_t> event_data;
-        alpaca::serialize(event, event_data);
-        espp::EventManager::get().publish("nfc/event", event_data);
-    }
+    authenticateCold();
 }
 
 /**

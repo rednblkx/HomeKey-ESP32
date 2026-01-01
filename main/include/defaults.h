@@ -54,6 +54,7 @@
 #define DEVICE_NAME "HK" //Device name
 #define HOMEKEY_ALWAYS_UNLOCK 0 // Flag indicating if a successful Homekey authentication should always set and publish the unlock state
 #define HOMEKEY_ALWAYS_LOCK 0  // Flag indicating if a successful Homekey authentication should always set and publish the lock state
+#define HK_AUTH_PRECOMPUTE_ENABLED false // Enable HomeKey auth precompute cache (faster taps, higher CPU/RAM)
 #define HS_STATUS_LED 255 // HomeSpan Status LED GPIO pin
 #define HS_PIN 255 // GPIO Pin for a Configuration Mode button (more info on https://github.com/HomeSpan/HomeSpan/blob/master/docs/UserGuide.md#device-configuration-mode)
 #define BTR_PROX_BAT_ENABLED false // Enable or disable battery monitoring

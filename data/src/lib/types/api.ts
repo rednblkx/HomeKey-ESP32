@@ -93,6 +93,8 @@ export interface MiscConfig {
   lockAlwaysUnlock: boolean;
   /** Force lock to always lock (overrides normal behavior) */
   lockAlwaysLock: boolean;
+  /** Enable HomeKey auth precompute cache (faster taps, higher CPU/RAM) */
+  hkAuthPrecomputeEnabled: boolean;
   /** GPIO pin for lock control */
   controlPin: number;
   /** GPIO pin for HomeSpan status indicator */

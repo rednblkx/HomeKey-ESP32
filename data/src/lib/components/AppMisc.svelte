@@ -27,6 +27,7 @@
 			setupCode: "",
 			lockAlwaysUnlock: false,
 			lockAlwaysLock: false,
+			hkAuthPrecomputeEnabled: false,
 			proxBatEnabled: false,
 			btrLowStatusThreshold: 10,
 			webAuthEnabled: false,
@@ -451,6 +452,21 @@
 											</label>
 										{/each}
 									</div>
+								</div>
+								<div class="divider">Performance</div>
+								<div class="form-control">
+									<label class="label cursor-pointer">
+										<span class="label-text"
+											>Auth Precompute Cache</span
+										>
+										<input
+											type="checkbox"
+											bind:checked={
+												miscConfig.hkAuthPrecomputeEnabled
+											}
+											class="toggle toggle-primary"
+										/>
+									</label>
 								</div>
 							</div>
 						</div>
