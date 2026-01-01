@@ -12,6 +12,7 @@
 #include <esp_log.h>
 #include <chrono>
 #include <functional>
+#include <new>
 #include <system_error>
 #include <serialization.hpp>
 
@@ -151,7 +152,7 @@ void NfcManager::authPrecomputeTask() {
              uxQueueMessagesWaiting(m_authCtxReadyQueue));
 
     auto startTime = std::chrono::high_resolution_clock::now();
-    item->ctx = new HKAuthenticationContext(item->nfcFn, item->readerData, item->saveFn);
+    item->ctx = new (std::nothrow) HKAuthenticationContext(item->nfcFn, item->readerData, item->saveFn);
     auto stopTime = std::chrono::high_resolution_clock::now();
     const auto durationMs =
         std::chrono::duration_cast<std::chrono::milliseconds>(stopTime - startTime).count();
