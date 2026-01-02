@@ -14,7 +14,6 @@
 #include "esp_heap_caps.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
-#include "esp_log_level.h"
 #include "esp_task_wdt.h"
 #include "eth_structs.hpp"
 #include "eventStructs.hpp"

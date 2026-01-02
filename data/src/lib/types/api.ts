@@ -99,6 +99,10 @@ export interface MiscConfig {
   controlPin: number;
   /** GPIO pin for HomeSpan status indicator */
   hsStatusPin: number;
+  /** GPIO pin for Door Sensor */
+  doorSensorPin: number;
+  /** Invert Door Sensor logic (true: HIGH=Closed, false: LOW=Closed) */
+  doorSensorInvert: boolean;
   /** Enable web authentication */
   webAuthEnabled: boolean;
   /** Web interface username */
