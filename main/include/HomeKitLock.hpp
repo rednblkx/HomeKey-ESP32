@@ -16,11 +16,12 @@ namespace Service
 class LockManager;
 class ConfigManager;
 class ReaderDataManager;
+class HardwareManager;
 namespace espConfig { struct misc_config_t; };
 
 class HomeKitLock {
 public:
-    HomeKitLock(std::function<void(int)> &conn_cb, LockManager& lockManager, ConfigManager& configManager, ReaderDataManager& readerDataManager);
+    HomeKitLock(std::function<void(int)> &conn_cb, LockManager& lockManager, ConfigManager& configManager, ReaderDataManager& readerDataManager, HardwareManager& hardwareManager);
     void begin();
     void updateLockState(int currentState, int targetState);
     void updateBatteryStatus(uint8_t batteryLevel, bool isLow);
@@ -34,6 +35,7 @@ private:
     LockManager& m_lockManager;
     ConfigManager& m_configManager;
     ReaderDataManager& m_readerDataManager;
+    HardwareManager& m_hardwareManager;
 
     std::function<void(int)> &conn_cb;
 
@@ -56,13 +58,12 @@ private:
     };
     struct LockMechanismService : Service::LockMechanism {
       LockManager& m_lockManager;
+      HardwareManager& m_hardwareManager;
       SpanCharacteristic* m_lockTargetState;
       SpanCharacteristic* m_lockCurrentState;
       SpanCharacteristic* m_doorState;
-      int m_doorSensorPin = 32;
-      bool m_doorSensorInvert = false;
-      int m_lastDoorState = -1;
-      LockMechanismService(HomeKitLock& bridge, LockManager& lockManager, const espConfig::misc_config_t& config);
+
+      LockMechanismService(HomeKitLock& bridge, LockManager& lockManager, HardwareManager& hardwareManager);
       boolean update() override;
       void loop() override;
     };

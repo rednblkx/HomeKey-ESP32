@@ -27,8 +27,9 @@ const std::array<const char*, 6> pixelTypeMap = { "RGB", "RBG", "BRG", "BGR", "G
  * @param miscConfig Configuration values controlling GPIO pins, NeoPixel type/behavior, and
  *                   timing used by the HardwareManager.
  */
-HardwareManager::HardwareManager(const espConfig::actions_config_t& miscConfig)
-    : m_miscConfig(miscConfig),
+HardwareManager::HardwareManager(const espConfig::misc_config_t& sysConfig, const espConfig::actions_config_t& miscConfig)
+    : m_sysConfig(sysConfig),
+      m_miscConfig(miscConfig),
       m_feedbackTaskHandle(nullptr),
       m_feedbackQueue(nullptr),
       m_lockControlTaskHandle(nullptr),
@@ -137,6 +138,10 @@ void HardwareManager::begin() {
       gpio_isr_handler_add((gpio_num_t)m_miscConfig.hkAltActionInitPin, initiator_isr_handler, (void*) this);
     }
 
+    if (m_sysConfig.doorSensorPin != 255) {
+        pinMode(m_sysConfig.doorSensorPin, INPUT_PULLUP);
+    }
+
     // --- Initialize NeoPixel ---
     if (m_miscConfig.nfcNeopixelPin != 255) {
         size_t pixelTypeIndex = m_miscConfig.neoPixelType;
@@ -231,6 +236,31 @@ void HardwareManager::setLockOutput(int state) {
     if (m_lockControlQueue != nullptr) {
         xQueueSend(m_lockControlQueue, &state, pdMS_TO_TICKS(100));
     }
+}
+
+/**
+ * @brief Checks the door sensor state with debouncing.
+ * @return 1 for Closed, 0 for Open, -1 for no change/invalid.
+ */
+int HardwareManager::checkDoorSensor() {
+    if (m_sysConfig.doorSensorPin == 255) return -1;
+
+    int currentState = digitalRead(m_sysConfig.doorSensorPin);
+
+    if (currentState != m_lastRawDoorState) {
+        m_lastDoorChangeTime = esp_timer_get_time() / 1000;
+        m_lastRawDoorState = currentState;
+    }
+
+    if (((esp_timer_get_time() / 1000) - m_lastDoorChangeTime) > DEBOUNCE_DELAY) {
+        if (currentState != m_lastDoorState) {
+            m_lastDoorState = currentState;
+            // Apply invert logic: if inverted, swap the interpretation
+            bool isClosed = m_sysConfig.doorSensorInvert ? (currentState == HIGH) : (currentState == LOW);
+            return isClosed ? 1 : 0;
+        }
+    }
+    return -1;
 }
 
 /**

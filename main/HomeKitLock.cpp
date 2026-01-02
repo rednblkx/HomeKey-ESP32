@@ -30,10 +30,11 @@ static HomeKitLock* s_instance = nullptr;
  * @param configManager Reference to the ConfigManager used for configuration access.
  * @param readerDataManager Reference to the ReaderDataManager used to manage reader/issuer data.
  */
-HomeKitLock::HomeKitLock(std::function<void(int)> &conn_cb, LockManager& lockManager, ConfigManager& configManager, ReaderDataManager& readerDataManager)
+HomeKitLock::HomeKitLock(std::function<void(int)> &conn_cb, LockManager& lockManager, ConfigManager& configManager, ReaderDataManager& readerDataManager, HardwareManager& hardwareManager)
     : m_lockManager(lockManager),
       m_configManager(configManager),
       m_readerDataManager(readerDataManager),
+      m_hardwareManager(hardwareManager),
       conn_cb(conn_cb) {
     if (s_instance != nullptr) {
         ESP_LOGE(TAG, "ERROR: More than one instance of HomeKitBridge created!");
@@ -228,7 +229,7 @@ void HomeKitLock::begin() {
       new Service::HAPProtocolInformation();
       new Characteristic::Version();
       new LockManagementService();
-      new LockMechanismService(*this, m_lockManager, miscConfig);
+      new LockMechanismService(*this, m_lockManager, m_hardwareManager);
       new NFCAccessService(m_readerDataManager);
       if(miscConfig.proxBatEnabled) {
           new PhysicalLockBatteryService(*this);

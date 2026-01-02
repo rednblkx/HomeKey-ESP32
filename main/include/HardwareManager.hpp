@@ -7,7 +7,7 @@
 
 class ConfigManager;
 class Pixel;
-namespace espConfig { struct actions_config_t; }
+namespace espConfig { struct actions_config_t; struct misc_config_t; }
 
 /**
  * @class HardwareManager
@@ -23,7 +23,7 @@ public:
      * @brief Constructs the HardwareManager.
      * @param configManager Reference to the application configuration manager.
      */
-    HardwareManager(const espConfig::actions_config_t &);
+    HardwareManager(const espConfig::misc_config_t &, const espConfig::actions_config_t &);
 
     /**
      * @brief Initializes all hardware pins and starts background tasks for feedback.
@@ -35,6 +35,12 @@ public:
      * @param state The desired lock state (e.g., lockStates::LOCKED).
      */
     void setLockOutput(int state);
+
+    /**
+     * @brief Checks the door sensor state with debouncing.
+     * @return 1 for Closed, 0 for Open, -1 for no change/invalid.
+     */
+    int checkDoorSensor();
 
     /**
      * @brief Triggers a non-blocking visual/audible signal for a successful action.
@@ -92,10 +98,16 @@ private:
     static void handleTimer(void *instance);
     
     // --- Member Variables ---
+    const espConfig::misc_config_t& m_sysConfig;
     const espConfig::actions_config_t& m_miscConfig;
 
     Pixel* m_pixel = nullptr;
   
+    int m_lastDoorState = -1;
+    int m_lastRawDoorState = -1;
+    uint32_t m_lastDoorChangeTime = 0;
+    static const uint32_t DEBOUNCE_DELAY = 50;
+
     esp_timer_handle_t m_gpioSuccessTimer;
     esp_timer_handle_t m_gpioFailTimer;
     esp_timer_handle_t m_tagEventTimer;
