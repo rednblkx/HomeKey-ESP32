@@ -193,6 +193,9 @@ This section is organized into several subsections: **HomeKit**, **HomeKey**, **
 
 *   **HomeKey Card Finish:** Choose the color of the HomeKey icon that appears in Apple Wallet when you add a HomeKey pass. Options: `Tan`, `Gold`, `Silver`, `Black`.
 
+*   **Performance:** Authentication optimizations.
+    *   **Auth Precompute Cache:** Enable or disable precomputation of authentication context.
+
 ### 5.3. PN532
 
 This section allows you to manually assign the GPIO pins for the PN532 NFC module's SPI communication. You typically only need to adjust these if you're using a custom wiring setup or a non-standard ESP32 board.

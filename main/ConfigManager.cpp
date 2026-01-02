@@ -103,6 +103,7 @@ ConfigManager::ConfigManager() : m_isInitialized(false) {
       {"setupCode", &m_miscConfig.setupCode},
       {"lockAlwaysUnlock", &m_miscConfig.lockAlwaysUnlock},
       {"lockAlwaysLock", &m_miscConfig.lockAlwaysLock},
+      {"hkAuthPrecomputeEnabled", &m_miscConfig.hkAuthPrecomputeEnabled},
       {"controlPin", &m_miscConfig.controlPin},
       {"hsStatusPin", &m_miscConfig.hsStatusPin},
       {"webAuthEnabled", &m_miscConfig.webAuthEnabled},
