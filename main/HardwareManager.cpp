@@ -43,7 +43,7 @@ HardwareManager::HardwareManager(const espConfig::misc_config_t& sysConfig, cons
         if(!ec) {
           setLockOutput(s.targetState);
         }
-      }, 3072);
+      }, 4096);
   espp::EventManager::get().add_subscriber("nfc/event", "HardwareManager", [&](const std::vector<uint8_t> &data){
     std::error_code ec;
     NfcEvent event = alpaca::deserialize<NfcEvent>(data, ec);
@@ -89,7 +89,7 @@ HardwareManager::HardwareManager(const espConfig::misc_config_t& sysConfig, cons
               digitalWrite(s.newValue, state);
           }
         }
-      }, 3072);
+      }, 4096);
   espp::EventManager::get().add_publisher("lock/updateState", "HardwareManager");
   espp::EventManager::get().add_publisher("lock/altAction", "HardwareManager");
 }

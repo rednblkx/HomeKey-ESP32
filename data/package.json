@@ -1,6 +1,6 @@
 {
-  "name": "test-svelte-js",
-  "version": "0.0.1",
+  "name": "hk-ui-svelte",
+  "version": "0.1",
   "devDependencies": {
     "@eslint/compat": "^1.4.0",
     "@eslint/js": "^9.36.0",

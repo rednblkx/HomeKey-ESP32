@@ -3,6 +3,7 @@
 #include "HomeKitLock.hpp"
 #include "LockManager.hpp"
 #include "ReaderDataManager.hpp"
+#include "HardwareManager.hpp"
 #include "esp_mac.h"
 #include "HK_HomeKit.h"
 

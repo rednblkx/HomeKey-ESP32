@@ -7,14 +7,13 @@ idf_component_register(SRCS "main.cpp" "ConfigManager.cpp" "ReaderDataManager.cp
 if(NOT DEFINED ENV{CI})
   add_custom_target(webui 
     WORKING_DIRECTORY ${COMPONENT_DIR}/../data 
+    COMMAND bun install
     COMMAND bun run build 
-    COMMAND find build -name "*.html.gz" -delete
-    COMMAND find build -name "*.css" -delete
-    COMMAND find build -name "*.br" -delete
-    COMMAND find build -name "*.js" -delete
-    COMMAND find build -name "*.json.gz" -delete
+    COMMAND sh -c "find build -regex '.*\\.\\(html\\.gz\\|css\\|br\\|js\\|json\\.gz\\)' -delete"
     VERBATIM
   )
   littlefs_create_partition_image(spiffs ../data/build FLASH_IN_PROJECT DEPENDS webui)
+else()
+  littlefs_create_partition_image(spiffs ../data/build FLASH_IN_PROJECT)
 endif()
 target_compile_definitions(${COMPONENT_LIB} PUBLIC "-DLOG_LOCAL_LEVEL=ESP_LOG_VERBOSE")

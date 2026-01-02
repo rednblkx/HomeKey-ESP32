@@ -40,12 +40,12 @@ MqttManager::MqttManager(const ConfigManager& configManager)
         if(!ec) {
           publishLockState(s.currentState, s.targetState);
         }
-      },3072);
+      },4096);
   espp::EventManager::get().add_subscriber(
       "lock/altAction", "MqttManager",
       [&](const std::vector<uint8_t> &data) {
         publish(m_mqttConfig.hkAltActionTopic, "1");
-      },3072);
+      },4096);
   espp::EventManager::get().add_publisher("lock/targetStateChanged", "MqttManager");
   espp::EventManager::get().add_publisher("lock/overrideState", "MqttManager");
   espp::EventManager::get().add_publisher("homekit/event", "MqttManager");
@@ -71,7 +71,7 @@ MqttManager::MqttManager(const ConfigManager& configManager)
       default:
         break;
     }
-  }, 3072);
+  }, 4096);
 }
 
 MqttManager::~MqttManager() {
@@ -549,6 +549,32 @@ void MqttManager::publishHassDiscovery() {
     std::string lockConfigTopic = "homeassistant/lock/" + m_mqttConfig.mqttClientId + "/lock/config";
     publish(lockConfigTopic, payload, 1, true);
     cJSON_Delete(lockPayload);
+
+    cJSON *issuerPayload = cJSON_CreateObject();
+    cJSON_AddStringToObject(issuerPayload, "name", "HomeKey Issuer");
+    cJSON_AddStringToObject(issuerPayload, "unique_id", deviceID.c_str());
+    cJSON_AddItemToObject(issuerPayload, "device", cJSON_Duplicate(device, true));
+    cJSON_AddStringToObject(issuerPayload, "topic", m_mqttConfig.hkTopic.c_str());
+    cJSON_AddStringToObject(issuerPayload, "value_template", "{{ value_json.issuerId }}");
+    char *issuerPayload_cstr = cJSON_Print(issuerPayload);
+    std::string issuerPayload_str(issuerPayload_cstr);
+    free(issuerPayload_cstr);
+    std::string issuerConfigTopic = "homeassistant/tag/" + m_mqttConfig.mqttClientId + "/hk_issuer/config";
+    publish(issuerConfigTopic, issuerPayload_str, 1, true);
+    cJSON_Delete(issuerPayload);
+
+    cJSON *endpointPayload = cJSON_CreateObject();
+    cJSON_AddStringToObject(endpointPayload, "name", "HomeKey Endpoint");
+    cJSON_AddStringToObject(endpointPayload, "unique_id", deviceID.c_str());
+    cJSON_AddItemToObject(endpointPayload, "device", cJSON_Duplicate(device, true));
+    cJSON_AddStringToObject(endpointPayload, "topic", m_mqttConfig.hkTopic.c_str());
+    cJSON_AddStringToObject(endpointPayload, "value_template", "{{ value_json.endpointId }}");
+    char *endpointPayload_cstr = cJSON_Print(endpointPayload);
+    std::string endpointPayload_str(endpointPayload_cstr);
+    free(endpointPayload_cstr);
+    std::string endpointConfigTopic = "homeassistant/tag/" + m_mqttConfig.mqttClientId + "/hk_endpoint/config";
+    publish(endpointConfigTopic, endpointPayload_str, 1, true);
+    cJSON_Delete(endpointPayload);
 
     if (!m_mqttConfig.nfcTagNoPublish) {
         cJSON *rfidPayload = cJSON_CreateObject();
