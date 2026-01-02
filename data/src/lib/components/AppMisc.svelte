@@ -620,6 +620,8 @@
 										type="number"
 										bind:value={miscConfig.doorSensorPin}
 										placeholder="32"
+										min="0"
+                                        max="255"
 										class="input input-bordered w-full"
 									/>
 								</div>
