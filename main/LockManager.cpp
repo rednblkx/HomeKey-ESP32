@@ -35,7 +35,7 @@ LockManager::LockManager(const espConfig::misc_config_t& miscConfig, const espCo
         if (!ec) {
           overrideState(s.currentState, s.targetState);
         }
-      }, 3072);
+      }, 4096);
   espp::EventManager::get().add_subscriber(
       "lock/targetStateChanged", "LockManager",
       [&](const std::vector<uint8_t> &data) {
@@ -44,7 +44,7 @@ LockManager::LockManager(const espConfig::misc_config_t& miscConfig, const espCo
         if (!ec) {
           setTargetState(s.targetState, Source(s.source));
         }
-      }, 3072);
+      }, 4096);
   espp::EventManager::get().add_subscriber(
       "lock/updateState", "LockManager", [&](const std::vector<uint8_t> &data) {
         std::error_code ec;
@@ -84,7 +84,7 @@ LockManager::LockManager(const espConfig::misc_config_t& miscConfig, const espCo
           }
         }
       },
-      3072);
+      4096);
   esp_timer_create_args_t momentaryStateTimer_arg = {
     .callback = handleTimer,
     .arg = this,

@@ -52,7 +52,7 @@ NfcManager::NfcManager(ReaderDataManager& readerDataManager,const std::array<uin
       default:
         break;
     }
-  }, 3072);
+  }, 4096);
 }
 
 /**
@@ -204,7 +204,7 @@ void NfcManager::pollingTask() {
         uint8_t *uidLen = new uint8_t[1];
         uint8_t *atqa = new uint8_t[2];
         uint8_t *sak = new uint8_t[1];
-        bool passiveTargetFound = m_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, uidLen, atqa, sak, 500, true, true);
+        bool passiveTargetFound = m_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, uidLen, atqa, sak, 200, true, true);
         
         if (passiveTargetFound) {
             ESP_LOGI(TAG, "NFC tag detected!");
@@ -218,7 +218,7 @@ void NfcManager::pollingTask() {
         delete[] atqa;
         delete[] sak;
 
-        vTaskDelay(pdMS_TO_TICKS(50));
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 
