@@ -1,5 +1,6 @@
 #pragma once
 #include <vector>
+#include <mutex>
 #include <nvs.h>
 #include "HomeKey.h"
 #include "msgpack/object.h"
@@ -36,6 +37,12 @@ public:
      * @return A constant reference to the readerData_t object.
      */
     const readerData_t& getReaderData() const;
+
+    /**
+     * @brief Provides a thread-safe snapshot copy of the complete reader data structure.
+     * @return A copy of the readerData_t object.
+     */
+    readerData_t getReaderDataCopy() const;
 
     /**
      * @brief Provides convenient read-only access to the reader group identifier.
@@ -83,8 +90,11 @@ public:
     
     /**
      * @brief Persists the current in-memory reader data to NVS.
-     * @return A constant pointer to the readerData_t object if successful
-     * otherwise a nullptr
+     * @return A constant pointer to the current in-memory readerData_t object on success, otherwise `nullptr`.
+     *
+     * @note This function persists a snapshot of the in-memory data to NVS. The returned pointer refers to the manager's
+     *       current in-memory state, which may change concurrently. If you need a consistent snapshot, call
+     *       getReaderDataCopy().
      */
     const readerData_t* saveData();
 
@@ -101,10 +111,10 @@ private:
     void unpack_hkEndpoint_t(msgpack_object obj, hkEndpoint_t& endpoint);
     void pack_hkEndpoint_t(msgpack_packer* pk, const hkEndpoint_t& endpoint);
     readerData_t m_readerData;
+    mutable std::mutex m_readerDataMutex;
     nvs_handle m_nvsHandle;
     bool m_isInitialized;
 
     static const char* TAG;
     static const char* NVS_KEY;
 };
-

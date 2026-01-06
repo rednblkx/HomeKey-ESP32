@@ -94,7 +94,11 @@ const readerData_t* saveData();
 ```
 
 **Returns:**
-*   `const readerData_t*`: A pointer to the in-memory data on success, or `nullptr` if the save operation fails.
+*   `const readerData_t*`: A pointer to the current in-memory data on success, or `nullptr` if the save operation fails.
+
+**Note:**
+This function persists a snapshot of the in-memory data to NVS. The returned pointer refers to the manager's current
+in-memory state, which may change concurrently. If you need a consistent snapshot, call `getReaderDataCopy()`.
 
 ### updateReaderData()
 

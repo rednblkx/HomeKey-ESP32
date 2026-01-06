@@ -362,7 +362,8 @@ void HomeKitLock::setupDebugCommands() {
     });
 
     new SpanUserCommand('P', "Print Issuers", [](const char* c) {
-        const auto& issuers = s_instance->m_readerDataManager.getReaderData().issuers;
+        const auto readerDataCopy = s_instance->m_readerDataManager.getReaderDataCopy();
+        const auto& issuers = readerDataCopy.issuers;
         ESP_LOGI(TAG, "--- Registered HomeKey Issuers ---");
         if (issuers.empty()) {
             ESP_LOGI(TAG, "None");

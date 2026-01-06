@@ -426,7 +426,7 @@ esp_err_t WebServerManager::handleGetConfig(httpd_req_t *req) {
     responseJson =
         instance->m_configManager.serializeToJson<espConfig::actions_config_t>();
   } else if (type == "hkinfo") {
-    const auto &readerData = instance->m_readerDataManager.getReaderData();
+    const auto readerData = instance->m_readerDataManager.getReaderDataCopy();
     cJSON *hkInfo = cJSON_CreateObject();
     cJSON_AddStringToObject(
         hkInfo, "group_identifier",

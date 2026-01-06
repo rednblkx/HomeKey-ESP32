@@ -73,7 +73,9 @@ void setup() {
     ESP_LOGI(TAG, "NFC GPIO pins preset: Custom");
     ESP_LOGI(TAG, "NFC Custom GPIO pins: %d, %d, %d, %d", miscConfig.nfcGpioPins[0], miscConfig.nfcGpioPins[1], miscConfig.nfcGpioPins[2], miscConfig.nfcGpioPins[3]);
   }
-  nfcManager = new NfcManager(*readerDataManager, miscConfig.nfcPinsPreset == 255 ? miscConfig.nfcGpioPins : nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins);
+  nfcManager = new NfcManager(*readerDataManager,
+                              miscConfig.nfcPinsPreset == 255 ? miscConfig.nfcGpioPins : nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins,
+                              miscConfig.hkAuthPrecomputeEnabled);
   readerDataManager->begin();
   nfcManager->begin();
   homekitLock->begin();
