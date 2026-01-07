@@ -118,8 +118,8 @@ void WebServerManager::begin() {
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   config.server_port = 80;
   config.max_uri_handlers = 20;
-  config.max_open_sockets = 8;
-  config.stack_size = 8192;
+  config.max_open_sockets = 4;
+  config.stack_size = 4096;
   config.uri_match_fn = httpd_uri_match_wildcard;
   config.lru_purge_enable = true;
 
@@ -324,17 +324,21 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
     content_type = "image/webp";
 
   httpd_resp_set_type(req, content_type);
+  httpd_resp_set_hdr(req, "Connection", "close");
   if (use_compressed)
     httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
 
-  // Stream file
-  char buffer[1024];
+  char buffer[512];
   size_t bytes_read;
   while ((bytes_read = file.read((uint8_t *)buffer, sizeof(buffer))) > 0) {
-    if (httpd_resp_send_chunk(req, buffer, bytes_read) != ESP_OK) {
+    esp_err_t err = httpd_resp_send_chunk(req, buffer, bytes_read);
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "Failed to send chunk: %d", err);
       file.close();
+      httpd_resp_send_chunk(req, NULL, 0);
       return ESP_FAIL;
     }
+    vTaskDelay(pdMS_TO_TICKS(10));
   }
   file.close();
   httpd_resp_send_chunk(req, NULL, 0);
@@ -343,8 +347,8 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
 
 esp_err_t WebServerManager::handleRootOrHash(httpd_req_t *req) {
   WebServerManager* instance = getInstance(req);
-  char *sessionId = new char[65];
-  size_t sessionIdLen = 65;
+  char sessionId[65];
+  size_t sessionIdLen = sizeof(sessionId);
   esp_err_t err = httpd_req_get_cookie_val(req, "sessionId", sessionId, &sessionIdLen);
   if(!instance->basicAuth(req)){
     ESP_LOGE(TAG, "HTTP Authorization failed!");
@@ -352,7 +356,6 @@ esp_err_t WebServerManager::handleRootOrHash(httpd_req_t *req) {
     httpd_resp_set_hdr(req, "Connection", "keep-alive");
     httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
     httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
-    delete[] sessionId;
     return ESP_FAIL;
   }
   std::string sessionCookie;
@@ -360,7 +363,6 @@ esp_err_t WebServerManager::handleRootOrHash(httpd_req_t *req) {
     sessionCookie = fmt::format("sessionId={};", instance->m_sessionId);
     httpd_resp_set_hdr(req, "Set-Cookie", sessionCookie.c_str());
   }
-  delete[] sessionId;
 
   File file = LittleFS.open("/app.html", "r");
   if (!file) {
@@ -368,14 +370,17 @@ esp_err_t WebServerManager::handleRootOrHash(httpd_req_t *req) {
     return ESP_FAIL;
   }
   httpd_resp_set_type(req, "text/html");
+  httpd_resp_set_hdr(req, "Connection", "close");
 
-  char buffer[1024];
+  char buffer[256];
   size_t bytes_read;
   while ((bytes_read = file.read((uint8_t *)buffer, sizeof(buffer))) > 0) {
     if (httpd_resp_send_chunk(req, buffer, bytes_read) != ESP_OK) {
       file.close();
+      httpd_resp_send_chunk(req, NULL, 0);
       return ESP_FAIL;
     }
+    vTaskDelay(pdMS_TO_TICKS(10));
   }
   file.close();
   httpd_resp_send_chunk(req, NULL, 0);
