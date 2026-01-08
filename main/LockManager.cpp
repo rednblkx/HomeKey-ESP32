@@ -10,15 +10,15 @@ const char* LockManager::TAG = "LockManager";
 static EventBus::Bus& event_bus = EventBus::Bus::instance();
 
 /**
- * @brief Construct a LockManager configured for managing lock state and events.
+ * @brief Initialize a LockManager and set up state handling and event subscriptions.
  *
- * Initializes internal state from the provided miscConfig, registers event
- * publishers and subscribers for lock state/action updates and NFC events,
- * and creates the momentary-state timer used for temporary unlocks.
+ * Initializes current and target lock states to LOCKED, stores provided configuration,
+ * subscribes to lock override/target/update topics on the event bus to handle external
+ * state changes, and creates the momentary-state timer used for temporary unlocks.
  *
- * @param miscConfig Configuration values that control NFC behavior, momentary
- *                   timeout and related lock handling flags (e.g. lockAlwaysUnlock,
- *                   lockAlwaysLock, GPIO/momentary source settings).
+ * @param miscConfig Configuration controlling NFC behavior, momentary timeout, and flags
+ *                   such as lockAlwaysUnlock, lockAlwaysLock, and related GPIO/momentary source settings.
+ * @param actionsConfig Configuration mapping hardware actions and GPIO behavior used when emitting hardware action events.
  */
 LockManager::LockManager(const espConfig::misc_config_t& miscConfig, const espConfig::actions_config_t& actionsConfig)
     : m_miscConfig(miscConfig),
@@ -71,6 +71,11 @@ LockManager::LockManager(const espConfig::misc_config_t& miscConfig, const espCo
   esp_timer_create(&momentaryStateTimer_arg, &momentaryStateTimer);
 }
 
+/**
+ * @brief Initializes NFC handling and publishes the initial lock state to the hardware action topic.
+ *
+ * Subscribes to the NFC event topic and stores the subscription in m_nfc_event. Incoming NFC events with a non-empty payload are deserialized to NfcEvent; HOMEKEY_TAP events trigger processing of an embedded EventHKTap. If the tap payload deserializes and its status is true, the lock target is set via NFC according to configuration: force unlock if lockAlwaysUnlock is enabled, force lock if lockAlwaysLock is enabled, or toggle the current lock state otherwise. Deserialization errors or empty payloads are ignored. After subscribing, an EventLockState reflecting the current and target states (source INTERNAL) is serialized and published to HARDWARE_ACTION_BUS_TOPIC.
+ */
 void LockManager::begin() {
   m_nfc_event = event_bus.subscribe(event_bus.get_topic(NFC_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), [&](const EventBus::Event& event, void* context){
       if(event.payload_size == 0 || event.payload == nullptr) return;
@@ -133,16 +138,16 @@ int LockManager::getTargetState() const {
 }
 
 /**
- * @brief Request a change of the lock's target state and notify observers.
+ * @brief Set the lock's desired target state and propagate the resulting state to observers.
  *
- * Updates the stored target state, optionally updates the current state in dumb-switch mode,
- * publishes a `lock/action` event when an external action should be performed, always publishes
- * a `lock/stateChanged` event with the resulting current and target states, and starts the
- * momentary unlock timer when an unlock was requested by a configured momentary source.
+ * Updates the stored target state, optionally updates the current state when configured for
+ * "dumb switch" mode, publishes an event for hardware actions when appropriate, always
+ * publishes the updated state to the lock state topic, and starts the momentary unlock timer
+ * when an unlock was requested by a configured momentary source.
  *
  * @param state Desired target lock state (use values from lockStates).
- * @param source Origin of the request which may affect publishing behavior and momentary handling.
- */
+ * @param source Origin of the request; influences whether a hardware action event is published
+ *               and whether the request is treated as momentary.
 
 void LockManager::setTargetState(uint8_t state, Source source) {
     if (state == m_targetState && m_currentState == m_targetState) {
@@ -190,9 +195,9 @@ void LockManager::setTargetState(uint8_t state, Source source) {
 /**
  * @brief Apply an external override to the lock's current and/or target state and notify observers.
  *
- * If a provided state equals 255, that state is left unchanged. Stops any active momentary-state timer,
- * updates the internal current and target states, and publishes the resulting state to "lock/action"
- * and "lock/stateChanged".
+ * Updates the manager's current and/or target state using the provided values (a value of 255 means "no change"),
+ * stops any active momentary-state timer, and publishes the resulting state to the configured event topics so
+ * observers and hardware are informed.
  *
  * @param c_state External current state to apply, or 255 to leave the current state unchanged.
  * @param t_state External target state to apply, or 255 to leave the target state unchanged.
@@ -216,4 +221,3 @@ void LockManager::overrideState(uint8_t c_state, uint8_t t_state) {
     event_bus.publish({event_bus.get_topic(HARDWARE_ACTION_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d.size()});
     event_bus.publish({bus_topic, 0, d.data(), d.size()});
 }
-

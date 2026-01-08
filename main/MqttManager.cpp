@@ -35,6 +35,13 @@ MqttManager::MqttManager(const ConfigManager& configManager)
   m_mqttSslConfig = configManager.getMqttSslConfig();
 }
 
+/**
+ * @brief Cleans up MQTT resources and unsubscribes from EventBus topics.
+ *
+ * Stops and destroys the underlying MQTT client if present, then unsubscribes
+ * any event subscriptions owned by this instance (homekey, lock state, alt
+ * action, and NFC).
+ */
 MqttManager::~MqttManager() {
    if (m_client) {
        esp_mqtt_client_stop(m_client);
@@ -306,15 +313,13 @@ void MqttManager::onConnected() {
 }
 
 /**
- * @brief Handle an incoming MQTT message and translate it into internal events.
+ * @brief Translate MQTT command messages into internal events that update lock state and HomeKit battery level.
  *
- * Processes messages on configured MQTT command topics to update or override lock
- * state, handle custom lock-state codes, and forward battery level changes as
- * HomeKit events. Matching topic payloads are converted into the appropriate
- * EventManager events.
+ * Processes configured MQTT command topics and publishes corresponding EventBus events for lock state updates,
+ * custom lock-state codes, and battery level changes.
  *
  * @param topic MQTT topic of the received message.
- * @param data Payload of the received message as a string.
+ * @param data Message payload as a UTF-8 string.
  */
 void MqttManager::onData(const std::string& topic, const std::string& data) {
     ESP_LOGI(TAG, "Received message on topic '%s': %s", topic.c_str(), data.c_str());
@@ -431,12 +436,11 @@ void MqttManager::onData(const std::string& topic, const std::string& data) {
 }
 
 /**
- * @brief Publish the lock's current/target state to the configured MQTT state topic.
+ * @brief Publish the lock state to the configured MQTT state topic.
  *
  * Publishes a string representation of the lock state to the MQTT topic configured in m_mqttConfig.lockStateTopic.
- * If the current state differs from the target state, the published value indicates an in-transition state
- * ("locking" or "unlocking"); otherwise the numeric current state is published. The message is sent with QoS 0
- * and retained.
+ * If currentState and targetState differ, publishes a transition indicator ("locking" or "unlocking"); otherwise
+ * publishes the numeric current state. The message is sent with QoS 0 and retained.
  *
  * @param currentState Numeric code representing the lock's current state.
  * @param targetState Numeric code representing the lock's target state.

@@ -67,7 +67,15 @@ static inline std::string cjson_to_string_and_free(cJSON *obj) {
 
 // ============================================================================
 // Constructor & Destructor
-// ============================================================================
+/**
+ * @brief Construct a WebServerManager using the provided managers.
+ *
+ * Initializes a WebServerManager that will use the given ConfigManager and
+ * ReaderDataManager for configuration access and reader-related data.
+ *
+ * @param configManager Reference to the ConfigManager used to read and persist configuration.
+ * @param readerDataManager Reference to the ReaderDataManager used to access reader state and HomeKit-related data.
+ */
 
 WebServerManager::WebServerManager(ConfigManager &configManager,
                                    ReaderDataManager &readerDataManager)
@@ -75,6 +83,12 @@ WebServerManager::WebServerManager(ConfigManager &configManager,
       m_readerDataManager(readerDataManager), m_mqttManager(nullptr) {
 }
 
+/**
+ * @brief Release resources and stop services managed by WebServerManager.
+ *
+ * Cleans up any ongoing OTA work, stops the HTTP server if running, and
+ * stops and deletes the periodic status timer.
+ */
 WebServerManager::~WebServerManager() {
   ESP_LOGI(TAG, "WebServerManager destructor called");
   cleanupOTAAsync();
@@ -91,7 +105,15 @@ WebServerManager::~WebServerManager() {
 
 // ============================================================================
 // Initialization
-// ============================================================================
+/**
+ * @brief Initializes the web server and related subsystems.
+ *
+ * Sets up a session identifier, mounts LittleFS, configures and starts the
+ * HTTP server, creates the WebSocket queue and sender task, registers HTTP
+ * routes, and creates the periodic status timer. If critical steps (filesystem
+ * mount, HTTP server start, or WebSocket resources) fail, initialization
+ * aborts and the server is left stopped.
+ */
 
 void WebServerManager::begin() {
   ESP_LOGI(TAG, "Initializing...");
@@ -339,6 +361,18 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
   return ESP_OK;
 }
 
+/**
+ * @brief Authenticate the request and serve the main application page (/app.html).
+ *
+ * If authentication fails, responds with 401 and a WWW-Authenticate header.
+ * If the client's session cookie doesn't match the server session, sets a
+ * Set-Cookie header with the current session ID. On success, sends the
+ * contents of /app.html with content type text/html; if the file is missing,
+ * responds with 404.
+ *
+ * @param req The HTTP request context.
+ * @return esp_err_t `ESP_OK` if the page was sent successfully, `ESP_FAIL` on error.
+ */
 esp_err_t WebServerManager::handleRootOrHash(httpd_req_t *req) {
   WebServerManager* instance = getInstance(req);
   char sessionId[65];
@@ -589,6 +623,33 @@ esp_err_t WebServerManager::handleGetEthConfig(httpd_req_t *req) {
   return ESP_OK;
 }
 
+/**
+ * @brief HTTP handler that validates and persists configuration updates.
+ *
+ * Accepts a JSON object in the request body and updates the configuration specified
+ * by the required query parameter `type` (allowed values: "mqtt", "misc", "actions").
+ * Performs schema validation, applies permitted changes, publishes related events,
+ * saves the updated configuration, and may schedule an immediate reboot when required.
+ *
+ * This handler enforces Basic authentication and produces JSON responses with
+ * appropriate HTTP status codes for common error conditions.
+ *
+ * @param req Pointer to the HTTP request context.
+ * @return esp_err_t `ESP_OK` if the configuration was saved and applied; `ESP_FAIL` on
+ *         validation, authorization, or save errors. The function sends the HTTP
+ *         response body and status code directly before returning.
+ *
+ * Possible HTTP responses (representative):
+ * - 200 with `{ "success": true, ... }` on success.
+ * - 401 when authentication fails.
+ * - 400 for missing/invalid `type` parameter or invalid JSON/keys.
+ * - 413 when request body exceeds the configured size limit.
+ * - 500 for internal errors (e.g., save failure or unsupported TLS on some chips).
+ *
+ * Side effects:
+ * - Publishes events to the event bus for specific configuration changes.
+ * - May reboot the device when certain configuration keys or types require it.
+ */
 esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
   if(!instance->basicAuth(req)){

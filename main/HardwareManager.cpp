@@ -12,21 +12,14 @@ const std::array<const char*, 6> pixelTypeMap = { "RGB", "RBG", "BRG", "BGR", "G
 static EventBus::Bus& event_bus = EventBus::Bus::instance();
 
 /**
- * @brief Construct a HardwareManager and register its event handlers and publishers.
+ * @brief Initialize HardwareManager state and register its event topics and subscribers.
  *
- * Initializes internal state from the provided misc configuration and registers event subscribers
- * for "lock/action", "nfc/event", and "hardware/gpioPinChanged". Also creates publishers for
- * "lock/updateState" and "lock/altAction". Task and queue handles are initialized to nullptr.
+ * Initializes internal state from the provided configuration, registers topics and subscribers
+ * used to receive hardware action, NFC, and GPIO-configuration events, and prepares publishers
+ * for lock state updates and alternate-action events.
  *
- * The registered subscribers:
- * - "lock/action": deserializes an EventLockState and applies its targetState via setLockOutput.
- * - "nfc/event": handles HOMEKEY_TAP and TAG_TAP events, triggering success/failure feedback and
- *   potentially the alternate action.
- * - "hardware/gpioPinChanged": updates pin configuration when GPIO ownership changes (resets old
- *   pin, disables pull-up, configures new pin as output and restores state for gpioActionPin).
- *
- * @param miscConfig Configuration values controlling GPIO pins, NeoPixel type/behavior, and
- *                   timing used by the HardwareManager.
+ * @param miscConfig Configuration values controlling GPIO pins, NeoPixel behavior, and timing
+ *                   used by the HardwareManager.
  */
 HardwareManager::HardwareManager(const espConfig::actions_config_t& miscConfig)
     : m_miscConfig(miscConfig),
@@ -410,10 +403,10 @@ void HardwareManager::lockControlTask() {
 }
 
 /**
- * @brief Triggers the configured alternate (home-key) action when armed.
+ * @brief Trigger the configured alternate (home-key) action if armed.
  *
- * If the manager is armed, publishes the "lock/altAction" event. When an alternate-action GPIO is configured (pin != 255),
- * writes the configured GPIO state to that pin and starts the alt-action timer for the configured timeout.
+ * When armed, publishes the alternate-action event and, if an alternate-action GPIO is configured,
+ * drives that GPIO to the configured state and starts the alt-action timer for the configured duration.
  *
  * @note The timer is started for @c hkAltActionTimeout milliseconds.
  */

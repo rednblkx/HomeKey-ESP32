@@ -17,6 +17,15 @@ const char* NfcManager::TAG = "NfcManager";
 
 static EventBus::Bus& event_bus = EventBus::Bus::instance();
 
+/**
+ * @brief Task entry wrapper that forwards to an NfcManager instance's authPrecomputeTask().
+ *
+ * This function is the static task entry used when creating the authentication precompute
+ * worker; it casts the opaque `instance` pointer to `NfcManager*` and invokes the
+ * instance method that implements the task loop.
+ *
+ * @param instance Pointer to the NfcManager instance to run the task on (must not be null).
+ */
 void NfcManager::authPrecomputeTaskEntry(void* instance) {
   static_cast<NfcManager*>(instance)->authPrecomputeTask();
 }
@@ -191,14 +200,13 @@ void NfcManager::authPrecomputeTask() {
 }
 
 /**
- * @brief Initializes the NFC manager, configures internal state, and registers NFC-related event handlers.
+ * @brief Constructs an NfcManager, initializing internal NFC state and registering event handlers.
  *
- * Sets initial ECP data and task handles, registers an "nfc/event" publisher, and subscribes to
- * "homekit/internal" events to react to ACCESSDATA_CHANGED (updates ECP data) and DEBUG_AUTH_FLOW
- * (updates the authentication flow).
+ * Initializes ECP data and task handles, registers the NFC topic, and subscribes to HomeKit internal events so that ACCESSDATA_CHANGED triggers ECP data refresh and auth cache invalidation, and DEBUG_AUTH_FLOW updates the authentication flow.
  *
  * @param readerDataManager Reference to the ReaderDataManager used to read and persist reader data.
  * @param nfcGpioPins Four GPIO pin numbers used to construct the PN532 SPI interface.
+ * @param hkAuthPrecomputeEnabled Enables HomeKey authentication precompute when true.
  */
 NfcManager::NfcManager(ReaderDataManager& readerDataManager, const std::array<uint8_t, 4> &nfcGpioPins, bool hkAuthPrecomputeEnabled)
     : nfcGpioPins(nfcGpioPins),
@@ -439,14 +447,14 @@ void NfcManager::handleTagPresence() {
 }
 
 /**
- * @brief Attempts HomeKey authentication for the currently-present NFC tag.
+ * @brief Authenticate a detected HomeKey applet and publish the result.
  *
- * Performs authentication using the manager's configured authentication flow and the current reader data.
- * On successful authentication, updates stored reader data and publishes a HOMEKEY_TAP event containing
- * success status, issuer ID, endpoint ID, and reader ID. On failure, publishes a HOMEKEY_TAP event indicating
- * authentication failure.
+ * Attempts authentication using the configured authentication flow and current reader data.
+ * On success, updates stored reader data and publishes a HOMEKEY_TAP event containing success,
+ * issuer ID, endpoint ID, and reader ID. On failure, publishes a HOMEKEY_TAP event indicating failure.
  *
- * @note This method has side effects: it may update ReaderDataManager and will publish an event via EventManager.
+ * @note This function may use a cached precomputed authentication context when available,
+ * invalidate or update ReaderDataManager state, and publish events on the NFC bus topic.
  */
 void NfcManager::handleHomeKeyAuth() {
     auto publishAuthResult = [](
@@ -561,16 +569,15 @@ void NfcManager::handleHomeKeyAuth() {
 }
 
 /**
- * @brief Publish a TAG_TAP NFC event for a detected non-HomeKey (generic) tag.
+ * @brief Publish a TAG_TAP event for a detected non-HomeKey NFC tag on the NFC bus.
  *
- * Constructs an EventTagTap containing the tag UID, ATQA, and SAK, serializes it
- * into an NfcEvent payload, and publishes the serialized event to the NFC event
- * topic.
+ * Builds an EventTagTap containing the tag UID, ATQA, and SAK, serializes it into
+ * an NfcEvent payload, and publishes the payload to the NFC event topic.
  *
  * @param uid Pointer to the tag UID bytes.
  * @param uidLen Number of bytes in `uid`.
- * @param atqa Pointer to the 2-byte ATQA value.
- * @param sak Pointer to the 1-byte SAK value.
+ * @param atqa Pointer to the 2-byte ATQA value (must point to two bytes).
+ * @param sak Pointer to the 1-byte SAK value (must point to one byte).
  */
 void NfcManager::handleGenericTag(const uint8_t* uid, uint8_t uidLen, const uint8_t* atqa, const uint8_t* sak) {
     EventTagTap s{.uid = std::vector<uint8_t>(uid, uid+uidLen), .atqa = std::vector<uint8_t>(atqa, atqa + 2), .sak = std::vector<uint8_t>(sak, sak + 1)};

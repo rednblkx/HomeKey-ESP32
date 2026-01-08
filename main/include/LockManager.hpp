@@ -39,7 +39,12 @@ public:
      * @param configManager Reference to the application configuration manager.
      */
     LockManager(const espConfig::misc_config_t& miscConfig, const espConfig::actions_config_t& actionsConfig);
-    ~LockManager() {EventBus::Bus::instance().unsubscribe(m_override_state_event);EventBus::Bus::instance().unsubscribe(m_target_state_event);EventBus::Bus::instance().unsubscribe(m_update_state_event);EventBus::Bus::instance().unsubscribe(m_nfc_event);}
+    /**
+ * @brief Unsubscribes the LockManager's event subscriptions from the EventBus.
+ *
+ * Removes the override, target, update, and NFC subscriber handles so no EventBus callbacks occur after the object is destroyed.
+ */
+~LockManager() {EventBus::Bus::instance().unsubscribe(m_override_state_event);EventBus::Bus::instance().unsubscribe(m_target_state_event);EventBus::Bus::instance().unsubscribe(m_update_state_event);EventBus::Bus::instance().unsubscribe(m_nfc_event);}
 
     /**
      * @brief Initializes the lock state to its default.
@@ -84,4 +89,3 @@ private:
     const EventBus::TopicHandle bus_topic;
     static void handleTimer(void* instance);
 };
-

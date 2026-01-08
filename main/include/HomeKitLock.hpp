@@ -22,7 +22,12 @@ namespace espConfig { struct misc_config_t; };
 class HomeKitLock {
 public:
     HomeKitLock(std::function<void(int)> &conn_cb, LockManager& lockManager, ConfigManager& configManager, ReaderDataManager& readerDataManager);
-    ~HomeKitLock() {EventBus::Bus::instance().unsubscribe(m_lock_state_changed);EventBus::Bus::instance().unsubscribe(m_hk_event);}
+    /**
+ * @brief Unsubscribes HomeKitLock's event subscribers from the EventBus.
+ *
+ * Ensures m_lock_state_changed and m_hk_event are unsubscribed so no further callbacks occur after the object is destroyed.
+ */
+~HomeKitLock() {EventBus::Bus::instance().unsubscribe(m_lock_state_changed);EventBus::Bus::instance().unsubscribe(m_hk_event);}
     void begin();
     void updateLockState(int currentState, int targetState);
     void updateBatteryStatus(uint8_t batteryLevel, bool isLow);
@@ -76,4 +81,3 @@ private:
         PhysicalLockBatteryService(HomeKitLock& bridge);
     };
 };
-

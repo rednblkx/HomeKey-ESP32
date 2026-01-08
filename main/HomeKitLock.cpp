@@ -22,15 +22,16 @@ static HomeKitLock* s_instance = nullptr;
 static EventBus::Bus& event_bus = EventBus::Bus::instance();
 
 /**
- * @brief Initialize the HomeKitLock singleton, register internal event publishers/subscribers, and store manager callbacks.
+ * @brief Construct and initialize the HomeKitLock singleton and register internal event handlers.
  *
- * Enforces a single instance (calls esp_restart() if another instance exists), registers the "homekit/internal" publisher,
- * and subscribes to "lock/stateChanged" and "homekit/event" to keep lock state, pairing code, and battery status synchronized.
+ * Initializes internal references and stores the provided connection callback and manager references,
+ * enforces a single instance of HomeKitLock (aborts startup if another instance exists), and subscribes
+ * to internal HomeKit events to keep pairing code and battery status synchronized with external changes.
  *
  * @param conn_cb Callback invoked when connection status changes; receives an integer status code.
  * @param lockManager Reference to the LockManager used to control and query lock state.
  * @param configManager Reference to the ConfigManager used for configuration access.
- * @param readerDataManager Reference to the ReaderDataManager used to manage reader/issuer data.
+ * @param readerDataManager Reference to the ReaderDataManager used to manage reader and issuer data.
  */
 HomeKitLock::HomeKitLock(std::function<void(int)> &conn_cb, LockManager& lockManager, ConfigManager& configManager, ReaderDataManager& readerDataManager)
     : m_lockManager(lockManager),
@@ -190,9 +191,9 @@ void HomeKitLock::initializeETH(){
     }
 }
 /**
- * @brief Initialize HomeSpan, expose lock-related accessories/services, and register runtime callbacks.
+ * @brief Configure and start HomeSpan, expose lock-related accessories, and register runtime handlers.
  *
- * Configures HomeSpan using settings from ConfigManager (pins, OTA password, port, host name suffix), initializes reader data handling, creates the lock accessory and its services/characteristics (including lock mechanism, management, NFC access, protocol/version, and optional physical battery service), installs developer debug commands, and registers controller and connection callbacks.
+ * Configures HomeSpan from stored settings, initializes networking, subscribes to internal lock-state events, creates the accessory and its services/characteristics (protocol/version, lock management, lock mechanism, NFC access, and optional physical battery), installs debug commands, and registers controller and connection callbacks.
  */
 void HomeKitLock::begin() {
     m_lock_state_changed = event_bus.subscribe(event_bus.get_topic(LOCK_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), [&](const EventBus::Event& event, void* context){
