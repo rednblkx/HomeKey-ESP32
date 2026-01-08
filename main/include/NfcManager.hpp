@@ -8,6 +8,7 @@
 #include <array>
 #include <atomic>
 #include <functional>
+#include "event_bus.hpp"
 
 class LockManager;
 class HardwareManager;
@@ -19,6 +20,7 @@ namespace espConfig { struct misc_config_t; }
 class NfcManager {
 public:
     NfcManager(ReaderDataManager& readerDataManager, const std::array<uint8_t, 4> &nfcGpioPins, bool hkAuthPrecomputeEnabled);
+    ~NfcManager() {EventBus::Bus::instance().unsubscribe(m_hk_event);}
     bool begin();
     void updateEcpData();
 
@@ -77,4 +79,6 @@ private:
     KeyFlow authFlow = KeyFlow::kFlowFAST;
 
     static const char* TAG;
+    EventBus::SubscriberHandle m_hk_event;
+    EventBus::TopicHandle m_nfc_topic;
 };

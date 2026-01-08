@@ -3,7 +3,17 @@
 #include <string>
 #include <vector>
 #include <serialization.hpp>
-#include <event_manager.hpp>
+
+#define LOCK_BUS_TOPIC "lock/stateChanged"
+#define LOCK_UPDATE_BUS_TOPIC "lock/updateState"
+#define LOCK_T_STATE_CHANGED "lock/targetStateChanged"
+#define LOCK_O_STATE_CHANGED "lock/overrideState"
+#define HK_BUS_TOPIC "homekit/internal"
+#define NFC_BUS_TOPIC "nfc/event"
+#define MQTT_BUS_TOPIC "mqtt/event"
+#define HARDWARE_ACTION_BUS_TOPIC "hardware/action"
+#define HARDWARE_ALT_ACTION_BUS_TOPIC "hardware/altAction"
+#define HARDWARE_CONFIG_BUS_TOPIC "hardware/gpioPinChanged"
 
 struct EventLockState {
   uint8_t currentState = 255;

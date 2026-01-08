@@ -47,6 +47,7 @@ using namespace loggable;
  * application and invoking their initialization routines.
  */
 void setup() {
+  EventBus::Bus::instance().init();
   auto& distributor = Sinker::instance();
 
   distributor.set_level(LogLevel::Verbose);
@@ -76,8 +77,8 @@ void setup() {
                               miscConfig.hkAuthPrecomputeEnabled);
   readerDataManager->begin();
   nfcManager->begin();
-  homekitLock->begin();
   hardwareManager->begin();
+  homekitLock->begin();
   lockManager->begin();
 }
 

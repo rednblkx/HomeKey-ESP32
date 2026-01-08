@@ -1,12 +1,13 @@
 #include "esp_log.h"
 #include "esp_timer.h"
-#include "event_manager.hpp"
 #include "config.hpp"
 #include "LockManager.hpp"
 #include "HardwareManager.hpp"
 #include "eventStructs.hpp"
 
 const char* LockManager::TAG = "LockManager";
+
+static EventBus::Bus& event_bus = EventBus::Bus::instance();
 
 /**
  * @brief Construct a LockManager configured for managing lock state and events.
@@ -23,68 +24,45 @@ LockManager::LockManager(const espConfig::misc_config_t& miscConfig, const espCo
     : m_miscConfig(miscConfig),
       m_actionsConfig(actionsConfig),
       m_currentState(lockStates::LOCKED),
-      m_targetState(lockStates::LOCKED)
+      m_targetState(lockStates::LOCKED),
+      bus_topic(event_bus.register_topic(LOCK_BUS_TOPIC))
 {
-  espp::EventManager::get().add_publisher("lock/stateChanged", "LockManager");
-  espp::EventManager::get().add_publisher("lock/action", "LockManager");
-  espp::EventManager::get().add_subscriber(
-      "lock/overrideState", "LockManager",
-      [&](const std::vector<uint8_t> &data) {
-        std::error_code ec;
-        EventLockState s = alpaca::deserialize<EventLockState>(data, ec);
-        if (!ec) {
-          overrideState(s.currentState, s.targetState);
-        }
-      }, 4096);
-  espp::EventManager::get().add_subscriber(
-      "lock/targetStateChanged", "LockManager",
-      [&](const std::vector<uint8_t> &data) {
-        std::error_code ec;
-        EventLockState s = alpaca::deserialize<EventLockState>(data, ec);
-        if (!ec) {
-          setTargetState(s.targetState, Source(s.source));
-        }
-      }, 4096);
-  espp::EventManager::get().add_subscriber(
-      "lock/updateState", "LockManager", [&](const std::vector<uint8_t> &data) {
-        std::error_code ec;
-        EventLockState s = alpaca::deserialize<EventLockState>(data, ec);
-        if (!ec) {
-          m_currentState = s.currentState;
-          s.currentState = m_currentState;
-          s.targetState = m_targetState;
-          EventLockState s{
-            .currentState = static_cast<uint8_t>(m_currentState),
-            .targetState = static_cast<uint8_t>(m_targetState),
-            .source = LockManager::INTERNAL
-          };
-          std::vector<uint8_t> d;
-          alpaca::serialize(s, d);
-          espp::EventManager::get().publish("lock/stateChanged", d);
-        }
-      }, 4096);
-  espp::EventManager::get().add_subscriber(
-      "nfc/event", "LockManager",
-      [&](const std::vector<uint8_t> &data) {
-        std::error_code ec;
-        NfcEvent event = alpaca::deserialize<NfcEvent>(data, ec);
-        if(ec) return;
-        if(event.type == HOMEKEY_TAP) {
-          ESP_LOGI(TAG, "Processing NFC tap request...");
-          EventHKTap s = alpaca::deserialize<EventHKTap>(event.data, ec);
-          if (!ec && s.status) {
-            if (m_miscConfig.lockAlwaysUnlock) {
-              setTargetState(lockStates::UNLOCKED, Source::NFC);
-            } else if (m_miscConfig.lockAlwaysLock) {
-              setTargetState(lockStates::LOCKED, Source::NFC);
-            } else {
-              int newState = (m_currentState == lockStates::LOCKED) ? lockStates::UNLOCKED : lockStates::LOCKED;
-              setTargetState(newState, Source::NFC);
-            }
-          }
-        }
-      },
-      4096);
+  m_override_state_event = event_bus.subscribe(event_bus.register_topic(LOCK_O_STATE_CHANGED), [&](const EventBus::Event& event, void* context){
+      if(event.payload_size == 0 || event.payload == nullptr) return;
+      std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
+      std::error_code ec;
+      EventLockState s = alpaca::deserialize<EventLockState>(payload, ec);
+      if(ec) return;
+      ESP_LOGD(TAG, "Received override state event: %d -> %d", s.currentState, s.targetState);
+      overrideState(s.currentState, s.targetState);
+    });
+  m_target_state_event = event_bus.subscribe(event_bus.register_topic(LOCK_T_STATE_CHANGED), [&](const EventBus::Event& event, void* context){
+      if(event.payload_size == 0 || event.payload == nullptr) return;
+      std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
+      std::error_code ec;
+      EventLockState s = alpaca::deserialize<EventLockState>(payload, ec);
+      if(ec) return;
+      ESP_LOGD(TAG, "Received target state event: %d -> %d", s.currentState, s.targetState);
+      setTargetState(s.targetState, Source(s.source));
+    });
+  m_update_state_event = event_bus.subscribe(event_bus.register_topic(LOCK_UPDATE_BUS_TOPIC), [&](const EventBus::Event& event, void* context){
+      if(event.payload_size == 0 || event.payload == nullptr) return;
+      std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
+      std::error_code ec;
+      EventLockState s = alpaca::deserialize<EventLockState>(payload, ec);
+      if(ec) return;
+      m_currentState = s.currentState;
+      s.currentState = m_currentState;
+      s.targetState = m_targetState;
+      EventLockState sp{
+        .currentState = static_cast<uint8_t>(m_currentState),
+        .targetState = static_cast<uint8_t>(m_targetState),
+        .source = LockManager::INTERNAL
+      };
+      std::vector<uint8_t> d;
+      alpaca::serialize(sp, d);
+      event_bus.publish({bus_topic, 0, d.data(), d.size()});
+    });
   esp_timer_create_args_t momentaryStateTimer_arg = {
     .callback = handleTimer,
     .arg = this,
@@ -93,14 +71,29 @@ LockManager::LockManager(const espConfig::misc_config_t& miscConfig, const espCo
   esp_timer_create(&momentaryStateTimer_arg, &momentaryStateTimer);
 }
 
-/**
- * @brief Publish the manager's current and target lock state with source INTERNAL to initialize external listeners.
- *
- * Constructs an EventLockState reflecting the LockManager's current and target states (source set to INTERNAL)
- * and publishes it on the "lock/action" event channel so external components receive the initial lock state.
- */
 void LockManager::begin() {
-  ESP_LOGI(TAG, "Initializing to Default/NVS state");
+  m_nfc_event = event_bus.subscribe(event_bus.get_topic(NFC_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), [&](const EventBus::Event& event, void* context){
+      if(event.payload_size == 0 || event.payload == nullptr) return;
+      std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
+      std::error_code ec;
+      NfcEvent nfc_event = alpaca::deserialize<NfcEvent>(payload, ec);
+      ESP_LOGD(TAG, "Received NFC event: %d", nfc_event.type);
+      if(ec) return;
+      if(nfc_event.type == HOMEKEY_TAP) {
+        ESP_LOGI(TAG, "Processing NFC tap request...");
+        EventHKTap s = alpaca::deserialize<EventHKTap>(nfc_event.data, ec);
+        if (!ec && s.status) {
+          if (m_miscConfig.lockAlwaysUnlock) {
+            setTargetState(lockStates::UNLOCKED, Source::NFC);
+          } else if (m_miscConfig.lockAlwaysLock) {
+            setTargetState(lockStates::LOCKED, Source::NFC);
+          } else {
+            int newState = (m_currentState == lockStates::LOCKED) ? lockStates::UNLOCKED : lockStates::LOCKED;
+            setTargetState(newState, Source::NFC);
+          }
+        }
+      }
+    });
   EventLockState s{
     .currentState = static_cast<uint8_t>(m_currentState),
     .targetState = static_cast<uint8_t>(m_targetState),
@@ -108,8 +101,7 @@ void LockManager::begin() {
   };
   std::vector<uint8_t> d;
   alpaca::serialize(s, d);
-  espp::EventManager::get().publish("lock/action", d);
-  // espp::EventManager::get().publish("lock/stateChanged", d);
+  event_bus.publish({event_bus.get_topic(HARDWARE_ACTION_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d.size()});
 }
 
 /**
@@ -178,9 +170,9 @@ void LockManager::setTargetState(uint8_t state, Source source) {
       d.clear();
       alpaca::serialize(s, d);
     } else if((source == NFC && m_actionsConfig.hkGpioControlledState) || source != NFC) {
-      espp::EventManager::get().publish("lock/action", d);
+      event_bus.publish({event_bus.get_topic(HARDWARE_ACTION_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d.size()});
     }
-    espp::EventManager::get().publish("lock/stateChanged", d);
+    event_bus.publish({bus_topic, 0, d.data(), d.size()});
 
     uint8_t momentarySources = (((m_actionsConfig.gpioActionMomentaryEnabled |
                                   m_actionsConfig.gpioActionPin) == 255) &
@@ -221,7 +213,7 @@ void LockManager::overrideState(uint8_t c_state, uint8_t t_state) {
     };
     std::vector<uint8_t> d;
     alpaca::serialize(s, d);
-    espp::EventManager::get().publish("lock/action", d);
-    espp::EventManager::get().publish("lock/stateChanged", d);
+    event_bus.publish({event_bus.get_topic(HARDWARE_ACTION_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d.size()});
+    event_bus.publish({bus_topic, 0, d.data(), d.size()});
 }
 

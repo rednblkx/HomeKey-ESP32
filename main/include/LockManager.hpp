@@ -1,6 +1,7 @@
 #pragma once
 #include "config.hpp"
 #include "esp_timer.h"
+#include "event_bus.hpp"
 class HardwareManager;
 class ConfigManager;
 class LockApplication;
@@ -38,6 +39,7 @@ public:
      * @param configManager Reference to the application configuration manager.
      */
     LockManager(const espConfig::misc_config_t& miscConfig, const espConfig::actions_config_t& actionsConfig);
+    ~LockManager() {EventBus::Bus::instance().unsubscribe(m_override_state_event);EventBus::Bus::instance().unsubscribe(m_target_state_event);EventBus::Bus::instance().unsubscribe(m_update_state_event);EventBus::Bus::instance().unsubscribe(m_nfc_event);}
 
     /**
      * @brief Initializes the lock state to its default.
@@ -65,17 +67,21 @@ public:
      * @param tstate The new target state
      */
     void overrideState(uint8_t cstate, uint8_t tstate);
-
 private:
     const espConfig::misc_config_t& m_miscConfig;
     const espConfig::actions_config_t& m_actionsConfig;
 
     uint8_t m_currentState;
     uint8_t m_targetState;
+    EventBus::SubscriberHandle m_override_state_event;
+    EventBus::SubscriberHandle m_target_state_event;
+    EventBus::SubscriberHandle m_update_state_event;
+    EventBus::SubscriberHandle m_nfc_event;
 
     esp_timer_handle_t momentaryStateTimer;
 
     static const char* TAG;
+    const EventBus::TopicHandle bus_topic;
     static void handleTimer(void* instance);
 };
 

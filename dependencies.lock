@@ -9,38 +9,6 @@ dependencies:
       registry_url: https://components.espressif.com
       type: service
     version: 1.0.3
-  espp/base_component:
-    component_hash: 569d8a4c2520fbb8f9c79ddd772e278506c80099e218599c602a8891bb995bf9
-    dependencies:
-    - name: espp/logger
-      registry_url: https://components.espressif.com
-      require: private
-      version: '>=1.0'
-    - name: idf
-      require: private
-      version: '>=5.0'
-    source:
-      registry_url: https://components.espressif.com
-      type: service
-    version: 1.0.33
-  espp/event_manager:
-    component_hash: d00e436797d7865e733fc922ead119f266b3efd0416e4c62da2cbedb0784d752
-    dependencies:
-    - name: espp/base_component
-      registry_url: https://components.espressif.com
-      require: private
-      version: '>=1.0'
-    - name: espp/task
-      registry_url: https://components.espressif.com
-      require: private
-      version: '>=1.0'
-    - name: idf
-      require: private
-      version: '>=5.0'
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 1.0.33
   espp/format:
     component_hash: 9723eeb2cadb7191255337320f51edec7b300c648d98aa4ab92e93365297acc4
     dependencies:
@@ -51,20 +19,6 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 1.0.33
-  espp/logger:
-    component_hash: 91bc16342ba44200df5b56977270921a863e3447d3c94049a75e30b8d515b34d
-    dependencies:
-    - name: espp/format
-      registry_url: https://components.espressif.com
-      require: private
-      version: '>=1.0'
-    - name: idf
-      require: private
-      version: '>=5.0'
-    source:
-      registry_url: https://components.espressif.com
-      type: service
-    version: 1.0.33
   espp/serialization:
     component_hash: 6e7dc5efd3f5870d5de4a93e6a7c04fc27fb86f1b7ec038179eab5ac9afc0d64
     dependencies:
@@ -73,20 +27,6 @@ dependencies:
       version: '>=5.0'
     source:
       registry_url: https://components.espressif.com/
-      type: service
-    version: 1.0.33
-  espp/task:
-    component_hash: 82c7bbafb07f7e7f2e5b4813ad3a03c48458dcb0027c19ef8c834ef91771ff49
-    dependencies:
-    - name: espp/base_component
-      registry_url: https://components.espressif.com
-      require: private
-      version: '>=1.0'
-    - name: idf
-      require: private
-      version: '>=5.0'
-    source:
-      registry_url: https://components.espressif.com
       type: service
     version: 1.0.33
   espressif/arduino-esp32:
@@ -514,7 +454,6 @@ dependencies:
       type: service
     version: 1.20.3
 direct_dependencies:
-- espp/event_manager
 - espp/format
 - espp/serialization
 - espressif/arduino-esp32
@@ -522,6 +461,6 @@ direct_dependencies:
 - espressif/libsodium
 - idf
 - joltwallet/littlefs
-manifest_hash: 18e3b1a1c3264b9bd52bbd0a747c6ac3228d106375dacd2e1f46a03a866a669e
+manifest_hash: 66ac8bff4d42888a8003206327149fd4fd6ab2341082fa4e29d5aaad6ae6380f
 target: esp32c6
 version: 2.0.0
