@@ -1498,7 +1498,6 @@ esp_err_t WebServerManager::handleOTAUpload(httpd_req_t *req) {
   if (!instance->m_otaInProgress.compare_exchange_strong(expected, true)) {
     httpd_resp_set_status(req, "409 Conflict");
     httpd_resp_sendstr(req, "{\"success\":false,\"error\":\"OTA in progress\"}");
-    instance->m_otaInProgress = false;
     return ESP_OK;
   }
 
