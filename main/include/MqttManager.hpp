@@ -93,7 +93,6 @@ private:
     bool m_sslConfigured;
     
     static const char* TAG;
-    EventBus::SubscriberHandle m_hk_event;
     EventBus::SubscriberHandle m_lock_state_changed;
     EventBus::SubscriberHandle m_alt_action;
     EventBus::SubscriberHandle m_nfc_event;

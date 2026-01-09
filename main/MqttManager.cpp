@@ -41,7 +41,6 @@ MqttManager::~MqttManager() {
        esp_mqtt_client_destroy(m_client);
        m_client = nullptr;
    }
-  event_bus.unsubscribe(m_hk_event);
   event_bus.unsubscribe(m_lock_state_changed);
   event_bus.unsubscribe(m_alt_action);
   event_bus.unsubscribe(m_nfc_event);
