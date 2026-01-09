@@ -41,12 +41,17 @@ public:
     LockManager(const espConfig::misc_config_t& miscConfig, const espConfig::actions_config_t& actionsConfig);
     ~LockManager() {
       auto& bus = EventBus::Bus::instance();
+      // unsubscribe can be called regardless of whether the event is valid
+      // EventBus will check for nullptr inside the SubscriberHandle which 
+      // is default-constructed to nullptr
       bus.unsubscribe(m_override_state_event);
       bus.unsubscribe(m_target_state_event);
       bus.unsubscribe(m_update_state_event);
       bus.unsubscribe(m_nfc_event);
-      if(momentaryStateTimer && esp_timer_is_active(momentaryStateTimer)) {
-        esp_timer_stop(momentaryStateTimer);
+      if(momentaryStateTimer) {
+        if(esp_timer_is_active(momentaryStateTimer)) {
+          esp_timer_stop(momentaryStateTimer);
+        }
         esp_timer_delete(momentaryStateTimer);
       }
     }
@@ -88,7 +93,7 @@ private:
     EventBus::SubscriberHandle m_update_state_event;
     EventBus::SubscriberHandle m_nfc_event;
 
-    esp_timer_handle_t momentaryStateTimer;
+    esp_timer_handle_t momentaryStateTimer = nullptr;
 
     static const char* TAG;
     const EventBus::TopicHandle bus_topic;
