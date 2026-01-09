@@ -1,5 +1,5 @@
+#include "format.hpp"
 #include "config.hpp"
-#include "event_manager.hpp"
 #include "MqttManager.hpp"
 #include "LockManager.hpp"
 #include "ConfigManager.hpp"
@@ -8,13 +8,14 @@
 #include <esp_log.h>
 #include <esp_app_desc.h>
 #include "eventStructs.hpp"
-#include "fmt/format.h"
 #include <cJSON.h>
+#include <string>
 #include <sys/_types.h>
 #include <vector>
 #include <cstring>
 
 const char* MqttManager::TAG = "MqttManager";
+static EventBus::Bus& event_bus = EventBus::Bus::instance();
 
 /**
  * @brief Initialize MqttManager from configuration and register MQTT-related event subscribers and publishers.
@@ -32,55 +33,17 @@ MqttManager::MqttManager(const ConfigManager& configManager)
       m_sslConfigured(false)
 {
   m_mqttSslConfig = configManager.getMqttSslConfig();
-  espp::EventManager::get().add_subscriber(
-      "lock/stateChanged", "MqttManager",
-      [&](const std::vector<uint8_t> &data) {
-        std::error_code ec;
-        EventLockState s = alpaca::deserialize<EventLockState>(data, ec);
-        if(!ec) {
-          publishLockState(s.currentState, s.targetState);
-        }
-      },4096);
-  espp::EventManager::get().add_subscriber(
-      "lock/altAction", "MqttManager",
-      [&](const std::vector<uint8_t> &data) {
-        publish(m_mqttConfig.hkAltActionTopic, "1");
-      },4096);
-  espp::EventManager::get().add_publisher("lock/targetStateChanged", "MqttManager");
-  espp::EventManager::get().add_publisher("lock/overrideState", "MqttManager");
-  espp::EventManager::get().add_publisher("homekit/event", "MqttManager");
-  espp::EventManager::get().add_subscriber("nfc/event", "MqttManager", [&](const std::vector<uint8_t> &data){
-    std::error_code ec;
-    NfcEvent event = alpaca::deserialize<NfcEvent>(data, ec);
-    if(ec) return;
-    switch(event.type) {
-      case HOMEKEY_TAP: {
-        EventHKTap s = alpaca::deserialize<EventHKTap>(event.data, ec);
-        if(!ec && s.status){
-          publishHomeKeyTap(s.issuerId, s.endpointId, s.readerId);
-        }
-        break;
-      }
-      case TAG_TAP: {
-        EventTagTap s = alpaca::deserialize<EventTagTap>(event.data, ec);
-        if(!ec){
-          publishUidTap(s.uid, s.atqa, s.sak);
-        }
-        break;
-      }
-      default:
-        break;
-    }
-  }, 4096);
 }
 
 MqttManager::~MqttManager() {
-   // Clean up MQTT client if it exists
    if (m_client) {
        esp_mqtt_client_stop(m_client);
        esp_mqtt_client_destroy(m_client);
        m_client = nullptr;
    }
+  event_bus.unsubscribe(m_lock_state_changed);
+  event_bus.unsubscribe(m_alt_action);
+  event_bus.unsubscribe(m_nfc_event);
 }
 
 /**
@@ -98,6 +61,49 @@ bool MqttManager::begin(std::string deviceID) {
         return false;
     }
 
+    m_lock_state_changed = event_bus.subscribe(event_bus.get_topic(LOCK_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), [&](const EventBus::Event& event, void* context){
+      if(event.payload_size == 0 || event.payload == nullptr) return;
+      std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
+      std::error_code ec;
+      EventLockState s = alpaca::deserialize<EventLockState>(payload, ec);
+      if(ec) { ESP_LOGE(TAG, "Failed to deserialize lock state event: %s", ec.message().c_str()); return; }
+      ESP_LOGD(TAG, "Received lock state event: %d -> %d", s.currentState, s.targetState);
+      if(!ec) publishLockState(s.currentState, s.targetState);
+    });
+    m_alt_action = event_bus.subscribe(event_bus.get_topic(HARDWARE_ALT_ACTION_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), [&](const EventBus::Event& event, void* context){
+      publish(m_mqttConfig.hkAltActionTopic, std::to_string(event.data));
+    });
+    m_nfc_event = event_bus.subscribe(event_bus.get_topic(NFC_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), [&](const EventBus::Event& event, void* context){
+      if(event.payload_size == 0 || event.payload == nullptr) return;
+      std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
+      std::error_code ec;
+      NfcEvent nfc_event = alpaca::deserialize<NfcEvent>(payload, ec);
+      if(ec) { ESP_LOGE(TAG, "Failed to deserialize NFC event: %s", ec.message().c_str()); return; }
+      switch(nfc_event.type) {
+        case HOMEKEY_TAP: {
+          EventHKTap s = alpaca::deserialize<EventHKTap>(nfc_event.data, ec);
+          if(!ec && s.status){
+            publishHomeKeyTap(s.issuerId, s.endpointId, s.readerId);
+          } else {
+            ESP_LOGE(TAG, "Failed to deserialize HomeKey event: %s", ec.message().c_str());
+            return;
+          }
+        }
+        break;
+        case TAG_TAP: {
+          EventTagTap s = alpaca::deserialize<EventTagTap>(nfc_event.data, ec);
+          if(!ec){
+            publishUidTap(s.uid, s.atqa, s.sak);
+          } else {
+            ESP_LOGE(TAG, "Failed to deserialize Tag event: %s", ec.message().c_str());
+            return;
+          }
+        }
+        break;
+        default:
+          break;
+      }
+    });
     this->deviceID = deviceID;
 
     esp_mqtt_client_config_t mqtt_cfg = {};
@@ -335,7 +341,7 @@ void MqttManager::onData(const std::string& topic, const std::string& data) {
       };
       std::vector<uint8_t> d;
       alpaca::serialize(s, d);
-      espp::EventManager::get().publish("lock/overrideState", d);
+      event_bus.publish({event_bus.get_topic(LOCK_O_STATE_CHANGED).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d.size()});
     } else if (topic == m_mqttConfig.lockTStateCmd) {
       uint8_t v; if (!to_u8(data, v)) { ESP_LOGW(TAG, "Invalid lockTStateCmd payload: %s", data.c_str()); return; }
       EventLockState s{
@@ -345,7 +351,7 @@ void MqttManager::onData(const std::string& topic, const std::string& data) {
       };
       std::vector<uint8_t> d;
       alpaca::serialize(s, d);
-      espp::EventManager::get().publish("lock/targetStateChanged", d);
+      event_bus.publish({event_bus.get_topic(LOCK_T_STATE_CHANGED).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d.size()});
     } else if (topic == m_mqttConfig.lockCStateCmd) {
       uint8_t v; if (!to_u8(data, v)) { ESP_LOGW(TAG, "Invalid lockCStateCmd payload: %s", data.c_str()); return; }
       EventLockState s{
@@ -355,7 +361,7 @@ void MqttManager::onData(const std::string& topic, const std::string& data) {
       };
       std::vector<uint8_t> d;
       alpaca::serialize(s, d);
-      espp::EventManager::get().publish("lock/updateState", d);
+      event_bus.publish({event_bus.get_topic(LOCK_UPDATE_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d.size()});
     } else if (m_mqttConfig.lockEnableCustomState &&
                topic == m_mqttConfig.lockCustomStateCmd) {
       uint8_t v; if (!to_u8(data, v)) { ESP_LOGW(TAG, "Invalid lockCStateCmd payload: %s", data.c_str()); return; }
@@ -367,7 +373,7 @@ void MqttManager::onData(const std::string& topic, const std::string& data) {
         };
         std::vector<uint8_t> d;
         alpaca::serialize(s, d);
-        espp::EventManager::get().publish("lock/targetStateChanged", d);
+        event_bus.publish({event_bus.get_topic(LOCK_T_STATE_CHANGED).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d.size()});
       } else if (m_mqttConfig.customLockStates.at("C_LOCKING") == v) {
         EventLockState s{
           .currentState = LockManager::UNKNOWN,
@@ -376,7 +382,7 @@ void MqttManager::onData(const std::string& topic, const std::string& data) {
         };
         std::vector<uint8_t> d;
         alpaca::serialize(s, d);
-        espp::EventManager::get().publish("lock/targetStateChanged", d);
+        event_bus.publish({event_bus.get_topic(LOCK_T_STATE_CHANGED).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d.size()});
       } else if (m_mqttConfig.customLockStates.at("C_UNLOCKED") == v) {
         EventLockState s{
           .currentState = LockManager::UNLOCKED,
@@ -385,7 +391,7 @@ void MqttManager::onData(const std::string& topic, const std::string& data) {
         };
         std::vector<uint8_t> d;
         alpaca::serialize(s, d);
-        espp::EventManager::get().publish("lock/overrideState", d);
+        event_bus.publish({event_bus.get_topic(LOCK_O_STATE_CHANGED).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d.size()});
       } else if (m_mqttConfig.customLockStates.at("C_LOCKED") == v) {
         EventLockState s{
           .currentState = LockManager::LOCKED,
@@ -394,7 +400,7 @@ void MqttManager::onData(const std::string& topic, const std::string& data) {
         };
         std::vector<uint8_t> d;
         alpaca::serialize(s, d);
-        espp::EventManager::get().publish("lock/overrideState", d);
+        event_bus.publish({event_bus.get_topic(LOCK_O_STATE_CHANGED).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d.size()});
       } else if (m_mqttConfig.customLockStates.at("C_JAMMED") == v) {
         EventLockState s{
           .currentState = LockManager::JAMMED,
@@ -403,7 +409,7 @@ void MqttManager::onData(const std::string& topic, const std::string& data) {
         };
         std::vector<uint8_t> d;
         alpaca::serialize(s, d);
-        espp::EventManager::get().publish("lock/overrideState", d);
+        event_bus.publish({event_bus.get_topic(LOCK_O_STATE_CHANGED).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d.size()});
       } else if (m_mqttConfig.customLockStates.at("C_UNKNOWN") == v) {
         EventLockState s{
           .currentState = LockManager::UNKNOWN,
@@ -412,7 +418,7 @@ void MqttManager::onData(const std::string& topic, const std::string& data) {
         };
         std::vector<uint8_t> d;
         alpaca::serialize(s, d);
-        espp::EventManager::get().publish("lock/overrideState", d);
+        event_bus.publish({event_bus.get_topic(LOCK_O_STATE_CHANGED).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d.size()});
       }
     } else if (topic == m_mqttConfig.btrLvlCmdTopic) { 
         uint8_t v; if (!to_u8(data, v)) { ESP_LOGW(TAG, "Invalid btrLvlCmdTopic payload: %s", data.c_str()); return; }
@@ -426,7 +432,7 @@ void MqttManager::onData(const std::string& topic, const std::string& data) {
         HomekitEvent event{.type = HomekitEventType::BTR_PROP_CHANGED, .data = d};
         std::vector<uint8_t> event_data;
         alpaca::serialize(event, event_data);
-        espp::EventManager::get().publish("homekit/event", event_data);
+        event_bus.publish({event_bus.get_topic(HK_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, event_data.data(), event_data.size()});
     }
 }
 
@@ -442,7 +448,7 @@ void MqttManager::onData(const std::string& topic, const std::string& data) {
  * @param targetState Numeric code representing the lock's target state.
  */
 
-void MqttManager::publishLockState(int currentState, int targetState) {
+void MqttManager::publishLockState(const int currentState, const int targetState) {
     std::string stateStr;
     if (currentState != targetState) {
         stateStr = (targetState == LockManager::UNLOCKED) ? std::to_string(LockManager::UNLOCKING) : std::to_string(LockManager::LOCKING);

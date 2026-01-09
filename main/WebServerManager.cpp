@@ -2,6 +2,7 @@
 // WebServerManager.cpp - ESP32 Web Server Implementation
 // ============================================================================
 
+#include "format.hpp"
 #include "WebServerManager.hpp"
 #include "ConfigManager.hpp"
 #include "HomeSpan.h"
@@ -18,10 +19,6 @@
 #include "esp_task_wdt.h"
 #include "eth_structs.hpp"
 #include "eventStructs.hpp"
-#include "fmt/base.h"
-#include "fmt/format.h"
-#include "fmt/ranges.h"
-#include "freertos/projdefs.h"
 #include "sodium/randombytes.h"
 #include <LittleFS.h>
 #include <algorithm>
@@ -31,7 +28,6 @@
 #include <cstring>
 #include <dirent.h>
 #include <esp_app_desc.h>
-#include <event_manager.hpp>
 #include <future>
 #include <mutex>
 #include <esp_tls_crypto.h>
@@ -44,6 +40,7 @@
 // ============================================================================
 
 const char *WebServerManager::TAG = "WebServerManager";
+static EventBus::Bus& event_bus = EventBus::Bus::instance();
 const size_t MAX_WS_PAYLOAD = 8192;
 const size_t MAX_OTA_SIZE = 0x1E0000;
 
@@ -76,9 +73,6 @@ WebServerManager::WebServerManager(ConfigManager &configManager,
                                    ReaderDataManager &readerDataManager)
     : m_server(nullptr), m_configManager(configManager),
       m_readerDataManager(readerDataManager), m_mqttManager(nullptr) {
-  espp::EventManager::get().add_publisher("homekit/event", "WebServerManager");
-  espp::EventManager::get().add_publisher("hardware/gpioPinChanged",
-                                          "WebServerManager");
 }
 
 WebServerManager::~WebServerManager() {
@@ -118,7 +112,7 @@ void WebServerManager::begin() {
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   config.server_port = 80;
   config.max_uri_handlers = 20;
-  config.max_open_sockets = 4;
+  config.max_open_sockets = 6;
   config.stack_size = 4096;
   config.uri_match_fn = httpd_uri_match_wildcard;
   config.lru_purge_enable = true;
@@ -372,7 +366,7 @@ esp_err_t WebServerManager::handleRootOrHash(httpd_req_t *req) {
   httpd_resp_set_type(req, "text/html");
   httpd_resp_set_hdr(req, "Connection", "close");
 
-  char buffer[256];
+  char buffer[1024];
   size_t bytes_read;
   while ((bytes_read = file.read((uint8_t *)buffer, sizeof(buffer))) > 0) {
     if (httpd_resp_send_chunk(req, buffer, bytes_read) != ESP_OK) {
@@ -731,7 +725,7 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
                          .data = d};
       std::vector<uint8_t> event_data;
       alpaca::serialize(event, event_data);
-      espp::EventManager::get().publish("homekit/event", event_data);
+      event_bus.publish({event_bus.get_topic(HK_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, event_data.data(), event_data.size()});
     } else if (keyStr == "nfcNeopixelPin") {
       rebootNeeded = true;
       rebootMsg = "Pixel GPIO pin changed, reboot needed! Rebooting...";
@@ -742,7 +736,7 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
                           .newValue = (uint8_t)it->valueint};
       std::vector<uint8_t> d;
       alpaca::serialize(s, d);
-      espp::EventManager::get().publish("hardware/gpioPinChanged", d);
+      event_bus.publish({event_bus.get_topic(HARDWARE_CONFIG_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d.size()});
       if (keyStr == "gpioActionPin" && it->valueint != 255 && cJSON_IsTrue(cJSON_GetObjectItem(configSchema, "hkDumbSwitchMode"))) {
         cJSON_AddBoolToObject(obj, "hkDumbSwitchMode",false);
       }
@@ -754,7 +748,7 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
       HomekitEvent event{.type = HomekitEventType::BTR_PROP_CHANGED, .data = d};
       std::vector<uint8_t> event_data;
       alpaca::serialize(event, event_data);
-      espp::EventManager::get().publish("homekit/event", event_data);
+      event_bus.publish({event_bus.get_topic(HK_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, event_data.data(), event_data.size()});
     } else if (keyStr == "neoPixelType") {
       rebootNeeded = true;
       rebootMsg = "Pixel Type changed, reboot needed! Rebooting...";

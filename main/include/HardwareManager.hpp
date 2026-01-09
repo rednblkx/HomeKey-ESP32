@@ -1,5 +1,6 @@
 #pragma once
 #include "esp_timer.h"
+#include "event_bus.hpp"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -24,6 +25,7 @@ public:
      * @param configManager Reference to the application configuration manager.
      */
     HardwareManager(const espConfig::actions_config_t &);
+    ~HardwareManager() {EventBus::Bus::instance().unsubscribe(m_hardware_action_event);EventBus::Bus::instance().unsubscribe(m_nfc_event);EventBus::Bus::instance().unsubscribe(m_gpio_pin_event);}
 
     /**
      * @brief Initializes all hardware pins and starts background tasks for feedback.
@@ -114,10 +116,14 @@ private:
     TaskHandle_t m_initiatorTaskHandle;
     QueueHandle_t m_initiatorQueue;
 
-
-
     bool m_altActionArmed = false;
     
     static const char* TAG;
+
+    EventBus::TopicHandle m_hardware_action_topic;
+    EventBus::TopicHandle m_alt_action_topic;
+    EventBus::SubscriberHandle m_hardware_action_event;
+    EventBus::SubscriberHandle m_nfc_event;
+    EventBus::SubscriberHandle m_gpio_pin_event;
 };
 

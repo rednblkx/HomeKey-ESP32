@@ -1,4 +1,5 @@
 #pragma once
+#include "event_bus.hpp"
 #include "mqtt_client.h"
 #include <string>
 #include <vector>
@@ -48,7 +49,7 @@ private:
       * @param currentState The current physical state of the lock.
       * @param targetState The intended state of the lock.
       */
-    void publishLockState(int currentState, int targetState);
+    void publishLockState(const int currentState, const int targetState);
 
     /**
       * @brief Publishes a successful HomeKey authentication event.
@@ -92,5 +93,8 @@ private:
     bool m_sslConfigured;
     
     static const char* TAG;
+    EventBus::SubscriberHandle m_lock_state_changed;
+    EventBus::SubscriberHandle m_alt_action;
+    EventBus::SubscriberHandle m_nfc_event;
 };
 

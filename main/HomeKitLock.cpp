@@ -1,3 +1,4 @@
+#include "format.hpp"
 #include "config.hpp"
 #include "esp_log.h"
 #include "eth_structs.hpp"
@@ -13,11 +14,12 @@
 #include "ReaderDataManager.hpp"
 #include "HK_HomeKit.h"
 #include "esp_mac.h"
-#include "fmt/format.h"
 #include "utils.hpp"
 
 const char* HomeKitLock::TAG = "HomeKitBridge";
 static HomeKitLock* s_instance = nullptr;
+
+static EventBus::Bus& event_bus = EventBus::Bus::instance();
 
 /**
  * @brief Initialize the HomeKitLock singleton, register internal event publishers/subscribers, and store manager callbacks.
@@ -34,45 +36,40 @@ HomeKitLock::HomeKitLock(std::function<void(int)> &conn_cb, LockManager& lockMan
     : m_lockManager(lockManager),
       m_configManager(configManager),
       m_readerDataManager(readerDataManager),
-      conn_cb(conn_cb) {
+      conn_cb(conn_cb),
+      bus_topic(event_bus.register_topic(HK_BUS_TOPIC)) {
     if (s_instance != nullptr) {
         ESP_LOGE(TAG, "ERROR: More than one instance of HomeKitBridge created!");
         esp_restart();
     }
     s_instance = this;
-    espp::EventManager::get().add_publisher("homekit/internal", "HomeKitLock");
-    espp::EventManager::get().add_subscriber(
-        "lock/stateChanged", "HomeKitLock",
-        [&](const std::vector<uint8_t> &data) {
-          std::error_code ec;
-          EventLockState s = alpaca::deserialize<EventLockState>(data, ec);
-          if(!ec) {
-            updateLockState(s.currentState, s.targetState);
-          }
-        }, 4096); 
-    espp::EventManager::get().add_subscriber(
-        "homekit/event", "HomeKitLock",
-        [&](const std::vector<uint8_t> &data) {
-          std::error_code ec;
-          HomekitEvent event = alpaca::deserialize<HomekitEvent>(data, ec);
-          if(ec) return;
-          EventValueChanged s = alpaca::deserialize<EventValueChanged>(event.data, ec);
-          if(ec) return;
-          switch(event.type) {
-            case HomekitEventType::SETUP_CODE_CHANGED:
+    m_hk_event = event_bus.subscribe(bus_topic, [&](const EventBus::Event& event, void* context){
+      if(event.payload_size == 0 || event.payload == nullptr) return;
+      std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
+      std::error_code ec;
+      HomekitEvent hk_event = alpaca::deserialize<HomekitEvent>(payload, ec);
+      if(ec) { ESP_LOGE(TAG, "Failed to deserialize HomeKit event: %s", ec.message().c_str()); return; }
+      switch(hk_event.type) {
+          case HomekitEventType::SETUP_CODE_CHANGED:{
+              EventValueChanged s = alpaca::deserialize<EventValueChanged>(hk_event.data, ec);
+              if(ec) { ESP_LOGE(TAG, "Failed to deserialize EventValueChanged event: %s", ec.message().c_str()); return; }
               homeSpan.setPairingCode(s.str.c_str(), false);
-              break;
-            case HomekitEventType::BTR_PROP_CHANGED:
-              if(s.name == "btrLevel") {
-                updateBatteryStatus(s.newValue, m_statusLowBattery->getVal());
-              } else if(s.name == "btrLowThreshold"){
-                updateBatteryStatus(m_batteryLevel->getVal(), s.newValue);
-              }
-              break;
-            default:
-            break;
           }
-        }, 4096); 
+          break;
+          case HomekitEventType::BTR_PROP_CHANGED:{
+              EventValueChanged s = alpaca::deserialize<EventValueChanged>(hk_event.data, ec);
+              if(ec) { ESP_LOGE(TAG, "Failed to deserialize EventValueChanged event: %s", ec.message().c_str()); return; }
+              if(s.name == "btrLevel") {
+                  updateBatteryStatus(s.newValue, m_statusLowBattery->getVal());
+              } else if(s.name == "btrLowThreshold"){
+                  updateBatteryStatus(m_batteryLevel->getVal(), s.newValue);
+              }
+          }
+          break;
+          default:
+          break;
+      }
+  });
 }
 
 /**
@@ -202,6 +199,15 @@ void HomeKitLock::initializeETH(){
  * Configures HomeSpan using settings from ConfigManager (pins, OTA password, port, host name suffix), initializes reader data handling, creates the lock accessory and its services/characteristics (including lock mechanism, management, NFC access, protocol/version, and optional physical battery service), installs developer debug commands, and registers controller and connection callbacks.
  */
 void HomeKitLock::begin() {
+    m_lock_state_changed = event_bus.subscribe(event_bus.get_topic(LOCK_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), [&](const EventBus::Event& event, void* context){
+        if(event.payload_size == 0 || event.payload == nullptr) return;
+        std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
+        std::error_code ec;
+        EventLockState s = alpaca::deserialize<EventLockState>(payload, ec);
+        if(ec) { ESP_LOGE(TAG, "Failed to deserialize EventLockState event: %s", ec.message().c_str()); return; }
+        ESP_LOGI(TAG, "Received lock state event: %d -> %d", s.currentState, s.targetState);
+        updateLockState(s.currentState, s.targetState);
+    });
     const auto& miscConfig = m_configManager.getConfig<espConfig::misc_config_t>();
     const auto& app_version = esp_app_get_description()->version;
     ESP_LOGI(TAG, "Starting HomeSpan setup...");
@@ -328,13 +334,13 @@ void HomeKitLock::setupDebugCommands() {
          LOG(I, "0 = FAST flow, 1 = STANDARD Flow, 2 = ATTESTATION Flow");
         break;
       }
-    EventValueChanged s{.newValue = static_cast<uint8_t>(hkFlow)};
-    std::vector<uint8_t> d;
-    alpaca::serialize(s, d);
-    HomekitEvent event{.type=DEBUG_AUTH_FLOW, .data=d};
-    std::vector<uint8_t> event_data;
-    alpaca::serialize(event, event_data);
-    espp::EventManager::get().publish("homekit/internal", event_data);
+      EventValueChanged s{.newValue = static_cast<uint8_t>(hkFlow)};
+      std::vector<uint8_t> d;
+      alpaca::serialize(s, d);
+      HomekitEvent event{.type=DEBUG_AUTH_FLOW, .data=d};
+      std::vector<uint8_t> event_data;
+      alpaca::serialize(event, event_data);
+      event_bus.publish({event_bus.get_topic(HK_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, event_data.data(), event_data.size()});
     });
     new SpanUserCommand('M', "Erase MQTT Config and restart", [](const char*){s_instance->m_configManager.deleteConfig<espConfig::mqttConfig_t>();});
     new SpanUserCommand('N', "Btr status low", [](const char* arg) {

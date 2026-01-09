@@ -2,7 +2,7 @@ idf_component_register(SRCS "main.cpp" "ConfigManager.cpp" "ReaderDataManager.cp
                     "HardwareManager.cpp" "HomeKitLock.cpp" "LockManager.cpp"
                     "MqttManager.cpp" "HKServices.cpp" "NfcManager.cpp" "WebServerManager.cpp" "WebSocketLogSinker.cpp"
                     INCLUDE_DIRS "include"
-                    PRIV_REQUIRES HomeSpan PN532 HK-HomeKit-Lib esp_http_server mqtt libsodium
+                    PRIV_REQUIRES HomeSpan PN532 HK-HomeKit-Lib esp_http_server mqtt libsodium event_bus
                     msgpack-c json format loggable)
 if(NOT DEFINED ENV{CI})
   add_custom_target(webui 

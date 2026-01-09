@@ -1,4 +1,3 @@
-#include <event_manager.hpp>
 #include "NfcManager.hpp"
 #include "PN532.h"
 #include "PN532_SPI.h"
@@ -12,11 +11,11 @@
 #include <esp_log.h>
 #include <chrono>
 #include <functional>
-#include <new>
-#include <system_error>
 #include <serialization.hpp>
 
 const char* NfcManager::TAG = "NfcManager";
+
+static EventBus::Bus& event_bus = EventBus::Bus::instance();
 
 void NfcManager::authPrecomputeTaskEntry(void* instance) {
   static_cast<NfcManager*>(instance)->authPrecomputeTask();
@@ -207,29 +206,35 @@ NfcManager::NfcManager(ReaderDataManager& readerDataManager, const std::array<ui
       m_hkAuthPrecomputeEnabled(hkAuthPrecomputeEnabled),
       m_pollingTaskHandle(nullptr),
       m_retryTaskHandle(nullptr),
-      m_ecpData({ 0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0 })
+      m_ecpData({ 0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0 }),
+      m_nfc_topic(event_bus.register_topic(NFC_BUS_TOPIC))
 {
-  espp::EventManager::get().add_publisher("nfc/event", "NfcManager");
-  espp::EventManager::get().add_subscriber("homekit/internal", "NfcManager", [&](const std::vector<uint8_t> &data){
+  m_hk_event = event_bus.subscribe(event_bus.get_topic(HK_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), [&](const EventBus::Event& event, void* context){
+    if(event.payload_size == 0 || event.payload == nullptr) return;
+    std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
     std::error_code ec;
-    HomekitEvent event = alpaca::deserialize<HomekitEvent>(data, ec);
-    if(ec) return;
-    switch(event.type) {
-      case ACCESSDATA_CHANGED:
+    HomekitEvent hk_event = alpaca::deserialize<HomekitEvent>(payload, ec);
+    if(ec) { ESP_LOGE(TAG, "Failed to deserialize HomeKit event: %s", ec.message().c_str()); return; }
+    switch(hk_event.type) {
+      case ACCESSDATA_CHANGED: {
         updateEcpData();
         invalidateAuthCache();
-        break;
+      }
+      break;
       case DEBUG_AUTH_FLOW: {
-        EventValueChanged s = alpaca::deserialize<EventValueChanged>(event.data, ec);
+        EventValueChanged s = alpaca::deserialize<EventValueChanged>(hk_event.data, ec);
         if(!ec){
           authFlow = KeyFlow(s.newValue);
+        } else {
+          ESP_LOGE(TAG, "Failed to deserialize debug auth flow event: %s", ec.message().c_str());
+          return;
         }
-        break;
       }
+      break;
       default:
         break;
     }
-  }, 4096);
+  });
 }
 
 /**
@@ -448,7 +453,7 @@ void NfcManager::handleTagPresence() {
  * @note This method has side effects: it may update ReaderDataManager and will publish an event via EventManager.
  */
 void NfcManager::handleHomeKeyAuth() {
-    auto publishAuthResult = [this](
+    auto publishAuthResult = [](
         const std::tuple<std::vector<uint8_t>, std::vector<uint8_t>, KeyFlow>& authResult,
         const std::vector<uint8_t>& readerId
     ) {
@@ -460,7 +465,7 @@ void NfcManager::handleHomeKeyAuth() {
             NfcEvent event{.type=HOMEKEY_TAP, .data=d};
             std::vector<uint8_t> event_data;
             alpaca::serialize(event, event_data);
-            espp::EventManager::get().publish("nfc/event", event_data);
+            event_bus.publish({event_bus.get_topic(NFC_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, event_data.data(), event_data.size()});
         } else {
             ESP_LOGW(TAG, "HomeKey authentication failed.");
             EventHKTap s{.status = false, .issuerId = {}, .endpointId = {}, .readerId = {} };
@@ -469,7 +474,7 @@ void NfcManager::handleHomeKeyAuth() {
             NfcEvent event{.type=HOMEKEY_TAP, .data=d};
             std::vector<uint8_t> event_data;
             alpaca::serialize(event, event_data);
-            espp::EventManager::get().publish("nfc/event", event_data);
+            event_bus.publish({event_bus.get_topic(NFC_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, event_data.data(), event_data.size()});
         }
     };
 
@@ -578,7 +583,7 @@ void NfcManager::handleGenericTag(const uint8_t* uid, uint8_t uidLen, const uint
     NfcEvent event{.type=TAG_TAP, .data=d};
     std::vector<uint8_t> event_data;
     alpaca::serialize(event, event_data);
-    espp::EventManager::get().publish("nfc/event", event_data);
+    event_bus.publish({event_bus.get_topic(NFC_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, event_data.data(), event_data.size()});
 }
 
 /**

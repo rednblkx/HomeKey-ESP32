@@ -1,4 +1,3 @@
-#include <event_manager.hpp>
 #include "HardwareManager.hpp"
 #include "LockManager.hpp"
 #include "Pixel.h"
@@ -9,6 +8,8 @@
 const char* HardwareManager::TAG = "HardwareManager";
 
 const std::array<const char*, 6> pixelTypeMap = { "RGB", "RBG", "BRG", "BGR", "GBR", "GRB" };
+
+static EventBus::Bus& event_bus = EventBus::Bus::instance();
 
 /**
  * @brief Construct a HardwareManager and register its event handlers and publishers.
@@ -32,65 +33,42 @@ HardwareManager::HardwareManager(const espConfig::actions_config_t& miscConfig)
       m_feedbackTaskHandle(nullptr),
       m_feedbackQueue(nullptr),
       m_lockControlTaskHandle(nullptr),
-      m_lockControlQueue(nullptr)
+      m_lockControlQueue(nullptr),
+      m_hardware_action_topic(event_bus.register_topic(HARDWARE_ACTION_BUS_TOPIC)),
+      m_alt_action_topic(event_bus.register_topic(HARDWARE_ALT_ACTION_BUS_TOPIC))
 {
-  espp::EventManager::get().add_subscriber(
-      "lock/action", "HardwareManager",
-      [&](const std::vector<uint8_t> &data) {
-        std::error_code ec;
-        EventLockState s = alpaca::deserialize<EventLockState>(data, ec);
-        if(!ec) {
-          setLockOutput(s.targetState);
-        }
-      }, 4096);
-  espp::EventManager::get().add_subscriber("nfc/event", "HardwareManager", [&](const std::vector<uint8_t> &data){
+  m_hardware_action_event = event_bus.subscribe(m_hardware_action_topic, [&](const EventBus::Event& event, void* context){
+    if(event.payload_size == 0 || event.payload == nullptr) return;
+    std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
     std::error_code ec;
-    NfcEvent event = alpaca::deserialize<NfcEvent>(data, ec);
-    if(ec) return;
-    switch(event.type) {
-      case HOMEKEY_TAP: {
-        EventHKTap s = alpaca::deserialize<EventHKTap>(event.data, ec);
-        if(!ec){
-          if(s.status) {showSuccessFeedback();triggerAltAction();} else showFailureFeedback();
-        }
-        break;
-      }
-      case TAG_TAP: {
-        EventTagTap s = alpaca::deserialize<EventTagTap>(event.data, ec);
-        if(!ec){
-          if (m_feedbackQueue != nullptr) {
-              FeedbackType feedback = FeedbackType::TAG_EVENT;
-              xQueueSend(m_feedbackQueue, &feedback, 0);
-          }
-        }
-        break;
-      }
-      break;
-      default:
-        break;
+    EventLockState s = alpaca::deserialize<EventLockState>(payload, ec);
+    if(ec) { ESP_LOGE(TAG, "Failed to deserialize lock state event: %s", ec.message().c_str()); return; }
+    ESP_LOGD(TAG, "Received action event: %d -> %d", s.currentState, s.targetState);
+    setLockOutput(s.targetState);
+  });
+  m_gpio_pin_event = event_bus.subscribe(event_bus.register_topic(HARDWARE_CONFIG_BUS_TOPIC), [&](const EventBus::Event& event, void* context){
+    if(event.payload_size == 0 || event.payload == nullptr) return;
+    std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
+    std::error_code ec;
+    EventValueChanged s = alpaca::deserialize<EventValueChanged>(payload, ec);
+    if(!ec) {
+      ESP_LOGD(TAG, "Received hardware config event: %s -> %d (old=%d)", s.name.c_str(), s.newValue, s.oldValue);
+      uint8_t state = 0;
+      if(s.oldValue != 255 && GPIO_IS_VALID_OUTPUT_GPIO(s.oldValue)){
+        state = gpio_get_level(gpio_num_t(s.oldValue));
+        gpio_reset_pin(gpio_num_t(s.oldValue));
+        gpio_pullup_dis(gpio_num_t(s.oldValue));
+      } else ESP_LOGW(TAG, "Old GPIO %d is invalid", s.oldValue);
+      if(s.newValue != 255 && GPIO_IS_VALID_OUTPUT_GPIO(s.newValue)){
+        pinMode(s.newValue, OUTPUT);
+        if(s.name == "gpioActionPin")
+          digitalWrite(s.newValue, state);
+      } else ESP_LOGW(TAG, "New GPIO %d is invalid", s.newValue);
+    } else {
+      ESP_LOGE(TAG, "Failed to deserialize hardware config event: %s", ec.message().c_str());
+      return;
     }
-  }, 4096);
-  espp::EventManager::get().add_subscriber(
-      "hardware/gpioPinChanged", "HardwareManager",
-      [&](const std::vector<uint8_t> &data) {
-        std::error_code ec;
-        EventValueChanged s = alpaca::deserialize<EventValueChanged>(data, ec);
-        if(!ec) {
-          uint8_t state = 0;
-          if(s.oldValue != 255 && s.oldValue < GPIO_NUM_MAX){
-            state = gpio_get_level(gpio_num_t(s.oldValue));
-            gpio_reset_pin(gpio_num_t(s.oldValue));
-            gpio_pullup_dis(gpio_num_t(s.oldValue));
-          }
-          if(s.newValue != 255){    
-            pinMode(s.newValue, OUTPUT);
-            if(s.name == "gpioActionPin")
-              digitalWrite(s.newValue, state);
-          }
-        }
-      }, 4096);
-  espp::EventManager::get().add_publisher("lock/updateState", "HardwareManager");
-  espp::EventManager::get().add_publisher("lock/altAction", "HardwareManager");
+  });
 }
 
 /**
@@ -104,6 +82,41 @@ HardwareManager::HardwareManager(const espConfig::actions_config_t& miscConfig)
  * This prepares the HardwareManager to receive events and perform timed feedback and lock control.
  */
 void HardwareManager::begin() {
+  m_nfc_event = event_bus.subscribe(event_bus.get_topic(NFC_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), [&](const EventBus::Event& event, void* context){
+    if(event.payload_size == 0 || event.payload == nullptr) return;
+    std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
+    std::error_code ec;
+    NfcEvent nfc_event = alpaca::deserialize<NfcEvent>(payload, ec);
+    if(ec) { ESP_LOGE(TAG, "Failed to deserialize NFC event: %s", ec.message().c_str()); return; }
+    ESP_LOGD(TAG, "Received NFC event: %d", nfc_event.type);
+    switch(nfc_event.type) {
+      case HOMEKEY_TAP: {
+        EventHKTap s = alpaca::deserialize<EventHKTap>(nfc_event.data, ec);
+        if(!ec){
+          if(s.status) {showSuccessFeedback();triggerAltAction();} else showFailureFeedback();
+        } else {
+          ESP_LOGE(TAG, "Failed to deserialize HomeKey event: %s", ec.message().c_str());
+          return;
+        }
+      }
+      break;
+      case TAG_TAP: {
+        EventTagTap s = alpaca::deserialize<EventTagTap>(nfc_event.data, ec);
+        if(!ec){
+          if (m_feedbackQueue != nullptr) {
+              FeedbackType feedback = FeedbackType::TAG_EVENT;
+              xQueueSend(m_feedbackQueue, &feedback, 0);
+          }
+        } else {
+          ESP_LOGE(TAG, "Failed to deserialize Tag event: %s", ec.message().c_str());
+          return;
+        }
+      }
+      break;
+      default:
+      break;
+    }
+  });
     ESP_LOGI(TAG, "Initializing hardware pins...");
 
     // --- Initialize GPIO Pins ---
@@ -402,7 +415,7 @@ void HardwareManager::lockControlTask() {
           };
           std::vector<uint8_t> d;
           alpaca::serialize(s, d);
-          espp::EventManager::get().publish("lock/updateState", d);
+          event_bus.publish({event_bus.get_topic(LOCK_UPDATE_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d.size()});
         }
     }
 }
@@ -417,7 +430,7 @@ void HardwareManager::lockControlTask() {
  */
 void HardwareManager::triggerAltAction() {
   if (m_altActionArmed) { 
-      espp::EventManager::get().publish("lock/altAction", {});
+      event_bus.publish({m_alt_action_topic, 1});
       if (m_miscConfig.hkAltActionPin != 255) {
           ESP_LOGI(TAG, "Triggering alt action on pin %d for %dms", m_miscConfig.hkAltActionPin, m_miscConfig.hkAltActionTimeout);
           digitalWrite(m_miscConfig.hkAltActionPin, m_miscConfig.hkAltActionGpioState);

@@ -6,6 +6,8 @@
 #include "esp_mac.h"
 #include "HK_HomeKit.h"
 
+static EventBus::Bus& event_bus = EventBus::Bus::instance();
+
 const std::array<std::array<uint8_t, 6>, 4> hk_color_vals = { {{0x01,0x04,0xce,0xd5,0xda,0x00}, {0x01,0x04,0xaa,0xd6,0xec,0x00}, {0x01,0x04,0xe3,0xe3,0xe3,0x00}, {0x01,0x04,0x00,0x00,0x00,0x00}} };
 
 CUSTOM_CHAR(ConfigurationState, 263, PR+EV, UINT16, 0, 0, 1, true)
@@ -97,8 +99,6 @@ HomeKitLock::LockManagementService::LockManagementService() {
  * @param lockManager Lock manager providing current and target lock state values and the HOMEKIT source identifier.
  */
 HomeKitLock::LockMechanismService::LockMechanismService(HomeKitLock& bridge, LockManager& lockManager) : m_lockManager(lockManager) {
-    espp::EventManager::get().add_publisher("lock/overrideState", "LockMechanismService");
-    espp::EventManager::get().add_publisher("lock/targetStateChanged", "LockMechanismService");
     ESP_LOGI(HomeKitLock::TAG, "Configuring LockMechanism");
     m_lockCurrentState = bridge.m_lockCurrentState = new Characteristic::LockCurrentState(m_lockManager.getCurrentState(), true);
     m_lockTargetState = bridge.m_lockTargetState = new Characteristic::LockTargetState(m_lockManager.getTargetState(), true);
@@ -109,7 +109,7 @@ HomeKitLock::LockMechanismService::LockMechanismService(HomeKitLock& bridge, Loc
     };
     std::vector<uint8_t> d;
     alpaca::serialize(s, d);
-    espp::EventManager::get().publish("lock/overrideState", d);
+    event_bus.publish({event_bus.get_topic(LOCK_O_STATE_CHANGED).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d.size()});
 }
 /**
  * @brief Publishes an event when the lock target state has changed.
@@ -129,7 +129,7 @@ boolean HomeKitLock::LockMechanismService::update() {
       };
       std::vector<uint8_t> d;
       alpaca::serialize(s, d);
-      espp::EventManager::get().publish("lock/targetStateChanged", d);
+      event_bus.publish({event_bus.get_topic(LOCK_T_STATE_CHANGED).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d.size()});
     }
     return true;
 }
@@ -150,7 +150,6 @@ HomeKitLock::NFCAccessService::NFCAccessService(ReaderDataManager& readerDataMan
     conf.add(0x01, 0x10); conf.add(0x02, 0x10);
     new Characteristic::NFCAccessSupportedConfiguration(conf);
     m_nfcControlPoint = new Characteristic::NFCAccessControlPoint();
-    espp::EventManager::get().add_publisher("homekit/internal", "NFCAccessService");
 }
 /**
  * @brief Handles an update from the NFC Access Control Point, processes the incoming TLV control data, applies any response TLV to the control point, and publishes an internal access-data-changed event.
@@ -177,7 +176,7 @@ boolean HomeKitLock::NFCAccessService::update() {
     HomekitEvent event{.type=ACCESSDATA_CHANGED, .data={}};
     std::vector<uint8_t> event_data;
     alpaca::serialize(event, event_data);
-    espp::EventManager::get().publish("homekit/internal", event_data);
+    event_bus.publish({event_bus.get_topic(HK_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, event_data.data(), event_data.size()});
     return true;
 }
 
