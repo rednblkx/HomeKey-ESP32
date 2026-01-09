@@ -12,21 +12,17 @@ const std::array<const char*, 6> pixelTypeMap = { "RGB", "RBG", "BRG", "BGR", "G
 static EventBus::Bus& event_bus = EventBus::Bus::instance();
 
 /**
- * @brief Construct a HardwareManager and register its event handlers and publishers.
+ * @brief Initialize HardwareManager state and register event topics and subscribers.
  *
- * Initializes internal state from the provided misc configuration and registers event subscribers
- * for "lock/action", "nfc/event", and "hardware/gpioPinChanged". Also creates publishers for
- * "lock/updateState" and "lock/altAction". Task and queue handles are initialized to nullptr.
+ * Constructs the HardwareManager by storing the provided configuration, initializing task and
+ * queue handles to nullptr, registering publishers for lock update and alternate-action topics,
+ * and subscribing to hardware-related events. Subscribed handlers:
+ * - apply lock actions by setting the lock output to the event's target state;
+ * - reconfigure GPIO ownership when hardware configuration changes (reset old pin, disable pull-up,
+ *   configure new pin as output and restore action pin state when applicable);
+ * - handle NFC-related events to trigger success/failure feedback and the alternate action.
  *
- * The registered subscribers:
- * - "lock/action": deserializes an EventLockState and applies its targetState via setLockOutput.
- * - "nfc/event": handles HOMEKEY_TAP and TAG_TAP events, triggering success/failure feedback and
- *   potentially the alternate action.
- * - "hardware/gpioPinChanged": updates pin configuration when GPIO ownership changes (resets old
- *   pin, disables pull-up, configures new pin as output and restores state for gpioActionPin).
- *
- * @param miscConfig Configuration values controlling GPIO pins, NeoPixel type/behavior, and
- *                   timing used by the HardwareManager.
+ * @param miscConfig Configuration values controlling GPIO pins, NeoPixel behavior, and timing.
  */
 HardwareManager::HardwareManager(const espConfig::actions_config_t& miscConfig)
     : m_miscConfig(miscConfig),
@@ -385,13 +381,9 @@ void HardwareManager::lockControlTaskEntry(void* instance) {
 }
 
 /**
- * @brief Processes incoming lock commands and applies them to hardware and system state.
+ * @brief Processes lock commands from the internal lock-control queue, drives the configured GPIO, and publishes the resulting lock state.
  *
- * Continuously waits for lock state values from the internal lock-control queue. For each received
- * state, if a GPIO action pin is configured the function drives that pin to the configured lock
- * or unlock level and publishes an EventLockState with the received state as `currentState`,
- * `targetState` set to `UNKNOWN`, and `source` set to `INTERNAL` on the "lock/updateState" topic.
- * If no action pin is configured the received command is logged and ignored.
+ * Waits for a lock state value from the internal queue; if a GPIO action pin is configured the function sets that pin to the configured lock or unlock level and publishes an EventLockState whose `currentState` equals the received state, `targetState` is `UNKNOWN`, and `source` is `INTERNAL` to the lock update topic. If no action pin is configured (pin value 255), the command is ignored.
  */
 void HardwareManager::lockControlTask() {
     int receivedState;

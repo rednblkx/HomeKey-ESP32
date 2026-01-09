@@ -67,7 +67,15 @@ static inline std::string cjson_to_string_and_free(cJSON *obj) {
 
 // ============================================================================
 // Constructor & Destructor
-// ============================================================================
+/**
+ * @brief Construct a WebServerManager and initialize internal references and defaults.
+ *
+ * Stores references to the provided ConfigManager and ReaderDataManager, initializes
+ * the internal HTTP server pointer and MQTT manager pointer to null.
+ *
+ * @param configManager Reference to the configuration manager used for reading and saving settings.
+ * @param readerDataManager Reference to the reader data manager used for accessing reader-related state.
+ */
 
 WebServerManager::WebServerManager(ConfigManager &configManager,
                                    ReaderDataManager &readerDataManager)
@@ -75,6 +83,14 @@ WebServerManager::WebServerManager(ConfigManager &configManager,
       m_readerDataManager(readerDataManager), m_mqttManager(nullptr) {
 }
 
+/**
+ * @brief Clean up WebServerManager resources on destruction.
+ *
+ * Performs orderly shutdown of server-related subsystems and frees associated resources.
+ *
+ * @details Calls the OTA cleanup routine, stops the HTTP server if it is running, and
+ * stops and deletes the periodic status timer.
+ */
 WebServerManager::~WebServerManager() {
   ESP_LOGI(TAG, "WebServerManager destructor called");
   cleanupOTAAsync();
@@ -91,7 +107,14 @@ WebServerManager::~WebServerManager() {
 
 // ============================================================================
 // Initialization
-// ============================================================================
+/**
+ * @brief Initialize and start the web server, WebSocket subsystem, and related resources.
+ *
+ * Initializes a new session identifier, mounts LittleFS, configures and starts the HTTP server,
+ * creates the WebSocket send queue and worker task, registers HTTP/WebSocket routes, and
+ * creates a periodic status timer. On failure of critical steps the method logs the error
+ * and aborts initialization (server, queue, or task pointers may remain null).
+ */
 
 void WebServerManager::begin() {
   ESP_LOGI(TAG, "Initializing...");
@@ -339,6 +362,15 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
   return ESP_OK;
 }
 
+/**
+ * @brief Serve the single-page application entry (app.html) for root/hash requests.
+ *
+ * Authenticates the request, issues a sessionId cookie when different from the server's session,
+ * sets appropriate response headers, and streams /app.html from LittleFS in chunks.
+ *
+ * @param req The HTTP request to handle.
+ * @return esp_err_t ESP_OK on successful send; ESP_FAIL if authentication fails, the file is missing, or a send error occurs.
+ */
 esp_err_t WebServerManager::handleRootOrHash(httpd_req_t *req) {
   WebServerManager* instance = getInstance(req);
   char sessionId[65];
@@ -589,6 +621,18 @@ esp_err_t WebServerManager::handleGetEthConfig(httpd_req_t *req) {
   return ESP_OK;
 }
 
+/**
+ * @brief Handle an HTTP request to save a configuration object for a given config type.
+ *
+ * Processes the request's "type" query parameter and JSON body, validates the payload
+ * against the current configuration schema, applies updates, persists the configuration,
+ * publishes relevant configuration change events, and sends an appropriate JSON HTTP response.
+ * May trigger a device reboot when certain configuration keys change.
+ *
+ * @param req The HTTP request containing the query parameter `type=<mqtt|misc|actions>` and
+ *            a JSON body with the configuration fields to update.
+ * @return esp_err_t `ESP_OK` if the configuration was saved and applied; `ESP_FAIL` otherwise.
+ */
 esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
   if(!instance->basicAuth(req)){

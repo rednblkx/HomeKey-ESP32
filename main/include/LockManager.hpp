@@ -39,6 +39,14 @@ public:
      * @param configManager Reference to the application configuration manager.
      */
     LockManager(const espConfig::misc_config_t& miscConfig, const espConfig::actions_config_t& actionsConfig);
+    /**
+     * @brief Releases LockManager resources and unsubscribes its event handlers.
+     *
+     * Unsubscribes the manager's EventBus subscriber handles and cleans up the
+     * momentary state timer if present. Unsubscribe calls are safe when handles
+     * are null (no-op). If the timer exists, it is stopped if active and then
+     * deleted.
+     */
     ~LockManager() {
       auto& bus = EventBus::Bus::instance();
       // unsubscribe can be called regardless of whether the event is valid
@@ -99,4 +107,3 @@ private:
     const EventBus::TopicHandle bus_topic;
     static void handleTimer(void* instance);
 };
-

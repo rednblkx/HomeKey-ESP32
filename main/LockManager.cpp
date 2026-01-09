@@ -10,15 +10,15 @@ const char* LockManager::TAG = "LockManager";
 static EventBus::Bus& event_bus = EventBus::Bus::instance();
 
 /**
- * @brief Construct a LockManager configured for managing lock state and events.
+ * @brief Initialize a LockManager with configuration and wire its event handlers.
  *
- * Initializes internal state from the provided miscConfig, registers event
- * publishers and subscribers for lock state/action updates and NFC events,
- * and creates the momentary-state timer used for temporary unlocks.
+ * Sets initial current and target states to LOCKED, registers EventBus topics and
+ * subscriptions for lock state updates and NFC events, and creates the momentary-state
+ * timer used to revert temporary unlocks.
  *
- * @param miscConfig Configuration values that control NFC behavior, momentary
- *                   timeout and related lock handling flags (e.g. lockAlwaysUnlock,
- *                   lockAlwaysLock, GPIO/momentary source settings).
+ * @param miscConfig Configuration controlling NFC behavior, momentary timeout, and high-level lock flags
+ *                   (for example: lockAlwaysUnlock, lockAlwaysLock, and HK-related GPIO settings).
+ * @param actionsConfig Configuration defining which sources can trigger momentary unlocks and related action masks/timeouts.
  */
 LockManager::LockManager(const espConfig::misc_config_t& miscConfig, const espConfig::actions_config_t& actionsConfig)
     : m_miscConfig(miscConfig),
@@ -67,6 +67,15 @@ LockManager::LockManager(const espConfig::misc_config_t& miscConfig, const espCo
   esp_timer_create(&momentaryStateTimer_arg, &momentaryStateTimer);
 }
 
+/**
+ * @brief Subscribes to NFC events and publishes the initial hardware action state.
+ *
+ * Begins NFC handling by subscribing to the NFC event topic so HomeKey tap events
+ * can set or toggle the lock's target state according to configuration. Ignores
+ * empty or invalid NFC payloads. After subscribing, publishes an EventLockState
+ * describing the current and target states with source INTERNAL to the hardware
+ * action topic.
+ */
 void LockManager::begin() {
   m_nfc_event = event_bus.subscribe(event_bus.get_topic(NFC_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), [&](const EventBus::Event& event, void* context){
       if(event.payload_size == 0 || event.payload == nullptr) return;
@@ -134,15 +143,15 @@ int LockManager::getTargetState() const {
 }
 
 /**
- * @brief Request a change of the lock's target state and notify observers.
+ * @brief Change the lock's target state, propagate the change, and trigger any momentary unlock timer.
  *
- * Updates the stored target state, optionally updates the current state in dumb-switch mode,
- * publishes a `lock/action` event when an external action should be performed, always publishes
- * a `lock/stateChanged` event with the resulting current and target states, and starts the
- * momentary unlock timer when an unlock was requested by a configured momentary source.
+ * Updates the stored target state, stops any running momentary timer, and publishes the resulting
+ * current/target state to the lock state topic. If hardware actions should be performed for the
+ * given source (and dumb-switch mode is not enabled), publishes a hardware action event as well.
+ * When a target unlock is requested by a configured momentary source, starts the momentary timer.
  *
  * @param state Desired target lock state (use values from lockStates).
- * @param source Origin of the request which may affect publishing behavior and momentary handling.
+ * @param source Origin of the request which influences publishing behavior and momentary handling.
  */
 
 void LockManager::setTargetState(uint8_t state, Source source) {
@@ -217,4 +226,3 @@ void LockManager::overrideState(uint8_t c_state, uint8_t t_state) {
     event_bus.publish({event_bus.get_topic(HARDWARE_ACTION_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d.size()});
     event_bus.publish({bus_topic, 0, d.data(), d.size()});
 }
-

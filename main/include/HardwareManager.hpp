@@ -25,7 +25,13 @@ public:
      * @param configManager Reference to the application configuration manager.
      */
     HardwareManager(const espConfig::actions_config_t &);
-    ~HardwareManager() {EventBus::Bus::instance().unsubscribe(m_hardware_action_event);EventBus::Bus::instance().unsubscribe(m_nfc_event);EventBus::Bus::instance().unsubscribe(m_gpio_pin_event);}
+    /**
+ * @brief Unsubscribes the manager's event listeners from the global EventBus.
+ *
+ * Ensures the HardwareManager's subscribers for hardware actions, NFC events,
+ * and GPIO pin events are removed from the EventBus before destruction.
+ */
+~HardwareManager() {EventBus::Bus::instance().unsubscribe(m_hardware_action_event);EventBus::Bus::instance().unsubscribe(m_nfc_event);EventBus::Bus::instance().unsubscribe(m_gpio_pin_event);}
 
     /**
      * @brief Initializes all hardware pins and starts background tasks for feedback.
@@ -126,4 +132,3 @@ private:
     EventBus::SubscriberHandle m_nfc_event;
     EventBus::SubscriberHandle m_gpio_pin_event;
 };
-

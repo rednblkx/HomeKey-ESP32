@@ -17,6 +17,14 @@ const char* NfcManager::TAG = "NfcManager";
 
 static EventBus::Bus& event_bus = EventBus::Bus::instance();
 
+/**
+ * @brief Task entry wrapper that invokes an instance's auth precompute task.
+ *
+ * For use as a C-style task entry point; casts the provided task parameter to
+ * an NfcManager pointer and calls its authPrecomputeTask method.
+ *
+ * @param instance Pointer to the NfcManager instance passed as the task parameter.
+ */
 void NfcManager::authPrecomputeTaskEntry(void* instance) {
   static_cast<NfcManager*>(instance)->authPrecomputeTask();
 }
@@ -191,14 +199,15 @@ void NfcManager::authPrecomputeTask() {
 }
 
 /**
- * @brief Initializes the NFC manager, configures internal state, and registers NFC-related event handlers.
+ * @brief Construct and initialize an NfcManager, set up ECP data and event wiring.
  *
- * Sets initial ECP data and task handles, registers an "nfc/event" publisher, and subscribes to
- * "homekit/internal" events to react to ACCESSDATA_CHANGED (updates ECP data) and DEBUG_AUTH_FLOW
- * (updates the authentication flow).
+ * Initializes internal state, registers the NFC bus topic, and subscribes to HomeKit/internal
+ * events so that ACCESSDATA_CHANGED updates ECP data and invalidates the auth cache, and
+ * DEBUG_AUTH_FLOW updates the debug authentication flow when received.
  *
  * @param readerDataManager Reference to the ReaderDataManager used to read and persist reader data.
  * @param nfcGpioPins Four GPIO pin numbers used to construct the PN532 SPI interface.
+ * @param hkAuthPrecomputeEnabled If true, enables HomeKit authentication precompute behavior.
  */
 NfcManager::NfcManager(ReaderDataManager& readerDataManager, const std::array<uint8_t, 4> &nfcGpioPins, bool hkAuthPrecomputeEnabled)
     : nfcGpioPins(nfcGpioPins),
@@ -443,14 +452,16 @@ void NfcManager::handleTagPresence() {
 }
 
 /**
- * @brief Attempts HomeKey authentication for the currently-present NFC tag.
+ * @brief Attempt HomeKey authentication for the currently-present NFC tag.
  *
- * Performs authentication using the manager's configured authentication flow and the current reader data.
- * On successful authentication, updates stored reader data and publishes a HOMEKEY_TAP event containing
- * success status, issuer ID, endpoint ID, and reader ID. On failure, publishes a HOMEKEY_TAP event indicating
- * authentication failure.
+ * Performs the configured HomeKey authentication flow for the active tag and publishes a HOMEKEY_TAP
+ * event describing the outcome. On successful authentication, stored reader data may be updated.
  *
- * @note This method has side effects: it may update ReaderDataManager and will publish an event via EventManager.
+ * If HomeKey precomputation is enabled, a precomputed authentication context may be consumed (when
+ * generation matches current reader data); otherwise a fresh ("cold") authentication context is used.
+ *
+ * Side effects: may update ReaderDataManager, publish a HOMEKEY_TAP event on the NFC bus, notify the
+ * auth precompute task, and modify internal auth-cache queues.
  */
 void NfcManager::handleHomeKeyAuth() {
     auto publishAuthResult = [](

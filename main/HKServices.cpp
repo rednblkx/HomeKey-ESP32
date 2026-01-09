@@ -89,14 +89,14 @@ HomeKitLock::LockManagementService::LockManagementService() {
 };
 
 /**
- * @brief Configure lock mechanism integration between HomeKit and the lock manager.
+ * @brief Set up HomeKit lock characteristics and announce the initial lock state.
  *
- * Initializes LockCurrentState and LockTargetState characteristics (and installs them into the provided HomeKit bridge),
- * registers event publishers for lock state overrides and target changes, and publishes an initial overrideState event
- * containing the current and target lock states with source set to HOMEKIT.
+ * Creates LockCurrentState and LockTargetState characteristics, assigns them into the provided HomeKit bridge,
+ * and publishes an initial override-state event that contains the current and target lock states with the source
+ * set to HOMEKIT.
  *
- * @param bridge HomeKit bridge instance whose characteristic pointers will be set to the newly created characteristics.
- * @param lockManager Lock manager providing current and target lock state values and the HOMEKIT source identifier.
+ * @param bridge HomeKit bridge whose characteristic pointers will be set to the newly created characteristics.
+ * @param lockManager Lock manager used to obtain the current and target lock state values and the HOMEKIT source identifier.
  */
 HomeKitLock::LockMechanismService::LockMechanismService(HomeKitLock& bridge, LockManager& lockManager) : m_lockManager(lockManager) {
     ESP_LOGI(HomeKitLock::TAG, "Configuring LockMechanism");
@@ -112,11 +112,11 @@ HomeKitLock::LockMechanismService::LockMechanismService(HomeKitLock& bridge, Loc
     event_bus.publish({event_bus.get_topic(LOCK_O_STATE_CHANGED).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d.size()});
 }
 /**
- * @brief Publishes an event when the lock target state has changed.
+ * @brief Notifies the system when the HomeKit lock target state changes.
  *
- * If the target-state characteristic was updated, serializes an EventLockState
- * containing the current state, the new target state, and source set to HOMEKIT,
- * then publishes it on the "lock/targetStateChanged" channel.
+ * If the LockTargetState characteristic was updated, serializes an EventLockState
+ * containing the current state, the new target state, and source HOMEKIT, then
+ * publishes it on the LOCK_T_STATE_CHANGED event topic.
  *
  * @return boolean `true` on completion.
  */
@@ -135,13 +135,13 @@ boolean HomeKitLock::LockMechanismService::update() {
 }
 
 /**
- * @brief Configure NFC Access service and register its characteristics and event publisher.
+ * @brief Initialize the NFCAccess service and register its HomeKit characteristics.
  *
- * Creates and registers the ConfigurationState, NFCAccessSupportedConfiguration (with default TLV
- * entries), and NFCAccessControlPoint characteristics, and adds an internal "homekit/internal"
- * event publisher for NFCAccessService.
+ * Constructs and registers a ConfigurationState characteristic, a NFCAccessSupportedConfiguration
+ * characteristic pre-populated with TLV entries (0x01 => 0x10 and 0x02 => 0x10), and a
+ * NFCAccessControlPoint characteristic. Stores a reference to the provided ReaderDataManager.
  *
- * @param readerDataManager Reference to the ReaderDataManager used for managing NFC reader data.
+ * @param readerDataManager Reference to the ReaderDataManager used to persist and manage NFC reader data.
  */
 HomeKitLock::NFCAccessService::NFCAccessService(ReaderDataManager& readerDataManager) : m_readerDataManager(readerDataManager) {
     ESP_LOGI(HomeKitLock::TAG, "Configuring NFCAccess");
@@ -152,9 +152,9 @@ HomeKitLock::NFCAccessService::NFCAccessService(ReaderDataManager& readerDataMan
     m_nfcControlPoint = new Characteristic::NFCAccessControlPoint();
 }
 /**
- * @brief Handles an update from the NFC Access Control Point, processes the incoming TLV control data, applies any response TLV to the control point, and publishes an internal access-data-changed event.
+ * @brief Process a new NFC Access Control Point TLV, apply the resulting response TLV to the control point, and publish an internal access-data-changed event.
  *
- * When the NFC control point has new data, the function retrieves the TLV, invokes the HomeKit NFC processing context to handle save/remove callbacks and produce a response, writes the response TLV back to the control point, and emits a "homekit/internal" event of type ACCESSDATA_CHANGED.
+ * If no new control TLV is present or the control data is empty, no change is applied and the function returns.
  *
  * @return `true` if the update cycle completed, `false` otherwise.
  */

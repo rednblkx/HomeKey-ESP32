@@ -22,10 +22,10 @@ static HomeKitLock* s_instance = nullptr;
 static EventBus::Bus& event_bus = EventBus::Bus::instance();
 
 /**
- * @brief Initialize the HomeKitLock singleton, register internal event publishers/subscribers, and store manager callbacks.
+ * @brief Construct the HomeKitLock singleton, register internal event publishers/subscribers, and store manager callbacks.
  *
- * Enforces a single instance (calls esp_restart() if another instance exists), registers the "homekit/internal" publisher,
- * and subscribes to "lock/stateChanged" and "homekit/event" to keep lock state, pairing code, and battery status synchronized.
+ * Initializes the singleton instance, registers the internal HomeKit EventBus topic, and subscribes to internal HomeKit events required
+ * to synchronize pairing code and battery-related characteristics. If a second instance is created, logs an error and restarts the device.
  *
  * @param conn_cb Callback invoked when connection status changes; receives an integer status code.
  * @param lockManager Reference to the LockManager used to control and query lock state.

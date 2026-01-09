@@ -36,15 +36,16 @@ std::function<void(int)> lambda = [](int status) {
 using namespace loggable;
 
 /**
- * @brief Configure runtime and initialize core subsystems and manager instances.
+ * @brief Initialize runtime, configure logging/serial, and instantiate core subsystem managers.
  *
- * Initializes logging and serial output, brings up Ethernet according to configuration,
- * constructs global manager objects (ReaderDataManager, ConfigManager, HardwareManager,
- * LockManager, MqttManager, WebServerManager, HomeKitLock, NfcManager) and starts those
- * managers that require explicit startup.
+ * Initializes the global runtime infrastructure (EventBus, Sinker), sets logging levels and Serial,
+ * constructs and assigns global manager instances (ReaderDataManager, ConfigManager, WebServerManager,
+ * HardwareManager, LockManager, MqttManager, HomeKitLock, NfcManager), reads NFC-related configuration,
+ * and starts managers that require explicit startup.
  *
- * The function has the side effect of allocating and assigning globals used across the
- * application and invoking their initialization routines.
+ * @note This function allocates and assigns globals used across the application and invokes their
+ *       initialization routines (calls to `begin()` where applicable). It also logs the resolved NFC
+ *       GPIO pin configuration based on persisted settings.
  */
 void setup() {
   EventBus::Bus::instance().init();

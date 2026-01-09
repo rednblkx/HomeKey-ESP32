@@ -20,7 +20,12 @@ namespace espConfig { struct misc_config_t; }
 class NfcManager {
 public:
     NfcManager(ReaderDataManager& readerDataManager, const std::array<uint8_t, 4> &nfcGpioPins, bool hkAuthPrecomputeEnabled);
-    ~NfcManager() {EventBus::Bus::instance().unsubscribe(m_hk_event);}
+    /**
+ * @brief Unsubscribes the manager's HomeKey event subscription from the global EventBus.
+ *
+ * Ensures the subscriber identified by m_hk_event is removed when the NfcManager is destroyed.
+ */
+~NfcManager() {EventBus::Bus::instance().unsubscribe(m_hk_event);}
     bool begin();
     void updateEcpData();
 
