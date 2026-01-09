@@ -39,7 +39,17 @@ public:
      * @param configManager Reference to the application configuration manager.
      */
     LockManager(const espConfig::misc_config_t& miscConfig, const espConfig::actions_config_t& actionsConfig);
-    ~LockManager() {EventBus::Bus::instance().unsubscribe(m_override_state_event);EventBus::Bus::instance().unsubscribe(m_target_state_event);EventBus::Bus::instance().unsubscribe(m_update_state_event);EventBus::Bus::instance().unsubscribe(m_nfc_event);}
+    ~LockManager() {
+      auto& bus = EventBus::Bus::instance();
+      bus.unsubscribe(m_override_state_event);
+      bus.unsubscribe(m_target_state_event);
+      bus.unsubscribe(m_update_state_event);
+      bus.unsubscribe(m_nfc_event);
+      if(momentaryStateTimer && esp_timer_is_active(momentaryStateTimer)) {
+        esp_timer_stop(momentaryStateTimer);
+        esp_timer_delete(momentaryStateTimer);
+      }
+    }
 
     /**
      * @brief Initializes the lock state to its default.
