@@ -53,15 +53,10 @@ LockManager::LockManager(const espConfig::misc_config_t& miscConfig, const espCo
       if(ec) { ESP_LOGE(TAG, "Failed to deserialize update state event: %s", ec.message().c_str()); return; }
       ESP_LOGD(TAG, "Received update state event: %d -> %d", s.currentState, s.targetState);
       m_currentState = s.currentState;
-      s.currentState = m_currentState;
       s.targetState = m_targetState;
-      EventLockState sp{
-        .currentState = static_cast<uint8_t>(m_currentState),
-        .targetState = static_cast<uint8_t>(m_targetState),
-        .source = LockManager::INTERNAL
-      };
+      s.source = LockManager::INTERNAL;
       std::vector<uint8_t> d;
-      alpaca::serialize(sp, d);
+      alpaca::serialize(s, d);
       event_bus.publish({bus_topic, 0, d.data(), d.size()});
     });
   esp_timer_create_args_t momentaryStateTimer_arg = {
