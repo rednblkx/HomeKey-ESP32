@@ -111,6 +111,8 @@ ConfigManager::ConfigManager() : m_isInitialized(false) {
       {"webPassword", &m_miscConfig.webPassword},
       {"nfcGpioPins", &m_miscConfig.nfcGpioPins},
       {"nfcPinsPreset", &m_miscConfig.nfcPinsPreset},
+      {"doorSensorPin", &m_miscConfig.doorSensorPin},
+      {"doorSensorInvert", &m_miscConfig.doorSensorInvert},
       {"btrLowStatusThreshold", &m_miscConfig.btrLowStatusThreshold},
       {"proxBatEnabled", &m_miscConfig.proxBatEnabled},
       {"ethernetEnabled", &m_miscConfig.ethernetEnabled},
@@ -195,7 +197,7 @@ bool ConfigManager::begin() {
 
   nvs_stats_t nvs_stats;
   nvs_get_stats(NULL, &nvs_stats);
-  ESP_LOGI(TAG,"Count: UsedEntries = (%lu), FreeEntries = (%lu), AvailableEntries = (%lu), AllEntries = (%lu)\n",
+  ESP_LOGI(TAG,"Count: UsedEntries = (%zu), FreeEntries = (%zu), AvailableEntries = (%zu), AllEntries = (%zu)\n",
        nvs_stats.used_entries, nvs_stats.free_entries, nvs_stats.available_entries, nvs_stats.total_entries);
 
   m_isInitialized = true;
@@ -573,7 +575,7 @@ void ConfigManager::deserialize(msgpack_object obj, std::string type) {
               break;
             }
             default:
-              ESP_LOGW(TAG, "DON'T KNOW THIS ONE! - %s (%d) = %d", key.c_str(), v.val.type, v.val.via.u64);
+              ESP_LOGW(TAG, "DON'T KNOW THIS ONE! - %s (%d) = %llu", key.c_str(), (int)v.val.type, v.val.via.u64);
             }
           }
         }, m_configMap[type][key]);
@@ -1078,7 +1080,7 @@ bool ConfigManager::deserializeFromJson(const std::string& json_string) {
                     }
                 }
             }, configMap.at(key));
-        } else ESP_LOGW(TAG, "Key '%s' could not be found!");
+        } else ESP_LOGW(TAG, "Key '%s' could not be found!", key.c_str());
         item = item->next;
     }
 

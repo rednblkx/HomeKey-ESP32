@@ -16,11 +16,12 @@ namespace Service
 class LockManager;
 class ConfigManager;
 class ReaderDataManager;
+class HardwareManager;
 namespace espConfig { struct misc_config_t; };
 
 class HomeKitLock {
 public:
-    HomeKitLock(std::function<void(int)> &conn_cb, LockManager& lockManager, ConfigManager& configManager, ReaderDataManager& readerDataManager);
+    HomeKitLock(std::function<void(int)> &conn_cb, LockManager& lockManager, ConfigManager& configManager, ReaderDataManager& readerDataManager, HardwareManager& hardwareManager);
     void begin();
     void updateLockState(int currentState, int targetState);
     void updateBatteryStatus(uint8_t batteryLevel, bool isLow);
@@ -34,6 +35,7 @@ private:
     LockManager& m_lockManager;
     ConfigManager& m_configManager;
     ReaderDataManager& m_readerDataManager;
+    HardwareManager& m_hardwareManager;
 
     std::function<void(int)> &conn_cb;
 
@@ -56,10 +58,14 @@ private:
     };
     struct LockMechanismService : Service::LockMechanism {
       LockManager& m_lockManager;
+      HardwareManager& m_hardwareManager;
       SpanCharacteristic* m_lockTargetState;
       SpanCharacteristic* m_lockCurrentState;
-      LockMechanismService(HomeKitLock& bridge, LockManager& lockManager);
+      SpanCharacteristic* m_doorState;
+
+      LockMechanismService(HomeKitLock& bridge, LockManager& lockManager, HardwareManager& hardwareManager);
       boolean update() override;
+      void loop() override;
     };
     struct NFCAccessService : Service::NFCAccess {
         ReaderDataManager& m_readerDataManager;

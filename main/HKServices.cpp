@@ -3,6 +3,7 @@
 #include "HomeKitLock.hpp"
 #include "LockManager.hpp"
 #include "ReaderDataManager.hpp"
+#include "HardwareManager.hpp"
 #include "esp_mac.h"
 #include "HK_HomeKit.h"
 
@@ -96,10 +97,13 @@ HomeKitLock::LockManagementService::LockManagementService() {
  * @param bridge HomeKit bridge instance whose characteristic pointers will be set to the newly created characteristics.
  * @param lockManager Lock manager providing current and target lock state values and the HOMEKIT source identifier.
  */
-HomeKitLock::LockMechanismService::LockMechanismService(HomeKitLock& bridge, LockManager& lockManager) : m_lockManager(lockManager) {
+HomeKitLock::LockMechanismService::LockMechanismService(HomeKitLock& bridge, LockManager& lockManager, HardwareManager& hardwareManager) : m_lockManager(lockManager), m_hardwareManager(hardwareManager) {
     espp::EventManager::get().add_publisher("lock/overrideState", "LockMechanismService");
     espp::EventManager::get().add_publisher("lock/targetStateChanged", "LockMechanismService");
     ESP_LOGI(HomeKitLock::TAG, "Configuring LockMechanism");
+
+    m_doorState = brodge.m_doorState = new Characteristic::CurrentDoorState(1); //default Closed
+
     m_lockCurrentState = bridge.m_lockCurrentState = new Characteristic::LockCurrentState(m_lockManager.getCurrentState(), true);
     m_lockTargetState = bridge.m_lockTargetState = new Characteristic::LockTargetState(m_lockManager.getTargetState(), true);
     EventLockState s{
@@ -132,6 +136,13 @@ boolean HomeKitLock::LockMechanismService::update() {
       espp::EventManager::get().publish("lock/targetStateChanged", d);
     }
     return true;
+}
+
+void HomeKitLock::LockMechanismService::loop() {
+    int doorState = m_hardwareManager.checkDoorSensor();
+    if (doorState != -1) {
+        m_doorState->setVal(doorState);
+    }
 }
 
 /**
