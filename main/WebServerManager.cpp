@@ -1674,7 +1674,10 @@ error:
   
   httpd_resp_set_type(req, "application/json");
   httpd_resp_set_status(req, "500 Internal Server Error");
-  std::string errJson = "{\"success\":false,\"error\":\"" + params->state->error + "\"}";
+  cJSON *errResp = cJSON_CreateObject();
+  cJSON_AddBoolToObject(errResp, "success", false);
+  cJSON_AddStringToObject(errResp, "error", params->state->error.c_str());
+  std::string errJson = cjson_to_string_and_free(errResp);
   httpd_resp_sendstr(req, errJson.c_str());
   httpd_req_async_handler_complete(req);
   instance->m_otaInProgress = false;
