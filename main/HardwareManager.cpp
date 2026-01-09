@@ -466,7 +466,7 @@ void HardwareManager::feedbackTask() {
                 case FeedbackType::SUCCESS:
                     ESP_LOGD(TAG, "Executing SUCCESS feedback sequence.");
                     if(esp_timer_is_active(m_gpioSuccessTimer)) esp_timer_stop(m_gpioSuccessTimer);
-                    if(esp_timer_is_active(m_pixelSuccessTimer)) esp_timer_stop(m_gpioFailTimer);
+                    if(esp_timer_is_active(m_pixelSuccessTimer)) esp_timer_stop(m_pixelSuccessTimer);
                     if (m_pixel != nullptr) {
                         auto color = m_miscConfig.neopixelSuccessColor;
                         m_pixel->set(m_pixel->RGB(color[espConfig::actions_config_t::colorMap::R], color[espConfig::actions_config_t::colorMap::G], color[espConfig::actions_config_t::colorMap::B]));
