@@ -122,7 +122,7 @@ private:
   // Device info/status
   std::string getDeviceMetrics();
   std::string getDeviceInfo();
-  std::string getOTAStatus();
+  std::string getOTAInfo();
   // OTA management
   void broadcastOTAStatus();
 

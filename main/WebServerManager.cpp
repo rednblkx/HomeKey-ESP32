@@ -1415,8 +1415,8 @@ esp_err_t WebServerManager::handleWebSocketMessage(httpd_req_t *req,
     response = getDeviceMetrics();
   } else if (msg_type == "sysinfo") {
     response = getDeviceInfo();
-  } else if (msg_type == "ota_status") {
-    response = getOTAStatus();
+  } else if (msg_type == "ota_info") {
+    response = getOTAInfo();
   } else if (msg_type == "set_log_level") {  
     cJSON *level_item = cJSON_GetObjectItem(json, "data");
     if(level_item && cJSON_IsNumber(level_item)) {
@@ -1649,7 +1649,7 @@ void WebServerManager::otaTask(void *pvParameters) {
   instance->m_otaInProgress = false;
   instance->broadcastOTAStatus();
   httpd_resp_set_type(req, "application/json");
-  httpd_resp_sendstr(req, "{\"success\":true,\"message\":\"OTA Complete\"}");
+  httpd_resp_sendstr(req, "{\"success\":true,\"message\":\"Update Complete\"}");
   httpd_req_async_handler_complete(req);
   
   if (!params->skipReboot) {
@@ -1677,18 +1677,10 @@ error:
   vTaskDelete(NULL);
 }
 
-std::string WebServerManager::getOTAStatus() {
+std::string WebServerManager::getOTAInfo() {
   cJSON *status = cJSON_CreateObject();
-  cJSON_AddStringToObject(status, "type", "ota_status");
-  cJSON_AddBoolToObject(status, "in_progress", m_otaInProgress);
-  cJSON_AddNumberToObject(status, "bytes_written", m_otaWrittenBytes);
-  cJSON_AddStringToObject(status, "upload_type",
-                          (m_currentUploadType == OTAUploadType::LITTLEFS)
-                              ? "littlefs"
-                              : "firmware");
-
-  if (!m_otaError.empty())
-    cJSON_AddStringToObject(status, "error", m_otaError.c_str());
+  cJSON_AddStringToObject(status, "type", "ota_info");
+  
   cJSON_AddStringToObject(status, "current_version",
                           esp_app_get_description()->version);
 
@@ -1699,6 +1691,20 @@ std::string WebServerManager::getOTAStatus() {
   if (next_update)
     cJSON_AddStringToObject(status, "next_update_partition",
                             next_update->label);
+  return cjson_to_string_and_free(status);
+}
+
+void WebServerManager::broadcastOTAStatus() {
+  cJSON *status = cJSON_CreateObject();
+  cJSON_AddStringToObject(status, "type", "ota_status");
+  if (!m_otaError.empty())
+    cJSON_AddStringToObject(status, "error", m_otaError.c_str());
+  cJSON_AddBoolToObject(status, "in_progress", m_otaInProgress);
+  cJSON_AddNumberToObject(status, "bytes_written", m_otaWrittenBytes);
+  cJSON_AddStringToObject(status, "upload_type",
+                          (m_currentUploadType == OTAUploadType::LITTLEFS)
+                              ? "littlefs"
+                              : "firmware");
 
   if (m_otaInProgress && m_otaTotalBytes > 0) {
     cJSON_AddNumberToObject(status, "progress_percent",
@@ -1706,11 +1712,7 @@ std::string WebServerManager::getOTAStatus() {
                                 100.0f);
     cJSON_AddNumberToObject(status, "total_bytes", m_otaTotalBytes);
   }
-  return cjson_to_string_and_free(status);
-}
-
-void WebServerManager::broadcastOTAStatus() {
-  std::string otaStatus = getOTAStatus();
+  std::string otaStatus = cjson_to_string_and_free(status);
   broadcastWs((const uint8_t *)otaStatus.c_str(), otaStatus.size(),
               HTTPD_WS_TYPE_TEXT);
 }
