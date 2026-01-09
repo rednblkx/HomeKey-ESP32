@@ -35,6 +35,11 @@ MqttManager::MqttManager(const ConfigManager& configManager)
   m_mqttSslConfig = configManager.getMqttSslConfig();
 }
 
+/**
+ * @brief Stops and destroys the MQTT client (if active) and unsubscribes all EventBus listeners registered by this instance.
+ *
+ * Ensures the MQTT client is cleanly stopped and its resources freed, then removes subscriptions for lock state, alternate action, and NFC events from the shared EventBus.
+ */
 MqttManager::~MqttManager() {
    if (m_client) {
        esp_mqtt_client_stop(m_client);
@@ -47,13 +52,13 @@ MqttManager::~MqttManager() {
 }
 
 /**
- * @brief Initialize and start the MQTT client using stored configuration and a device identifier.
+ * @brief Configure and start the MQTT client using the manager's stored configuration and a device identifier.
  *
- * Configures the MQTT client from m_mqttConfig, registers the instance-level MQTT event handler,
- * and starts the client if a valid broker hostname is present.
+ * Initializes the MQTT client configuration (including optional SSL/TLS), registers the instance event handler,
+ * subscribes to internal EventBus topics for lock and NFC events, and starts the MQTT client.
  *
- * @param deviceID Unique device identifier to associate with the MQTT client and discovery topics.
- * @return true if the MQTT client was started, false if startup was skipped because the broker host was not configured.
+ * @param deviceID Unique device identifier used for MQTT client identification and discovery topics.
+ * @return true if the MQTT client was started successfully, false otherwise.
  */
 bool MqttManager::begin(std::string deviceID) {
     if (m_mqttConfig.mqttBroker.empty() || m_mqttConfig.mqttBroker == "0.0.0.0") {
@@ -312,15 +317,13 @@ void MqttManager::onConnected() {
 }
 
 /**
- * @brief Handle an incoming MQTT message and translate it into internal events.
+ * @brief Translate received MQTT command messages into internal EventBus events.
  *
- * Processes messages on configured MQTT command topics to update or override lock
- * state, handle custom lock-state codes, and forward battery level changes as
- * HomeKit events. Matching topic payloads are converted into the appropriate
- * EventManager events.
+ * Processes configured MQTT command topics (lock state/target/current/custom and battery level)
+ * and publishes the corresponding EventLockState or HomeKit events onto the EventBus.
  *
- * @param topic MQTT topic of the received message.
- * @param data Payload of the received message as a string.
+ * @param topic MQTT topic of the received message (used to determine the command).
+ * @param data Payload of the received message as a string (interpreted per-topic).
  */
 void MqttManager::onData(const std::string& topic, const std::string& data) {
     ESP_LOGI(TAG, "Received message on topic '%s': %s", topic.c_str(), data.c_str());
