@@ -49,19 +49,23 @@ HomeKitLock::HomeKitLock(std::function<void(int)> &conn_cb, LockManager& lockMan
       std::error_code ec;
       HomekitEvent hk_event = alpaca::deserialize<HomekitEvent>(payload, ec);
       if(ec) { ESP_LOGE(TAG, "Failed to deserialize HomeKit event: %s", ec.message().c_str()); return; }
-      EventValueChanged s = alpaca::deserialize<EventValueChanged>(hk_event.data, ec);
-      if(ec) { ESP_LOGE(TAG, "Failed to deserialize EventValueChanged event: %s", ec.message().c_str()); return; }
       switch(hk_event.type) {
-          case HomekitEventType::SETUP_CODE_CHANGED:
+          case HomekitEventType::SETUP_CODE_CHANGED:{
+              EventValueChanged s = alpaca::deserialize<EventValueChanged>(hk_event.data, ec);
+              if(ec) { ESP_LOGE(TAG, "Failed to deserialize EventValueChanged event: %s", ec.message().c_str()); return; }
               homeSpan.setPairingCode(s.str.c_str(), false);
-              break;
-          case HomekitEventType::BTR_PROP_CHANGED:
+          }
+          break;
+          case HomekitEventType::BTR_PROP_CHANGED:{
+              EventValueChanged s = alpaca::deserialize<EventValueChanged>(hk_event.data, ec);
+              if(ec) { ESP_LOGE(TAG, "Failed to deserialize EventValueChanged event: %s", ec.message().c_str()); return; }
               if(s.name == "btrLevel") {
                   updateBatteryStatus(s.newValue, m_statusLowBattery->getVal());
               } else if(s.name == "btrLowThreshold"){
                   updateBatteryStatus(m_batteryLevel->getVal(), s.newValue);
               }
-              break;
+          }
+          break;
           default:
           break;
       }
