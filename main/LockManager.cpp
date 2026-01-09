@@ -78,14 +78,16 @@ void LockManager::begin() {
       if(nfc_event.type == HOMEKEY_TAP) {
         ESP_LOGI(TAG, "Processing NFC tap request...");
         EventHKTap s = alpaca::deserialize<EventHKTap>(nfc_event.data, ec);
-        if (!ec && s.status) {
-          if (m_miscConfig.lockAlwaysUnlock) {
-            setTargetState(lockStates::UNLOCKED, Source::NFC);
-          } else if (m_miscConfig.lockAlwaysLock) {
-            setTargetState(lockStates::LOCKED, Source::NFC);
-          } else {
-            int newState = (m_currentState == lockStates::LOCKED) ? lockStates::UNLOCKED : lockStates::LOCKED;
-            setTargetState(newState, Source::NFC);
+        if (!ec) {
+          if (s.status) {
+            if (m_miscConfig.lockAlwaysUnlock) {
+              setTargetState(lockStates::UNLOCKED, Source::NFC);
+            } else if (m_miscConfig.lockAlwaysLock) {
+              setTargetState(lockStates::LOCKED, Source::NFC);
+            } else {
+              int newState = (m_currentState == lockStates::LOCKED) ? lockStates::UNLOCKED : lockStates::LOCKED;
+              setTargetState(newState, Source::NFC);
+            }
           }
         } else {
           ESP_LOGE(TAG, "Failed to deserialize HomeKey event: %s", ec.message().c_str());
