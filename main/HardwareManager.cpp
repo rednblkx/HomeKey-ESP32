@@ -54,16 +54,16 @@ HardwareManager::HardwareManager(const espConfig::actions_config_t& miscConfig)
     if(!ec) {
       ESP_LOGD(TAG, "Received hardware config event: %s -> %d (old=%d)", s.name.c_str(), s.newValue, s.oldValue);
       uint8_t state = 0;
-      if(s.oldValue != 255 && s.oldValue < GPIO_NUM_MAX){
+      if(s.oldValue != 255 && GPIO_IS_VALID_OUTPUT_GPIO(s.oldValue)){
         state = gpio_get_level(gpio_num_t(s.oldValue));
         gpio_reset_pin(gpio_num_t(s.oldValue));
         gpio_pullup_dis(gpio_num_t(s.oldValue));
-      }
-      if(s.newValue != 255){
+      } else ESP_LOGW(TAG, "Old GPIO %d is invalid", s.oldValue);
+      if(s.newValue != 255 && GPIO_IS_VALID_OUTPUT_GPIO(s.newValue)){
         pinMode(s.newValue, OUTPUT);
         if(s.name == "gpioActionPin")
           digitalWrite(s.newValue, state);
-      }
+      } else ESP_LOGW(TAG, "New GPIO %d is invalid", s.newValue);
     } else {
       ESP_LOGE(TAG, "Failed to deserialize hardware config event: %s", ec.message().c_str());
       return;
