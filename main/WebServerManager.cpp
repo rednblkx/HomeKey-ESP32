@@ -16,7 +16,6 @@
 #include "esp_http_server.h"
 #include "esp_log.h"
 #include "esp_log_level.h"
-#include "esp_task_wdt.h"
 #include "eth_structs.hpp"
 #include "eventStructs.hpp"
 #include "sodium/randombytes.h"
@@ -28,7 +27,6 @@
 #include <cstring>
 #include <dirent.h>
 #include <esp_app_desc.h>
-#include <future>
 #include <mutex>
 #include <esp_tls_crypto.h>
 #include <stdbool.h>
@@ -43,6 +41,7 @@ const char *WebServerManager::TAG = "WebServerManager";
 static EventBus::Bus& event_bus = EventBus::Bus::instance();
 const size_t MAX_WS_PAYLOAD = 8192;
 const size_t MAX_OTA_SIZE = 0x1E0000;
+const size_t MAX_FS_SIZE = 0x20000;
 
 // ============================================================================
 // Helper Functions
@@ -93,7 +92,7 @@ WebServerManager::WebServerManager(ConfigManager &configManager,
  */
 WebServerManager::~WebServerManager() {
   ESP_LOGI(TAG, "WebServerManager destructor called");
-  cleanupOTAAsync();
+
   if (m_server) {
     httpd_stop(m_server);
     m_server = nullptr;
@@ -145,8 +144,7 @@ void WebServerManager::begin() {
     return;
   }
 
-  // Create WebSocket queue
-  m_wsQueue = xQueueCreate(10, sizeof(WsFrame *));
+  m_wsQueue = xQueueCreate(20, sizeof(WsFrame *));
   if (!m_wsQueue) {
     ESP_LOGE(TAG, "Failed to create WebSocket queue");
     httpd_stop(m_server);
@@ -154,7 +152,6 @@ void WebServerManager::begin() {
     return;
   }
 
-  // Create WebSocket send task
   if (xTaskCreate(ws_send_task, "ws_send_task", 4096, this, 5,
                   &m_wsTaskHandle) != pdPASS) {
     ESP_LOGE(TAG, "Failed to create WebSocket task");
@@ -385,7 +382,7 @@ esp_err_t WebServerManager::handleRootOrHash(httpd_req_t *req) {
     return ESP_FAIL;
   }
   std::string sessionCookie;
-  if(instance->m_sessionId.compare(sessionId) != 0){
+  if(instance->m_sessionId.compare(sessionId) != 0 || err != ESP_OK){
     sessionCookie = fmt::format("sessionId={};", instance->m_sessionId);
     httpd_resp_set_hdr(req, "Set-Cookie", sessionCookie.c_str());
   }
@@ -1312,13 +1309,10 @@ void WebServerManager::broadcastWs(const uint8_t *payload, size_t len,
     for (const auto &c : m_wsClients)
       fds.push_back(c->fd);
   }
+  static const size_t max_buffer = 64;
   if (fds.empty()) {
-    ESP_LOGW(TAG, "No websocket clients, buffering, current size: %zu",
-             m_wsBroadcastBuffer.size());
-    if(m_wsBroadcastBuffer.size() >= 64){
-      ESP_LOGW(TAG, "WS Broadcast buffer full, dropping oldest frame");
-      std::shift_left(m_wsBroadcastBuffer.begin(), m_wsBroadcastBuffer.end(), 1);
-      m_wsBroadcastBuffer.pop_back();
+    if(m_wsBroadcastBuffer.size() >= max_buffer){
+       m_wsBroadcastBuffer.erase(m_wsBroadcastBuffer.begin());
     }
     m_wsBroadcastBuffer.push_back(std::vector<uint8_t>(payload, payload + len));
     return;
@@ -1489,108 +1483,47 @@ void WebServerManager::statusTimerCallback(void *arg) {
 // OTA Implementation
 // ============================================================================
 
-void WebServerManager::initializeOTAWorker() {
-  ESP_LOGI(TAG, "Initializing OTA worker");
-
-  m_otaWorkerReady = xSemaphoreCreateBinary();
-  if (!m_otaWorkerReady) {
-    ESP_LOGE(TAG, "Failed to create semaphore");
-    return;
-  }
-
-  m_otaRequestQueue = xQueueCreate(1, sizeof(OTAAsyncRequest));
-  if (!m_otaRequestQueue) {
-    vSemaphoreDelete(m_otaWorkerReady);
-    m_otaWorkerReady = nullptr;
-    return;
-  }
-
-  if (xTaskCreate(otaWorkerTask, "ota_worker", 8192, this, 5,
-                  &m_otaWorkerHandle) != pdPASS) {
-    vQueueDelete(m_otaRequestQueue);
-    vSemaphoreDelete(m_otaWorkerReady);
-    m_otaRequestQueue = m_otaWorkerReady = nullptr;
-  }
-}
-
-void WebServerManager::otaWorkerTask(void *parameter) {
-  WebServerManager *instance = static_cast<WebServerManager *>(parameter);
-
-  while (true) {
-    xSemaphoreGive(instance->m_otaWorkerReady);
-
-    OTAAsyncRequest otaReq;
-    if (xQueueReceive(instance->m_otaRequestQueue, &otaReq,
-                      pdMS_TO_TICKS(5000)) == pdTRUE) {
-      instance->m_currentUploadType = otaReq.uploadType;
-      instance->m_skipReboot = otaReq.skipReboot;
-
-      esp_err_t result = instance->otaUploadAsync(otaReq.req);
-
-      httpd_resp_set_type(otaReq.req, "application/json");
-      if (result == ESP_FAIL) {
-        httpd_resp_set_type(otaReq.req, "application/json");
-        httpd_resp_set_status(otaReq.req, "500 Internal Server Error");
-        httpd_resp_sendstr(
-            otaReq.req,
-            "{\"success\":\"false\",\"error\":\"OTA upload failed\"}");
-      } else {
-        httpd_resp_set_type(otaReq.req, "application/json");
-        httpd_resp_set_status(otaReq.req, "202 Accepted");
-        httpd_resp_sendstr(
-            otaReq.req,
-            "{\"success\":\"true\",\"message\":\"OTA upload finished\"}");
-      }
-
-      httpd_req_async_handler_complete(otaReq.req);
-      instance->m_otaInProgress = false;
-      instance->m_otaWrittenBytes = instance->m_otaTotalBytes = 0;
-      instance->m_otaError.clear();
-      instance->m_otaHandle = 0;
-      if(!instance->m_skipReboot){
-        vTaskDelay(pdMS_TO_TICKS(2000));
-        esp_restart();
-      }
-    } else
-      break;
-  }
-
-  instance->m_otaWorkerHandle = nullptr;
-  vTaskDelete(NULL);
-}
-
-esp_err_t WebServerManager::queueOTARequest(httpd_req_t *req) {
+esp_err_t WebServerManager::handleOTAUpload(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
-
-  {
-    std::lock_guard<std::mutex> lock(instance->m_otaMutex);
-    if (instance->m_otaInProgress) {
-      httpd_resp_set_type(req, "application/json");
-      httpd_resp_set_status(req, "409 Conflict");
-      httpd_resp_sendstr(
-          req,
-          "{\"success\":\"false\",\"error\":\"OTA already in progress\"}");
-      return ESP_FAIL;
-    }
-  }
-
-  httpd_req_t *reqCopy = nullptr;
-  esp_err_t err = httpd_req_async_handler_begin(req, &reqCopy);
-  if (err != ESP_OK)
-    return err;
-
-  if (xSemaphoreTake(instance->m_otaWorkerReady, 0) == pdFALSE) {
+  if (!instance->basicAuth(req)) {
+    ESP_LOGE(TAG, "HTTP Authorization failed!");
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_status(req, "503 Service Unavailable");
-    httpd_resp_sendstr(
-        req, "{\"success\":\"false\",\"error\":\"OTA worker busy\"}");
-    httpd_req_async_handler_complete(reqCopy);
+    httpd_resp_set_hdr(req, "Connection", "keep-alive");
+    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
+    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
     return ESP_FAIL;
   }
-  char * type = strrchr(req->uri, '/');
-  OTAUploadType uploadType = (strncmp(type+1, "littlefs", strlen("littlefs")) == 0)
+  
+  bool expected = false;
+  if (!instance->m_otaInProgress.compare_exchange_strong(expected, true)) {
+    httpd_resp_set_status(req, "409 Conflict");
+    httpd_resp_sendstr(req, "{\"success\":false,\"error\":\"OTA in progress\"}");
+    instance->m_otaInProgress = false;
+    return ESP_OK;
+  }
+
+  char *type = strrchr(req->uri, '/');
+  OTAUploadType uploadType = (type && strncmp(type + 1, "littlefs", 8) == 0)
                                  ? OTAUploadType::LITTLEFS
                                  : OTAUploadType::FIRMWARE;
+
+  if (uploadType == OTAUploadType::FIRMWARE && req->content_len > MAX_OTA_SIZE) {
+    ESP_LOGE(TAG, "OTA size %zu > max %zu", req->content_len, MAX_OTA_SIZE);
+    instance->m_otaInProgress = false;
+    httpd_resp_set_status(req, "413 Payload Too Large");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"success\":false,\"error\":\"Firmware too large\"}");
+    return ESP_OK;
+  }
+
+  if (uploadType == OTAUploadType::LITTLEFS && req->content_len > MAX_FS_SIZE) {
+    ESP_LOGE(TAG, "OTA size %zu > max %zu", req->content_len, MAX_FS_SIZE);
+    instance->m_otaInProgress = false;
+    httpd_resp_set_status(req, "413 Payload Too Large");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"success\":false,\"error\":\"LittleFS too large\"}");
+    return ESP_OK;
+  }
 
   bool skipReboot = false;
   char query[256], param[32];
@@ -1600,233 +1533,148 @@ esp_err_t WebServerManager::queueOTARequest(httpd_req_t *req) {
     skipReboot = (strcmp(param, "true") == 0);
   }
 
-  OTAAsyncRequest otaReq = {reqCopy, req->content_len, uploadType, skipReboot};
-  if (xQueueSend(instance->m_otaRequestQueue, &otaReq, pdMS_TO_TICKS(100)) ==
-      pdFALSE) {
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_status(req, "503 Service Unavailable");
-    httpd_resp_sendstr(
-        req, "{\"success\":\"false\",\"error\":\"Failed to queue request\"}");
-    httpd_req_async_handler_complete(reqCopy);
-    return ESP_FAIL;
+  httpd_req_t *reqCopy = nullptr;
+  if (httpd_req_async_handler_begin(req, &reqCopy) != ESP_OK) {
+    instance->m_otaInProgress = false;
+    httpd_resp_send_500(req);
+    return ESP_OK;
   }
+
+  OTAParams *params = new OTAParams{reqCopy, instance, uploadType, skipReboot, req->content_len};
+
+  if (xTaskCreate(otaTask, "ota_task", 8192, params, 5, NULL) != pdPASS) {
+    ESP_LOGE(TAG, "Failed to create OTA task");
+    delete params;
+    instance->m_otaInProgress = false;
+    return ESP_FAIL; 
+  }
+
   return ESP_OK;
 }
 
-esp_err_t WebServerManager::otaUploadAsync(httpd_req_t *req) {
-  std::lock_guard<std::mutex> lock(m_otaMutex);
+void WebServerManager::otaTask(void *pvParameters) {
+  OTAParams *params = static_cast<OTAParams *>(pvParameters);
+  WebServerManager *instance = params->instance;
+  httpd_req_t *req = params->req;
+  
+  instance->m_currentUploadType = params->uploadType;
+  instance->m_skipReboot = params->skipReboot;
+  instance->m_otaTotalBytes = params->contentLength;
+  instance->m_otaWrittenBytes = 0;
+  instance->m_otaError.clear();
 
-  if (esp_timer_is_active(m_statusTimer))
-    esp_timer_stop(m_statusTimer);
+  esp_ota_handle_t otaHandle = 0;
+  const esp_partition_t *updatePartition = nullptr;
+  const esp_partition_t *littlefsPartition = nullptr;
 
-  esp_task_wdt_config_t wdt_config = {
-      .timeout_ms = 10000, .idle_core_mask = 0, .trigger_panic = true};
-  esp_task_wdt_reconfigure(&wdt_config);
-  esp_task_wdt_add(NULL);
+  ESP_LOGI(TAG, "Starting OTA task. Type: %d, Size: %zu", (int)params->uploadType, params->contentLength);
 
-  size_t content_len = req->content_len;
-  if (content_len == 0 || content_len > MAX_OTA_SIZE) {
-    m_otaError = content_len == 0
-                     ? "No data"
-                     : "OTA size too large (max " +
-                           std::to_string(MAX_OTA_SIZE) + " bytes)";
-    esp_task_wdt_delete(NULL);
-    return ESP_FAIL;
-  }
-
-  esp_err_t err = ESP_OK;
-
-  // Initialize OTA partition
-  if (m_currentUploadType == OTAUploadType::FIRMWARE) {
-    m_updatePartition = esp_ota_get_next_update_partition(NULL);
-    if (!m_updatePartition) {
-      m_otaError = "No OTA partition found";
-      esp_task_wdt_delete(NULL);
-      return ESP_FAIL;
-    }
-    err = esp_ota_begin(m_updatePartition, content_len, &m_otaHandle);
-    esp_task_wdt_reset();
-    if (err != ESP_OK) {
-      m_otaError = "Failed to begin OTA";
-      esp_task_wdt_delete(NULL);
-      return ESP_FAIL;
-    }
-  } else {
-    m_littlefsPartition = esp_partition_find_first(
-        ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_SPIFFS, "spiffs");
-    if (!m_littlefsPartition) {
-      m_otaError = "No LittleFS partition found";
-      esp_task_wdt_delete(NULL);
-      return ESP_FAIL;
-    }
-    if (content_len > m_littlefsPartition->size) {
-      m_otaError = "LittleFS image too large";
-      esp_task_wdt_delete(NULL);
-      return ESP_FAIL;
-    }
-    err = esp_partition_erase_range(m_littlefsPartition, 0,
-                                    m_littlefsPartition->size);
-    if (err != ESP_OK) {
-      m_otaError = "Failed to erase partition";
-      esp_task_wdt_delete(NULL);
-      return ESP_FAIL;
-    }
-  }
-
-  m_otaInProgress = true;
-  m_otaWrittenBytes = 0;
-  m_otaTotalBytes = content_len;
-  m_otaError.clear();
-  auto f = std::async(std::launch::async, [this]() { broadcastOTAStatus(); });
-
-  const size_t preferred_size = heap_caps_get_free_size(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL) * 0.7;
-  size_t buffer_size = std::min(preferred_size, content_len);
-  std::unique_ptr<void, decltype(&heap_caps_free)> buffer(heap_caps_malloc(buffer_size, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL), heap_caps_free);
-
+  const size_t buffer_size = 4096;
+  char *buffer = (char *)heap_caps_malloc(buffer_size, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
   if (!buffer) {
-    size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
-    buffer_size = std::min((largest * 60) / 100, content_len);
-    buffer.reset(
-        heap_caps_malloc(std::max(buffer_size, size_t(4096)), MALLOC_CAP_8BIT));
-    if (!buffer) {
-      esp_ota_abort(m_otaHandle);
-      m_otaInProgress = false;
-      m_otaError = "Failed to allocate buffer";
-      broadcastOTAStatus();
-      esp_task_wdt_delete(NULL);
-      return ESP_FAIL;
-    }
+    instance->m_otaError = "Buffer allocation failed";
+    goto error;
   }
 
-  // Upload loop
-  size_t remaining = content_len, last_broadcast = 0;
-  int consecutive_failures = 0;
-  TickType_t last_progress = xTaskGetTickCount();
-  const TickType_t timeout = pdMS_TO_TICKS(30000);
-  const size_t broadcast_interval = 128 * 1024;
-
-  while (remaining > 0) {
-    if ((xTaskGetTickCount() - last_progress) > timeout) {
-      esp_ota_abort(m_otaHandle);
-      m_otaInProgress = false;
-      m_otaError = "Upload timeout";
-      broadcastOTAStatus();
-      esp_task_wdt_delete(NULL);
-      return ESP_FAIL;
+  if (params->uploadType == OTAUploadType::FIRMWARE) {
+    updatePartition = esp_ota_get_next_update_partition(NULL);
+    if (!updatePartition) {
+       instance->m_otaError = "No OTA partition";
+       goto error;
     }
-
-    size_t chunk_size = std::min(remaining, buffer_size);
-    int received = httpd_req_recv(req, (char *)buffer.get(), chunk_size);
-    esp_task_wdt_reset();
-
-    if (received <= 0) {
-      if (++consecutive_failures >= 10) {
-        esp_ota_abort(m_otaHandle);
-        m_otaInProgress = false;
-        m_otaError = "Failed to receive data";
-        broadcastOTAStatus();
-        esp_task_wdt_delete(NULL);
-        return ESP_FAIL;
-      }
-      vTaskDelay(pdMS_TO_TICKS(100));
-      continue;
+    if (esp_ota_begin(updatePartition, OTA_SIZE_UNKNOWN, &otaHandle) != ESP_OK) {
+       instance->m_otaError = "OTA begin failed";
+       goto error;
     }
-
-    consecutive_failures = 0;
-    last_progress = xTaskGetTickCount();
-
-    if (m_currentUploadType == OTAUploadType::FIRMWARE) {
-      err = esp_ota_write(m_otaHandle, buffer.get(), received);
-      esp_task_wdt_reset();
-      if (err != ESP_OK) {
-        esp_ota_abort(m_otaHandle);
-        m_otaInProgress = false;
-        m_otaError = "Failed to write firmware";
-        broadcastOTAStatus();
-        esp_task_wdt_delete(NULL);
-        return ESP_FAIL;
-      }
-    } else {
-      err = esp_partition_write(m_littlefsPartition, m_otaWrittenBytes,
-                                buffer.get(), received);
-      if (err != ESP_OK) {
-        m_otaInProgress = false;
-        m_otaError = "Failed to write LittleFS";
-        broadcastOTAStatus();
-        esp_task_wdt_delete(NULL);
-        return ESP_FAIL;
-      }
-    }
-
-    m_otaWrittenBytes += received;
-    remaining -= received;
-    vTaskDelay(1);
-
-    if ((m_otaWrittenBytes - last_broadcast) >= broadcast_interval ||
-        remaining == 0) {
-      auto f =
-          std::async(std::launch::async, [this]() { broadcastOTAStatus(); });
-      last_broadcast = m_otaWrittenBytes;
-    }
-    vTaskDelay(pdMS_TO_TICKS(50));
-  }
-
-  esp_task_wdt_delete(NULL);
-
-  // Finalize OTA
-  if (m_currentUploadType == OTAUploadType::FIRMWARE) {
-    err = esp_ota_end(m_otaHandle);
-    if (err != ESP_OK) {
-      m_otaInProgress = false;
-      m_otaError = "Failed to finalize OTA";
-      broadcastOTAStatus();
-      return ESP_FAIL;
-    }
-    err = esp_ota_set_boot_partition(m_updatePartition);
-    if (err != ESP_OK) {
-      m_otaInProgress = false;
-      m_otaError = "Failed to set boot partition";
-      broadcastOTAStatus();
-      return ESP_FAIL;
-    }
-    m_otaInProgress = false;
-    broadcastOTAStatus();
   } else {
-    m_otaInProgress = false;
-    broadcastOTAStatus();
+    littlefsPartition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_SPIFFS, "spiffs");
+    if (!littlefsPartition) {
+      instance->m_otaError = "No LittleFS partition";
+      goto error;
+    }
+    if (params->contentLength > littlefsPartition->size) {
+      instance->m_otaError = "Image too large";
+      goto error;
+    }
+    if (esp_partition_erase_range(littlefsPartition, 0, littlefsPartition->size) != ESP_OK) {
+      instance->m_otaError = "Erase failed";
+      goto error;
+    }
   }
-  return ESP_OK;
-}
 
-void WebServerManager::cleanupOTAAsync() {
-  if (m_otaWorkerHandle) {
-    vTaskDelete(m_otaWorkerHandle);
-    m_otaWorkerHandle = nullptr;
+  {
+    size_t remaining = params->contentLength;
+    size_t last_broadcast = 0;
+    int received;
+    while (remaining > 0) {
+        received = httpd_req_recv(req, buffer, std::min(remaining, buffer_size));
+        if (received < 0) {
+            if (received == HTTPD_SOCK_ERR_TIMEOUT) {
+                continue;
+            }
+            instance->m_otaError = "Receive error";
+            goto error;
+        }
+        
+        if (received > 0) {
+            if (params->uploadType == OTAUploadType::FIRMWARE) {
+                if (esp_ota_write(otaHandle, buffer, received) != ESP_OK) {
+                    instance->m_otaError = "Write error";
+                    goto error;
+                }
+            } else {
+                if (esp_partition_write(littlefsPartition, instance->m_otaWrittenBytes, buffer, received) != ESP_OK) {
+                    instance->m_otaError = "Write error";
+                    goto error;
+                }
+            }
+            instance->m_otaWrittenBytes += received;
+            remaining -= received;
+            
+            if ((instance->m_otaWrittenBytes - last_broadcast) >= (params->contentLength / 20) || remaining == 0) {
+                instance->broadcastOTAStatus();
+                last_broadcast = instance->m_otaWrittenBytes;
+            }
+        }
+    }
   }
-  if (m_otaRequestQueue) {
-    vQueueDelete(m_otaRequestQueue);
-    m_otaRequestQueue = nullptr;
-  }
-  if (m_otaWorkerReady) {
-    vSemaphoreDelete(m_otaWorkerReady);
-    m_otaWorkerReady = nullptr;
-  }
-  m_otaInProgress = false;
-}
 
-esp_err_t WebServerManager::handleOTAUpload(httpd_req_t *req) {
-  WebServerManager *instance = static_cast<WebServerManager *>(req->user_ctx);
-  if(!instance->basicAuth(req)){
-    ESP_LOGE(TAG, "HTTP Authorization failed!");
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Connection", "keep-alive");
-    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
-    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
-    return ESP_FAIL;
+  if (params->uploadType == OTAUploadType::FIRMWARE) {
+    if (esp_ota_end(otaHandle) != ESP_OK || esp_ota_set_boot_partition(updatePartition) != ESP_OK) {
+        instance->m_otaError = "End/SetBoot failed";
+        goto error;
+    }
   }
-  if (!instance->m_otaWorkerHandle)
-    instance->initializeOTAWorker();
-  return queueOTARequest(req);
+
+  instance->m_otaInProgress = false;
+  instance->broadcastOTAStatus();
+  httpd_resp_set_type(req, "application/json");
+  httpd_resp_sendstr(req, "{\"success\":true,\"message\":\"OTA Complete\"}");
+  httpd_req_async_handler_complete(req);
+  
+  if (!params->skipReboot) {
+      vTaskDelay(pdMS_TO_TICKS(1000));
+      esp_restart();
+  }
+  
+  free(buffer);
+  delete params;
+  vTaskDelete(NULL);
+  return;
+
+error:
+  instance->m_otaInProgress = false;
+  instance->broadcastOTAStatus();
+  if (otaHandle) esp_ota_abort(otaHandle);
+  if (buffer) free(buffer);
+  
+  httpd_resp_set_type(req, "application/json");
+  httpd_resp_set_status(req, "500 Internal Server Error");
+  std::string errJson = "{\"success\":false,\"error\":\"" + instance->m_otaError + "\"}";
+  httpd_resp_sendstr(req, errJson.c_str());
+  httpd_req_async_handler_complete(req);
+  delete params;
+  vTaskDelete(NULL);
 }
 
 std::string WebServerManager::getOTAStatus() {

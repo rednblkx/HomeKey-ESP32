@@ -5,6 +5,7 @@
 #include "esp_partition.h"
 #include "esp_timer.h"
 #include <memory>
+#include <atomic>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -66,18 +67,21 @@ private:
     WsClient(int file_descriptor) : fd(file_descriptor) {}
   };
 
-  struct OTAAsyncRequest {
+  struct OTAParams {
     httpd_req_t *req;
-    size_t contentLength;
+    WebServerManager *instance;
     OTAUploadType uploadType;
-    bool skipReboot = false;
+    bool skipReboot;
+    size_t contentLength;
   };
+
+
 
   // ------------------------------------------------------------------------
   // Static Task Callbacks
   // ------------------------------------------------------------------------
   static void ws_send_task(void *arg);
-  static void otaWorkerTask(void *parameter);
+  static void otaTask(void *pvParameters);
   static void statusTimerCallback(void *arg);
 
   // ------------------------------------------------------------------------
@@ -119,13 +123,9 @@ private:
   std::string getDeviceMetrics();
   std::string getDeviceInfo();
   std::string getOTAStatus();
+  // OTA management
   void broadcastOTAStatus();
 
-  // OTA management
-  void initializeOTAWorker();
-  void cleanupOTAAsync();
-  esp_err_t otaUploadAsync(httpd_req_t *req);
-  static esp_err_t queueOTARequest(httpd_req_t *req);
 
   // Utility methods
   static bool validateRequest(httpd_req_t *req, cJSON *currentData,
@@ -163,14 +163,9 @@ private:
   const esp_partition_t *m_littlefsPartition = nullptr;
   size_t m_otaWrittenBytes = 0;
   size_t m_otaTotalBytes = 0;
-  bool m_otaInProgress = false;
-  std::string m_otaError;
-  OTAUploadType m_currentUploadType = OTAUploadType::FIRMWARE;
   bool m_skipReboot = false;
   std::mutex m_otaMutex;
-
-  // OTA async worker
-  TaskHandle_t m_otaWorkerHandle = nullptr;
-  QueueHandle_t m_otaRequestQueue = nullptr;
-  SemaphoreHandle_t m_otaWorkerReady = nullptr;
+  std::atomic<bool> m_otaInProgress{false};
+  std::string m_otaError;
+  OTAUploadType m_currentUploadType = OTAUploadType::FIRMWARE;
 };
