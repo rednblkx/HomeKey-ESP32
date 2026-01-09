@@ -1535,7 +1535,10 @@ esp_err_t WebServerManager::handleOTAUpload(httpd_req_t *req) {
   httpd_req_t *reqCopy = nullptr;
   if (httpd_req_async_handler_begin(req, &reqCopy) != ESP_OK) {
     instance->m_otaInProgress = false;
-    httpd_resp_send_500(req);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_status(req, "500 Internal Server Error");
+    httpd_resp_sendstr(req, "\"success\":false,\"error\":\"Failed to start OTA\"");
+    httpd_req_async_handler_complete(req);
     return ESP_OK;
   }
 
@@ -1546,6 +1549,9 @@ esp_err_t WebServerManager::handleOTAUpload(httpd_req_t *req) {
     ESP_LOGE(TAG, "Failed to create OTA task");
     delete params->state;
     delete params;
+    httpd_resp_set_type(reqCopy, "application/json");
+    httpd_resp_set_status(reqCopy, "500 Internal Server Error");
+    httpd_resp_sendstr(reqCopy, "{\"success\":false,\"error\":\"Failed to create OTA task\"}");
     httpd_req_async_handler_complete(reqCopy);
     instance->m_otaInProgress = false;
     return ESP_FAIL; 
