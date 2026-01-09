@@ -214,19 +214,23 @@ NfcManager::NfcManager(ReaderDataManager& readerDataManager, const std::array<ui
     std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
     std::error_code ec;
     HomekitEvent hk_event = alpaca::deserialize<HomekitEvent>(payload, ec);
-    if(ec) return;
+    if(ec) { ESP_LOGE(TAG, "Failed to deserialize HomeKit event: %s", ec.message().c_str()); return; }
     switch(hk_event.type) {
-      case ACCESSDATA_CHANGED:
+      case ACCESSDATA_CHANGED: {
         updateEcpData();
         invalidateAuthCache();
-        break;
+      }
+      break;
       case DEBUG_AUTH_FLOW: {
         EventValueChanged s = alpaca::deserialize<EventValueChanged>(hk_event.data, ec);
         if(!ec){
           authFlow = KeyFlow(s.newValue);
+        } else {
+          ESP_LOGE(TAG, "Failed to deserialize debug auth flow event: %s", ec.message().c_str());
+          return;
         }
-        break;
       }
+      break;
       default:
         break;
     }

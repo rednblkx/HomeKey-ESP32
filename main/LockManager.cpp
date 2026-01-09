@@ -32,7 +32,7 @@ LockManager::LockManager(const espConfig::misc_config_t& miscConfig, const espCo
       std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
       std::error_code ec;
       EventLockState s = alpaca::deserialize<EventLockState>(payload, ec);
-      if(ec) return;
+      if(ec) { ESP_LOGE(TAG, "Failed to deserialize override state event: %s", ec.message().c_str()); return; }
       ESP_LOGD(TAG, "Received override state event: %d -> %d", s.currentState, s.targetState);
       overrideState(s.currentState, s.targetState);
     });
@@ -41,7 +41,7 @@ LockManager::LockManager(const espConfig::misc_config_t& miscConfig, const espCo
       std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
       std::error_code ec;
       EventLockState s = alpaca::deserialize<EventLockState>(payload, ec);
-      if(ec) return;
+      if(ec) { ESP_LOGE(TAG, "Failed to deserialize target state event: %s", ec.message().c_str()); return; }
       ESP_LOGD(TAG, "Received target state event: %d -> %d", s.currentState, s.targetState);
       setTargetState(s.targetState, Source(s.source));
     });
@@ -50,7 +50,8 @@ LockManager::LockManager(const espConfig::misc_config_t& miscConfig, const espCo
       std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
       std::error_code ec;
       EventLockState s = alpaca::deserialize<EventLockState>(payload, ec);
-      if(ec) return;
+      if(ec) { ESP_LOGE(TAG, "Failed to deserialize update state event: %s", ec.message().c_str()); return; }
+      ESP_LOGD(TAG, "Received update state event: %d -> %d", s.currentState, s.targetState);
       m_currentState = s.currentState;
       s.currentState = m_currentState;
       s.targetState = m_targetState;
@@ -77,8 +78,8 @@ void LockManager::begin() {
       std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
       std::error_code ec;
       NfcEvent nfc_event = alpaca::deserialize<NfcEvent>(payload, ec);
+      if(ec) { ESP_LOGE(TAG, "Failed to deserialize NFC event: %s", ec.message().c_str()); return; }
       ESP_LOGD(TAG, "Received NFC event: %d", nfc_event.type);
-      if(ec) return;
       if(nfc_event.type == HOMEKEY_TAP) {
         ESP_LOGI(TAG, "Processing NFC tap request...");
         EventHKTap s = alpaca::deserialize<EventHKTap>(nfc_event.data, ec);
@@ -91,6 +92,9 @@ void LockManager::begin() {
             int newState = (m_currentState == lockStates::LOCKED) ? lockStates::UNLOCKED : lockStates::LOCKED;
             setTargetState(newState, Source::NFC);
           }
+        } else {
+          ESP_LOGE(TAG, "Failed to deserialize HomeKey event: %s", ec.message().c_str());
+          return;
         }
       }
     });

@@ -42,7 +42,9 @@ HardwareManager::HardwareManager(const espConfig::actions_config_t& miscConfig)
     std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
     std::error_code ec;
     EventLockState s = alpaca::deserialize<EventLockState>(payload, ec);
-    if(!ec) setLockOutput(s.targetState);
+    if(ec) { ESP_LOGE(TAG, "Failed to deserialize lock state event: %s", ec.message().c_str()); return; }
+    ESP_LOGD(TAG, "Received action event: %d -> %d", s.currentState, s.targetState);
+    setLockOutput(s.targetState);
   });
   m_gpio_pin_event = event_bus.subscribe(event_bus.register_topic(HARDWARE_CONFIG_BUS_TOPIC), [&](const EventBus::Event& event, void* context){
     if(event.payload_size == 0 || event.payload == nullptr) return;
@@ -50,6 +52,7 @@ HardwareManager::HardwareManager(const espConfig::actions_config_t& miscConfig)
     std::error_code ec;
     EventValueChanged s = alpaca::deserialize<EventValueChanged>(payload, ec);
     if(!ec) {
+      ESP_LOGD(TAG, "Received hardware config event: %s -> %d (old=%d)", s.name.c_str(), s.newValue, s.oldValue);
       uint8_t state = 0;
       if(s.oldValue != 255 && s.oldValue < GPIO_NUM_MAX){
         state = gpio_get_level(gpio_num_t(s.oldValue));
@@ -61,6 +64,9 @@ HardwareManager::HardwareManager(const espConfig::actions_config_t& miscConfig)
         if(s.name == "gpioActionPin")
           digitalWrite(s.newValue, state);
       }
+    } else {
+      ESP_LOGE(TAG, "Failed to deserialize hardware config event: %s", ec.message().c_str());
+      return;
     }
   });
 }
@@ -81,16 +87,19 @@ void HardwareManager::begin() {
     std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
     std::error_code ec;
     NfcEvent nfc_event = alpaca::deserialize<NfcEvent>(payload, ec);
+    if(ec) { ESP_LOGE(TAG, "Failed to deserialize NFC event: %s", ec.message().c_str()); return; }
     ESP_LOGD(TAG, "Received NFC event: %d", nfc_event.type);
-    if(ec) return;
     switch(nfc_event.type) {
       case HOMEKEY_TAP: {
         EventHKTap s = alpaca::deserialize<EventHKTap>(nfc_event.data, ec);
         if(!ec){
           if(s.status) {showSuccessFeedback();triggerAltAction();} else showFailureFeedback();
+        } else {
+          ESP_LOGE(TAG, "Failed to deserialize HomeKey event: %s", ec.message().c_str());
+          return;
         }
-        break;
       }
+      break;
       case TAG_TAP: {
         EventTagTap s = alpaca::deserialize<EventTagTap>(nfc_event.data, ec);
         if(!ec){
@@ -98,8 +107,10 @@ void HardwareManager::begin() {
               FeedbackType feedback = FeedbackType::TAG_EVENT;
               xQueueSend(m_feedbackQueue, &feedback, 0);
           }
+        } else {
+          ESP_LOGE(TAG, "Failed to deserialize Tag event: %s", ec.message().c_str());
+          return;
         }
-        break;
       }
       break;
       default:
