@@ -1544,6 +1544,7 @@ esp_err_t WebServerManager::handleOTAUpload(httpd_req_t *req) {
   if (xTaskCreate(otaTask, "ota_task", 8192, params, 5, NULL) != pdPASS) {
     ESP_LOGE(TAG, "Failed to create OTA task");
     delete params;
+    httpd_req_async_handler_complete(reqCopy);
     instance->m_otaInProgress = false;
     return ESP_FAIL; 
   }
