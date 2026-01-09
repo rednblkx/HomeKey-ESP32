@@ -1539,10 +1539,12 @@ esp_err_t WebServerManager::handleOTAUpload(httpd_req_t *req) {
     return ESP_OK;
   }
 
-  OTAParams *params = new OTAParams{reqCopy, instance, uploadType, skipReboot, req->content_len};
+  OTAParams *params = new OTAParams{reqCopy, instance, uploadType, skipReboot, req->content_len, new OTAState()};
+  params->state->inProgress = true;
 
   if (xTaskCreate(otaTask, "ota_task", 8192, params, 5, NULL) != pdPASS) {
     ESP_LOGE(TAG, "Failed to create OTA task");
+    delete params->state;
     delete params;
     httpd_req_async_handler_complete(reqCopy);
     instance->m_otaInProgress = false;
@@ -1557,47 +1559,47 @@ void WebServerManager::otaTask(void *pvParameters) {
   WebServerManager *instance = params->instance;
   httpd_req_t *req = params->req;
   
-  instance->m_currentUploadType = params->uploadType;
-  instance->m_skipReboot = params->skipReboot;
-  instance->m_otaTotalBytes = params->contentLength;
-  instance->m_otaWrittenBytes = 0;
-  instance->m_otaError.clear();
+  params->state->currentUploadType = params->uploadType;
+  params->state->skipReboot = params->skipReboot;
+  params->state->totalBytes = params->contentLength;
+  params->state->writtenBytes = 0;
+  params->state->error.clear();
 
-  esp_ota_handle_t otaHandle = 0;
-  const esp_partition_t *updatePartition = nullptr;
-  const esp_partition_t *littlefsPartition = nullptr;
+  params->state->handle = 0;
+  params->state->updatePartition = nullptr;
+  params->state->littlefsPartition = nullptr;
 
   ESP_LOGI(TAG, "Starting OTA task. Type: %d, Size: %zu", (int)params->uploadType, params->contentLength);
 
   const size_t buffer_size = 4096;
   char *buffer = (char *)heap_caps_malloc(buffer_size, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
   if (!buffer) {
-    instance->m_otaError = "Buffer allocation failed";
+    params->state->error = "Buffer allocation failed";
     goto error;
   }
 
   if (params->uploadType == OTAUploadType::FIRMWARE) {
-    updatePartition = esp_ota_get_next_update_partition(NULL);
-    if (!updatePartition) {
-       instance->m_otaError = "No OTA partition";
+    params->state->updatePartition = esp_ota_get_next_update_partition(NULL);
+    if (!params->state->updatePartition) {
+       params->state->error = "No OTA partition";
        goto error;
     }
-    if (esp_ota_begin(updatePartition, OTA_SIZE_UNKNOWN, &otaHandle) != ESP_OK) {
-       instance->m_otaError = "OTA begin failed";
+    if (esp_ota_begin(params->state->updatePartition, OTA_SIZE_UNKNOWN, &params->state->handle) != ESP_OK) {
+       params->state->error = "OTA begin failed";
        goto error;
     }
   } else {
-    littlefsPartition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_SPIFFS, "spiffs");
-    if (!littlefsPartition) {
-      instance->m_otaError = "No LittleFS partition";
+    params->state->littlefsPartition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_SPIFFS, "spiffs");
+    if (!params->state->littlefsPartition) {
+      params->state->error = "No LittleFS partition";
       goto error;
     }
-    if (params->contentLength > littlefsPartition->size) {
-      instance->m_otaError = "Image too large";
+    if (params->contentLength > params->state->littlefsPartition->size) {
+      params->state->error = "Image too large";
       goto error;
     }
-    if (esp_partition_erase_range(littlefsPartition, 0, littlefsPartition->size) != ESP_OK) {
-      instance->m_otaError = "Erase failed";
+    if (esp_partition_erase_range(params->state->littlefsPartition, 0, params->state->littlefsPartition->size) != ESP_OK) {
+      params->state->error = "Erase failed";
       goto error;
     }
   }
@@ -1612,67 +1614,71 @@ void WebServerManager::otaTask(void *pvParameters) {
             if (received == HTTPD_SOCK_ERR_TIMEOUT) {
                 continue;
             }
-            instance->m_otaError = "Receive error";
+            params->state->error = "Receive error";
             goto error;
         }
         
         if (received > 0) {
             if (params->uploadType == OTAUploadType::FIRMWARE) {
-                if (esp_ota_write(otaHandle, buffer, received) != ESP_OK) {
-                    instance->m_otaError = "Write error";
+                if (esp_ota_write(params->state->handle, buffer, received) != ESP_OK) {
+                    params->state->error = "Write error";
                     goto error;
                 }
             } else {
-                if (esp_partition_write(littlefsPartition, instance->m_otaWrittenBytes, buffer, received) != ESP_OK) {
-                    instance->m_otaError = "Write error";
+                if (esp_partition_write(params->state->littlefsPartition, params->state->writtenBytes, buffer, received) != ESP_OK) {
+                    params->state->error = "Write error";
                     goto error;
                 }
             }
-            instance->m_otaWrittenBytes += received;
+            params->state->writtenBytes += received;
             remaining -= received;
             
-            if ((instance->m_otaWrittenBytes - last_broadcast) >= (params->contentLength / 20) || remaining == 0) {
-                instance->broadcastOTAStatus();
-                last_broadcast = instance->m_otaWrittenBytes;
+            if ((params->state->writtenBytes - last_broadcast) >= (params->contentLength / 20) || remaining == 0) {
+                instance->broadcastOTAStatus(*params->state);
+                last_broadcast = params->state->writtenBytes;
             }
         }
     }
   }
 
   if (params->uploadType == OTAUploadType::FIRMWARE) {
-    if (esp_ota_end(otaHandle) != ESP_OK || esp_ota_set_boot_partition(updatePartition) != ESP_OK) {
-        instance->m_otaError = "End/SetBoot failed";
+    if (esp_ota_end(params->state->handle) != ESP_OK || esp_ota_set_boot_partition(params->state->updatePartition) != ESP_OK) {
+        params->state->error = "End/SetBoot failed";
         goto error;
     }
   }
 
-  instance->m_otaInProgress = false;
-  instance->broadcastOTAStatus();
+  params->state->inProgress = false;
+  instance->broadcastOTAStatus(*params->state);
   httpd_resp_set_type(req, "application/json");
   httpd_resp_sendstr(req, "{\"success\":true,\"message\":\"Update Complete\"}");
   httpd_req_async_handler_complete(req);
+  instance->m_otaInProgress = false;
   
   if (!params->skipReboot) {
       vTaskDelay(pdMS_TO_TICKS(1000));
       esp_restart();
   }
   
-  free(buffer);
+  if (buffer) free(buffer);
+  delete params->state;
   delete params;
   vTaskDelete(NULL);
   return;
 
 error:
-  instance->m_otaInProgress = false;
-  instance->broadcastOTAStatus();
-  if (otaHandle) esp_ota_abort(otaHandle);
+  params->state->inProgress = false;
+  instance->broadcastOTAStatus(*params->state);
+  if (params->state->handle) esp_ota_abort(params->state->handle);
   if (buffer) free(buffer);
   
   httpd_resp_set_type(req, "application/json");
   httpd_resp_set_status(req, "500 Internal Server Error");
-  std::string errJson = "{\"success\":false,\"error\":\"" + instance->m_otaError + "\"}";
+  std::string errJson = "{\"success\":false,\"error\":\"" + params->state->error + "\"}";
   httpd_resp_sendstr(req, errJson.c_str());
   httpd_req_async_handler_complete(req);
+  instance->m_otaInProgress = false;
+  delete params->state;
   delete params;
   vTaskDelete(NULL);
 }
@@ -1694,24 +1700,25 @@ std::string WebServerManager::getOTAInfo() {
   return cjson_to_string_and_free(status);
 }
 
-void WebServerManager::broadcastOTAStatus() {
+void WebServerManager::broadcastOTAStatus(const OTAState& state) {
   cJSON *status = cJSON_CreateObject();
   cJSON_AddStringToObject(status, "type", "ota_status");
-  if (!m_otaError.empty())
-    cJSON_AddStringToObject(status, "error", m_otaError.c_str());
-  cJSON_AddBoolToObject(status, "in_progress", m_otaInProgress);
-  cJSON_AddNumberToObject(status, "bytes_written", m_otaWrittenBytes);
+  if (!state.error.empty())
+    cJSON_AddStringToObject(status, "error", state.error.c_str());
+  cJSON_AddBoolToObject(status, "in_progress", state.inProgress);
+  cJSON_AddNumberToObject(status, "bytes_written", state.writtenBytes);
   cJSON_AddStringToObject(status, "upload_type",
-                          (m_currentUploadType == OTAUploadType::LITTLEFS)
+                          (state.currentUploadType == OTAUploadType::LITTLEFS)
                               ? "littlefs"
                               : "firmware");
 
-  if (m_otaInProgress && m_otaTotalBytes > 0) {
+  if (state.inProgress && state.totalBytes > 0) {
     cJSON_AddNumberToObject(status, "progress_percent",
-                            (float)m_otaWrittenBytes / m_otaTotalBytes *
+                            (float)state.writtenBytes / state.totalBytes *
                                 100.0f);
-    cJSON_AddNumberToObject(status, "total_bytes", m_otaTotalBytes);
+    cJSON_AddNumberToObject(status, "total_bytes", state.totalBytes);
   }
+  
   std::string otaStatus = cjson_to_string_and_free(status);
   broadcastWs((const uint8_t *)otaStatus.c_str(), otaStatus.size(),
               HTTPD_WS_TYPE_TEXT);

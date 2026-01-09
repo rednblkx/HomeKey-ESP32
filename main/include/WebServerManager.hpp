@@ -59,12 +59,25 @@ private:
   // ------------------------------------------------------------------------
   // Internal Types & Enums
   // ------------------------------------------------------------------------
-  enum class OTAUploadType { FIRMWARE, LITTLEFS };
 
   struct WsClient {
     int fd;
     std::mutex mutex;
     WsClient(int file_descriptor) : fd(file_descriptor) {}
+  };
+
+  enum class OTAUploadType { FIRMWARE, LITTLEFS };
+
+  struct OTAState {
+    esp_ota_handle_t handle = 0;
+    const esp_partition_t *updatePartition = nullptr;
+    const esp_partition_t *littlefsPartition = nullptr;
+    size_t writtenBytes = 0;
+    size_t totalBytes = 0;
+    bool skipReboot = false;
+    bool inProgress = false;
+    std::string error;
+    OTAUploadType currentUploadType = OTAUploadType::FIRMWARE;
   };
 
   struct OTAParams {
@@ -73,9 +86,8 @@ private:
     OTAUploadType uploadType;
     bool skipReboot;
     size_t contentLength;
+    OTAState *state;
   };
-
-
 
   // ------------------------------------------------------------------------
   // Static Task Callbacks
@@ -124,8 +136,7 @@ private:
   std::string getDeviceInfo();
   std::string getOTAInfo();
   // OTA management
-  void broadcastOTAStatus();
-
+  void broadcastOTAStatus(const OTAState& state);
 
   // Utility methods
   static bool validateRequest(httpd_req_t *req, cJSON *currentData,
@@ -157,15 +168,5 @@ private:
   esp_timer_handle_t m_statusTimer;
   std::vector<std::vector<uint8_t>> m_wsBroadcastBuffer;
 
-  // OTA state
-  esp_ota_handle_t m_otaHandle = 0;
-  const esp_partition_t *m_updatePartition = nullptr;
-  const esp_partition_t *m_littlefsPartition = nullptr;
-  size_t m_otaWrittenBytes = 0;
-  size_t m_otaTotalBytes = 0;
-  bool m_skipReboot = false;
-  std::mutex m_otaMutex;
   std::atomic<bool> m_otaInProgress{false};
-  std::string m_otaError;
-  OTAUploadType m_currentUploadType = OTAUploadType::FIRMWARE;
 };
