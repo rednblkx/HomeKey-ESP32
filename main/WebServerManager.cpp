@@ -1490,6 +1490,13 @@ esp_err_t WebServerManager::handleOTAUpload(httpd_req_t *req) {
     return ESP_FAIL;
   }
   
+  if (req->content_len == 0) {
+    httpd_resp_set_status(req, "400 Bad Request");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"success\":false,\"error\":\"Invalid request\"}");
+    return ESP_OK;
+  }
+
   bool expected = false;
   if (!instance->m_otaInProgress.compare_exchange_strong(expected, true)) {
     httpd_resp_set_status(req, "409 Conflict");
