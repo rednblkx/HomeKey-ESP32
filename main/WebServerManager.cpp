@@ -122,15 +122,12 @@ void WebServerManager::begin() {
   randombytes_buf(sessionIdBytes.data(), sessionIdBytes.size());
   m_sessionId = fmt::format("{:02x}", fmt::join(sessionIdBytes, ""));
 
-  // Mount filesystem
   if (!LittleFS.begin()) {
-    ESP_LOGE(TAG, "Failed to mount LittleFS");
-    return;
+    ESP_LOGW(TAG, "Failed to mount LittleFS");
+  } else{
+    ESP_LOGI(TAG, "LittleFS mounted: %d/%d bytes", LittleFS.usedBytes(),
+            LittleFS.totalBytes());
   }
-  ESP_LOGI(TAG, "LittleFS mounted: %d/%d bytes", LittleFS.usedBytes(),
-           LittleFS.totalBytes());
-
-  // Configure and start HTTP server
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   config.server_port = 80;
   config.max_uri_handlers = 20;
@@ -163,7 +160,6 @@ void WebServerManager::begin() {
 
   setupRoutes();
 
-  // Create status timer
   esp_timer_create_args_t timerArgs = {
       .callback = &statusTimerCallback, .arg = this, .name = "statusTimer"};
   if (esp_timer_create(&timerArgs, &m_statusTimer) != ESP_OK) {
