@@ -1646,6 +1646,9 @@ void WebServerManager::otaTask(void *pvParameters) {
                 instance->broadcastOTAStatus(*params->state);
                 last_broadcast = params->state->writtenBytes;
             }
+        } else {
+            params->state->error = "Received empty payload, aborting";
+            goto error;
         }
     }
   }
