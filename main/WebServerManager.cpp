@@ -1538,7 +1538,6 @@ esp_err_t WebServerManager::handleOTAUpload(httpd_req_t *req) {
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_status(req, "500 Internal Server Error");
     httpd_resp_sendstr(req, "\"success\":false,\"error\":\"Failed to start OTA\"");
-    httpd_req_async_handler_complete(req);
     return ESP_OK;
   }
 
