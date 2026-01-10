@@ -1652,6 +1652,12 @@ void WebServerManager::otaTask(void *pvParameters) {
         params->state->error = "End/SetBoot failed";
         goto error;
     }
+  } else if (params->uploadType == OTAUploadType::LITTLEFS) {
+    if(!LittleFS.begin()) {
+      ESP_LOGE(TAG, "Failed to remount LittleFS after OTA");
+      params->state->error = "LittleFS remount failed after OTA";
+      goto error;
+    }
   }
 
   params->state->inProgress = false;
