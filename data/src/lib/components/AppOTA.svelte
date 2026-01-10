@@ -112,13 +112,12 @@
 					lastLoggedPercent = percent;
 				}
 			} else if (!evt.data.in_progress && previousStatus.in_progress) {
-				if (!evt.data.error) {
-					addLog("success", "OTA update completed successfully");
-				}
 				lastLoggedPercent = 0;
 			}
+		} else if(evt.type == "message" && evt.data.type == "ota_info") {
+			otaStatus = { ...otaStatus, ...evt.data };
 		} else if (evt.type == "status" && evt.data.state == "open") {
-			requestOTAStatus();
+			requestOTAInfo();
 		}
 	}
 
@@ -337,9 +336,9 @@
 		}
 	}
 
-	function requestOTAStatus() {
+	function requestOTAInfo() {
 		if (ws && ws.connected) {
-			ws.send({ type: "ota_status" });
+			ws.send({ type: "ota_info" });
 		}
 	}
 
@@ -352,7 +351,7 @@
 			addLog("error", "WebSocket service not available");
 		}
 
-		requestOTAStatus();
+		requestOTAInfo();
 	});
 
 	onDestroy(() => {

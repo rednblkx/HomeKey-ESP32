@@ -267,7 +267,7 @@ export interface NfcGpioPinsPreset {
  */
 export interface OTAStatus {
   /** Message type identifier */
-  type: "ota_status";
+  type: "ota_status" | "ota_info";
   /** Whether an OTA update is currently in progress */
   in_progress: boolean;
   /** Number of bytes written so far */

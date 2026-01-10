@@ -5,6 +5,7 @@
 #include "esp_partition.h"
 #include "esp_timer.h"
 #include <memory>
+#include <atomic>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -58,7 +59,6 @@ private:
   // ------------------------------------------------------------------------
   // Internal Types & Enums
   // ------------------------------------------------------------------------
-  enum class OTAUploadType { FIRMWARE, LITTLEFS };
 
   struct WsClient {
     int fd;
@@ -66,18 +66,34 @@ private:
     WsClient(int file_descriptor) : fd(file_descriptor) {}
   };
 
-  struct OTAAsyncRequest {
-    httpd_req_t *req;
-    size_t contentLength;
-    OTAUploadType uploadType;
+  enum class OTAUploadType { FIRMWARE, LITTLEFS };
+
+  struct OTAState {
+    esp_ota_handle_t handle = 0;
+    const esp_partition_t *updatePartition = nullptr;
+    const esp_partition_t *littlefsPartition = nullptr;
+    size_t writtenBytes = 0;
+    size_t totalBytes = 0;
     bool skipReboot = false;
+    bool inProgress = false;
+    std::string error;
+    OTAUploadType currentUploadType = OTAUploadType::FIRMWARE;
+  };
+
+  struct OTAParams {
+    httpd_req_t *req;
+    WebServerManager *instance;
+    OTAUploadType uploadType;
+    bool skipReboot;
+    size_t contentLength;
+    OTAState *state;
   };
 
   // ------------------------------------------------------------------------
   // Static Task Callbacks
   // ------------------------------------------------------------------------
   static void ws_send_task(void *arg);
-  static void otaWorkerTask(void *parameter);
+  static void otaTask(void *pvParameters);
   static void statusTimerCallback(void *arg);
 
   // ------------------------------------------------------------------------
@@ -118,14 +134,9 @@ private:
   // Device info/status
   std::string getDeviceMetrics();
   std::string getDeviceInfo();
-  std::string getOTAStatus();
-  void broadcastOTAStatus();
-
+  std::string getOTAInfo();
   // OTA management
-  void initializeOTAWorker();
-  void cleanupOTAAsync();
-  esp_err_t otaUploadAsync(httpd_req_t *req);
-  static esp_err_t queueOTARequest(httpd_req_t *req);
+  void broadcastOTAStatus(const OTAState& state);
 
   // Utility methods
   static bool validateRequest(httpd_req_t *req, cJSON *currentData,
@@ -157,20 +168,5 @@ private:
   esp_timer_handle_t m_statusTimer;
   std::vector<std::vector<uint8_t>> m_wsBroadcastBuffer;
 
-  // OTA state
-  esp_ota_handle_t m_otaHandle = 0;
-  const esp_partition_t *m_updatePartition = nullptr;
-  const esp_partition_t *m_littlefsPartition = nullptr;
-  size_t m_otaWrittenBytes = 0;
-  size_t m_otaTotalBytes = 0;
-  bool m_otaInProgress = false;
-  std::string m_otaError;
-  OTAUploadType m_currentUploadType = OTAUploadType::FIRMWARE;
-  bool m_skipReboot = false;
-  std::mutex m_otaMutex;
-
-  // OTA async worker
-  TaskHandle_t m_otaWorkerHandle = nullptr;
-  QueueHandle_t m_otaRequestQueue = nullptr;
-  SemaphoreHandle_t m_otaWorkerReady = nullptr;
+  std::atomic<bool> m_otaInProgress{false};
 };
