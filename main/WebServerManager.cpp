@@ -132,7 +132,7 @@ void WebServerManager::begin() {
   config.server_port = 80;
   config.max_uri_handlers = 20;
   config.max_open_sockets = 6;
-  config.stack_size = 4096;
+  config.stack_size = 8192;
   config.uri_match_fn = httpd_uri_match_wildcard;
   config.lru_purge_enable = true;
 
