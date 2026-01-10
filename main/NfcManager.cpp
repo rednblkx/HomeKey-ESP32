@@ -4,6 +4,7 @@
 #include "ReaderDataManager.hpp"
 #include "esp32-hal.h"
 #include "eventStructs.hpp"
+#include "fmt/ranges.h"
 #include "hkAuthContext.h"
 #include "utils.hpp"
 
@@ -398,22 +399,20 @@ void NfcManager::pollingTask() {
         m_nfc->inCommunicateThru(m_ecpData.data(), m_ecpData.size(), res, &resLen, 0, true);
 
         uint8_t *uid = new uint8_t[16];
-        uint8_t *uidLen = new uint8_t[1];
+        uint8_t uidLen = 0;
         uint8_t *atqa = new uint8_t[2];
-        uint8_t *sak = new uint8_t[1];
-        bool passiveTargetFound = m_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, uidLen, atqa, sak, 200, true, true);
+        uint8_t sak = 0;
+        bool passiveTargetFound = m_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, atqa, &sak, 200, true, true);
         
         if (passiveTargetFound) {
             ESP_LOGI(TAG, "NFC tag detected!");
             m_nfc->setPassiveActivationRetries(5);
-            handleTagPresence();
+            handleTagPresence(uid, uidLen, atqa, sak);
             waitForTagRemoval();
             m_nfc->setPassiveActivationRetries(0);
         }
         delete[] uid;
-        delete[] uidLen;
         delete[] atqa;
-        delete[] sak;
 
         vTaskDelay(pdMS_TO_TICKS(100));
     }
@@ -426,7 +425,7 @@ void NfcManager::pollingTask() {
  * HomeKey authentication handling. If selection fails, reads the tag's UID/ATQA/SAK and processes it as a generic ISO14443A tag.
  * Logs the tag processing duration and releases the PN532 device state before returning.
  */
-void NfcManager::handleTagPresence() {
+void NfcManager::handleTagPresence(const uint8_t* uid, const uint8_t uidLen, const uint8_t* atqa, const uint8_t sak) {
     auto startTime = std::chrono::high_resolution_clock::now();
     uint8_t selectAppletCmd[] = { 0x00, 0xA4, 0x04, 0x00, 0x07, 0xA0, 0x00, 0x00, 0x08, 0x58, 0x01, 0x01, 0x00 };
     uint8_t response[64];
@@ -440,8 +439,7 @@ void NfcManager::handleTagPresence() {
         handleHomeKeyAuth();
     } else {
         ESP_LOGI(TAG, "Not a HomeKey tag, or failed to select applet.");
-        uint8_t uid[16], uidLen = 0, atqa[2], sak[1];
-        m_nfc->readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLen, atqa, sak);
+        ESP_LOGD(TAG, "Passive target UID: %s (%d)", fmt::format("{:02X}", fmt::join(std::span(uid, uidLen), "")).c_str(), uidLen);
         handleGenericTag(uid, uidLen, atqa, sak);
     }
     
@@ -587,8 +585,8 @@ void NfcManager::handleHomeKeyAuth() {
  * @param atqa Pointer to the 2-byte ATQA value.
  * @param sak Pointer to the 1-byte SAK value.
  */
-void NfcManager::handleGenericTag(const uint8_t* uid, uint8_t uidLen, const uint8_t* atqa, const uint8_t* sak) {
-    EventTagTap s{.uid = std::vector<uint8_t>(uid, uid+uidLen), .atqa = std::vector<uint8_t>(atqa, atqa + 2), .sak = std::vector<uint8_t>(sak, sak + 1)};
+void NfcManager::handleGenericTag(const uint8_t* uid, uint8_t uidLen, const uint8_t* atqa, const uint8_t sak) {
+    EventTagTap s{.uid = std::vector<uint8_t>(uid, uid+uidLen), .atqa = std::vector<uint8_t>(atqa, atqa + 2), .sak = sak};
     std::vector<uint8_t> d;
     alpaca::serialize(s, d);
     NfcEvent event{.type=TAG_TAP, .data=d};

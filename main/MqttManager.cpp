@@ -496,13 +496,13 @@ void MqttManager::publishHomeKeyTap(const std::vector<uint8_t>& issuerId, const 
  *
  * If NFC tag publishing is disabled in the MQTT configuration, no publish is performed.
  */
-void MqttManager::publishUidTap(const std::vector<uint8_t>& uid, const std::vector<uint8_t> &atqa, const std::vector<uint8_t> &sak) {
+void MqttManager::publishUidTap(const std::vector<uint8_t>& uid, const std::vector<uint8_t> &atqa, const uint8_t &sak) {
     if(!m_mqttConfig.nfcTagNoPublish){
       cJSON *doc = cJSON_CreateObject();
       cJSON_AddStringToObject(doc, "uid", fmt::format("{:02X}", fmt::join(uid, "")).c_str());
       cJSON_AddBoolToObject(doc, "homekey", false);
       cJSON_AddStringToObject(doc, "atqa", fmt::format("{:02X}", fmt::join(atqa, "")).c_str());
-      cJSON_AddStringToObject(doc, "sak", fmt::format("{:02X}", fmt::join(sak, "")).c_str());
+      cJSON_AddStringToObject(doc, "sak", fmt::format("{:02X}", sak).c_str());
       char *payload_cstr = cJSON_Print(doc);
       std::string payload(payload_cstr);
       free(payload_cstr);

@@ -57,9 +57,9 @@ private:
 
     // --- Core NFC Logic ---
     bool initializeReader();
-    void handleTagPresence();
+    void handleTagPresence(const uint8_t* uid, const uint8_t uidLen, const uint8_t* atqa, const uint8_t sak);
     void handleHomeKeyAuth();
-    void handleGenericTag(const uint8_t* uid, uint8_t uidLen, const uint8_t* atqa, const uint8_t* sak);
+    void handleGenericTag(const uint8_t* uid, uint8_t uidLen, const uint8_t* atqa, const uint8_t sak);
     void waitForTagRemoval();
     
     // --- Member Variables ---
