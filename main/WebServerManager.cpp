@@ -1589,7 +1589,7 @@ void WebServerManager::otaTask(void *pvParameters) {
        params->state->error = "No OTA partition";
        goto error;
     }
-    if (esp_ota_begin(params->state->updatePartition, OTA_SIZE_UNKNOWN, &params->state->handle) != ESP_OK) {
+    if (esp_ota_begin(params->state->updatePartition, params->contentLength, &params->state->handle) != ESP_OK) {
        params->state->error = "OTA begin failed";
        goto error;
     }
