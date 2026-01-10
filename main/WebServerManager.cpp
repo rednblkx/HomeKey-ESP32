@@ -1638,7 +1638,7 @@ void WebServerManager::otaTask(void *pvParameters) {
             params->state->writtenBytes += received;
             remaining -= received;
             
-            if ((params->state->writtenBytes - last_broadcast) >= (params->contentLength / 20) || remaining == 0) {
+            if ((params->state->writtenBytes - last_broadcast) >= std::max(params->contentLength / 20, (size_t)1) || remaining == 0) {
                 instance->broadcastOTAStatus(*params->state);
                 last_broadcast = params->state->writtenBytes;
             }
