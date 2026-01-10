@@ -1603,6 +1603,7 @@ void WebServerManager::otaTask(void *pvParameters) {
       params->state->error = "Image too large";
       goto error;
     }
+    LittleFS.end();
     if (esp_partition_erase_range(params->state->littlefsPartition, 0, params->state->littlefsPartition->size) != ESP_OK) {
       params->state->error = "Erase failed";
       goto error;
