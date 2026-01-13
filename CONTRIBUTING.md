@@ -69,7 +69,7 @@ Thank you for your interest in contributing to HomeKey-ESP32! We welcome contrib
 
 - Include steps to reproduce
 - Provide system information
-- Include relevant logs or screenshots
+- Include relevant logs and/or screenshots
 
 ### Feature Requests
 
@@ -81,7 +81,7 @@ Thank you for your interest in contributing to HomeKey-ESP32! We welcome contrib
 
 - **Firmware**: ESP32 C++ code in `main/`
 - **Web Interface**: Svelte code in `data/`
-- **Documentation**: Markdown files in `docs/`
+- **Documentation**: Markdown files in `docs/content`
 
 ### Documentation
 
@@ -144,12 +144,6 @@ docs: update installation guide for Windows
 
 ## Testing Guidelines
 
-### Integration Tests
-
-- Verify MQTT functionality
-- Test HomeKit integration
-- Validate web interface
-
 ### Hardware Compatibility
 
 Test on different ESP32 variants:
@@ -171,60 +165,14 @@ Test on different ESP32 variants:
 
 - Use established libraries
 - Follow cryptographic best practices
-- Secure key storage
+- Secure key storage (not implemented atm)
 - Proper random seeding
 
 ### Network Security
 
-- Use TLS for sensitive data
 - Validate certificates
 - Implement proper authentication
 - Avoid information leakage
-
-## Issue Templates
-
-### Bug Report Template
-
-```markdown
-**Describe the bug**
-A clear description of the bug.
-
-**To Reproduce**
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '...'
-3. See error
-
-**Expected behavior**
-What you expected to happen.
-
-**Screenshots**
-If applicable, add screenshots.
-
-**Environment:**
-- Hardware: [e.g., ESP32-WROOM-32]
-- Firmware version: [e.g., 1.0.0]
-- Web UI version: [e.g., 1.0.0]
-
-**Additional context**
-Add any other context about the problem here.
-```
-
-### Feature Request Template
-
-```markdown
-**Is your feature request related to a problem?**
-A clear description of the problem.
-
-**Describe the solution you'd like**
-A clear description of what you want to happen.
-
-**Describe alternatives you've considered**
-A clear description of any alternative solutions you've considered.
-
-**Additional context**
-Add any other context or screenshots about the feature request here.
-```
 
 ## Getting Help
 
