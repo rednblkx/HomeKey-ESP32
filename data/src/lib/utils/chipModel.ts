@@ -30,3 +30,14 @@ export function getChipModelString(model: number): string {
       return 'Unknown';
   }
 }
+
+export function doesChipModelHaveMultipleSPIBuses(model: number): boolean {
+  switch (model) {
+    case 2: // ESP32-S2
+    case 9: // ESP32-S3
+    case 18: // ESP32-P4
+      return true;
+    default:
+      return false;
+  }
+}

@@ -129,6 +129,11 @@ void HomeKitLock::ethEventHandler(arduino_event_id_t event, arduino_event_info_t
 void HomeKitLock::initializeETH(){
   const auto& miscConfig = m_configManager.getConfig<espConfig::misc_config_t>();
 
+#if SOC_SPI_PERIPH_NUM > 2
+    constexpr auto ETH_SPI_BUS = SPI3_HOST;
+#else
+    constexpr auto ETH_SPI_BUS = SPI2_HOST;
+#endif
 
     if (!miscConfig.ethernetEnabled) {
         ESP_LOGI(TAG, "Ethernet is disabled. HomeSpan will manage Wi-Fi.");
@@ -152,7 +157,7 @@ void HomeKitLock::initializeETH(){
             // SPI-based Ethernet Module
             const auto& spiConf = ethPreset.spi_conf;
             ETH.begin(ethPreset.ethChip.phy_type, 1, spiConf.pin_cs, spiConf.pin_irq, spiConf.pin_rst,
-                      SPI2_HOST, spiConf.pin_sck, spiConf.pin_miso, spiConf.pin_mosi, spiConf.spi_freq_mhz);
+                      ETH_SPI_BUS, spiConf.pin_sck, spiConf.pin_miso, spiConf.pin_mosi, spiConf.spi_freq_mhz);
         } else {
             // Internal MAC (RMII) Ethernet Module
             #if CONFIG_ETH_USE_ESP32_EMAC
@@ -180,7 +185,7 @@ void HomeKitLock::initializeETH(){
             // Custom SPI pins
             const auto& spiConf = miscConfig.ethSpiConfig;
             ETH.begin(chipType.phy_type, 1, spiConf[1], spiConf[2], spiConf[3],
-                      SPI2_HOST, spiConf[4], spiConf[5], spiConf[6], spiConf[0]);
+                      ETH_SPI_BUS, spiConf[4], spiConf[5], spiConf[6], spiConf[0]);
         } else {
             // Custom RMII pins
             #if CONFIG_ETH_USE_ESP32_EMAC

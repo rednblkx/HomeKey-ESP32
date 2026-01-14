@@ -16,8 +16,13 @@
 		NfcGpioPinsPreset,
 	} from "$lib/types/api";
 	import { diff } from "$lib/utils/objDiff";
+	import SpiEthernetNote from "$lib/components/SpiEthernetNote.svelte";
+	import { systemInfo } from "$lib/stores/system.svelte";
+	import { doesChipModelHaveMultipleSPIBuses } from "$lib/utils/chipModel";
 
 	let { misc, eth, nfcPresets, error } = $props();
+	
+	let chipModel = $derived(() => systemInfo.chip_model || 0);
 
 	let miscConfig = $state<MiscConfig>(
 		misc ?? {
@@ -475,6 +480,10 @@
 							<input type="checkbox" name="misc-collapse" />
 							<div class="collapse-title font-medium">PN532</div>
 							<div class="collapse-content flex flex-col gap-4">
+								<SpiEthernetNote
+									multipleSpi={doesChipModelHaveMultipleSPIBuses(chipModel())}
+									ethernetEnabled={miscConfig.ethernetEnabled}
+								/>
 								<div class="form-control">
 									<!-- svelte-ignore a11y_label_has_associated_control -->
 									<label class="label">
@@ -639,6 +648,11 @@
 								</div>
 
 								{#if miscConfig.ethernetEnabled}
+									<SpiEthernetNote
+										multipleSpi={doesChipModelHaveMultipleSPIBuses(chipModel())}
+										ethernetEnabled={miscConfig.ethernetEnabled}
+									/>
+
 									<div class="flex flex-col gap-4">
 										<div class="form-control">
 											<!-- svelte-ignore a11y_label_has_associated_control -->
