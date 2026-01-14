@@ -33,9 +33,15 @@ export function getChipModelString(model: number): string {
 
 export function doesChipModelHaveMultipleSPIBuses(model: number): boolean {
   switch (model) {
+    // The following list is from chips in the ESP-IDF
+    // whose `SOC_SPI_PERIPH_NUM` > 2
+    // (which is the condition used in the IDF
+    // for determining if the SPI3 bus exists).
+    case 1: // ESP32
     case 2: // ESP32-S2
     case 9: // ESP32-S3
     case 18: // ESP32-P4
+    case 28: // ESP32-H4
       return true;
     default:
       return false;
