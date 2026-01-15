@@ -119,6 +119,8 @@ export interface MiscConfig {
   ethActivePreset: number;
   /** Ethernet PHY type */
   ethPhyType: number;
+  /** Ethernet SPI host */
+  ethSpiBus: number;
   /** RMII configuration [phy_addr, pin_mcd, pin_mdio, pin_power, pin_rmii_clock] */
   ethRmiiConfig: [number, number, number, number, number];
   /** SPI configuration [freq_mhz, pin_cs, pin_irq, pin_rst, pin_sck, pin_miso, pin_mosi] */

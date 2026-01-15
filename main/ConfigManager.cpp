@@ -116,6 +116,7 @@ ConfigManager::ConfigManager() : m_isInitialized(false) {
       {"ethernetEnabled", &m_miscConfig.ethernetEnabled},
       {"ethActivePreset", &m_miscConfig.ethActivePreset},
       {"ethPhyType", &m_miscConfig.ethPhyType},
+      {"ethSpiBus", &m_miscConfig.ethSpiBus},
       {"ethRmiiConfig", &m_miscConfig.ethRmiiConfig},
       {"ethSpiConfig", &m_miscConfig.ethSpiConfig},
       {"logLevel", &m_miscConfig.logLevel}

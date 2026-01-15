@@ -18,7 +18,6 @@
 	import { diff } from "$lib/utils/objDiff";
 	import SpiEthernetNote from "$lib/components/SpiEthernetNote.svelte";
 	import { systemInfo } from "$lib/stores/system.svelte";
-	import { doesChipModelHaveMultipleSPIBuses } from "$lib/utils/chipModel";
 
 	let { misc, eth, nfcPresets, error } = $props();
 	
@@ -43,6 +42,7 @@
 			ethernetEnabled: false,
 			ethActivePreset: 255,
 			ethPhyType: 0,
+			ethSpiBus: 0,
 			ethRmiiConfig: [0, 0, 0, 0, 0],
 			ethSpiConfig: [20, -1, -1, -1, -1, -1, -1],
 			controlPin: 26,
@@ -481,7 +481,7 @@
 							<div class="collapse-title font-medium">PN532</div>
 							<div class="collapse-content flex flex-col gap-4">
 								<SpiEthernetNote
-									multipleSpi={doesChipModelHaveMultipleSPIBuses(chipModel())}
+									multipleSpi={miscConfig.ethSpiBus > 1}
 									ethernetEnabled={miscConfig.ethernetEnabled}
 								/>
 								<div class="form-control">
@@ -649,7 +649,7 @@
 
 								{#if miscConfig.ethernetEnabled}
 									<SpiEthernetNote
-										multipleSpi={doesChipModelHaveMultipleSPIBuses(chipModel())}
+										multipleSpi={miscConfig.ethSpiBus > 1}
 										ethernetEnabled={miscConfig.ethernetEnabled}
 									/>
 
