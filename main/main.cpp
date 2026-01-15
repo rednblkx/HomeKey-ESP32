@@ -73,11 +73,29 @@ void setup() {
     ESP_LOGI(TAG, "NFC GPIO pins preset: Custom");
     ESP_LOGI(TAG, "NFC Custom GPIO pins: %d, %d, %d, %d", miscConfig.nfcGpioPins[0], miscConfig.nfcGpioPins[1], miscConfig.nfcGpioPins[2], miscConfig.nfcGpioPins[3]);
   }
-  nfcManager = new NfcManager(*readerDataManager,
-                              miscConfig.nfcPinsPreset == 255 ? miscConfig.nfcGpioPins : nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins,
-                              miscConfig.hkAuthPrecomputeEnabled);
   readerDataManager->begin();
-  nfcManager->begin();
+  if(miscConfig.ethernetEnabled){
+    std::vector<uint8_t> pins_intersection;
+    std::ranges::set_intersection(miscConfig.ethSpiConfig.begin() + 1, miscConfig.ethSpiConfig.end(), miscConfig.nfcGpioPins.begin(), miscConfig.nfcGpioPins.end(), std::back_inserter(pins_intersection));
+    if((!pins_intersection.empty() && miscConfig.ethSpiBus == SPI2_HOST) || (pins_intersection.empty() && miscConfig.ethSpiBus == SPI3_HOST)){
+      goto nfc_init;
+    } else {
+      if(miscConfig.ethSpiBus == SPI2_HOST){
+        ESP_LOGE(TAG, "Ethernet enabled on SPI2 Bus, PN532 has to use the same GPIO pins as Ethernet");
+      } else {
+        ESP_LOGE(TAG, "Ethernet enabled on SPI3 Bus, PN532 cannot use the same GPIO pins as Ethernet");
+        for(auto& pin : pins_intersection){
+          ESP_LOGE(TAG, "GPIO Intersection: %d", pin);
+        }
+      }
+    }
+  } else {
+  nfc_init:
+    nfcManager = new NfcManager(*readerDataManager,
+                                miscConfig.nfcPinsPreset == 255 ? miscConfig.nfcGpioPins : nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins,
+                                miscConfig.hkAuthPrecomputeEnabled);
+    nfcManager->begin();
+  }
   hardwareManager->begin();
   homekitLock->begin();
   lockManager->begin();
