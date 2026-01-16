@@ -480,10 +480,12 @@
 							<input type="checkbox" name="misc-collapse" />
 							<div class="collapse-title font-medium">PN532</div>
 							<div class="collapse-content flex flex-col gap-4">
+                {#if miscConfig.ethernetEnabled}
 								<SpiEthernetNote
-									multipleSpi={miscConfig.ethSpiBus > 1}
-									ethernetEnabled={miscConfig.ethernetEnabled}
+									multipleSpi={ethConfig.numSpiBuses > 1}
+                  selectedBus={miscConfig.ethSpiBus}
 								/>
+                {/if}
 								<div class="form-control">
 									<!-- svelte-ignore a11y_label_has_associated_control -->
 									<label class="label">
@@ -648,11 +650,6 @@
 								</div>
 
 								{#if miscConfig.ethernetEnabled}
-									<SpiEthernetNote
-										multipleSpi={miscConfig.ethSpiBus > 1}
-										ethernetEnabled={miscConfig.ethernetEnabled}
-									/>
-
 									<div class="flex flex-col gap-4">
 										<div class="form-control">
 											<!-- svelte-ignore a11y_label_has_associated_control -->
@@ -825,6 +822,10 @@
 												<h3 class="text-lg font-bold">
 													SPI Configuration
 												</h3>
+												<SpiEthernetNote
+													multipleSpi={ethConfig.numSpiBuses > 1}
+                          selectedBus={miscConfig.ethSpiBus}
+												/>
 												<div
 													class="flex flex-col gap-4"
 												>
