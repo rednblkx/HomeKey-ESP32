@@ -850,6 +850,21 @@
 													<div class="form-control">
 														<!-- svelte-ignore a11y_label_has_associated_control -->
 														<label class="label">
+															<span class="label-text">SPI Bus</span>
+														</label>
+														<select
+																bind:value={miscConfig.ethSpiBus}
+																disabled={miscConfig.ethActivePreset !== 255}
+																class="select select-bordered w-full">
+																<option value={1}>SPI2</option>
+															{#if ethConfig.numSpiBuses === 2}
+																<option value={2}>SPI3</option>
+															{/if}
+														</select>
+													</div>
+													<div class="form-control">
+														<!-- svelte-ignore a11y_label_has_associated_control -->
+														<label class="label">
 															<span
 																class="label-text"
 																>Pin CS</span
