@@ -604,6 +604,8 @@ esp_err_t WebServerManager::handleGetEthConfig(httpd_req_t *req) {
       instance->m_configManager.getConfig<espConfig::misc_config_t>()
           .ethernetEnabled);
 
+  cJSON_AddNumberToObject(eth_config, "numSpiBuses", SPI_HOST_MAX - 1);
+
   std::string payload = cjson_to_string_and_free(eth_config);
   httpd_resp_set_type(req, "application/json");
   cJSON *res = cJSON_CreateObject();

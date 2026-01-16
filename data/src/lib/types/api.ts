@@ -254,6 +254,7 @@ export interface EthConfig {
   }>;
   /** Whether Ethernet is enabled */
   ethEnabled: boolean;
+  numSpiBuses: number;
 }
 
 export interface NfcGpioPinsPreset {
