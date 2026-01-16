@@ -102,7 +102,7 @@ HomeKitLock::LockMechanismService::LockMechanismService(HomeKitLock& bridge, Loc
     espp::EventManager::get().add_publisher("lock/targetStateChanged", "LockMechanismService");
     ESP_LOGI(HomeKitLock::TAG, "Configuring LockMechanism");
 
-    m_doorState = brodge.m_doorState = new Characteristic::CurrentDoorState(1); //default Closed
+    m_doorState = bridge.m_doorState = new Characteristic::CurrentDoorState(1); //default Closed
 
     m_lockCurrentState = bridge.m_lockCurrentState = new Characteristic::LockCurrentState(m_lockManager.getCurrentState(), true);
     m_lockTargetState = bridge.m_lockTargetState = new Characteristic::LockTargetState(m_lockManager.getTargetState(), true);
@@ -141,7 +141,9 @@ boolean HomeKitLock::LockMechanismService::update() {
 void HomeKitLock::LockMechanismService::loop() {
     int doorState = m_hardwareManager.checkDoorSensor();
     if (doorState != -1) {
+        homeSpanPAUSE();
         m_doorState->setVal(doorState);
+        homeSpanRESUME();
     }
 }
 
