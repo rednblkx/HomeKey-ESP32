@@ -1,6 +1,7 @@
 #include <memory>
 #define FMT_HEADER_ONLY
 #include "config.hpp"
+#include "eth_structs.hpp"
 #include "HomeKitLock.hpp"
 #include "LockManager.hpp"
 #include "NfcManager.hpp"
@@ -75,8 +76,21 @@ void setup() {
   }
   readerDataManager->begin();
   if(miscConfig.ethernetEnabled){
+    std::vector<uint8_t> ethPins;
+    if(miscConfig.ethActivePreset == 255){
+      ethPins = {miscConfig.ethSpiConfig[4], miscConfig.ethSpiConfig[5], miscConfig.ethSpiConfig[6]};
+    } else { 
+        const eth_board_presets_t& ethPreset = eth_config_ns::boardPresets[miscConfig.ethActivePreset];
+        ethPins = {ethPreset.spi_conf.pin_sck, ethPreset.spi_conf.pin_miso, ethPreset.spi_conf.pin_mosi};
+    }
+    std::vector<uint8_t> nfcPins;
+    if(miscConfig.nfcPinsPreset == 255){
+      nfcPins = {miscConfig.nfcGpioPins[1], miscConfig.nfcGpioPins[2], miscConfig.nfcGpioPins[3]};
+    } else {
+      nfcPins = {nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins[1], nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins[2], nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins[3]};
+    }
     std::vector<uint8_t> pins_intersection;
-    std::ranges::set_intersection(miscConfig.ethSpiConfig.begin() + 1, miscConfig.ethSpiConfig.end(), miscConfig.nfcGpioPins.begin(), miscConfig.nfcGpioPins.end(), std::back_inserter(pins_intersection));
+    std::ranges::set_intersection(ethPins.begin(), ethPins.end(), nfcPins.begin(), nfcPins.end(), std::back_inserter(pins_intersection));
     if((!pins_intersection.empty() && miscConfig.ethSpiBus == SPI2_HOST)){
       goto nfc_init;
     }
