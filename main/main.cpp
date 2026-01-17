@@ -77,9 +77,13 @@ void setup() {
   if(miscConfig.ethernetEnabled){
     std::vector<uint8_t> pins_intersection;
     std::ranges::set_intersection(miscConfig.ethSpiConfig.begin() + 1, miscConfig.ethSpiConfig.end(), miscConfig.nfcGpioPins.begin(), miscConfig.nfcGpioPins.end(), std::back_inserter(pins_intersection));
-    if((!pins_intersection.empty() && miscConfig.ethSpiBus == SPI2_HOST) || (pins_intersection.empty() && miscConfig.ethSpiBus == SPI3_HOST)){
+    if((!pins_intersection.empty() && miscConfig.ethSpiBus == SPI2_HOST)){
       goto nfc_init;
-    } else {
+    }
+    #if SOC_SPI_PERIPH_NUM > 2
+    else if (pins_intersection.empty() && miscConfig.ethSpiBus == SPI3_HOST) goto nfc_init;
+    #endif
+    else {
       if(miscConfig.ethSpiBus == SPI2_HOST){
         ESP_LOGE(TAG, "Ethernet enabled on SPI2 Bus, PN532 has to use the same GPIO pins as Ethernet");
       } else {
