@@ -15,8 +15,15 @@
         ? "bus"
         : "buses"}
       {spiNumBuses > 1 ? "and Ethernet is assigned to the" : "."}
-      {spiNumBuses > 1 ? (selectedBus === 1 ? "first bus." : "second bus.") : ""} Ensure that
-      the PN532 pins {selectedBus === 1 ? "match (except CS/SS)" : "do not conflict with"}
+      {spiNumBuses > 1
+        ? selectedBus === 1
+          ? "first bus."
+          : "second bus."
+        : ""}
+      <br />
+      Ensure that the PN532 pins {selectedBus === 1
+        ? "match (except CS/SS)"
+        : "do not conflict with"}
       the Ethernet pins as they will {selectedBus === 1
         ? "share the same bus."
         : "be initialized on separate buses."}
