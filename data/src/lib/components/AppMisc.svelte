@@ -482,7 +482,7 @@
 							<div class="collapse-content flex flex-col gap-4">
                 {#if miscConfig.ethernetEnabled}
 								<SpiEthernetNote
-									multipleSpi={ethConfig.numSpiBuses > 1}
+									spiNumBuses={ethConfig.numSpiBuses}
                   selectedBus={miscConfig.ethSpiBus}
 								/>
                 {/if}
@@ -823,7 +823,7 @@
 													SPI Configuration
 												</h3>
 												<SpiEthernetNote
-													multipleSpi={ethConfig.numSpiBuses > 1}
+													spiNumBuses={ethConfig.numSpiBuses}
                           selectedBus={miscConfig.ethSpiBus}
 												/>
 												<div
