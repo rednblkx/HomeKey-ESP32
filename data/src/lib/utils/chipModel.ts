@@ -30,3 +30,4 @@ export function getChipModelString(model: number): string {
       return 'Unknown';
   }
 }
+

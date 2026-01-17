@@ -604,6 +604,8 @@ esp_err_t WebServerManager::handleGetEthConfig(httpd_req_t *req) {
       instance->m_configManager.getConfig<espConfig::misc_config_t>()
           .ethernetEnabled);
 
+  cJSON_AddNumberToObject(eth_config, "numSpiBuses", SPI_HOST_MAX - 1);
+
   std::string payload = cjson_to_string_and_free(eth_config);
   httpd_resp_set_type(req, "application/json");
   cJSON *res = cJSON_CreateObject();
@@ -990,6 +992,17 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
         return false;
       }
+    } else if (keyStr == "ethSpiBus" && cJSON_IsNumber(incomingValue) && (incomingValue->valueint < SPI2_HOST || incomingValue->valueint >= SPI_HOST_MAX)){
+        std::string msg = std::to_string(incomingValue->valueint) +
+                      " is not a valid SPI Bus value";
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_set_status(req, "400 Bad Request");
+        cJSON *res = cJSON_CreateObject();
+        cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+        cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
+        std::string response = cjson_to_string_and_free(res);
+        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+        return false;
     }
 
     // Boolean coercion

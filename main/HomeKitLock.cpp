@@ -129,7 +129,6 @@ void HomeKitLock::ethEventHandler(arduino_event_id_t event, arduino_event_info_t
 void HomeKitLock::initializeETH(){
   const auto& miscConfig = m_configManager.getConfig<espConfig::misc_config_t>();
 
-
     if (!miscConfig.ethernetEnabled) {
         ESP_LOGI(TAG, "Ethernet is disabled. HomeSpan will manage Wi-Fi.");
         return; // Do nothing and let HomeSpan handle Wi-Fi
@@ -137,6 +136,15 @@ void HomeKitLock::initializeETH(){
 
     ESP_LOGI(TAG,"Ethernet is enabled. Initializing...");
     Network.onEvent(ethEventHandler);
+
+    const auto& spiBus = miscConfig.ethSpiBus;
+        // Convert and validate config uint8_t -> spi_host_device_t
+    spi_host_device_t spiHost = SPI2_HOST; // safe default
+    if (spiBus < static_cast<unsigned char>(SPI_HOST_MAX)) {
+        spiHost = static_cast<spi_host_device_t>(spiBus);
+    } else {
+        ESP_LOGW(TAG, "ethSpiBus out of range (%u). Defaulting to SPI2_HOST.", static_cast<unsigned>(spiBus));
+    }
 
     // --- Preset-based Configuration ---
     if (miscConfig.ethActivePreset != 255) {
@@ -152,7 +160,7 @@ void HomeKitLock::initializeETH(){
             // SPI-based Ethernet Module
             const auto& spiConf = ethPreset.spi_conf;
             ETH.begin(ethPreset.ethChip.phy_type, 1, spiConf.pin_cs, spiConf.pin_irq, spiConf.pin_rst,
-                      SPI2_HOST, spiConf.pin_sck, spiConf.pin_miso, spiConf.pin_mosi, spiConf.spi_freq_mhz);
+                      spiHost, spiConf.pin_sck, spiConf.pin_miso, spiConf.pin_mosi, spiConf.spi_freq_mhz);
         } else {
             // Internal MAC (RMII) Ethernet Module
             #if CONFIG_ETH_USE_ESP32_EMAC
@@ -179,8 +187,9 @@ void HomeKitLock::initializeETH(){
         if (!chipType.emac) {
             // Custom SPI pins
             const auto& spiConf = miscConfig.ethSpiConfig;
+
             ETH.begin(chipType.phy_type, 1, spiConf[1], spiConf[2], spiConf[3],
-                      SPI2_HOST, spiConf[4], spiConf[5], spiConf[6], spiConf[0]);
+                      spiHost, spiConf[4], spiConf[5], spiConf[6], spiConf[0]);
         } else {
             // Custom RMII pins
             #if CONFIG_ETH_USE_ESP32_EMAC

@@ -16,8 +16,12 @@
 		NfcGpioPinsPreset,
 	} from "$lib/types/api";
 	import { diff } from "$lib/utils/objDiff";
+	import SpiEthernetNote from "$lib/components/SpiEthernetNote.svelte";
+	import { systemInfo } from "$lib/stores/system.svelte";
 
 	let { misc, eth, nfcPresets, error } = $props();
+	
+	let chipModel = $derived(() => systemInfo.chip_model || 0);
 
 	let miscConfig = $state<MiscConfig>(
 		misc ?? {
@@ -38,6 +42,7 @@
 			ethernetEnabled: false,
 			ethActivePreset: 255,
 			ethPhyType: 0,
+			ethSpiBus: 0,
 			ethRmiiConfig: [0, 0, 0, 0, 0],
 			ethSpiConfig: [20, -1, -1, -1, -1, -1, -1],
 			controlPin: 26,
@@ -475,6 +480,12 @@
 							<input type="checkbox" name="misc-collapse" />
 							<div class="collapse-title font-medium">PN532</div>
 							<div class="collapse-content flex flex-col gap-4">
+                {#if miscConfig.ethernetEnabled}
+								<SpiEthernetNote
+									spiNumBuses={ethConfig.numSpiBuses}
+                  selectedBus={miscConfig.ethSpiBus}
+								/>
+                {/if}
 								<div class="form-control">
 									<!-- svelte-ignore a11y_label_has_associated_control -->
 									<label class="label">
@@ -811,6 +822,10 @@
 												<h3 class="text-lg font-bold">
 													SPI Configuration
 												</h3>
+												<SpiEthernetNote
+													spiNumBuses={ethConfig.numSpiBuses}
+                          selectedBus={miscConfig.ethSpiBus}
+												/>
 												<div
 													class="flex flex-col gap-4"
 												>
@@ -832,6 +847,21 @@
 																255}
 															class="input input-bordered w-full"
 														/>
+													</div>
+													<div class="form-control">
+														<!-- svelte-ignore a11y_label_has_associated_control -->
+														<label class="label">
+															<span class="label-text">SPI Bus</span>
+														</label>
+														<select
+																bind:value={miscConfig.ethSpiBus}
+																disabled={miscConfig.ethActivePreset !== 255}
+																class="select select-bordered w-full">
+																<option value={1}>SPI2</option>
+															{#if ethConfig.numSpiBuses === 2}
+																<option value={2}>SPI3</option>
+															{/if}
+														</select>
 													</div>
 													<div class="form-control">
 														<!-- svelte-ignore a11y_label_has_associated_control -->
