@@ -20,3 +20,6 @@
 [submodule "components/event_bus"]
 	path = components/event_bus
 	url = https://github.com/rednblkx/esp32-event-bus.git
+[submodule "components/loggable_espidf"]
+	path = components/loggable_espidf
+	url = https://github.com/rednblkx/loggable-idf-hook.git

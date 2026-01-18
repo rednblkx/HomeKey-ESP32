@@ -15,6 +15,7 @@
 #include <sodium/crypto_box.h>
 #include "HAP.h"
 #include "loggable.hpp"
+#include "loggable_espidf.hpp"
 #include "WebSocketLogSinker.h"
 
 LockManager *lockManager;
@@ -53,7 +54,7 @@ void setup() {
   auto& distributor = Sinker::instance();
 
   distributor.set_level(LogLevel::Verbose);
-  distributor.hook_esp_log(true);
+  loggable::espidf::LogHook::install();
   Serial.begin(115200);
   readerDataManager = new ReaderDataManager;
   configManager = new ConfigManager;
