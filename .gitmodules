@@ -16,7 +16,7 @@
 	branch = c_master
 [submodule "components/loggable"]
 	path = components/loggable
-	url = https://github.com/rednblkx/loggable-esp32.git
+	url = https://github.com/rednblkx/loggable-thing.git
 [submodule "components/event_bus"]
 	path = components/event_bus
 	url = https://github.com/rednblkx/esp32-event-bus.git
