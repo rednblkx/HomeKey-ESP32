@@ -8,7 +8,10 @@
 
 class ConfigManager;
 class Pixel;
-namespace espConfig { struct actions_config_t; }
+namespace espConfig {
+    struct actions_config_t;
+    struct misc_config_t;
+}
 
 /**
  * @class HardwareManager
@@ -22,9 +25,10 @@ class HardwareManager {
 public:
     /**
      * @brief Constructs the HardwareManager.
-     * @param configManager Reference to the application configuration manager.
+     * @param actionsConfig Reference to the actions configuration.
+     * @param miscConfig Reference to the misc configuration (for door sensor).
      */
-    HardwareManager(const espConfig::actions_config_t &);
+    HardwareManager(const espConfig::actions_config_t&, const espConfig::misc_config_t&);
     /**
  * @brief Unsubscribes the manager's event listeners from the global EventBus.
  *
@@ -97,10 +101,15 @@ private:
     void initiator_task();
     static void IRAM_ATTR initiator_isr_handler(void* arg);
 
+    static void door_sensor_task_entry(void* arg);
+    void door_sensor_task();
+    static void IRAM_ATTR door_sensor_isr_handler(void* arg);
+
     static void handleTimer(void *instance);
     
     // --- Member Variables ---
-    const espConfig::actions_config_t& m_miscConfig;
+    const espConfig::actions_config_t& m_actionsConfig;
+    const espConfig::misc_config_t& m_miscConfig;
 
     Pixel* m_pixel = nullptr;
   
@@ -122,12 +131,17 @@ private:
     TaskHandle_t m_initiatorTaskHandle;
     QueueHandle_t m_initiatorQueue;
 
+    TaskHandle_t m_doorSensorTaskHandle;
+    QueueHandle_t m_doorSensorQueue;
+
     bool m_altActionArmed = false;
+    uint8_t m_lastDoorState = 255;
     
     static const char* TAG;
 
     EventBus::TopicHandle m_hardware_action_topic;
     EventBus::TopicHandle m_alt_action_topic;
+    EventBus::TopicHandle m_door_state_topic;
     EventBus::SubscriberHandle m_hardware_action_event;
     EventBus::SubscriberHandle m_nfc_event;
     EventBus::SubscriberHandle m_gpio_pin_event;

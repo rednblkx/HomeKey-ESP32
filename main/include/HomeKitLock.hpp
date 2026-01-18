@@ -68,7 +68,10 @@ private:
       LockManager& m_lockManager;
       SpanCharacteristic* m_lockTargetState;
       SpanCharacteristic* m_lockCurrentState;
+      SpanCharacteristic* m_doorState;
+      EventBus::SubscriberHandle m_door_state_event;
       LockMechanismService(HomeKitLock& bridge, LockManager& lockManager);
+      ~LockMechanismService() {EventBus::Bus::instance().unsubscribe(m_door_state_event);}
       boolean update() override;
     };
     struct NFCAccessService : Service::NFCAccess {
