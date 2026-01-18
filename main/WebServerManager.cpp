@@ -964,11 +964,8 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
     }
     // Pin validation
     else if (str_ends_with(keyStr.c_str(), "Pin")) {
-      if (!cJSON_IsNumber(incomingValue) || incomingValue->valueint == 0) {
-        char *valueStr = cJSON_PrintUnformatted(incomingValue);
-        std::string msg =
-            std::string(valueStr) + " is not valid for \"" + keyStr + "\".";
-        free(valueStr);
+      if (!cJSON_IsNumber(incomingValue)) {
+        std::string msg = "Value for \"" + keyStr + "\" must be a number.";
         httpd_resp_set_type(req, "application/json");
         httpd_resp_set_status(req, "400 Bad Request");
         cJSON *res = cJSON_CreateObject();
@@ -978,9 +975,8 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
         return false;
       }
-      uint8_t pin = incomingValue->valueint;
-      if (pin != 255 && !GPIO_IS_VALID_GPIO(pin) &&
-          !GPIO_IS_VALID_OUTPUT_GPIO(pin)) {
+      if (uint8_t pin = incomingValue->valueint; pin != 255 && !GPIO_IS_VALID_GPIO(pin) &&
+                                                 !GPIO_IS_VALID_OUTPUT_GPIO(pin)) {
         std::string msg = std::to_string(pin) +
                           " is not a valid GPIO Pin for \"" + keyStr + "\".";
         httpd_resp_set_type(req, "application/json");
