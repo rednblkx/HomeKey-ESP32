@@ -237,25 +237,33 @@ void HardwareManager::begin() {
     if (m_miscConfig.doorSensorPin != 255) {
         ESP_LOGI(TAG, "Initializing door sensor on GPIO %d (invert=%d)", m_miscConfig.doorSensorPin, m_miscConfig.doorSensorInvert);
         pinMode(m_miscConfig.doorSensorPin, INPUT_PULLUP);
+
         m_doorSensorQueue = xQueueCreate(1, sizeof(uint8_t));
-        xTaskCreateUniversal(door_sensor_task_entry, "door_sensor_task", 2048, this, 3, &m_doorSensorTaskHandle, 1);
+        if (!m_doorSensorQueue) {
+            ESP_LOGE(TAG, "Failed to create door sensor queue");
+        } else if (xTaskCreateUniversal(door_sensor_task_entry, "door_sensor_task", 2048, this, 3, &m_doorSensorTaskHandle, 1) != pdPASS) {
+            ESP_LOGE(TAG, "Failed to create door sensor task");
+            vQueueDelete(m_doorSensorQueue);
+            m_doorSensorQueue = nullptr;
+            m_doorSensorTaskHandle = nullptr;
+        } else {
+            // Install ISR service if not already installed
+            if (m_actionsConfig.hkAltActionInitPin == 255) {
+                gpio_install_isr_service(0);
+            }
+            gpio_set_intr_type((gpio_num_t)m_miscConfig.doorSensorPin, GPIO_INTR_ANYEDGE);
+            gpio_isr_handler_add((gpio_num_t)m_miscConfig.doorSensorPin, door_sensor_isr_handler, (void*) this);
 
-        // Install ISR service if not already installed
-        if (m_actionsConfig.hkAltActionInitPin == 255) {
-            gpio_install_isr_service(0);
+            // Publish initial door state
+            uint8_t initialState = digitalRead(m_miscConfig.doorSensorPin);
+            bool isClosed = m_miscConfig.doorSensorInvert ? (initialState == HIGH) : (initialState == LOW);
+            m_lastDoorState = isClosed ? 1 : 0;
+            EventDoorState event{.doorState = m_lastDoorState};
+            std::vector<uint8_t> data;
+            alpaca::serialize(event, data);
+            event_bus.publish({m_door_state_topic, 0, data.data(), data.size()});
+            ESP_LOGI(TAG, "Door sensor initialized, initial state: %s", isClosed ? "Closed" : "Open");
         }
-        gpio_set_intr_type((gpio_num_t)m_miscConfig.doorSensorPin, GPIO_INTR_ANYEDGE);
-        gpio_isr_handler_add((gpio_num_t)m_miscConfig.doorSensorPin, door_sensor_isr_handler, (void*) this);
-
-        // Publish initial door state
-        uint8_t initialState = digitalRead(m_miscConfig.doorSensorPin);
-        bool isClosed = m_miscConfig.doorSensorInvert ? (initialState == HIGH) : (initialState == LOW);
-        m_lastDoorState = isClosed ? 1 : 0;
-        EventDoorState event{.doorState = m_lastDoorState};
-        std::vector<uint8_t> data;
-        alpaca::serialize(event, data);
-        event_bus.publish({m_door_state_topic, 0, data.data(), data.size()});
-        ESP_LOGI(TAG, "Door sensor initialized, initial state: %s", isClosed ? "Closed" : "Open");
     }
 
     ESP_LOGI(TAG, "Hardware initialization complete.");
