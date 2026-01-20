@@ -1,7 +1,3 @@
-[submodule "PN532"]
-	path = components/PN532
-	url = https://github.com/rednblkx/PN532.git
-	branch = esp-idf
 [submodule "HK-HomeKit-Lib"]
 	path = components/HK-HomeKit-Lib
 	url = https://github.com/rednblkx/HK-HomeKit-Lib.git
