@@ -1,7 +1,5 @@
 #pragma once
 #include "HomeKey.h"
-#include "PN532.h"
-#include "PN532_SPI.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
@@ -9,6 +7,8 @@
 #include <atomic>
 #include <functional>
 #include "event_bus.hpp"
+#include "pn532_cxx/pn532.hpp"
+#include "pn532_hal/spi.hpp"
 
 class LockManager;
 class HardwareManager;
@@ -57,15 +57,15 @@ private:
 
     // --- Core NFC Logic ---
     bool initializeReader();
-    void handleTagPresence(const uint8_t* uid, const uint8_t uidLen, const uint8_t* atqa, const uint8_t sak);
+    void handleTagPresence(const std::vector<uint8_t>& uid, const std::array<uint8_t,2>& atqa, const uint8_t& sak);
     void handleHomeKeyAuth();
-    void handleGenericTag(const uint8_t* uid, uint8_t uidLen, const uint8_t* atqa, const uint8_t sak);
+    void handleGenericTag(const std::vector<uint8_t>& uid, const std::array<uint8_t,2>& atqa, const uint8_t& sak);
     void waitForTagRemoval();
     
     // --- Member Variables ---
     const std::array<uint8_t, 4> &nfcGpioPins;
-    PN532_SPI *m_pn532spi;
-    PN532 *m_nfc;
+    pn532::SpiTransport *m_pn532spi;
+    pn532::Frontend *m_nfc;
 
     ReaderDataManager& m_readerDataManager;
     const bool m_hkAuthPrecomputeEnabled;

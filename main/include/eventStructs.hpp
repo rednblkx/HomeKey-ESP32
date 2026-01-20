@@ -34,7 +34,7 @@ struct EventHKTap {
 
 struct EventTagTap {
   std::vector<uint8_t> uid;
-  std::vector<uint8_t> atqa;
+  std::array<uint8_t,2> atqa;
   uint8_t sak;
 };
 
