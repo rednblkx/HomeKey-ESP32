@@ -23,3 +23,9 @@
 [submodule "components/loggable_espidf"]
 	path = components/loggable_espidf
 	url = https://github.com/rednblkx/loggable-espidf.git
+[submodule "components/pn532_cxx"]
+	path = components/pn532_cxx
+	url = https://github.com/rednblkx/pn532_cxx.git
+[submodule "components/pn532_hal"]
+	path = components/pn532_hal
+	url = https://github.com/rednblkx/esp-hal-pn532.git
