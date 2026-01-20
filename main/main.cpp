@@ -1,5 +1,4 @@
 #include <memory>
-#define FMT_HEADER_ONLY
 #include "config.hpp"
 #include "eth_structs.hpp"
 #include "HomeKitLock.hpp"
@@ -51,17 +50,15 @@ using namespace loggable;
  */
 void setup() {
   EventBus::Bus::instance().init();
-  auto& distributor = Sinker::instance();
-
-  distributor.set_level(LogLevel::Verbose);
   loggable::espidf::LogHook::install();
   Serial.begin(115200);
   readerDataManager = new ReaderDataManager;
   configManager = new ConfigManager;
   configManager->begin();
   esp_log_level_set("*", static_cast<esp_log_level_t>(configManager->getConfig<espConfig::misc_config_t>().logLevel));
+  loggable::Sinker::instance().set_level((loggable::LogLevel)configManager->getConfig<espConfig::misc_config_t>().logLevel);
   webServerManager = new WebServerManager(*configManager, *readerDataManager);
-  distributor.add_sinker(std::make_shared<loggable::WebSocketLogSinker>(webServerManager));
+  Sinker::instance().add_sinker(std::make_shared<loggable::WebSocketLogSinker>(webServerManager));
   hardwareManager = new HardwareManager(configManager->getConfig<espConfig::actions_config_t>());
   lockManager = new LockManager(configManager->getConfig<espConfig::misc_config_t>(), configManager->getConfig<espConfig::actions_config_t>());
   mqttManager = new MqttManager(*configManager);
