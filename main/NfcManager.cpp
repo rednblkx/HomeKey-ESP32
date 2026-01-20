@@ -3,6 +3,7 @@
 #include "esp32-hal.h"
 #include "eventStructs.hpp"
 #include "fmt/ranges.h"
+#include "freertos/idf_additions.h"
 #include "hkAuthContext.h"
 #include "pn532_hal/spi.hpp"
 #include "pn532_cxx/transport.hpp"
@@ -412,6 +413,7 @@ void NfcManager::pollingTask() {
         }
 
         vTaskDelay(pdMS_TO_TICKS(100));
+        taskYIELD();
     }
 }
 
