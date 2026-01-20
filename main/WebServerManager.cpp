@@ -18,6 +18,7 @@
 #include "esp_log_level.h"
 #include "eth_structs.hpp"
 #include "eventStructs.hpp"
+#include "freertos/idf_additions.h"
 #include "loggable.hpp"
 #include "sodium/randombytes.h"
 #include <LittleFS.h>
@@ -339,18 +340,20 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
   if (use_compressed)
     httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
 
-  char buffer[512];
+  uint8_t *buffer = new uint8_t[4096];
   size_t bytes_read;
-  while ((bytes_read = file.read((uint8_t *)buffer, sizeof(buffer))) > 0) {
-    esp_err_t err = httpd_resp_send_chunk(req, buffer, bytes_read);
+  while ((bytes_read = file.read(buffer, 4096)) > 0) {
+    esp_err_t err = httpd_resp_send_chunk(req, (const char *)buffer, bytes_read);
     if (err != ESP_OK) {
       ESP_LOGE(TAG, "Failed to send chunk: %d", err);
+      delete[] buffer;
       file.close();
       httpd_resp_send_chunk(req, NULL, 0);
       return ESP_FAIL;
     }
-    vTaskDelay(pdMS_TO_TICKS(10));
+    taskYIELD();
   }
+  delete[] buffer;
   file.close();
   httpd_resp_send_chunk(req, NULL, 0);
   return ESP_OK;
