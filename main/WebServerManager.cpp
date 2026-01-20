@@ -2,7 +2,7 @@
 // WebServerManager.cpp - ESP32 Web Server Implementation
 // ============================================================================
 
-#include "format.hpp"
+#include "fmt/ranges.h"
 #include "WebServerManager.hpp"
 #include "ConfigManager.hpp"
 #include "HomeSpan.h"
@@ -18,6 +18,7 @@
 #include "esp_log_level.h"
 #include "eth_structs.hpp"
 #include "eventStructs.hpp"
+#include "loggable.hpp"
 #include "sodium/randombytes.h"
 #include <LittleFS.h>
 #include <algorithm>
@@ -1427,6 +1428,7 @@ esp_err_t WebServerManager::handleWebSocketMessage(httpd_req_t *req,
     if(level_item && cJSON_IsNumber(level_item)) {
       esp_log_level_t level = esp_log_level_t(level_item->valueint >= 0 && level_item->valueint < 6 ? level_item->valueint : ESP_LOG_WARN);
       esp_log_level_set("*", level);
+      loggable::Sinker::instance().set_level(level_item->valueint >= 0 && level_item->valueint < 6 ? (loggable::LogLevel)level_item->valueint : loggable::LogLevel::Warning);
       m_configManager.updateFromJson<espConfig::misc_config_t>("{\"logLevel\":" + std::to_string(level) + "}");
       m_configManager.saveConfig<espConfig::misc_config_t>();
     }
