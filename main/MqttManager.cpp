@@ -1,4 +1,4 @@
-#include "format.hpp"
+#include "fmt/ranges.h"
 #include "config.hpp"
 #include "MqttManager.hpp"
 #include "LockManager.hpp"
@@ -87,8 +87,10 @@ bool MqttManager::begin(std::string deviceID) {
       switch(nfc_event.type) {
         case HOMEKEY_TAP: {
           EventHKTap s = alpaca::deserialize<EventHKTap>(nfc_event.data, ec);
-          if(!ec && s.status){
-            publishHomeKeyTap(s.issuerId, s.endpointId, s.readerId);
+          if(!ec){
+            if(s.status){
+              publishHomeKeyTap(s.issuerId, s.endpointId, s.readerId);
+            }
           } else {
             ESP_LOGE(TAG, "Failed to deserialize HomeKey event: %s", ec.message().c_str());
             return;
@@ -496,13 +498,14 @@ void MqttManager::publishHomeKeyTap(const std::vector<uint8_t>& issuerId, const 
  *
  * If NFC tag publishing is disabled in the MQTT configuration, no publish is performed.
  */
-void MqttManager::publishUidTap(const std::vector<uint8_t>& uid, const std::vector<uint8_t> &atqa, const uint8_t &sak) {
+void MqttManager::publishUidTap(const std::vector<uint8_t>& uid, const std::array<uint8_t,2> &atqa, const uint8_t &sak) {
     if(!m_mqttConfig.nfcTagNoPublish){
       cJSON *doc = cJSON_CreateObject();
       cJSON_AddStringToObject(doc, "uid", fmt::format("{:02X}", fmt::join(uid, "")).c_str());
       cJSON_AddBoolToObject(doc, "homekey", false);
       cJSON_AddStringToObject(doc, "atqa", fmt::format("{:02X}", fmt::join(atqa, "")).c_str());
       cJSON_AddStringToObject(doc, "sak", fmt::format("{:02X}", sak).c_str());
+      cJSON_AddStringToObject(doc, "readerId", this->deviceID.c_str());
       char *payload_cstr = cJSON_Print(doc);
       std::string payload(payload_cstr);
       free(payload_cstr);

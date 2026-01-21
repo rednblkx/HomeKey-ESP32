@@ -9,16 +9,6 @@ dependencies:
       registry_url: https://components.espressif.com
       type: service
     version: 1.0.3
-  espp/format:
-    component_hash: 9723eeb2cadb7191255337320f51edec7b300c648d98aa4ab92e93365297acc4
-    dependencies:
-    - name: idf
-      require: private
-      version: '>=5.0'
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 1.0.33
   espp/serialization:
     component_hash: 6e7dc5efd3f5870d5de4a93e6a7c04fc27fb86f1b7ec038179eab5ac9afc0d64
     dependencies:
@@ -356,7 +346,7 @@ dependencies:
       type: service
     version: 1.2.0
   espressif/esp_secure_cert_mgr:
-    component_hash: e8ce8d5ac0ef4ef5df12fdb266190413c4170ad39b394435f0e3115a4fddc6a6
+    component_hash: 29248e402b2014394228b289a3c02fdb1dc43168ef18fc83449a868dfbc2341f
     dependencies:
     - name: idf
       require: private
@@ -364,7 +354,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com
       type: service
-    version: 2.7.2
+    version: 2.8.0
   espressif/jsmn:
     component_hash: d80350c41bbaa827c98a25b6072df00884e72f54885996fab4a4f0aebce6b6c3
     dependencies:
@@ -396,7 +386,7 @@ dependencies:
       type: service
     version: 1.0.3
   espressif/libsodium:
-    component_hash: 25b968723c584a2742ca36cebe5a7ef049c6767e059f7b1e1eec69946019025d
+    component_hash: 6ee084dee7a4d664498274870aa65391c9ec9d38dcdb34d2ad2b8518726f8b5e
     dependencies:
     - name: idf
       require: private
@@ -404,7 +394,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 1.0.20~2
+    version: 1.0.20~3
   espressif/mdns:
     component_hash: 29e47564b1a7ee778135e17fbbf2a2773f71c97ebabfe626c8eda7c958a7ad16
     dependencies:
@@ -454,13 +444,12 @@ dependencies:
       type: service
     version: 1.20.3
 direct_dependencies:
-- espp/format
 - espp/serialization
 - espressif/arduino-esp32
 - espressif/cbor
 - espressif/libsodium
 - idf
 - joltwallet/littlefs
-manifest_hash: 66ac8bff4d42888a8003206327149fd4fd6ab2341082fa4e29d5aaad6ae6380f
+manifest_hash: e88f92671962c3f146738091b20832d2b2186501ab7329000873e2d589b456e0
 target: esp32c6
 version: 2.0.0

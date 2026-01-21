@@ -2,8 +2,17 @@ idf_component_register(SRCS "main.cpp" "ConfigManager.cpp" "ReaderDataManager.cp
                     "HardwareManager.cpp" "HomeKitLock.cpp" "LockManager.cpp"
                     "MqttManager.cpp" "HKServices.cpp" "NfcManager.cpp" "WebServerManager.cpp" "WebSocketLogSinker.cpp"
                     INCLUDE_DIRS "include"
-                    PRIV_REQUIRES HomeSpan PN532 HK-HomeKit-Lib esp_http_server mqtt libsodium event_bus
-                    msgpack-c json format loggable)
+                    PRIV_REQUIRES HomeSpan pn532_hal HK-HomeKit-Lib esp_http_server mqtt libsodium event_bus
+                    msgpack-c json loggable loggable_espidf)
+
+include(FetchContent)
+
+FetchContent_Declare(
+  fmt
+  GIT_REPOSITORY https://github.com/fmtlib/fmt
+  GIT_TAG        12.1.0)
+FetchContent_MakeAvailable(fmt)
+target_link_libraries(${COMPONENT_LIB} PUBLIC fmt::fmt-header-only)
 if(NOT DEFINED ENV{CI})
   add_custom_target(webui 
     WORKING_DIRECTORY ${COMPONENT_DIR}/../data 

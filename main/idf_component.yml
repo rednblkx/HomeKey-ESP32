@@ -4,4 +4,3 @@ dependencies:
   espressif/arduino-esp32: ==3.3.5
   joltwallet/littlefs: ^1.20.1
   espp/serialization: ^1.0.22
-  espp/format: '^1.0.22'

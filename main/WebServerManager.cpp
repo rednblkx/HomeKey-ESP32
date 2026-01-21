@@ -2,7 +2,7 @@
 // WebServerManager.cpp - ESP32 Web Server Implementation
 // ============================================================================
 
-#include "format.hpp"
+#include "fmt/ranges.h"
 #include "WebServerManager.hpp"
 #include "ConfigManager.hpp"
 #include "HomeSpan.h"
@@ -18,6 +18,8 @@
 #include "esp_log_level.h"
 #include "eth_structs.hpp"
 #include "eventStructs.hpp"
+#include "freertos/idf_additions.h"
+#include "loggable.hpp"
 #include "sodium/randombytes.h"
 #include <LittleFS.h>
 #include <algorithm>
@@ -338,18 +340,20 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
   if (use_compressed)
     httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
 
-  char buffer[512];
+  uint8_t *buffer = new uint8_t[4096];
   size_t bytes_read;
-  while ((bytes_read = file.read((uint8_t *)buffer, sizeof(buffer))) > 0) {
-    esp_err_t err = httpd_resp_send_chunk(req, buffer, bytes_read);
+  while ((bytes_read = file.read(buffer, 4096)) > 0) {
+    esp_err_t err = httpd_resp_send_chunk(req, (const char *)buffer, bytes_read);
     if (err != ESP_OK) {
       ESP_LOGE(TAG, "Failed to send chunk: %d", err);
+      delete[] buffer;
       file.close();
       httpd_resp_send_chunk(req, NULL, 0);
       return ESP_FAIL;
     }
-    vTaskDelay(pdMS_TO_TICKS(10));
+    taskYIELD();
   }
+  delete[] buffer;
   file.close();
   httpd_resp_send_chunk(req, NULL, 0);
   return ESP_OK;
@@ -964,11 +968,8 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
     }
     // Pin validation
     else if (str_ends_with(keyStr.c_str(), "Pin")) {
-      if (!cJSON_IsNumber(incomingValue) || incomingValue->valueint == 0) {
-        char *valueStr = cJSON_PrintUnformatted(incomingValue);
-        std::string msg =
-            std::string(valueStr) + " is not valid for \"" + keyStr + "\".";
-        free(valueStr);
+      if (!cJSON_IsNumber(incomingValue)) {
+        std::string msg = "Value for \"" + keyStr + "\" must be a number.";
         httpd_resp_set_type(req, "application/json");
         httpd_resp_set_status(req, "400 Bad Request");
         cJSON *res = cJSON_CreateObject();
@@ -978,9 +979,8 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
         return false;
       }
-      uint8_t pin = incomingValue->valueint;
-      if (pin != 255 && !GPIO_IS_VALID_GPIO(pin) &&
-          !GPIO_IS_VALID_OUTPUT_GPIO(pin)) {
+      if (uint8_t pin = incomingValue->valueint; pin != 255 && !GPIO_IS_VALID_GPIO(pin) &&
+                                                 !GPIO_IS_VALID_OUTPUT_GPIO(pin)) {
         std::string msg = std::to_string(pin) +
                           " is not a valid GPIO Pin for \"" + keyStr + "\".";
         httpd_resp_set_type(req, "application/json");
@@ -1431,6 +1431,7 @@ esp_err_t WebServerManager::handleWebSocketMessage(httpd_req_t *req,
     if(level_item && cJSON_IsNumber(level_item)) {
       esp_log_level_t level = esp_log_level_t(level_item->valueint >= 0 && level_item->valueint < 6 ? level_item->valueint : ESP_LOG_WARN);
       esp_log_level_set("*", level);
+      loggable::Sinker::instance().set_level(level_item->valueint >= 0 && level_item->valueint < 6 ? (loggable::LogLevel)level_item->valueint : loggable::LogLevel::Warning);
       m_configManager.updateFromJson<espConfig::misc_config_t>("{\"logLevel\":" + std::to_string(level) + "}");
       m_configManager.saveConfig<espConfig::misc_config_t>();
     }

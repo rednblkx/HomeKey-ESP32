@@ -66,7 +66,7 @@ private:
       * @param atqa Pointer to the ATQA byte array (can be null).
       * @param sak Pointer to the SAK byte array (can be null).
       */
-    void publishUidTap(const std::vector<uint8_t>& uid, const std::vector<uint8_t> &atqa, const uint8_t &sak);
+    void publishUidTap(const std::vector<uint8_t>& uid, const std::array<uint8_t,2> &atqa, const uint8_t &sak);
     // --- Event Handling ---
     static void mqttEventHandler(void* handler_args, esp_event_base_t base, int32_t event_id, void* event_data);
     void onMqttEvent(esp_event_base_t base, int32_t event_id, void* event_data);
