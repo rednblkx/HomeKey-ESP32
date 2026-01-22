@@ -22,16 +22,21 @@ static EventBus::Bus& event_bus = EventBus::Bus::instance();
  *   configure new pin as output and restore action pin state when applicable);
  * - handle NFC-related events to trigger success/failure feedback and the alternate action.
  *
- * @param miscConfig Configuration values controlling GPIO pins, NeoPixel behavior, and timing.
+ * @param actionsConfig Configuration values controlling GPIO pins, NeoPixel behavior, and timing.
+ * @param miscConfig Configuration values for miscellaneous settings including door sensor.
  */
-HardwareManager::HardwareManager(const espConfig::actions_config_t& miscConfig)
-    : m_miscConfig(miscConfig),
+HardwareManager::HardwareManager(const espConfig::actions_config_t& actionsConfig, const espConfig::misc_config_t& miscConfig)
+    : m_actionsConfig(actionsConfig),
+      m_miscConfig(miscConfig),
       m_feedbackTaskHandle(nullptr),
       m_feedbackQueue(nullptr),
       m_lockControlTaskHandle(nullptr),
       m_lockControlQueue(nullptr),
+      m_doorSensorTaskHandle(nullptr),
+      m_doorSensorQueue(nullptr),
       m_hardware_action_topic(event_bus.register_topic(HARDWARE_ACTION_BUS_TOPIC)),
-      m_alt_action_topic(event_bus.register_topic(HARDWARE_ALT_ACTION_BUS_TOPIC))
+      m_alt_action_topic(event_bus.register_topic(HARDWARE_ALT_ACTION_BUS_TOPIC)),
+      m_door_state_topic(event_bus.register_topic(DOOR_STATE_BUS_TOPIC))
 {
   m_hardware_action_event = event_bus.subscribe(m_hardware_action_topic, [&](const EventBus::Event& event, void* context){
     if(event.payload_size == 0 || event.payload == nullptr) return;
@@ -116,46 +121,46 @@ void HardwareManager::begin() {
     ESP_LOGI(TAG, "Initializing hardware pins...");
 
     // --- Initialize GPIO Pins ---
-    if (m_miscConfig.nfcSuccessPin != 255) {
-        pinMode(m_miscConfig.nfcSuccessPin, OUTPUT);
-        digitalWrite(m_miscConfig.nfcSuccessPin, !m_miscConfig.nfcSuccessHL);
+    if (m_actionsConfig.nfcSuccessPin != 255) {
+        pinMode(m_actionsConfig.nfcSuccessPin, OUTPUT);
+        digitalWrite(m_actionsConfig.nfcSuccessPin, !m_actionsConfig.nfcSuccessHL);
     }
-    if (m_miscConfig.nfcFailPin != 255) {
-        pinMode(m_miscConfig.nfcFailPin, OUTPUT);
-        digitalWrite(m_miscConfig.nfcFailPin, !m_miscConfig.nfcFailHL);
+    if (m_actionsConfig.nfcFailPin != 255) {
+        pinMode(m_actionsConfig.nfcFailPin, OUTPUT);
+        digitalWrite(m_actionsConfig.nfcFailPin, !m_actionsConfig.nfcFailHL);
     }
-    if (m_miscConfig.tagEventPin != 255) {
-      pinMode(m_miscConfig.tagEventPin, OUTPUT);
-      digitalWrite(m_miscConfig.tagEventPin, !m_miscConfig.tagEventHL);
+    if (m_actionsConfig.tagEventPin != 255) {
+      pinMode(m_actionsConfig.tagEventPin, OUTPUT);
+      digitalWrite(m_actionsConfig.tagEventPin, !m_actionsConfig.tagEventHL);
     }
-    if (m_miscConfig.gpioActionPin != 255) {
-        pinMode(m_miscConfig.gpioActionPin, OUTPUT);
+    if (m_actionsConfig.gpioActionPin != 255) {
+        pinMode(m_actionsConfig.gpioActionPin, OUTPUT);
     }
-    if (m_miscConfig.hkAltActionInitPin != 255) {
-      pinMode(m_miscConfig.hkAltActionInitPin, INPUT_PULLUP);
-      if (m_miscConfig.hkAltActionPin != 255) {
-        pinMode(m_miscConfig.hkAltActionPin, OUTPUT);
+    if (m_actionsConfig.hkAltActionInitPin != 255) {
+      pinMode(m_actionsConfig.hkAltActionInitPin, INPUT_PULLUP);
+      if (m_actionsConfig.hkAltActionPin != 255) {
+        pinMode(m_actionsConfig.hkAltActionPin, OUTPUT);
       }
-      if (m_miscConfig.hkAltActionInitLedPin != 255) {
-        pinMode(m_miscConfig.hkAltActionInitLedPin, OUTPUT);
+      if (m_actionsConfig.hkAltActionInitLedPin != 255) {
+        pinMode(m_actionsConfig.hkAltActionInitLedPin, OUTPUT);
       }
       m_initiatorQueue = xQueueCreate(1, sizeof(uint8_t));
       xTaskCreateUniversal(initiator_task_entry, "initiator_task", 2048, this, 3, &m_initiatorTaskHandle, 1);
       gpio_install_isr_service(0);
-      gpio_set_intr_type((gpio_num_t)m_miscConfig.hkAltActionInitPin, GPIO_INTR_NEGEDGE);
-      gpio_isr_handler_add((gpio_num_t)m_miscConfig.hkAltActionInitPin, initiator_isr_handler, (void*) this);
+      gpio_set_intr_type((gpio_num_t)m_actionsConfig.hkAltActionInitPin, GPIO_INTR_NEGEDGE);
+      gpio_isr_handler_add((gpio_num_t)m_actionsConfig.hkAltActionInitPin, initiator_isr_handler, (void*) this);
     }
 
     // --- Initialize NeoPixel ---
-    if (m_miscConfig.nfcNeopixelPin != 255) {
-        size_t pixelTypeIndex = m_miscConfig.neoPixelType;
+    if (m_actionsConfig.nfcNeopixelPin != 255) {
+        size_t pixelTypeIndex = m_actionsConfig.neoPixelType;
         if (pixelTypeIndex >= pixelTypeMap.size()) {
             ESP_LOGW(TAG, "Invalid NeoPixel type index (%d), defaulting to GRB.", pixelTypeIndex);
             pixelTypeIndex = 5; // GRB
         }
-        m_pixel = new Pixel(m_miscConfig.nfcNeopixelPin, pixelTypeMap[pixelTypeIndex]);
+        m_pixel = new Pixel(m_actionsConfig.nfcNeopixelPin, pixelTypeMap[pixelTypeIndex]);
         m_pixel->off(); // Ensure pixel is off at startup
-        ESP_LOGI(TAG, "NeoPixel initialized on pin %d with type %s.", m_miscConfig.nfcNeopixelPin, pixelTypeMap[pixelTypeIndex]);
+        ESP_LOGI(TAG, "NeoPixel initialized on pin %d with type %s.", m_actionsConfig.nfcNeopixelPin, pixelTypeMap[pixelTypeIndex]);
     }
 
     static TimerContext gpioS_context = {this, TimerSources::GPIO_S};
@@ -227,6 +232,40 @@ void HardwareManager::begin() {
 
     m_lockControlQueue = xQueueCreate(5, sizeof(int));
     xTaskCreateUniversal(lockControlTaskEntry, "lock_control_task", 4096, this, 3, &m_lockControlTaskHandle, 1);
+
+    // --- Initialize Door Sensor ---
+    if (m_miscConfig.doorSensorPin != 255) {
+        ESP_LOGI(TAG, "Initializing door sensor on GPIO %d (invert=%d)", m_miscConfig.doorSensorPin, m_miscConfig.doorSensorInvert);
+        pinMode(m_miscConfig.doorSensorPin, INPUT_PULLUP);
+
+        m_doorSensorQueue = xQueueCreate(1, sizeof(uint8_t));
+        if (!m_doorSensorQueue) {
+            ESP_LOGE(TAG, "Failed to create door sensor queue");
+        } else if (xTaskCreateUniversal(door_sensor_task_entry, "door_sensor_task", 2048, this, 3, &m_doorSensorTaskHandle, 1) != pdPASS) {
+            ESP_LOGE(TAG, "Failed to create door sensor task");
+            vQueueDelete(m_doorSensorQueue);
+            m_doorSensorQueue = nullptr;
+            m_doorSensorTaskHandle = nullptr;
+        } else {
+            // Install ISR service if not already installed
+            if (m_actionsConfig.hkAltActionInitPin == 255) {
+                gpio_install_isr_service(0);
+            }
+            gpio_set_intr_type((gpio_num_t)m_miscConfig.doorSensorPin, GPIO_INTR_ANYEDGE);
+            gpio_isr_handler_add((gpio_num_t)m_miscConfig.doorSensorPin, door_sensor_isr_handler, (void*) this);
+
+            // Publish initial door state
+            uint8_t initialState = digitalRead(m_miscConfig.doorSensorPin);
+            bool isClosed = m_miscConfig.doorSensorInvert ? (initialState == HIGH) : (initialState == LOW);
+            m_lastDoorState = isClosed ? 1 : 0;
+            EventDoorState event{.doorState = m_lastDoorState};
+            std::vector<uint8_t> data;
+            alpaca::serialize(event, data);
+            event_bus.publish({m_door_state_topic, 0, data.data(), data.size()});
+            ESP_LOGI(TAG, "Door sensor initialized, initial state: %s", isClosed ? "Closed" : "Open");
+        }
+    }
+
     ESP_LOGI(TAG, "Hardware initialization complete.");
 }
 
@@ -286,15 +325,15 @@ void HardwareManager::handleTimer(void* arg){
 
   switch (t) {
     case TimerSources::GPIO_S:
-      digitalWrite(i->m_miscConfig.nfcSuccessPin, !i->m_miscConfig.nfcSuccessHL);
+      digitalWrite(i->m_actionsConfig.nfcSuccessPin, !i->m_actionsConfig.nfcSuccessHL);
       ESP_LOGD(TAG, "GPIO_S");
       break;
     case TimerSources::GPIO_F:
-      digitalWrite(i->m_miscConfig.nfcFailPin, !i->m_miscConfig.nfcFailHL);
+      digitalWrite(i->m_actionsConfig.nfcFailPin, !i->m_actionsConfig.nfcFailHL);
       ESP_LOGD(TAG, "GPIO_F");
       break;
     case TimerSources::TAG_EVENT:
-      digitalWrite(i->m_miscConfig.tagEventPin, !i->m_miscConfig.tagEventHL);
+      digitalWrite(i->m_actionsConfig.tagEventPin, !i->m_actionsConfig.tagEventHL);
       ESP_LOGD(TAG, "TAG_EVENT");
       break;
     case TimerSources::PIXEL_S:
@@ -304,13 +343,13 @@ void HardwareManager::handleTimer(void* arg){
       ESP_LOGD(TAG, "PIXEL");
       break;
     case TimerSources::ALT_GPIO:
-      digitalWrite(i->m_miscConfig.hkAltActionPin, !i->m_miscConfig.hkAltActionGpioState);
+      digitalWrite(i->m_actionsConfig.hkAltActionPin, !i->m_actionsConfig.hkAltActionGpioState);
       ESP_LOGD(TAG, "ALT_GPIO");
       break;
     case TimerSources::ALT_GPIO_INIT:
       i->m_altActionArmed = false;
-      if (i->m_miscConfig.hkAltActionInitLedPin != 255) {
-        digitalWrite(i->m_miscConfig.hkAltActionInitLedPin, LOW);
+      if (i->m_actionsConfig.hkAltActionInitLedPin != 255) {
+        digitalWrite(i->m_actionsConfig.hkAltActionInitLedPin, LOW);
       }
       ESP_LOGD(TAG, "ALT_GPIO_INIT");
       break;
@@ -351,21 +390,21 @@ void IRAM_ATTR HardwareManager::initiator_isr_handler(void* arg) {
  *
  * Side effects:
  * - Sets `m_altActionArmed` to true.
- * - Writes HIGH to `m_miscConfig.hkAltActionInitLedPin` when that pin is not 255.
- * - Starts `m_altActionInitTimer` for `m_miscConfig.hkAltActionInitTimeout` milliseconds.
+ * - Writes HIGH to `m_actionsConfig.hkAltActionInitLedPin` when that pin is not 255.
+ * - Starts `m_altActionInitTimer` for `m_actionsConfig.hkAltActionInitTimeout` milliseconds.
  */
 void HardwareManager::initiator_task() {
     uint8_t dummy;
     while (true) {
         if (xQueueReceive(m_initiatorQueue, &dummy, portMAX_DELAY)) {
             if (!m_altActionArmed) {
-                ESP_LOGI(TAG, "Alt action armed for %dms", m_miscConfig.hkAltActionInitTimeout);
+                ESP_LOGI(TAG, "Alt action armed for %dms", m_actionsConfig.hkAltActionInitTimeout);
                 m_altActionArmed = true;
-                if (m_miscConfig.hkAltActionInitLedPin != 255) {
-                    digitalWrite(m_miscConfig.hkAltActionInitLedPin, HIGH);
+                if (m_actionsConfig.hkAltActionInitLedPin != 255) {
+                    digitalWrite(m_actionsConfig.hkAltActionInitLedPin, HIGH);
                 }
 
-                esp_timer_start_once(m_altActionInitTimer, m_miscConfig.hkAltActionInitTimeout * 1000);
+                esp_timer_start_once(m_altActionInitTimer, m_actionsConfig.hkAltActionInitTimeout * 1000);
             }
         }
     }
@@ -389,16 +428,16 @@ void HardwareManager::lockControlTask() {
     int receivedState;
     while (true) {
         if (xQueueReceive(m_lockControlQueue, &receivedState, portMAX_DELAY)) {
-          if (m_miscConfig.gpioActionPin == 255) {
+          if (m_actionsConfig.gpioActionPin == 255) {
               ESP_LOGI(TAG, "Received lock command but no action pin is configured.");
               continue;
           }
           
           ESP_LOGI(TAG, "Setting lock output for state: %d", receivedState);
           if (receivedState == LockManager::LOCKED) {
-              digitalWrite(m_miscConfig.gpioActionPin, m_miscConfig.gpioActionLockState);
+              digitalWrite(m_actionsConfig.gpioActionPin, m_actionsConfig.gpioActionLockState);
           } else if (receivedState == LockManager::UNLOCKED) {
-              digitalWrite(m_miscConfig.gpioActionPin, m_miscConfig.gpioActionUnlockState);
+              digitalWrite(m_actionsConfig.gpioActionPin, m_actionsConfig.gpioActionUnlockState);
           }
           EventLockState s{
             .currentState = static_cast<uint8_t>(receivedState),
@@ -423,10 +462,10 @@ void HardwareManager::lockControlTask() {
 void HardwareManager::triggerAltAction() {
   if (m_altActionArmed) { 
       event_bus.publish({m_alt_action_topic, 1});
-      if (m_miscConfig.hkAltActionPin != 255) {
-          ESP_LOGI(TAG, "Triggering alt action on pin %d for %dms", m_miscConfig.hkAltActionPin, m_miscConfig.hkAltActionTimeout);
-          digitalWrite(m_miscConfig.hkAltActionPin, m_miscConfig.hkAltActionGpioState);
-          esp_timer_start_once(m_altActionTimer, m_miscConfig.hkAltActionTimeout * 1000);
+      if (m_actionsConfig.hkAltActionPin != 255) {
+          ESP_LOGI(TAG, "Triggering alt action on pin %d for %dms", m_actionsConfig.hkAltActionPin, m_actionsConfig.hkAltActionTimeout);
+          digitalWrite(m_actionsConfig.hkAltActionPin, m_actionsConfig.hkAltActionGpioState);
+          esp_timer_start_once(m_altActionTimer, m_actionsConfig.hkAltActionTimeout * 1000);
       }
   }
 }
@@ -468,15 +507,15 @@ void HardwareManager::feedbackTask() {
                     if(esp_timer_is_active(m_gpioSuccessTimer)) esp_timer_stop(m_gpioSuccessTimer);
                     if(esp_timer_is_active(m_pixelSuccessTimer)) esp_timer_stop(m_pixelSuccessTimer);
                     if (m_pixel != nullptr) {
-                        auto color = m_miscConfig.neopixelSuccessColor;
+                        auto color = m_actionsConfig.neopixelSuccessColor;
                         m_pixel->set(m_pixel->RGB(color[espConfig::actions_config_t::colorMap::R], color[espConfig::actions_config_t::colorMap::G], color[espConfig::actions_config_t::colorMap::B]));
 
-                        esp_timer_start_once(m_pixelSuccessTimer, m_miscConfig.neopixelSuccessTime * 1000);
+                        esp_timer_start_once(m_pixelSuccessTimer, m_actionsConfig.neopixelSuccessTime * 1000);
                     }
-                    if (m_miscConfig.nfcSuccessPin != 255) {
-                        digitalWrite(m_miscConfig.nfcSuccessPin, m_miscConfig.nfcSuccessHL);
+                    if (m_actionsConfig.nfcSuccessPin != 255) {
+                        digitalWrite(m_actionsConfig.nfcSuccessPin, m_actionsConfig.nfcSuccessHL);
 
-                        esp_timer_start_once(m_gpioSuccessTimer, m_miscConfig.nfcSuccessTime * 1000);
+                        esp_timer_start_once(m_gpioSuccessTimer, m_actionsConfig.nfcSuccessTime * 1000);
                     }
                     break;
 
@@ -485,15 +524,15 @@ void HardwareManager::feedbackTask() {
                     if(esp_timer_is_active(m_gpioFailTimer)) esp_timer_stop(m_gpioFailTimer);
                     if(esp_timer_is_active(m_pixelFailTimer)) esp_timer_stop(m_pixelFailTimer);
                     if (m_pixel != nullptr) {
-                        auto color = m_miscConfig.neopixelFailureColor;
+                        auto color = m_actionsConfig.neopixelFailureColor;
                         m_pixel->set(m_pixel->RGB(color[espConfig::actions_config_t::colorMap::R], color[espConfig::actions_config_t::colorMap::G], color[espConfig::actions_config_t::colorMap::B]));
 
-                        esp_timer_start_once(m_pixelFailTimer, m_miscConfig.neopixelFailTime * 1000);
+                        esp_timer_start_once(m_pixelFailTimer, m_actionsConfig.neopixelFailTime * 1000);
                     }
-                    if (m_miscConfig.nfcFailPin != 255) {
-                        digitalWrite(m_miscConfig.nfcFailPin, m_miscConfig.nfcFailHL);
+                    if (m_actionsConfig.nfcFailPin != 255) {
+                        digitalWrite(m_actionsConfig.nfcFailPin, m_actionsConfig.nfcFailHL);
 
-                        esp_timer_start_once(m_gpioFailTimer, m_miscConfig.nfcFailTime * 1000);
+                        esp_timer_start_once(m_gpioFailTimer, m_actionsConfig.nfcFailTime * 1000);
                     }
                     break;
                 case FeedbackType::TAG_EVENT: 
@@ -501,17 +540,82 @@ void HardwareManager::feedbackTask() {
                     if(esp_timer_is_active(m_tagEventTimer)) esp_timer_stop(m_tagEventTimer);
                     if(esp_timer_is_active(m_pixelTagEventTimer)) esp_timer_stop(m_pixelTagEventTimer);
                     if (m_pixel != nullptr) {
-                        auto color = m_miscConfig.neopixelTagEventColor;
+                        auto color = m_actionsConfig.neopixelTagEventColor;
                         m_pixel->set(m_pixel->RGB(color[espConfig::actions_config_t::colorMap::R], color[espConfig::actions_config_t::colorMap::G], color[espConfig::actions_config_t::colorMap::B]));
 
-                        esp_timer_start_once(m_pixelTagEventTimer, m_miscConfig.neopixelTagEventTime * 1000);
+                        esp_timer_start_once(m_pixelTagEventTimer, m_actionsConfig.neopixelTagEventTime * 1000);
                     }
-                    if (m_miscConfig.tagEventPin != 255) {
-                        digitalWrite(m_miscConfig.tagEventPin, m_miscConfig.tagEventHL);
+                    if (m_actionsConfig.tagEventPin != 255) {
+                        digitalWrite(m_actionsConfig.tagEventPin, m_actionsConfig.tagEventHL);
 
-                        esp_timer_start_once(m_tagEventTimer, m_miscConfig.tagEventTimeout * 1000);
+                        esp_timer_start_once(m_tagEventTimer, m_actionsConfig.tagEventTimeout * 1000);
                     }
                     break;
+            }
+        }
+    }
+}
+/**
+ * @brief Task entry wrapper that forwards to the HardwareManager instance's door sensor task.
+ *
+ * @param arg Pointer to a HardwareManager instance (must not be null).
+ */
+void HardwareManager::door_sensor_task_entry(void* arg) {
+    static_cast<HardwareManager*>(arg)->door_sensor_task();
+}
+
+/**
+ * @brief ISR posted by the door sensor GPIO; signals the door sensor task by enqueuing a wake byte.
+ *
+ * Posts a single dummy byte to the HardwareManager's door sensor queue from ISR context to wake
+ * the door sensor task without blocking.
+ *
+ * @param arg Pointer to the HardwareManager instance whose door sensor queue will be signaled.
+ */
+void IRAM_ATTR HardwareManager::door_sensor_isr_handler(void* arg) {
+    uint8_t dummy = 0;
+    xQueueSendFromISR(static_cast<HardwareManager*>(arg)->m_doorSensorQueue, &dummy, NULL);
+}
+
+/**
+ * @brief Waits for door sensor GPIO interrupt events and publishes door state changes via EventBus.
+ *
+ * This task blocks waiting for a byte posted to the door sensor queue (from the ISR).
+ * When an event is received, it reads the current GPIO state with debouncing (50ms delay),
+ * applies the configured invert logic, and publishes a door state event if the state has changed.
+ *
+ * Door states:
+ * - 0 = Open
+ * - 1 = Closed
+ *
+ * The invert logic allows for different wiring configurations:
+ * - invert=false: LOW=closed, HIGH=open
+ * - invert=true: LOW=open, HIGH=closed
+ */
+void HardwareManager::door_sensor_task() {
+    uint8_t dummy;
+    while (true) {
+        if (xQueueReceive(m_doorSensorQueue, &dummy, portMAX_DELAY)) {
+            // Debounce: wait 50ms before reading the state
+            vTaskDelay(pdMS_TO_TICKS(50));
+
+            // Read current door sensor state
+            uint8_t currentState = digitalRead(m_miscConfig.doorSensorPin);
+            
+            // Apply invert logic: if inverted, swap the interpretation
+            bool isClosed = m_miscConfig.doorSensorInvert ? (currentState == HIGH) : (currentState == LOW);
+            uint8_t doorState = isClosed ? 1 : 0;  // 1 = Closed, 0 = Open
+
+            // Only publish if the state has changed
+            if (doorState != m_lastDoorState) {
+                m_lastDoorState = doorState;
+                
+                EventDoorState event{.doorState = doorState};
+                std::vector<uint8_t> data;
+                alpaca::serialize(event, data);
+                event_bus.publish({m_door_state_topic, 0, data.data(), data.size()});
+                
+                ESP_LOGI(TAG, "Door sensor state changed: %s", isClosed ? "Closed" : "Open");
             }
         }
     }

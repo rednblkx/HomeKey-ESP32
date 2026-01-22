@@ -1,4 +1,5 @@
 #include <memory>
+#define FMT_HEADER_ONLY
 #include "config.hpp"
 #include "eth_structs.hpp"
 #include "HomeKitLock.hpp"
@@ -14,7 +15,6 @@
 #include <sodium/crypto_box.h>
 #include "HAP.h"
 #include "loggable.hpp"
-#include "loggable_espidf.hpp"
 #include "WebSocketLogSinker.h"
 
 LockManager *lockManager;
@@ -50,16 +50,18 @@ using namespace loggable;
  */
 void setup() {
   EventBus::Bus::instance().init();
-  loggable::espidf::LogHook::install();
+  auto& distributor = Sinker::instance();
+
+  distributor.set_level(LogLevel::Verbose);
+  distributor.hook_esp_log(true);
   Serial.begin(115200);
   readerDataManager = new ReaderDataManager;
   configManager = new ConfigManager;
   configManager->begin();
   esp_log_level_set("*", static_cast<esp_log_level_t>(configManager->getConfig<espConfig::misc_config_t>().logLevel));
-  loggable::Sinker::instance().set_level((loggable::LogLevel)configManager->getConfig<espConfig::misc_config_t>().logLevel);
   webServerManager = new WebServerManager(*configManager, *readerDataManager);
-  Sinker::instance().add_sinker(std::make_shared<loggable::WebSocketLogSinker>(webServerManager));
-  hardwareManager = new HardwareManager(configManager->getConfig<espConfig::actions_config_t>());
+  distributor.add_sinker(std::make_shared<loggable::WebSocketLogSinker>(webServerManager));
+  hardwareManager = new HardwareManager(configManager->getConfig<espConfig::actions_config_t>(), configManager->getConfig<espConfig::misc_config_t>());
   lockManager = new LockManager(configManager->getConfig<espConfig::misc_config_t>(), configManager->getConfig<espConfig::actions_config_t>());
   mqttManager = new MqttManager(*configManager);
   homekitLock = new HomeKitLock(lambda, *lockManager, *configManager, *readerDataManager);

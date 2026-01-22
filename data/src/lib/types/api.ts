@@ -125,6 +125,10 @@ export interface MiscConfig {
   ethRmiiConfig: [number, number, number, number, number];
   /** SPI configuration [freq_mhz, pin_cs, pin_irq, pin_rst, pin_sck, pin_miso, pin_mosi] */
   ethSpiConfig: [number, number, number, number, number, number, number];
+  /** GPIO pin for door sensor (255 = disabled) */
+  doorSensorPin: number;
+  /** Invert door sensor logic (false = LOW=closed, HIGH=open; true = LOW=open, HIGH=closed) */
+  doorSensorInvert: boolean;
 }
 
 /**

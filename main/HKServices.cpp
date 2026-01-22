@@ -102,6 +102,25 @@ HomeKitLock::LockMechanismService::LockMechanismService(HomeKitLock& bridge, Loc
     ESP_LOGI(HomeKitLock::TAG, "Configuring LockMechanism");
     m_lockCurrentState = bridge.m_lockCurrentState = new Characteristic::LockCurrentState(m_lockManager.getCurrentState(), true);
     m_lockTargetState = bridge.m_lockTargetState = new Characteristic::LockTargetState(m_lockManager.getTargetState(), true);
+
+    // Add CurrentDoorState characteristic (default to Closed = 1)
+    m_doorState = new Characteristic::CurrentDoorState(1);
+    ESP_LOGI(HomeKitLock::TAG, "Door sensor characteristic added");
+
+    // Subscribe to door state events
+    m_door_state_event = event_bus.subscribe(event_bus.get_topic(DOOR_STATE_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), [this](const EventBus::Event& event, void* context){
+        if(event.payload_size == 0 || event.payload == nullptr) return;
+        std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
+        std::error_code ec;
+        EventDoorState door_event = alpaca::deserialize<EventDoorState>(payload, ec);
+        if(ec) {
+            ESP_LOGE(HomeKitLock::TAG, "Failed to deserialize door state event: %s", ec.message().c_str());
+            return;
+        }
+        ESP_LOGI(HomeKitLock::TAG, "Door state changed to: %d", door_event.doorState);
+        m_doorState->setVal(door_event.doorState);
+    });
+
     EventLockState s{
       .currentState = static_cast<uint8_t>(m_lockCurrentState->getNewVal()),
       .targetState = static_cast<uint8_t>(m_lockTargetState->getNewVal()),

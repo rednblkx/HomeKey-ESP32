@@ -14,6 +14,7 @@
 #define HARDWARE_ACTION_BUS_TOPIC "hardware/action"
 #define HARDWARE_ALT_ACTION_BUS_TOPIC "hardware/altAction"
 #define HARDWARE_CONFIG_BUS_TOPIC "hardware/gpioPinChanged"
+#define DOOR_STATE_BUS_TOPIC "door/stateChanged"
 
 struct EventLockState {
   uint8_t currentState = 255;
@@ -43,6 +44,10 @@ struct EventValueChanged {
   uint8_t oldValue = 255;
   uint8_t newValue = 255;
   std::string str = "";
+};
+
+struct EventDoorState {
+  uint8_t doorState = 255;  // 0 = Open, 1 = Closed, 2 = Opening, 3 = Closing, 4 = Stopped
 };
 
 enum NfcEventType : uint8_t {
