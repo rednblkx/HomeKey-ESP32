@@ -540,10 +540,7 @@ void ConfigManager::deserialize(msgpack_object obj, std::string type) {
                         const msgpack_object* inner_array_ptr = o.via.array.ptr;
                         uint64_t key_val = inner_array_ptr[0].via.u64;
                         uint64_t value_val = inner_array_ptr[1].via.u64;
-                        arg->try_emplace(
-                            static_cast<espConfig::actions_config_t::colorMap>(key_val),
-                            static_cast<uint8_t>(value_val)
-                        );
+                        (*arg)[static_cast<espConfig::actions_config_t::colorMap>(key_val)] = static_cast<uint8_t>(value_val);
                     }
                 });
               } else if constexpr (std::is_same_v<PointeeType, std::map<std::string, uint8_t>>) {
@@ -552,7 +549,7 @@ void ConfigManager::deserialize(msgpack_object obj, std::string type) {
                         const msgpack_object* inner_array_ptr = o.via.array.ptr;
                         std::string key_str(inner_array_ptr[0].via.str.ptr, inner_array_ptr[0].via.str.size);
                         uint64_t value_val = inner_array_ptr[1].via.u64;
-                        arg->try_emplace(key_str, static_cast<uint8_t>(value_val));
+                        (*arg)[key_str] = static_cast<uint8_t>(value_val);
                     }
                 });
               }
