@@ -282,22 +282,22 @@ void HomeKitLock::setupDebugCommands() {
       esp_log_level_t level = esp_log_level_get("*");
       if (strncmp(buf + 1, "E", 1) == 0) {
         level = ESP_LOG_ERROR;
-         LOG(I, "ERROR");
+        ESP_LOGI(TAG, "ERROR");
       } else if (strncmp(buf + 1, "W", 1) == 0) {
         level = ESP_LOG_WARN;
-         LOG(I, "WARNING");
+        ESP_LOGI(TAG, "WARNING");
       } else if (strncmp(buf + 1, "I", 1) == 0) {
         level = ESP_LOG_INFO;
-         LOG(I, "INFO");
+        ESP_LOGI(TAG, "INFO");
       } else if (strncmp(buf + 1, "D", 1) == 0) {
         level = ESP_LOG_DEBUG;
-         LOG(I, "DEBUG");
+        ESP_LOGI(TAG, "DEBUG");
       } else if (strncmp(buf + 1, "V", 1) == 0) {
         level = ESP_LOG_VERBOSE;
-         LOG(I, "VERBOSE");
+        ESP_LOGI(TAG, "VERBOSE");
       } else if (strncmp(buf + 1, "N", 1) == 0) {
         level = ESP_LOG_NONE;
-         LOG(I, "NONE");
+        ESP_LOGI(TAG, "NONE");
       }
 
       esp_log_level_set(TAG, level);
@@ -327,20 +327,20 @@ void HomeKitLock::setupDebugCommands() {
       switch (buf[1]) {
       case '0':
         hkFlow = KeyFlow::kFlowFAST;
-         LOG(I, "FAST Flow");
+        ESP_LOGI(TAG, "FAST Flow");
         break;
 
       case '1':
         hkFlow = KeyFlow::kFlowSTANDARD;
-         LOG(I, "STANDARD Flow");
+        ESP_LOGI(TAG, "STANDARD Flow");
         break;
       case '2':
         hkFlow = KeyFlow::kFlowATTESTATION;
-         LOG(I, "ATTESTATION Flow");
+        ESP_LOGI(TAG, "ATTESTATION Flow");
         break;
 
       default:
-         LOG(I, "0 = FAST flow, 1 = STANDARD Flow, 2 = ATTESTATION Flow");
+        ESP_LOGI(TAG, "0 = FAST flow, 1 = STANDARD Flow, 2 = ATTESTATION Flow");
         break;
       }
       EventValueChanged s{.newValue = static_cast<uint8_t>(hkFlow)};
@@ -360,10 +360,10 @@ void HomeKitLock::setupDebugCommands() {
       const char* TAG = "BTR_LOW";
       if (strncmp(arg + 1, "0", 1) == 0) {
         s_instance->m_statusLowBattery->setVal(0);
-         LOG(I, "Low status set to NORMAL");
+        ESP_LOGI(TAG, "Low status set to NORMAL");
       } else if (strncmp(arg + 1, "1", 1) == 0) {
         s_instance->m_statusLowBattery->setVal(1);
-         LOG(I, "Low status set to LOW");
+        ESP_LOGI(TAG, "Low status set to LOW");
       }
     });
     new SpanUserCommand('B', "Btr level", [](const char* arg) {
