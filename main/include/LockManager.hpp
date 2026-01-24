@@ -27,7 +27,7 @@ public:
         INTERNAL,
         HOMEKIT,
         NFC,
-        MQTT = 4,
+        MQTT,
     };
 
     enum lockStates { UNLOCKED, LOCKED, JAMMED, UNKNOWN, UNLOCKING, LOCKING };
