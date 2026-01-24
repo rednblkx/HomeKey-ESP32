@@ -246,6 +246,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           name: dev
+          tag_name: dev
           prerelease: true
           files: |
             artifacts/esp32.firmware.bin
