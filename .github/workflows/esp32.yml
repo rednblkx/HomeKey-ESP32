@@ -233,6 +233,8 @@ jobs:
           path: build/esp32s3.firmware.factory.bin
   pre-release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     if: ${{ github.ref == 'refs/heads/main' }}
     needs: [littlefs, esp32, esp32c3, esp32c6, esp32s3]
     steps:
@@ -241,10 +243,9 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
-      - uses: "marvinpinto/action-automatic-releases@latest"
+      - uses: softprops/action-gh-release@v2
         with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: "dev"
+          name: dev
           prerelease: true
           files: |
             artifacts/esp32.firmware.bin
