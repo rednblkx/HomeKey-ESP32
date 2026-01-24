@@ -1,4 +1,5 @@
 #include <memory>
+#include "ConsoleLogSinker.h"
 #include "config.hpp"
 #include "eth_structs.hpp"
 #include "HomeKitLock.hpp"
@@ -51,6 +52,7 @@ using namespace loggable;
 void setup() {
   Serial.begin(115200);
   loggable::espidf::LogHook::install(false);
+  Sinker::instance().add_sinker(std::make_shared<loggable::ConsoleLogSinker>());
   EventBus::Bus::instance().init();
   readerDataManager = new ReaderDataManager;
   configManager = new ConfigManager;
