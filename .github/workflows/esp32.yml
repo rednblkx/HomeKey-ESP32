@@ -243,10 +243,10 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
-      - uses: softprops/action-gh-release@v2
+      - uses: "marvinpinto/action-automatic-releases@latest"
         with:
-          tag_name: dev
-          target_commitish: ${{ github.sha }}
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: "dev"
           prerelease: true
           files: |
             artifacts/esp32.firmware.bin
