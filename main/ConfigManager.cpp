@@ -536,7 +536,7 @@ void ConfigManager::deserialize(msgpack_object obj, std::string type) {
                 std::ranges::copy(integer_view, arg->begin());
               } else if constexpr (std::is_same_v<PointeeType, std::map<espConfig::actions_config_t::colorMap, uint8_t>>) {
                 std::ranges::for_each(msgpack_elements, [&](const msgpack_object& o) {
-                    if (o.type == MSGPACK_OBJECT_ARRAY && o.via.array.size >= 2) {
+                    if (o.type == MSGPACK_OBJECT_ARRAY && o.via.array.size == 2) {
                         const msgpack_object* inner_array_ptr = o.via.array.ptr;
                         uint8_t key_val = inner_array_ptr[0].via.u64;
                         uint8_t value_val = inner_array_ptr[1].via.u64;
