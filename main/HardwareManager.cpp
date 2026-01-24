@@ -395,11 +395,13 @@ void HardwareManager::lockControlTask() {
           }
           
           ESP_LOGI(TAG, "Setting lock output for state: %d", receivedState);
+          gpio_hold_dis((gpio_num_t)m_miscConfig.gpioActionPin);
           if (receivedState == LockManager::LOCKED) {
               digitalWrite(m_miscConfig.gpioActionPin, m_miscConfig.gpioActionLockState);
           } else if (receivedState == LockManager::UNLOCKED) {
               digitalWrite(m_miscConfig.gpioActionPin, m_miscConfig.gpioActionUnlockState);
           }
+          gpio_hold_en((gpio_num_t)m_miscConfig.gpioActionPin);
           EventLockState s{
             .currentState = static_cast<uint8_t>(receivedState),
             .targetState = LockManager::UNKNOWN,
