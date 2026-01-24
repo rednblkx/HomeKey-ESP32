@@ -7,6 +7,7 @@ on:
   workflow_dispatch:
   push:
     branches:
+      - main
       - dev
     tags:
       - 'v0.*'
@@ -230,3 +231,28 @@ jobs:
         with:
           name: esp32s3-firmware-factory
           path: build/esp32s3.firmware.factory.bin
+  pre-release:
+    runs-on: ubuntu-latest
+    if: ${{ github.ref == 'refs/heads/main' }}
+    needs: [littlefs, esp32, esp32c3, esp32c6, esp32s3]
+    steps:
+      - name: Get Artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: artifacts
+          merge-multiple: true
+      - uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
+          automatic_release_tag: "dev"
+          prerelease: true
+          files: |
+            artifacts/esp32.firmware.bin
+            artifacts/esp32.firmware.factory.bin
+            artifacts/esp32c3.firmware.bin
+            artifacts/esp32c3.firmware.factory.bin
+            artifacts/esp32c6.firmware.bin
+            artifacts/esp32c6.firmware.factory.bin
+            artifacts/esp32s3.firmware.bin
+            artifacts/esp32s3.firmware.factory.bin
+            artifacts/littlefs.bin
