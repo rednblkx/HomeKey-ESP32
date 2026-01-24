@@ -49,9 +49,9 @@ using namespace loggable;
  *       GPIO pin configuration based on persisted settings.
  */
 void setup() {
-  EventBus::Bus::instance().init();
-  loggable::espidf::LogHook::install();
   Serial.begin(115200);
+  loggable::espidf::LogHook::install(false);
+  EventBus::Bus::instance().init();
   readerDataManager = new ReaderDataManager;
   configManager = new ConfigManager;
   configManager->begin();
