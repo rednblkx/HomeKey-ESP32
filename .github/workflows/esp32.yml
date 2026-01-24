@@ -245,8 +245,8 @@ jobs:
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
-          name: dev
           tag_name: dev
+          target_commitish: ${{ github.sha }}
           prerelease: true
           files: |
             artifacts/esp32.firmware.bin
