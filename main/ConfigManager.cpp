@@ -1076,7 +1076,7 @@ bool ConfigManager::deserializeFromJson(const std::string& json_string) {
                     }
                 }
             }, configMap.at(key));
-        } else ESP_LOGW(TAG, "Key '%s' could not be found!");
+        } else ESP_LOGW(TAG, "Key '%s' could not be found!", key.c_str());
         item = item->next;
     }
 
