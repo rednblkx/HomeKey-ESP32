@@ -19,6 +19,15 @@ on:
       - 'docs/**'
 
 jobs:
+  cleanup-dev-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Delete dev release
+        run: gh release --repo ${{ github.repository }} delete dev --cleanup-tag -y
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   littlefs:
     runs-on: ubuntu-latest
     steps:
@@ -26,10 +35,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           sparse-checkout: 'data'
-      - name: Delete old dev release
-        run: gh release delete dev --cleanup-tag -y
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
