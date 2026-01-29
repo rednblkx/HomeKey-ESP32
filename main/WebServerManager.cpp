@@ -2,6 +2,7 @@
 // WebServerManager.cpp - ESP32 Web Server Implementation
 // ============================================================================
 
+#include "esp_ota_ops.h"
 #include "fmt/ranges.h"
 #include "WebServerManager.hpp"
 #include "ConfigManager.hpp"
@@ -42,8 +43,6 @@
 const char *WebServerManager::TAG = "WebServerManager";
 static EventBus::Bus& event_bus = EventBus::Bus::instance();
 const size_t MAX_WS_PAYLOAD = 8192;
-const size_t MAX_OTA_SIZE = 0x1E0000;
-const size_t MAX_FS_SIZE = 0x20000;
 
 // ============================================================================
 // Helper Functions
@@ -1523,17 +1522,18 @@ esp_err_t WebServerManager::handleOTAUpload(httpd_req_t *req) {
                                  ? OTAUploadType::LITTLEFS
                                  : OTAUploadType::FIRMWARE;
 
-  if (uploadType == OTAUploadType::FIRMWARE && req->content_len > MAX_OTA_SIZE) {
-    ESP_LOGE(TAG, "OTA size %zu > max %zu", req->content_len, MAX_OTA_SIZE);
+ auto app_part =  esp_ota_get_running_partition();
+  if (uploadType == OTAUploadType::FIRMWARE && req->content_len > app_part->size) {
+    ESP_LOGE(TAG, "OTA size %zu > max %zu", req->content_len, app_part->size);
     instance->m_otaInProgress = false;
     httpd_resp_set_status(req, "413 Payload Too Large");
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, "{\"success\":false,\"error\":\"Firmware too large\"}");
     return ESP_OK;
   }
-
-  if (uploadType == OTAUploadType::LITTLEFS && req->content_len > MAX_FS_SIZE) {
-    ESP_LOGE(TAG, "OTA size %zu > max %zu", req->content_len, MAX_FS_SIZE);
+  auto fs_part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_SPIFFS, "spiffs");
+  if (uploadType == OTAUploadType::LITTLEFS && req->content_len > fs_part->size) {
+    ESP_LOGE(TAG, "OTA size %zu > max %zu", req->content_len, fs_part->size);
     instance->m_otaInProgress = false;
     httpd_resp_set_status(req, "413 Payload Too Large");
     httpd_resp_set_type(req, "application/json");
