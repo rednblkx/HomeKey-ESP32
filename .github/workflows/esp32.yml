@@ -79,9 +79,7 @@ jobs:
         with:
           path: |
             ~/.ccache
-            build
             managed_components
-            sdkconfig
           key: ${{ runner.os }}-esp32-build
       - name: ESP32 Build
         uses: espressif/esp-idf-ci-action@v1
@@ -122,9 +120,7 @@ jobs:
         with:
           path: |
             ~/.ccache
-            build
             managed_components
-            sdkconfig
           key: ${{ runner.os }}-esp32c3-build
       - name: ESP32C3 Build
         uses: espressif/esp-idf-ci-action@v1
@@ -165,9 +161,7 @@ jobs:
         with:
           path: |
             ~/.ccache
-            build
             managed_components
-            sdkconfig
           key: ${{ runner.os }}-esp32c6-build
       - name: ESP32C6 Build
         uses: espressif/esp-idf-ci-action@v1
@@ -207,9 +201,7 @@ jobs:
         with:
           path: |
             ~/.ccache
-            build
             managed_components
-            sdkconfig
           key: ${{ runner.os }}-esp32s3-build
       - name: ESP32S3 Build
         uses: espressif/esp-idf-ci-action@v1
