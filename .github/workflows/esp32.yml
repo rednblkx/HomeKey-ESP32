@@ -244,7 +244,7 @@ jobs:
           path: artifacts
           merge-multiple: true
       - name: Delete old dev release
-        run: gh release delete dev --cleanup-tag
+        run: gh release --repo ${{ github.repository }} delete dev --cleanup-tag -y
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: "marvinpinto/action-automatic-releases@latest"
