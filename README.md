@@ -19,6 +19,15 @@ The project aims to be the easy DIY solution for using Apple's HomeKey feature w
 
 **No proprietary hardware required** – just an ESP32 and a PN532 NFC module
 
+> [!WARNING]
+> The flash memory is not encrypted as this kinda started as pet project of mine but a lot of people started using
+> so unfortunately it's stuck like this because migration would be painful and i don't want to be telling people to
+> reconfigure their device if they want to update.
+>
+> If you care about this, i'm working on a new project implementing the new Aliro standard and flash will be
+> encrypted first thing, however, honestly don't know when that will be public, you can join the Discord server
+> if you want to know as soon as it is available.
+
 ## Getting Started
 
 ### Prerequisites
