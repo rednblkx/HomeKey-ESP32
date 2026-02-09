@@ -9,7 +9,7 @@
   **Apple HomeKey functionality for the rest of us**
   
 
-  [Documentation](https://rednblkx.github.io/HomeKey-ESP32/) • [Quick Start](#-60-second-quick-start) • [Setup Guide](docs/setup.md) • [Discord](https://discord.com/invite/VWpZ5YyUcm)
+  [Documentation](https://rednblkx.github.io/HomeKey-ESP32/)
 
 </div>
 
