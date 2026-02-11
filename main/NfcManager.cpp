@@ -1,4 +1,5 @@
 #include "NfcManager.hpp"
+#include "HomeKey.h"
 #include "ReaderDataManager.hpp"
 #include "esp32-hal.h"
 #include "eventStructs.hpp"
@@ -6,7 +7,6 @@
 #include "freertos/idf_additions.h"
 #include "hkAuthContext.h"
 #include "pn532_hal/spi.hpp"
-#include "pn532_cxx/transport.hpp"
 #include "soc/gpio_num.h"
 #include "utils.hpp"
 
@@ -159,7 +159,7 @@ void NfcManager::authPrecomputeTask() {
              uxQueueMessagesWaiting(m_authCtxReadyQueue));
 
     auto startTime = std::chrono::high_resolution_clock::now();
-    item->ctx = new (std::nothrow) HKAuthenticationContext(item->nfcFn, item->readerData, item->saveFn);
+    item->ctx = new (std::nothrow) HKAuthenticationContext(kHomeKey, item->nfcFn, item->readerData, item->saveFn);
     auto stopTime = std::chrono::high_resolution_clock::now();
     const auto durationMs =
         std::chrono::duration_cast<std::chrono::milliseconds>(stopTime - startTime).count();
@@ -505,7 +505,7 @@ void NfcManager::handleHomeKeyAuth() {
             invalidateAuthCache();
         };
         //
-        HKAuthenticationContext authCtx(nfcFn, readerData, saveFn);
+        HKAuthenticationContext authCtx(kHomeKey, nfcFn, readerData, saveFn);
         auto authResult = authCtx.authenticate(authFlow);
         publishAuthResult(authResult, readerData.reader_id);
     };
