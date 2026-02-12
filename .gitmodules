@@ -1,6 +1,6 @@
-[submodule "HK-HomeKit-Lib"]
-	path = components/HK-HomeKit-Lib
-	url = https://github.com/rednblkx/HK-HomeKit-Lib.git
+[submodule "DigitalDoorKey"]
+	path = components/DigitalDoorKey
+	url = https://github.com/rednblkx/DigitalDoorKey.git
 	branch = main
 [submodule "HomeSpan"]
 	path = components/HomeSpan/upstream
