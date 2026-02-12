@@ -1,5 +1,5 @@
 #pragma once
-#include "HomeKey.h"
+#include "DDKReaderData.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
@@ -14,7 +14,7 @@ class LockManager;
 class HardwareManager;
 class ReaderDataManager;
 class MqttManager;
-class HKAuthenticationContext;
+class DDKAuthenticationContext;
 namespace espConfig { struct misc_config_t; }
 
 class NfcManager {
@@ -42,7 +42,7 @@ private:
         readerData_t readerData;
         std::function<bool(std::vector<uint8_t>&, std::vector<uint8_t>&, bool)> nfcFn;
         std::function<void(const readerData_t&)> saveFn;
-        HKAuthenticationContext* ctx = nullptr;
+        DDKAuthenticationContext* ctx = nullptr;
         uint32_t generation = 0;
     };
 
