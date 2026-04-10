@@ -3,12 +3,12 @@
 #include "MqttManager.hpp"
 #include "LockManager.hpp"
 #include "ConfigManager.hpp"
+#include "JsonGuard.hpp"
 #include <cstdint>
 #include <cstdlib>
 #include <esp_log.h>
 #include <esp_app_desc.h>
 #include "eventStructs.hpp"
-#include <cJSON.h>
 #include <string>
 #include <sys/_types.h>
 #include <vector>
@@ -473,16 +473,13 @@ void MqttManager::publishLockState(const int currentState, const int targetState
  * @param readerId Byte sequence of the reader identifier; encoded as an uppercase hex string in the `readerId` JSON field.
  */
 void MqttManager::publishHomeKeyTap(const std::vector<uint8_t>& issuerId, const std::vector<uint8_t>& endpointId, const std::vector<uint8_t>& readerId) {
-    cJSON *doc = cJSON_CreateObject();
-    cJSON_AddStringToObject(doc, "issuerId", fmt::format("{:02X}", fmt::join(issuerId, "")).c_str());
-    cJSON_AddStringToObject(doc, "endpointId", fmt::format("{:02X}", fmt::join(endpointId, "")).c_str());
-    cJSON_AddStringToObject(doc, "readerId", fmt::format("{:02X}", fmt::join(readerId, "")).c_str());
-    cJSON_AddBoolToObject(doc, "homekey", true);
-    char *payload_cstr = cJSON_Print(doc);
-    std::string payload(payload_cstr);
-    free(payload_cstr);
+    std::string payload = JsonBuilder::object()
+        .addString("issuerId", fmt::format("{:02X}", fmt::join(issuerId, "")))
+        .addString("endpointId", fmt::format("{:02X}", fmt::join(endpointId, "")))
+        .addString("readerId", fmt::format("{:02X}", fmt::join(readerId, "")))
+        .addBool("homekey", true)
+        .toStringUnformatted();
     publish(m_mqttConfig.hkTopic, payload);
-    cJSON_Delete(doc);
 }
 
 /**
@@ -500,17 +497,14 @@ void MqttManager::publishHomeKeyTap(const std::vector<uint8_t>& issuerId, const 
  */
 void MqttManager::publishUidTap(const std::vector<uint8_t>& uid, const std::array<uint8_t,2> &atqa, const uint8_t &sak) {
     if(!m_mqttConfig.nfcTagNoPublish){
-      cJSON *doc = cJSON_CreateObject();
-      cJSON_AddStringToObject(doc, "uid", fmt::format("{:02X}", fmt::join(uid, "")).c_str());
-      cJSON_AddBoolToObject(doc, "homekey", false);
-      cJSON_AddStringToObject(doc, "atqa", fmt::format("{:02X}", fmt::join(atqa, "")).c_str());
-      cJSON_AddStringToObject(doc, "sak", fmt::format("{:02X}", sak).c_str());
-      cJSON_AddStringToObject(doc, "readerId", this->deviceID.c_str());
-      char *payload_cstr = cJSON_Print(doc);
-      std::string payload(payload_cstr);
-      free(payload_cstr);
+      std::string payload = JsonBuilder::object()
+          .addString("uid", fmt::format("{:02X}", fmt::join(uid, "")))
+          .addBool("homekey", false)
+          .addString("atqa", fmt::format("{:02X}", fmt::join(atqa, "")))
+          .addString("sak", fmt::format("{:02X}", sak))
+          .addString("readerId", this->deviceID)
+          .toStringUnformatted();
       publish(m_mqttConfig.hkTopic, payload);
-      cJSON_Delete(doc);
     } else ESP_LOGW(TAG, "MQTT publishing of Tag UID not enabled, ignoring!");
 }
 

@@ -158,69 +158,96 @@ void HardwareManager::begin() {
         ESP_LOGI(TAG, "NeoPixel initialized on pin %d with type %s.", m_miscConfig.nfcNeopixelPin, pixelTypeMap[pixelTypeIndex]);
     }
 
-    static TimerContext gpioS_context = {this, TimerSources::GPIO_S};
+    // Initialize timer contexts as member variables (not static locals)
+    m_gpioS_context = {this, TimerSources::GPIO_S};
+    m_gpioF_context = {this, TimerSources::GPIO_F};
+    m_tagEvent_context = {this, TimerSources::TAG_EVENT};
+    m_pixelS_context = {this, TimerSources::PIXEL_S};
+    m_pixelF_context = {this, TimerSources::PIXEL_F};
+    m_pixelTagEvent_context = {this, TimerSources::PIXEL_TAG_EVENT};
+    m_altAction_context = {this, TimerSources::ALT_GPIO};
+    m_altActionInit_context = {this, TimerSources::ALT_GPIO_INIT};
+
     const esp_timer_create_args_t gpioS_timer_args = {
             .callback = &handleTimer,
-            .arg = (void*) &gpioS_context,
-            .name = "gpioSuccessTimer"
+            .arg = (void*) &m_gpioS_context,
+            .dispatch_method = ESP_TIMER_TASK,
+            .name = "gpioSuccessTimer",
+            .skip_unhandled_events = false
     };
 
-    static TimerContext gpioF_context = {this, TimerSources::GPIO_F};
     const esp_timer_create_args_t gpioF_timer_args = {
             .callback = &handleTimer,
-            .arg = (void*) &gpioF_context,
-            .name = "gpioFailTimer"
+            .arg = (void*) &m_gpioF_context,
+            .dispatch_method = ESP_TIMER_TASK,
+            .name = "gpioFailTimer",
+            .skip_unhandled_events = false
     };
-    
-    static TimerContext tagEvent_context = {this, TimerSources::TAG_EVENT};
+
     const esp_timer_create_args_t tagEvent_timer_args = {
             .callback = &handleTimer,
-            .arg = (void*) &tagEvent_context,
-            .name = "tagEventTimer"
+            .arg = (void*) &m_tagEvent_context,
+            .dispatch_method = ESP_TIMER_TASK,
+            .name = "tagEventTimer",
+            .skip_unhandled_events = false
     };
-    static TimerContext pixelS_context = {this, TimerSources::PIXEL_S};
+
     const esp_timer_create_args_t pixelS_timer_args = {
             .callback = &handleTimer,
-            .arg = (void*) &pixelS_context,
-            .name = "pixelSuccessTimer"
+            .arg = (void*) &m_pixelS_context,
+            .dispatch_method = ESP_TIMER_TASK,
+            .name = "pixelSuccessTimer",
+            .skip_unhandled_events = false
     };
 
-    static TimerContext pixelF_context = {this, TimerSources::PIXEL_F};
     const esp_timer_create_args_t pixelF_timer_args = {
             .callback = &handleTimer,
-            .arg = (void*) &pixelF_context,
-            .name = "pixelFailTimer"
+            .arg = (void*) &m_pixelF_context,
+            .dispatch_method = ESP_TIMER_TASK,
+            .name = "pixelFailTimer",
+            .skip_unhandled_events = false
     };
 
-    static TimerContext pixelTagEvent_context = {this, TimerSources::PIXEL_TAG_EVENT};
     const esp_timer_create_args_t pixelTagEvent_timer_args = {
             .callback = &handleTimer,
-            .arg = (void*) &pixelTagEvent_context,
-            .name = "pixelTagEventTimer"
+            .arg = (void*) &m_pixelTagEvent_context,
+            .dispatch_method = ESP_TIMER_TASK,
+            .name = "pixelTagEventTimer",
+            .skip_unhandled_events = false
     };
 
-    static TimerContext altAction_context = {this, TimerSources::ALT_GPIO};
     const esp_timer_create_args_t altAction_timer_args = {
             .callback = &handleTimer,
-            .arg = (void*) &altAction_context,
-            .name = "altActionTimer"
-    };
-  
-    static TimerContext altActionInit_context = {this, TimerSources::ALT_GPIO_INIT};
-    const esp_timer_create_args_t altActionInit_timer_args = {
-            .callback = &handleTimer,
-            .arg = (void*) &altActionInit_context,
-            .name = "altActionInitTimer"
+            .arg = (void*) &m_altAction_context,
+            .dispatch_method = ESP_TIMER_TASK,
+            .name = "altActionTimer",
+            .skip_unhandled_events = false
     };
 
-    esp_timer_create(&gpioS_timer_args, &m_gpioSuccessTimer);
-    esp_timer_create(&gpioF_timer_args, &m_gpioFailTimer);
-    esp_timer_create(&tagEvent_timer_args, &m_tagEventTimer);
-    esp_timer_create(&pixelS_timer_args, &m_pixelSuccessTimer);
-    esp_timer_create(&pixelF_timer_args, &m_pixelFailTimer);
-    esp_timer_create(&pixelTagEvent_timer_args, &m_pixelTagEventTimer);
-    esp_timer_create(&altAction_timer_args, &m_altActionTimer);
-    esp_timer_create(&altActionInit_timer_args, &m_altActionInitTimer);
+    const esp_timer_create_args_t altActionInit_timer_args = {
+            .callback = &handleTimer,
+            .arg = (void*) &m_altActionInit_context,
+            .dispatch_method = ESP_TIMER_TASK,
+            .name = "altActionInitTimer",
+            .skip_unhandled_events = false
+    };
+
+    auto create_timer = [](const esp_timer_create_args_t& args, esp_timer_handle_t& handle, const char* name) {
+        esp_err_t err = esp_timer_create(&args, &handle);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to create %s: %s", name, esp_err_to_name(err));
+            handle = nullptr;
+        }
+    };
+
+    create_timer(gpioS_timer_args, m_gpioSuccessTimer, "gpioSuccessTimer");
+    create_timer(gpioF_timer_args, m_gpioFailTimer, "gpioFailTimer");
+    create_timer(tagEvent_timer_args, m_tagEventTimer, "tagEventTimer");
+    create_timer(pixelS_timer_args, m_pixelSuccessTimer, "pixelSuccessTimer");
+    create_timer(pixelF_timer_args, m_pixelFailTimer, "pixelFailTimer");
+    create_timer(pixelTagEvent_timer_args, m_pixelTagEventTimer, "pixelTagEventTimer");
+    create_timer(altAction_timer_args, m_altActionTimer, "altActionTimer");
+    create_timer(altActionInit_timer_args, m_altActionInitTimer, "altActionInitTimer");
 
     m_feedbackQueue = xQueueCreate(5, sizeof(FeedbackType));
     xTaskCreateUniversal(feedbackTaskEntry, "feedback_task", 4096, this, 3, &m_feedbackTaskHandle, 1);
@@ -365,7 +392,7 @@ void HardwareManager::initiator_task() {
                     digitalWrite(m_miscConfig.hkAltActionInitLedPin, HIGH);
                 }
 
-                esp_timer_start_once(m_altActionInitTimer, m_miscConfig.hkAltActionInitTimeout * 1000);
+                if (m_altActionInitTimer) esp_timer_start_once(m_altActionInitTimer, m_miscConfig.hkAltActionInitTimeout * 1000);
             }
         }
     }
@@ -428,7 +455,7 @@ void HardwareManager::triggerAltAction() {
       if (m_miscConfig.hkAltActionPin != 255) {
           ESP_LOGI(TAG, "Triggering alt action on pin %d for %dms", m_miscConfig.hkAltActionPin, m_miscConfig.hkAltActionTimeout);
           digitalWrite(m_miscConfig.hkAltActionPin, m_miscConfig.hkAltActionGpioState);
-          esp_timer_start_once(m_altActionTimer, m_miscConfig.hkAltActionTimeout * 1000);
+          if (m_altActionTimer) esp_timer_start_once(m_altActionTimer, m_miscConfig.hkAltActionTimeout * 1000);
       }
   }
 }
@@ -467,51 +494,51 @@ void HardwareManager::feedbackTask() {
             switch (feedback) {
                 case FeedbackType::SUCCESS:
                     ESP_LOGD(TAG, "Executing SUCCESS feedback sequence.");
-                    if(esp_timer_is_active(m_gpioSuccessTimer)) esp_timer_stop(m_gpioSuccessTimer);
-                    if(esp_timer_is_active(m_pixelSuccessTimer)) esp_timer_stop(m_pixelSuccessTimer);
+                    if(m_gpioSuccessTimer && esp_timer_is_active(m_gpioSuccessTimer)) esp_timer_stop(m_gpioSuccessTimer);
+                    if(m_pixelSuccessTimer && esp_timer_is_active(m_pixelSuccessTimer)) esp_timer_stop(m_pixelSuccessTimer);
                     if (m_pixel != nullptr) {
                         auto color = m_miscConfig.neopixelSuccessColor;
                         m_pixel->set(m_pixel->RGB(color[espConfig::actions_config_t::colorMap::R], color[espConfig::actions_config_t::colorMap::G], color[espConfig::actions_config_t::colorMap::B]));
 
-                        esp_timer_start_once(m_pixelSuccessTimer, m_miscConfig.neopixelSuccessTime * 1000);
+                        if (m_pixelSuccessTimer) esp_timer_start_once(m_pixelSuccessTimer, m_miscConfig.neopixelSuccessTime * 1000);
                     }
                     if (m_miscConfig.nfcSuccessPin != 255) {
                         digitalWrite(m_miscConfig.nfcSuccessPin, m_miscConfig.nfcSuccessHL);
 
-                        esp_timer_start_once(m_gpioSuccessTimer, m_miscConfig.nfcSuccessTime * 1000);
+                        if (m_gpioSuccessTimer) esp_timer_start_once(m_gpioSuccessTimer, m_miscConfig.nfcSuccessTime * 1000);
                     }
                     break;
 
                 case FeedbackType::FAILURE:
                     ESP_LOGD(TAG, "Executing FAILURE feedback sequence.");
-                    if(esp_timer_is_active(m_gpioFailTimer)) esp_timer_stop(m_gpioFailTimer);
-                    if(esp_timer_is_active(m_pixelFailTimer)) esp_timer_stop(m_pixelFailTimer);
+                    if(m_gpioFailTimer && esp_timer_is_active(m_gpioFailTimer)) esp_timer_stop(m_gpioFailTimer);
+                    if(m_pixelFailTimer && esp_timer_is_active(m_pixelFailTimer)) esp_timer_stop(m_pixelFailTimer);
                     if (m_pixel != nullptr) {
                         auto color = m_miscConfig.neopixelFailureColor;
                         m_pixel->set(m_pixel->RGB(color[espConfig::actions_config_t::colorMap::R], color[espConfig::actions_config_t::colorMap::G], color[espConfig::actions_config_t::colorMap::B]));
 
-                        esp_timer_start_once(m_pixelFailTimer, m_miscConfig.neopixelFailTime * 1000);
+                        if (m_pixelFailTimer) esp_timer_start_once(m_pixelFailTimer, m_miscConfig.neopixelFailTime * 1000);
                     }
                     if (m_miscConfig.nfcFailPin != 255) {
                         digitalWrite(m_miscConfig.nfcFailPin, m_miscConfig.nfcFailHL);
 
-                        esp_timer_start_once(m_gpioFailTimer, m_miscConfig.nfcFailTime * 1000);
+                        if (m_gpioFailTimer) esp_timer_start_once(m_gpioFailTimer, m_miscConfig.nfcFailTime * 1000);
                     }
                     break;
-                case FeedbackType::TAG_EVENT: 
+                case FeedbackType::TAG_EVENT:
                     ESP_LOGD(TAG, "Executing TAG_EVENT feedback sequence.");
-                    if(esp_timer_is_active(m_tagEventTimer)) esp_timer_stop(m_tagEventTimer);
-                    if(esp_timer_is_active(m_pixelTagEventTimer)) esp_timer_stop(m_pixelTagEventTimer);
+                    if(m_tagEventTimer && esp_timer_is_active(m_tagEventTimer)) esp_timer_stop(m_tagEventTimer);
+                    if(m_pixelTagEventTimer && esp_timer_is_active(m_pixelTagEventTimer)) esp_timer_stop(m_pixelTagEventTimer);
                     if (m_pixel != nullptr) {
                         auto color = m_miscConfig.neopixelTagEventColor;
                         m_pixel->set(m_pixel->RGB(color[espConfig::actions_config_t::colorMap::R], color[espConfig::actions_config_t::colorMap::G], color[espConfig::actions_config_t::colorMap::B]));
 
-                        esp_timer_start_once(m_pixelTagEventTimer, m_miscConfig.neopixelTagEventTime * 1000);
+                        if (m_pixelTagEventTimer) esp_timer_start_once(m_pixelTagEventTimer, m_miscConfig.neopixelTagEventTime * 1000);
                     }
                     if (m_miscConfig.tagEventPin != 255) {
                         digitalWrite(m_miscConfig.tagEventPin, m_miscConfig.tagEventHL);
 
-                        esp_timer_start_once(m_tagEventTimer, m_miscConfig.tagEventTimeout * 1000);
+                        if (m_tagEventTimer) esp_timer_start_once(m_tagEventTimer, m_miscConfig.tagEventTimeout * 1000);
                     }
                     break;
             }

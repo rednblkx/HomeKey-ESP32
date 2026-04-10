@@ -123,7 +123,17 @@ private:
     QueueHandle_t m_initiatorQueue;
 
     bool m_altActionArmed = false;
-    
+
+    // Timer contexts (non-static to handle re-initialization correctly)
+    TimerContext m_gpioS_context;
+    TimerContext m_gpioF_context;
+    TimerContext m_tagEvent_context;
+    TimerContext m_pixelS_context;
+    TimerContext m_pixelF_context;
+    TimerContext m_pixelTagEvent_context;
+    TimerContext m_altAction_context;
+    TimerContext m_altActionInit_context;
+
     static const char* TAG;
 
     EventBus::TopicHandle m_hardware_action_topic;

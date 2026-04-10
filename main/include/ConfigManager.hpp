@@ -58,7 +58,15 @@ public:
     bool validateCertificateContent(const std::string& certContent, const std::string& certType);
     bool validatePrivateKeyMatchesCertificate();
     std::vector<CertificateStatus> getCertificatesStatus();
-    const espConfig::mqtt_ssl_t* getMqttSslConfig() const {static bool configured = false; if(not configured) {return &m_mqttSslConfig;configured=true;} else ESP_LOGE(TAG, "Ptr already assigned");return nullptr;};
+    const espConfig::mqtt_ssl_t* getMqttSslConfig() const {
+      static bool configured = false;
+      if (!configured) {
+        configured = true;
+        return &m_mqttSslConfig;
+      }
+      ESP_LOGE(TAG, "SSL config already retrieved - only MqttManager should access this");
+      return nullptr;
+    }
 
   private:
     using ConfigMapType = std::map<std::string,

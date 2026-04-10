@@ -87,7 +87,7 @@ private:
     const espConfig::mqtt_ssl_t* m_mqttSslConfig;
     esp_mqtt_client_handle_t m_client;
     const std::string &device_name;
-    bool m_isConnected;
+    bool m_isConnected = false;
     
     // SSL/TLS related members
     bool m_sslConfigured;

@@ -18,14 +18,14 @@
 #include "loggable_espidf.hpp"
 #include "WebSocketLogSinker.h"
 
-LockManager *lockManager;
-ReaderDataManager *readerDataManager;
-ConfigManager *configManager;
-HardwareManager *hardwareManager;
-MqttManager *mqttManager;
-WebServerManager *webServerManager;
-HomeKitLock *homekitLock;
-NfcManager *nfcManager;
+std::unique_ptr<LockManager> lockManager;
+std::unique_ptr<ReaderDataManager> readerDataManager;
+std::unique_ptr<ConfigManager> configManager;
+std::unique_ptr<HardwareManager> hardwareManager;
+std::unique_ptr<MqttManager> mqttManager;
+std::unique_ptr<WebServerManager> webServerManager;
+std::unique_ptr<HomeKitLock> homekitLock;
+std::unique_ptr<NfcManager> nfcManager;
 
 std::function<void(int)> lambda = [](int status) {
   if (status == 1) {
@@ -54,20 +54,20 @@ void setup() {
   loggable::espidf::LogHook::install(false);
   Sinker::instance().add_sinker(std::make_shared<loggable::ConsoleLogSinker>());
   EventBus::Bus::instance().init();
-  readerDataManager = new ReaderDataManager;
-  configManager = new ConfigManager;
+  readerDataManager = std::make_unique<ReaderDataManager>();
+  configManager = std::make_unique<ConfigManager>();
   configManager->begin();
   esp_log_level_set("*", static_cast<esp_log_level_t>(configManager->getConfig<espConfig::misc_config_t>().logLevel));
   loggable::Sinker::instance().set_level((loggable::LogLevel)configManager->getConfig<espConfig::misc_config_t>().logLevel);
-  webServerManager = new WebServerManager(*configManager, *readerDataManager);
-  Sinker::instance().add_sinker(std::make_shared<loggable::WebSocketLogSinker>(webServerManager));
-  hardwareManager = new HardwareManager(configManager->getConfig<espConfig::actions_config_t>());
-  lockManager = new LockManager(configManager->getConfig<espConfig::misc_config_t>(), configManager->getConfig<espConfig::actions_config_t>());
-  mqttManager = new MqttManager(*configManager);
-  homekitLock = new HomeKitLock(lambda, *lockManager, *configManager, *readerDataManager);
+  webServerManager = std::make_unique<WebServerManager>(*configManager, *readerDataManager);
+  Sinker::instance().add_sinker(std::make_shared<loggable::WebSocketLogSinker>(webServerManager.get()));
+  hardwareManager = std::make_unique<HardwareManager>(configManager->getConfig<espConfig::actions_config_t>());
+  lockManager = std::make_unique<LockManager>(configManager->getConfig<espConfig::misc_config_t>(), configManager->getConfig<espConfig::actions_config_t>());
+  mqttManager = std::make_unique<MqttManager>(*configManager);
+  homekitLock = std::make_unique<HomeKitLock>(lambda, *lockManager, *configManager, *readerDataManager);
   espConfig::misc_config_t miscConfig = configManager->getConfig<espConfig::misc_config_t>();
   static const char* TAG = "Main";
-  if(miscConfig.nfcPinsPreset != 255){
+  if(miscConfig.nfcPinsPreset != PIN_UNSET){
     ESP_LOGI(TAG, "NFC GPIO pins preset: %s", nfcGpioPinsPresets[miscConfig.nfcPinsPreset].name.c_str());
     ESP_LOGI(TAG, "NFC preset pins: %d, %d, %d, %d", nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins[0], nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins[1], nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins[2], nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins[3]);
   } else {
@@ -77,14 +77,14 @@ void setup() {
   readerDataManager->begin();
   if(miscConfig.ethernetEnabled){
     std::vector<uint8_t> ethPins;
-    if(miscConfig.ethActivePreset == 255){
+    if(miscConfig.ethActivePreset == PIN_UNSET){
       ethPins = {miscConfig.ethSpiConfig[4], miscConfig.ethSpiConfig[5], miscConfig.ethSpiConfig[6]};
     } else { 
         const eth_board_presets_t& ethPreset = eth_config_ns::boardPresets[miscConfig.ethActivePreset];
         ethPins = {ethPreset.spi_conf.pin_sck, ethPreset.spi_conf.pin_miso, ethPreset.spi_conf.pin_mosi};
     }
     std::vector<uint8_t> nfcPins;
-    if(miscConfig.nfcPinsPreset == 255){
+    if(miscConfig.nfcPinsPreset == PIN_UNSET){
       nfcPins = {miscConfig.nfcGpioPins[1], miscConfig.nfcGpioPins[2], miscConfig.nfcGpioPins[3]};
     } else {
       nfcPins = {nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins[1], nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins[2], nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins[3]};
@@ -109,8 +109,8 @@ void setup() {
     }
   } else {
   nfc_init:
-    nfcManager = new NfcManager(*readerDataManager,
-                                miscConfig.nfcPinsPreset == 255 ? miscConfig.nfcGpioPins : nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins,
+    nfcManager = std::make_unique<NfcManager>(*readerDataManager,
+                                miscConfig.nfcPinsPreset == PIN_UNSET ? miscConfig.nfcGpioPins : nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins,
                                 miscConfig.hkAuthPrecomputeEnabled);
     nfcManager->begin();
   }
