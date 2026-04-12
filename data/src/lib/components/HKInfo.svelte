@@ -1,7 +1,3 @@
-<script lang="ts" module>
-  declare const __DEV__: boolean;
-</script>
-
 <script lang="ts">
   import { onMount } from "svelte";
   import type { HKInfo } from "$lib/types/api.js";
@@ -11,8 +7,7 @@
     setLoadingState,
   } from "$lib/stores/loading.svelte.js";
   import { calculateWifiSignal } from "$lib/utils/wifi.js";
-  // Version is injected at build time
-  const version = __DEV__ ? 'dev' : 'production';
+  const version : string = __DEV__ ? 'dev' : __VERSION__;
 
   /**
    * Props for HKInfo component

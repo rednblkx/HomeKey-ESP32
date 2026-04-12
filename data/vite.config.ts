@@ -5,9 +5,11 @@ import tailwindcss from "@tailwindcss/vite";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import { router } from "sv-router/vite-plugin";
 import compression from "vite-plugin-compression2";
+import { execSync } from "node:child_process";
 
 export default defineConfig(({ mode }) => {
   const isDev = mode === "development";
+  const version : string = execSync('git rev-parse --short=16 HEAD').toString().trim();
 
   return {
     plugins: [
@@ -26,7 +28,7 @@ export default defineConfig(({ mode }) => {
         deleteOriginalAssets: true
       })
     ],
-    define: { __DEV__: isDev },
+    define: { __DEV__: isDev, __VERSION__: JSON.stringify(version) },
     resolve: {
       alias: {
         "@": fileURLToPath(new URL("./src", import.meta.url)),
