@@ -3,7 +3,7 @@
 </script>
 
 <script lang="ts">
-  import { onMount, type Component } from "svelte";
+  import { onMount } from "svelte";
   import type { HKInfo } from "$lib/types/api.js";
   import { systemInfo } from "$lib/stores/system.svelte.js";
   import {
@@ -22,16 +22,8 @@
   let { hkInfo, error }: { hkInfo: HKInfo | null; error: string | null } =
     $props();
 
-  let webSocketTestPromise: Promise<Component> | null = $state(null);
-
   onMount(async (): Promise<void> => {
     systemInfo.uptime == 0 && setLoadingState("systemInfoLoading", true);
-
-    if (__DEV__) {
-      webSocketTestPromise = import(
-        "$lib/components/WebSocketTest.svelte"
-      ).then((module) => module.default);
-    }
   });
 
   let wifi_rssi = $derived(systemInfo?.wifi_rssi);
@@ -260,43 +252,5 @@
         {/if}
       </div>
     </div>
-
-    <!-- WebSocket Test Component (lazy-loaded in dev mode) -->
-    {#if webSocketTestPromise}
-      {#await webSocketTestPromise}
-        <div
-          class="card bg-base-200 shadow-xl"
-          aria-live="polite"
-          aria-label="Loading WebSocket Test component"
-        >
-          <div class="card-body p-4">
-            <div class="flex justify-center">
-              <span
-                class="loading loading-spinner loading-lg"
-                aria-label="Loading WebSocket Test component"
-              ></span>
-              <span class="ml-2">Loading WebSocket Test...</span>
-            </div>
-          </div>
-        </div>
-      {:then WebSocketTest}
-        <WebSocketTest />
-      {:catch error}
-        <div
-          class="card bg-base-200 shadow-xl"
-          aria-live="assertive"
-          aria-label="Error loading WebSocket Test component"
-        >
-          <div class="card-body p-4">
-            <div class="text-center text-error">
-              <p>
-                Failed to load WebSocket Test component: {error.message ||
-                  "Unknown error"}
-              </p>
-            </div>
-          </div>
-        </div>
-      {/await}
-    {/if}
   </div>
 </div>
