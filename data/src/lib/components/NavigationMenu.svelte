@@ -7,6 +7,7 @@
 		logoSrc,
 	} from "$lib/stores/theme.svelte.js";
 	import { websocketState } from "$lib/stores/websocket.svelte";
+	import { p } from "sv-router/generated";
 
 	let { onClose, triggerElement = $bindable(), id } = $props();
 
@@ -69,7 +70,7 @@
 		onclick={onClose}
 	>
 		<li class="my-1" role="menuitem">
-			<a href="/" class="text-lg flex items-center">
+			<a href={p('/')} class="text-lg flex items-center">
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
 					class="h-6 w-6 mr-2"
@@ -89,7 +90,7 @@
 			</a>
 		</li>
 		<li class="my-1" role="menuitem">
-			<a href="/mqtt" class="text-lg flex items-center">
+			<a href={p('/mqtt')} class="text-lg flex items-center">
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
 					fill="none"
@@ -109,7 +110,7 @@
 			</a>
 		</li>
 		<li class="my-1" role="menuitem">
-			<a href="/actions" class="text-lg flex items-center">
+			<a href={p('/actions')} class="text-lg flex items-center">
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
 					class="h-6 w-6 mr-2"
@@ -129,7 +130,7 @@
 			</a>
 		</li>
 		<li class="my-1" role="menuitem">
-			<a href="/misc" class="text-lg flex items-center">
+			<a href={p('/misc')} class="text-lg flex items-center">
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
 					class="h-6 w-6 mr-2"
@@ -155,7 +156,7 @@
 			</a>
 		</li>
 		<li class="my-1" role="menuitem">
-			<a href="/ota" class="text-lg flex items-center">
+			<a href={p('/ota')} class="text-lg flex items-center">
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
 					class="h-6 w-6 mr-2"
@@ -175,7 +176,7 @@
 			</a>
 		</li>
 		<li class="my-1" role="menuitem">
-			<a href="/logs" class="text-lg flex items-center">
+			<a href={p('/logs')} class="text-lg flex items-center">
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
 					class="h-6 w-6 mr-2"

@@ -10,7 +10,6 @@
 	import NavigationMenu from '$lib/components/NavigationMenu.svelte';
 	import Notification from '$lib/components/Notification.svelte';
   import { websocketState } from '$lib/stores/websocket.svelte';
-  import { navigating } from '$app/state';
   import type { LogEntry } from '$lib/types/api';
   import { logIdIncrement, logs } from '$lib/stores/logs.svelte';
 
@@ -116,24 +115,7 @@
 		<div class="drawer-content h-full w-full">
 			<!-- Content -->
 			<main id="main-content" class="px-6 h-full overflow-y-auto">
-        {#await navigating.complete}
-          <div class="flex justify-center items-center min-h-screen" aria-live="polite" aria-label="Loading page">
-            <div class="text-center">
-              <span class="loading loading-spinner loading-lg" aria-label="Loading page content"></span>
-              <p class="mt-4 text-lg">Loading...</p>
-            </div>
-          </div>
-        {:then}
-          {@render children()}
-        {:catch error}
-          <div class="card bg-base-200 shadow-xl" aria-live="assertive" aria-label="Error loading WebSocket Test component">
-            <div class="card-body p-4">
-              <div class="text-center text-error">
-                <p>Failed to load WebSocket Test component: {error.message || 'Unknown error'}</p>
-              </div>
-            </div>
-          </div>
-        {/await}
+				{@render children()}
 			</main>
 		</div>
 	

@@ -1,8 +1,7 @@
 <script>
 	import HKInfo from '$lib/components/HKInfo.svelte';
 	import { loadingStates } from '$lib/stores/loading.svelte.js';
-
-	let { data } = $props();
+	import { route } from 'sv-router/generated';
 </script>
 
 {#if loadingStates.pageLoading}
@@ -13,5 +12,5 @@
 		</div>
 	</div>
 {:else}
-	<HKInfo hkInfo={data.hkInfo} error={data.error} />
+	<HKInfo hkInfo={route.meta.homeData?.hkInfo} error={route.meta.homeData?.error} />
 {/if}

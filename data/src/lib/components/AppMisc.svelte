@@ -17,12 +17,9 @@
 	} from "$lib/types/api";
 	import { diff } from "$lib/utils/objDiff";
 	import SpiEthernetNote from "$lib/components/SpiEthernetNote.svelte";
-	import { systemInfo } from "$lib/stores/system.svelte";
 
 	let { misc, eth, nfcPresets, error } = $props();
 	
-	let chipModel = $derived(() => systemInfo.chip_model || 0);
-
 	let miscConfig = $state<MiscConfig>(
 		misc ?? {
 			deviceName: "",

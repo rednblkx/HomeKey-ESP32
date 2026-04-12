@@ -1,19 +1,33 @@
 {
-	"extends": "./.svelte-kit/tsconfig.json",
+	"extends": [
+		"./.router/tsconfig.json"
+	],
 	"compilerOptions": {
-		"allowJs": true,
-		"checkJs": true,
-		"esModuleInterop": true,
-		"forceConsistentCasingInFileNames": true,
-		"resolveJsonModule": true,
+		"lib": [
+			"DOM",
+			"ES2022"
+		],
+		"target": "ES2022",
+		"noEmit": true,
 		"skipLibCheck": true,
-		"sourceMap": true,
+		"useDefineForClassFields": true,
+		"module": "ESNext",
+		"moduleDetection": "force",
+		"moduleResolution": "bundler",
+		"verbatimModuleSyntax": true,
+		"resolveJsonModule": true,
+		"allowImportingTsExtensions": true,
+		"noUncheckedSideEffectImports": true,
 		"strict": true,
-		"moduleResolution": "bundler"
-	}
-	// Path aliases are handled by https://svelte.dev/docs/kit/configuration#alias
-	// except $lib which is handled by https://svelte.dev/docs/kit/configuration#files
-	//
-	// To make changes to top-level options such as include and exclude, we recommend extending
-	// the generated config; see https://svelte.dev/docs/kit/configuration#typescript
+		"noUnusedLocals": true,
+		"noUnusedParameters": true,
+		"paths": {
+			"$lib/*": [
+				"src/lib/*"
+			]
+		}
+	},
+	"include": [
+		"src"
+	]
 }

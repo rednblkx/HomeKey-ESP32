@@ -1,22 +1,36 @@
-import { defineConfig } from "vitest/config";
+import { defineConfig } from "vite";
 import { fileURLToPath, URL } from "node:url";
 import devtoolsJson from "vite-plugin-devtools-json";
 import tailwindcss from "@tailwindcss/vite";
-import { sveltekit } from "@sveltejs/kit/vite";
+import { svelte } from "@sveltejs/vite-plugin-svelte";
+import { router } from "sv-router/vite-plugin";
+import compression from "vite-plugin-compression2";
 
 export default defineConfig(({ mode }) => {
   const isDev = mode === "development";
 
   return {
     plugins: [
-      sveltekit(),
+      svelte(),
+      router({
+        path: "src/routes",
+        allLazy: false,
+        js: false,
+      }),
       tailwindcss(),
-      ...(isDev ? [devtoolsJson()] : [])
+      ...(isDev ? [devtoolsJson()] : []),
+      compression({
+        algorithms: [
+          'gzip'
+        ],
+        deleteOriginalAssets: true
+      })
     ],
     define: { __DEV__: isDev },
     resolve: {
       alias: {
         "@": fileURLToPath(new URL("./src", import.meta.url)),
+        "$lib": fileURLToPath(new URL("./src/lib", import.meta.url)),
       },
     },
     build: {

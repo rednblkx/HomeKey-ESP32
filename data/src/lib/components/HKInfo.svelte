@@ -1,3 +1,7 @@
+<script lang="ts" module>
+  declare const __DEV__: boolean;
+</script>
+
 <script lang="ts">
   import { onMount, type Component } from "svelte";
   import type { HKInfo } from "$lib/types/api.js";
@@ -7,7 +11,8 @@
     setLoadingState,
   } from "$lib/stores/loading.svelte.js";
   import { calculateWifiSignal } from "$lib/utils/wifi.js";
-  import { version } from "$app/environment";
+  // Version is injected at build time
+  const version = __DEV__ ? 'dev' : 'production';
 
   /**
    * Props for HKInfo component
@@ -22,7 +27,7 @@
   onMount(async (): Promise<void> => {
     systemInfo.uptime == 0 && setLoadingState("systemInfoLoading", true);
 
-    if (import.meta.env.DEV) {
+    if (__DEV__) {
       webSocketTestPromise = import(
         "$lib/components/WebSocketTest.svelte"
       ).then((module) => module.default);
@@ -202,7 +207,7 @@
               </div>
               <div class="stat">
                 <div class="stat-title">UI Version</div>
-                <div class="stat-value text-xl">{version || "N/A"}</div>
+                <div class="stat-value text-xl">{version}</div>
               </div>
             </div>
             <div
