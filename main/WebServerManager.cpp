@@ -217,7 +217,7 @@ void WebServerManager::setupRoutes() {
   RouteConfig routes[] = {
       // Static files
       {"/static/*", HTTP_GET, handleStaticFiles, this},
-      {"/_app/*", HTTP_GET, handleStaticFiles, this},
+      {"/assets/*", HTTP_GET, handleStaticFiles, this},
 
       // Configuration endpoints
       {"/config", HTTP_GET, handleGetConfig, this},
@@ -281,11 +281,12 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
     return ESP_FAIL;
   }
   const char *filename = strrchr(req->uri, '/') + 1;
-  if (strlen(filename) == 0)
-    filename = "/index.html";
-
   std::string filepath = req->uri;
   bool use_compressed = false;
+  if (strlen(filename) == 0){
+    filename = "/index.html.gz";
+    use_compressed = true;
+  }
 
   // Check for gzip compressed version
   if (str_ends_with(filename, ".js") || str_ends_with(filename, ".css")) {
@@ -386,13 +387,14 @@ esp_err_t WebServerManager::handleRootOrHash(httpd_req_t *req) {
     httpd_resp_set_hdr(req, "Set-Cookie", sessionCookie.c_str());
   }
 
-  File file = LittleFS.open("/app.html", "r");
+  File file = LittleFS.open("/index.html.gz", "r");
   if (!file) {
     httpd_resp_send_404(req);
     return ESP_FAIL;
   }
   httpd_resp_set_type(req, "text/html");
   httpd_resp_set_hdr(req, "Connection", "close");
+  httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
 
   char buffer[1024];
   size_t bytes_read;
