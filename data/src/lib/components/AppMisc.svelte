@@ -20,44 +20,12 @@
 
 	let { misc, eth, nfcPresets, error } = $props();
 	
-	let miscConfig = $state<MiscConfig>(
-		misc ?? {
-			deviceName: "",
-			otaPasswd: "",
-			hk_key_color: 0,
-			setupCode: "",
-			lockAlwaysUnlock: false,
-			lockAlwaysLock: false,
-			hkAuthPrecomputeEnabled: false,
-			proxBatEnabled: false,
-			btrLowStatusThreshold: 10,
-			webAuthEnabled: false,
-			webUsername: "",
-			webPassword: "",
-			nfcPinsPreset: 255,
-			nfcGpioPins: [5, 18, 19, 23],
-			ethernetEnabled: false,
-			ethActivePreset: 255,
-			ethPhyType: 0,
-			ethSpiBus: 0,
-			ethRmiiConfig: [0, 0, 0, 0, 0],
-			ethSpiConfig: [20, -1, -1, -1, -1, -1, -1],
-			controlPin: 26,
-			hsStatusPin: 2,
-		},
-	);
-	let ethConfig = $state<EthConfig>(
-		eth ?? {
-			supportedChips: [],
-			boardPresets: [],
-			ethEnabled: false,
-		},
-	);
-	let nfcPresetsList = $state<NfcGpioPinsPreset>(
-		nfcPresets ?? {
-			presets: [],
-		},
-	);
+	// svelte-ignore state_referenced_locally
+  let miscConfig = $state<MiscConfig>($state.snapshot(misc));
+	// svelte-ignore state_referenced_locally
+  let ethConfig = $state<EthConfig>($state.snapshot(eth));
+	// svelte-ignore state_referenced_locally
+  let nfcPresetsList = $state<NfcGpioPinsPreset>($state.snapshot(nfcPresets));
 
 	const hkFinishColors = [
 		{ name: "Tan", value: 0, image: HKFinish0 },
@@ -166,6 +134,8 @@
 			handleEthPresetChange();
 		}
 	});
+$inspect(misc);
+$inspect(miscConfig);
 </script>
 
 <div class="flex flex-col py-6">

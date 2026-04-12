@@ -1,65 +1,21 @@
 <script lang="ts">
-  import { saveConfig } from "$lib/services/api.js";
-  import type { ActionsConfig } from "$lib/types/api";
-  import { diff } from "$lib/utils/objDiff";
+  import { saveConfig } from '$lib/services/api.js';
+  import type { ActionsConfig } from '$lib/types/api';
+  import { diff } from '$lib/utils/objDiff';
 
   let {
     actions,
     error,
   }: { actions: ActionsConfig | null; error?: string | null } = $props();
 
-  let actionsConfig = $state<ActionsConfig>(
-    actions ?? {
-      neopixelSuccessColor: [
-        [0, 0],
-        [1, 255],
-        [2, 0],
-      ],
-      neopixelFailureColor: [
-        [0, 255],
-        [1, 0],
-        [2, 0],
-      ],
-      neopixelTagEventColor: [
-        [0, 0],
-        [1, 0],
-        [2, 0],
-      ],
-      neopixelTagEventTime: 1000,
-      nfcSuccessPin: 255,
-      nfcSuccessTime: 1000,
-      nfcSuccessHL: false,
-      nfcFailPin: 255,
-      nfcFailTime: 1000,
-      nfcFailHL: false,
-      tagEventPin: 255,
-      tagEventTimeout: 1000,
-      tagEventHL: false,
-      gpioActionPin: 255,
-      gpioActionLockState: false,
-      gpioActionUnlockState: false,
-      gpioActionMomentaryEnabled: 0,
-      hkGpioControlledState: false,
-      gpioActionMomentaryTimeout: 5000,
-      hkDumbSwitchMode: false,
-      hkAltActionInitPin: 255,
-      hkAltActionInitLedPin: 255,
-      hkAltActionInitTimeout: 5000,
-      hkAltActionPin: 255,
-      hkAltActionTimeout: 5000,
-      hkAltActionGpioState: 0,
-      nfcNeopixelPin: 8,
-      neoPixelType: 0,
-      neopixelSuccessTime: 1000,
-      neopixelFailTime: 1000,
-    },
-  );
+  // svelte-ignore state_referenced_locally
+    let actionsConfig = $state<ActionsConfig>($state.snapshot(actions));
 
   const saveActionsConfig = async (e: any): Promise<void> => {
     try {
       e.preventDefault();
       if (!actionsConfig || !actions) return;
-      const result = await saveConfig("actions", diff(actions, actionsConfig));
+      const result = await saveConfig('actions', diff(actions, actionsConfig));
       if (result.success) {
         actionsConfig = result.data;
         actions = result.data;

@@ -1,56 +1,29 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount } from 'svelte';
   import {
     type CertificatesStatus,
     type CertificateType,
     type MqttConfig,
-  } from "$lib/types/api";
+  } from '$lib/types/api';
   import {
     saveConfig,
     uploadCertificate,
     getCertificateStatus,
     deleteCertificate,
-  } from "$lib/services/api.js";
-  import { diff } from "$lib/utils/objDiff";
+  } from '$lib/services/api.js';
+  import { diff } from '$lib/utils/objDiff';
 
   let { mqtt, error }: { mqtt: MqttConfig | null; error: string | null } =
     $props();
 
-  let mqttConfig = $state<MqttConfig>(
-    mqtt ?? {
-      mqttBroker: "",
-      mqttPort: 1883,
-      mqttClientId: "",
-      mqttUsername: "",
-      mqttPassword: "",
-      hassMqttDiscoveryEnabled: false,
-      lwtTopic: "",
-      hkTopic: "",
-      lockStateTopic: "",
-      lockStateCmd: "",
-      lockCStateCmd: "",
-      lockTStateCmd: "",
-      btrLvlCmdTopic: "",
-      hkAltActionTopic: "",
-      lockCustomStateTopic: "",
-      lockCustomStateCmd: "",
-      lockEnableCustomState: false,
-      nfcTagNoPublish: false,
-      useSSL: false,
-      caCert: "",
-      clientCert: "",
-      clientKey: "",
-      allowInsecure: false,
-      customLockStates: {},
-      customLockActions: {},
-    },
-  );
+  // svelte-ignore state_referenced_locally
+    let mqttConfig = $state<MqttConfig>($state.snapshot(mqtt));
 
   let certificateStatus = $state<CertificatesStatus>();
 
   let uploadProgress = $state({ ca: 0, client: 0, privateKey: 0 });
 
-  let uploadErrors = $state({ ca: "", client: "", privateKey: "" });
+  let uploadErrors = $state({ ca: '', client: '', privateKey: '' });
 
   onMount(() => {
     if (mqtt) {
@@ -64,29 +37,29 @@
       if (response.success && response.data) {
         certificateStatus = response.data;
       } else {
-        console.error("Error fetching certificate status:", response.success);
+        console.error('Error fetching certificate status:', response.success);
       }
     } catch (e) {
-      console.error("Error fetching certificate status:", e);
+      console.error('Error fetching certificate status:', e);
     }
   };
 
   const handleCertificateUpload = async (event: Event) => {
     const type = (event.target as HTMLInputElement).dataset[
-      "type"
+      'type'
     ] as keyof typeof uploadErrors;
     const file = (event.target as HTMLInputElement).files?.[0];
     if (!file) return;
-    uploadErrors[type] = "";
+    uploadErrors[type] = '';
 
-    const validExtensions = [".pem", ".crt", ".cer", ".der", ".key"];
-    const fileNameParts = file.name.split(".");
-    const extension = fileNameParts.length > 1 ? fileNameParts.pop()! : "";
-    const fileExtension = "." + extension.toLowerCase();
+    const validExtensions = ['.pem', '.crt', '.cer', '.der', '.key'];
+    const fileNameParts = file.name.split('.');
+    const extension = fileNameParts.length > 1 ? fileNameParts.pop()! : '';
+    const fileExtension = '.' + extension.toLowerCase();
 
     if (!validExtensions.includes(fileExtension)) {
       uploadErrors.ca =
-        "Invalid file type. Must be .pem, .crt, .cer, .der, or .key";
+        'Invalid file type. Must be .pem, .crt, .cer, .der, or .key';
       return;
     }
 
@@ -106,7 +79,7 @@
         uploadProgress[type] = 95;
         const content = e.target?.result ?? null;
         if (content === null) {
-          uploadErrors[type] = "Failed to read file content";
+          uploadErrors[type] = 'Failed to read file content';
           uploadProgress[type] = 0;
           return;
         }
@@ -115,7 +88,7 @@
 
         await fetchCertificateStatus();
 
-        (event.target as HTMLInputElement).value = "";
+        (event.target as HTMLInputElement).value = '';
 
         setTimeout(() => {
           uploadProgress[type] = 0;
@@ -126,11 +99,11 @@
       }
     };
     reader.onerror = () => {
-      uploadErrors[type] = "Failed to read file";
+      uploadErrors[type] = 'Failed to read file';
       uploadProgress[type] = 0;
     };
 
-    if (fileExtension === ".der") {
+    if (fileExtension === '.der') {
       reader.readAsArrayBuffer(file);
     } else {
       reader.readAsText(file);
@@ -162,7 +135,7 @@
     e.preventDefault();
     try {
       if (!mqttConfig || !mqtt) return;
-      const result = await saveConfig("mqtt", diff(mqtt, mqttConfig));
+      const result = await saveConfig('mqtt', diff(mqtt, mqttConfig));
       if (result.success) {
         mqttConfig = result.data;
         mqtt = result.data;
@@ -433,7 +406,7 @@
                                   <button
                                     type="button"
                                     onclick={() =>
-                                      deleteCertificateHandler("ca")}
+                                      deleteCertificateHandler('ca')}
                                     class="btn btn-ghost btn-xs btn-error"
                                     >Delete</button
                                   >
@@ -489,7 +462,7 @@
                                   <button
                                     type="button"
                                     onclick={() =>
-                                      deleteCertificateHandler("client")}
+                                      deleteCertificateHandler('client')}
                                     class="btn btn-ghost btn-xs btn-error"
                                     >Delete</button
                                   >
@@ -543,7 +516,7 @@
                                   <button
                                     type="button"
                                     onclick={() =>
-                                      deleteCertificateHandler("privateKey")}
+                                      deleteCertificateHandler('privateKey')}
                                     class="btn btn-ghost btn-xs btn-error"
                                     >Delete</button
                                   >
