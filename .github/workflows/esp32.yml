@@ -26,6 +26,7 @@ jobs:
     steps:
       - name: Delete dev release
         run: gh release --repo ${{ github.repository }} delete dev --cleanup-tag -y
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   littlefs:
@@ -53,16 +54,16 @@ jobs:
         run: bun run build
         working-directory: data
       - name: Remove extra, only keep compressed
-        run: find build -regex ".*\.\(html.gz\|css\|br\|js\|json.gz\)" -delete
+        run: find dist -regex ".*\.\(html\|css\|br\|js\|json.gz\)" -delete
         working-directory: data
       - name: Create LittleFS Image
-        run: littlefs-python create $(pwd)/build littlefs.bin -v --fs-size=0x20000 --name-max=64 --block-size=4096
+        run: littlefs-python create $(pwd)/dist littlefs.bin -v --fs-size=0x20000 --name-max=64 --block-size=4096
         working-directory: data
       - name: Archive build directory
         uses: actions/upload-artifact@v4
         with:
           name: ui-build-directory
-          path: data/build
+          path: data/dist
           retention-days: 1
       - name: Archive LittleFS image
         uses: actions/upload-artifact@v4
@@ -83,7 +84,7 @@ jobs:
         uses: actions/download-artifact@v5
         with:
           name: ui-build-directory
-          path: data/build
+          path: data/dist
       - uses: actions/cache@v4
         with:
           path: |
@@ -124,7 +125,7 @@ jobs:
         uses: actions/download-artifact@v5
         with:
           name: ui-build-directory
-          path: data/build
+          path: data/dist
       - uses: actions/cache@v4
         with:
           path: |
@@ -165,7 +166,7 @@ jobs:
         uses: actions/download-artifact@v5
         with:
           name: ui-build-directory
-          path: data/build
+          path: data/dist
       - uses: actions/cache@v4
         with:
           path: |
@@ -205,7 +206,7 @@ jobs:
         uses: actions/download-artifact@v5
         with:
           name: ui-build-directory
-          path: data/build
+          path: data/dist
       - uses: actions/cache@v4
         with:
           path: |
