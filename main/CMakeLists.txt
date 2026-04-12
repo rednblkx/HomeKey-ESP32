@@ -19,11 +19,11 @@ if(NOT DEFINED ENV{CI})
     WORKING_DIRECTORY ${COMPONENT_DIR}/../data 
     COMMAND bun install
     COMMAND bun run build 
-    COMMAND sh -c "find build \\( -name '*.html.gz' -o -name '*.css' -o -name '*.br' -o -name '*.js' -o -name '*.json.gz' \\) -delete"
+    COMMAND sh -c "find dist \\( -name '*.css' -o -name '*.js' \\) -delete"
     VERBATIM
   )
-  littlefs_create_partition_image(spiffs ../data/build FLASH_IN_PROJECT DEPENDS webui)
+  littlefs_create_partition_image(spiffs ../data/dist FLASH_IN_PROJECT DEPENDS webui)
 else()
-  littlefs_create_partition_image(spiffs ../data/build FLASH_IN_PROJECT)
+  littlefs_create_partition_image(spiffs ../data/dist FLASH_IN_PROJECT)
 endif()
 target_compile_definitions(${COMPONENT_LIB} PUBLIC "-DLOG_LOCAL_LEVEL=ESP_LOG_VERBOSE")
