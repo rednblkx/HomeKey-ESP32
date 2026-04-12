@@ -1,33 +1,27 @@
 {
-	"extends": [
-		"./.router/tsconfig.json"
-	],
-	"compilerOptions": {
-		"lib": [
-			"DOM",
-			"ES2022"
-		],
-		"target": "ES2022",
-		"noEmit": true,
-		"skipLibCheck": true,
-		"useDefineForClassFields": true,
-		"module": "ESNext",
-		"moduleDetection": "force",
-		"moduleResolution": "bundler",
-		"verbatimModuleSyntax": true,
-		"resolveJsonModule": true,
-		"allowImportingTsExtensions": true,
-		"noUncheckedSideEffectImports": true,
-		"strict": true,
-		"noUnusedLocals": true,
-		"noUnusedParameters": true,
-		"paths": {
-			"$lib/*": [
-				"src/lib/*"
-			]
-		}
-	},
-	"include": [
-		"src"
-	]
+  "extends": [
+    "./.router/tsconfig.json",
+    "@tsconfig/svelte/tsconfig.json"
+  ],
+  "compilerOptions": {
+    "target": "ESNext",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "resolveJsonModule": true,
+    "allowJs": true,
+    "checkJs": true,
+    "isolatedModules": true,
+  },
+  "include": [
+    "src",
+    "src/**/*.d.ts",
+    "src/**/*.ts",
+    "src/**/*.js",
+    "src/**/*.svelte"
+  ],
+  "references": [
+    {
+      "path": "./tsconfig.node.json"
+    }
+  ]
 }
