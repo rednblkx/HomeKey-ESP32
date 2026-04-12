@@ -1,36 +1,19 @@
-/**
- * Available theme names
- * @typedef {'dracula' | 'autumn'} ThemeName
- */
+type ThemeName = 'dracula' | 'autumn';
 
-/**
- * Current theme state
- * @type {ThemeName}
- */
-let currentTheme = $state('dracula');
+let currentTheme : ThemeName = $state('dracula');
 
-/**
- * Get the current theme
- * @returns {ThemeName}
- */
-function getCurrentTheme() {
+function getCurrentTheme() : ThemeName {
 	return currentTheme;
 }
 
-/**
- * Toggle between available themes
- */
 function toggleTheme() {
 	currentTheme = currentTheme === 'dracula' ? 'autumn' : 'dracula';
 	localStorage.setItem('theme', currentTheme);
 	document.documentElement.setAttribute('data-theme', currentTheme);
 }
 
-/**
- * Initialize theme system and load saved theme
- */
 function initTheme() {
-	currentTheme = /** @type {ThemeName} */ (localStorage.getItem('theme') || 'dracula');
+	currentTheme = (localStorage.getItem('theme') || 'dracula') as ThemeName;
 	document.documentElement.setAttribute('data-theme', currentTheme);
 }
 

@@ -3,7 +3,6 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { updateSystemInfo } from '$lib/stores/system.svelte.js';
 	import { getCurrentTheme, toggleTheme, initTheme, logoSrc } from '$lib/stores/theme.svelte.js';
-	import { uiState, closeDrawer } from '$lib/stores/ui.svelte.js';
 	import ws, { type WebSocketEvent } from '$lib/services/ws.js';
 	import Logo from '$lib/assets/favicon.png';
 	import NavigationMenu from '$lib/components/NavigationMenu.svelte';
@@ -13,8 +12,7 @@
   import { logIdIncrement, logs } from '$lib/stores/logs.svelte';
 
 	let { children } = $props();
-
-	let sidebarTrigger = $state(null);
+  let drawerOpen = $state(false);
 	let unsubscribeMessages : (() => void) | null = null;
 
 	onMount(() => {
@@ -63,7 +61,7 @@
 
 <div class="flex flex-col h-dvh">
 	<!-- Mobile Navbar -->
-	<div class="navbar bg-base-100 lg:hidden sticky top-[0] z-[9999]">
+	<div class="navbar bg-base-100 lg:hidden sticky top-0 z-9999">
 		<div class="navbar-start">
 			<label for="main-content-drawer" class="btn btn-ghost drawer-button lg:hidden" aria-label="Menu">
 				<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
@@ -104,11 +102,11 @@
 	
 	<!-- Drawer -->
 	<div class="drawer lg:drawer-open flex w-full flex-1 overflow-hidden">
-		<input id="main-content-drawer" type="checkbox" class="drawer-toggle" bind:checked={uiState.drawerOpen} />
+		<input id="main-content-drawer" type="checkbox" class="drawer-toggle" bind:checked={drawerOpen} />
 		<!-- Sidebar -->
 		<div class="drawer-side max-lg:top-auto">
 			<label for="main-content-drawer" aria-label="close sidebar" class="drawer-overlay"></label>
-			<NavigationMenu onClose={closeDrawer} bind:triggerElement={sidebarTrigger} id="main-navigation" />
+			<NavigationMenu onClose={() => drawerOpen = false} id="main-navigation" />
 		</div>
 		<div class="drawer-content h-full w-full">
 			<!-- Content -->

@@ -9,7 +9,7 @@
 	import { websocketState } from "$lib/stores/websocket.svelte";
 	import { p } from "sv-router/generated";
 
-	let { onClose, triggerElement = $bindable(), id } = $props();
+	let { onClose, id } = $props();
 
 	onMount(() => {
 		initTheme();

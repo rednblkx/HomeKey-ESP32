@@ -8,7 +8,7 @@
 <div class="form-control">
   <!-- svelte-ignore a11y_label_has_associated_control -->
   <label class="label">
-    <span class="label-text block whitespace-normal break-words max-w-sm">
+    <span class="label-text block whitespace-normal wrap-break-words max-w-sm">
       Note: Your chip model {spiNumBuses === 1
         ? "only supports one"
         : "supports two"} general purpose SPI {spiNumBuses === 1
