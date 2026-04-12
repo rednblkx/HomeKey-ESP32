@@ -433,7 +433,7 @@ export type ApiResponse<T = any> = ApiSuccess<T> | ApiError;
 export { isApiSuccess, isApiError, isLogLevel, isNotificationType, isCertificateType } from '$lib/utils/index.js';
 
 type Only<T, U> = {
-[P in keyof T]: T[P];
+  [P in keyof T]: T[P];
 } & {
   [P in keyof U]?: never;
 };
