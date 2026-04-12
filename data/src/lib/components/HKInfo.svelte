@@ -1,11 +1,6 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import type { HKInfo } from "$lib/types/api.js";
   import { systemInfo } from "$lib/stores/system.svelte.js";
-  import {
-    loadingStates,
-    setLoadingState,
-  } from "$lib/stores/loading.svelte.js";
   import { calculateWifiSignal } from "$lib/utils/wifi.js";
   const version : string = __DEV__ ? 'dev' : __VERSION__;
 
@@ -17,46 +12,12 @@
   let { hkInfo, error }: { hkInfo: HKInfo | null; error: string | null } =
     $props();
 
-  onMount(async (): Promise<void> => {
-    systemInfo.uptime == 0 && setLoadingState("systemInfoLoading", true);
-  });
-
   let wifi_rssi = $derived(systemInfo?.wifi_rssi);
   let wifi_signal = $derived.by(() => calculateWifiSignal(wifi_rssi));
 </script>
 
 <div class="w-full py-6 flex flex-col items-center">
   <div class="flex flex-col max-w-4xl gap-6">
-    <!-- HomeKey Info Card -->
-    {#if loadingStates.hkInfoLoading}
-      <div
-        class="card bg-base-200 shadow-xl"
-        aria-live="polite"
-        aria-label="Loading HomeKey information"
-      >
-        <h2 class="card-title p-4 pb-0">
-          <div
-            class="badge badge-info badge-md"
-            aria-label="HomeKey information section"
-          >
-            Info
-          </div>
-          HomeKey
-        </h2>
-        <div class="card-body p-4">
-          <div class="flex justify-center">
-            <span
-              class="loading loading-spinner loading-lg"
-              aria-label="Loading HomeKey data"
-            ></span>
-          </div>
-        </div>
-      </div>
-    {:else if error}
-      <div class="text-center text-error" aria-live="assertive">
-        <p>Error: {error}</p>
-      </div>
-    {:else if hkInfo}
       <div class="card bg-base-200 shadow-xl">
         <h2 class="card-title p-4 pb-0">
           <div class="badge badge-info badge-md">Info</div>
@@ -126,8 +87,6 @@
           </div>
         </div>
       </div>
-    {/if}
-
     <div
       class="card bg-base-200 shadow-xl"
       aria-live="polite"
@@ -143,108 +102,68 @@
         System
       </h2>
       <div class="card-body p-4">
-        {#if loadingStates.systemInfoLoading}
+        <div class="flex flex-col gap-4">
           <div
-            class="flex flex-col gap-4"
-            aria-label="Loading system information"
+            class="stats stats-vertical md:stats-horizontal shadow bg-base-100 w-full"
           >
-            <div
-              class="stats stats-vertical md:stats-horizontal shadow bg-base-100 w-full"
-            >
-              <div class="stat">
-                <div class="skeleton h-4 w-20 mb-2"></div>
-                <div class="skeleton h-6 w-32"></div>
-              </div>
-              <div class="stat">
-                <div class="skeleton h-4 w-16 mb-2"></div>
-                <div class="skeleton h-6 w-24"></div>
-              </div>
-              <div class="stat">
-                <div class="skeleton h-4 w-14 mb-2"></div>
-                <div class="skeleton h-6 w-28"></div>
+            <div class="stat">
+              <div class="stat-title">Version</div>
+              <div class="stat-value text-xl">
+                {systemInfo?.version || "N/A"}
               </div>
             </div>
-            <div
-              class="stats stats-vertical md:stats-horizontal shadow bg-base-100 w-full"
-            >
-              <div class="stat">
-                <div class="skeleton h-4 w-18 mb-2"></div>
-                <div class="skeleton h-6 w-36"></div>
+            <div class="stat">
+              <div class="stat-title">UI Version</div>
+              <div class="stat-value text-xl">{version}</div>
+            </div>
+          </div>
+          <div
+            class="stats stats-vertical md:stats-horizontal shadow bg-base-100 w-full"
+          >
+            <div class="stat">
+              <div class="stat-title">Device Name</div>
+              <div class="stat-value text-xl">
+                {systemInfo?.deviceName || "N/A"}
               </div>
-              <div class="stat">
-                <div class="skeleton h-4 w-16 mb-2"></div>
-                <div class="skeleton h-6 w-40"></div>
+            </div>
+            <div class="stat">
+              <div class="stat-title">Uptime</div>
+              <div class="stat-value text-xl">
+                {systemInfo?.uptime || "N/A"}
               </div>
-              <div class="stat">
-                <div class="skeleton h-4 w-24 mb-2"></div>
-                <div class="skeleton h-6 w-12"></div>
+            </div>
+            <div class="stat">
+              <div class="stat-title">Free Heap</div>
+              <div class="stat-value text-xl">
+                {systemInfo?.free_heap || "N/A"}
               </div>
             </div>
           </div>
-        {:else}
-          <div class="flex flex-col gap-4">
-            <div
-              class="stats stats-vertical md:stats-horizontal shadow bg-base-100 w-full"
-            >
-              <div class="stat">
-                <div class="stat-title">Version</div>
-                <div class="stat-value text-xl">
-                  {systemInfo?.version || "N/A"}
-                </div>
-              </div>
-              <div class="stat">
-                <div class="stat-title">UI Version</div>
-                <div class="stat-value text-xl">{version}</div>
+          <div
+            class="stats stats-vertical md:stats-horizontal shadow bg-base-100 w-full"
+          >
+            <div class="stat">
+              <div class="stat-title">WiFi SSID</div>
+              <div class="stat-value text-xl">
+                {systemInfo?.wifi_ssid || "N/A"}
               </div>
             </div>
-            <div
-              class="stats stats-vertical md:stats-horizontal shadow bg-base-100 w-full"
-            >
+            {#if !systemInfo?.eth_enabled}
               <div class="stat">
-                <div class="stat-title">Device Name</div>
+                <div class="stat-title">WiFi RSSI</div>
                 <div class="stat-value text-xl">
-                  {systemInfo?.deviceName || "N/A"}
+                  {systemInfo?.wifi_rssi || "N/A"} ({wifi_signal})
                 </div>
               </div>
-              <div class="stat">
-                <div class="stat-title">Uptime</div>
-                <div class="stat-value text-xl">
-                  {systemInfo?.uptime || "N/A"}
-                </div>
-              </div>
-              <div class="stat">
-                <div class="stat-title">Free Heap</div>
-                <div class="stat-value text-xl">
-                  {systemInfo?.free_heap || "N/A"}
-                </div>
-              </div>
-            </div>
-            <div
-              class="stats stats-vertical md:stats-horizontal shadow bg-base-100 w-full"
-            >
-              <div class="stat">
-                <div class="stat-title">WiFi SSID</div>
-                <div class="stat-value text-xl">
-                  {systemInfo?.wifi_ssid || "N/A"}
-                </div>
-              </div>
-              {#if !systemInfo?.eth_enabled}
-                <div class="stat">
-                  <div class="stat-title">WiFi RSSI</div>
-                  <div class="stat-value text-xl">
-                    {systemInfo?.wifi_rssi || "N/A"} ({wifi_signal})
-                  </div>
-                </div>
-              {/if}
-              <div class="stat">
-                <div class="stat-title">Ethernet enabled</div>
-                <div class="stat-value text-xl">
-                  {systemInfo?.eth_enabled ? "Yes" : "No"}
-                </div>
+            {/if}
+            <div class="stat">
+              <div class="stat-title">Ethernet enabled</div>
+              <div class="stat-value text-xl">
+                {systemInfo?.eth_enabled ? "Yes" : "No"}
               </div>
             </div>
           </div>
-        {/if}
+        </div>
       </div>
     </div>
   </div>

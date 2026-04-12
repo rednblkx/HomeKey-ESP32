@@ -4,7 +4,6 @@
 	import { updateSystemInfo } from '$lib/stores/system.svelte.js';
 	import { getCurrentTheme, toggleTheme, initTheme, logoSrc } from '$lib/stores/theme.svelte.js';
 	import { uiState, closeDrawer } from '$lib/stores/ui.svelte.js';
-	import { setLoadingState } from '$lib/stores/loading.svelte.js';
 	import ws, { type WebSocketEvent } from '$lib/services/ws.js';
 	import Logo from '$lib/assets/favicon.png';
 	import NavigationMenu from '$lib/components/NavigationMenu.svelte';
@@ -29,7 +28,6 @@
 					const data = event.data;
 					if (data.type === 'sysinfo' || data.type === 'metrics') {
 						updateSystemInfo(data);
-						setLoadingState('systemInfoLoading', false);
 					}
           if (data.type === 'log') {
 						const log : LogEntry = {
