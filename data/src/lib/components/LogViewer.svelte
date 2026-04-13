@@ -13,6 +13,7 @@
   > | null>(null);
 
   let autoScrollActive = $state(true);
+  let toolbarExpanded = $state(false);
   let previousLogCount = $state(0);
   let isProgrammaticScroll = false;
   let lastScrollTop = 0;
@@ -236,10 +237,10 @@
   </div>
 
   <!-- Toolbar Card -->
-  <div class="pb-4">
-    <div class="bg-base-200 rounded-lg border border-base-300 p-4">
-      <!-- Row 1: Search and Log Level -->
-      <div class="flex flex-col sm:flex-row gap-3 mb-4">
+  <div class="pb-2 sm:pb-4">
+    <div class="bg-base-200 rounded-lg border border-base-300 p-2 sm:p-4">
+      <!-- Row 1: Search, Log Level, and Toggle -->
+      <div class="flex items-center gap-2 lg:pb-2">
         <div class="join flex-1">
           <div class="join-item bg-base-200 border border-base-300 border-r-0 px-3 flex items-center">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4 text-base-content/50">
@@ -255,9 +256,9 @@
           />
         </div>
         <div class="flex items-center gap-2 shrink-0">
-          <span class="text-sm whitespace-nowrap">Log Level:</span>
+          <span class="text-sm whitespace-nowrap hidden sm:inline">Log Level:</span>
           <select
-            class="select select-sm bg-base-100 border-base-300 text-sm min-w-[100px]"
+            class="select select-sm bg-base-100 border-base-300 text-sm min-w-[80px] sm:min-w-[100px]"
             value={sys_log_level()}
             onchange={(e) => {
               ws.send({
@@ -268,51 +269,78 @@
           >
             <option value="0">NONE</option>
             <option value="1">ERROR</option>
-            <option value="2">WARNING</option>
+            <option value="2">WARN</option>
             <option value="3">INFO</option>
             <option value="4">DEBUG</option>
             <option value="5">VERBOSE</option>
           </select>
+          <button
+            class="btn btn-sm btn-square btn-ghost sm:hidden"
+            onclick={() => toolbarExpanded = !toolbarExpanded}
+            aria-label="Toggle filters"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke-width="1.5"
+              stroke="currentColor"
+              class="size-4 transition-transform duration-200"
+              class:rotate-180={toolbarExpanded}
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+            </svg>
+          </button>
         </div>
       </div>
 
-      <!-- Row 2: Filter Levels and Actions -->
-      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div class="flex items-center gap-2 flex-wrap">
-          <span class="text-sm text-base-content/60 mr-1">Filter levels:</span>
-          {#each Object.keys(logLevels) as level}
-            <button
-              onclick={() => toggleLogLevel(level as LogLevel)}
-              class="badge badge-sm cursor-pointer border-0 transition-all duration-200 {getLogLevelBadgeStyle(level as LogLevel, logLevels[level as LogLevel])}"
-              aria-pressed={logLevels[level as LogLevel]}
-            >
-              {level}
-            </button>
-          {/each}
-        </div>
+      <!-- Collapsible Filter Section -->
+      <div
+        class="grid transition-all duration-200 ease-out overflow-hidden"
+        class:grid-rows-[0fr]={!toolbarExpanded}
+        class:grid-rows-[1fr]={toolbarExpanded}
+        class:sm:grid-rows-[1fr]={true}
+      >
+        <div class="min-h-0">
+          <!-- Row 2: Filter Levels and Actions -->
+          <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 pt-3 mt-2 border-t border-base-300/50 sm:border-t-0 sm:pt-0 sm:mt-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-sm text-base-content/60 shrink-0">Filter:</span>
+              {#each Object.keys(logLevels) as level}
+                <button
+                  onclick={() => toggleLogLevel(level as LogLevel)}
+                  class="badge badge-sm cursor-pointer border-0 transition-all duration-200 shrink-0 {getLogLevelBadgeStyle(level as LogLevel, logLevels[level as LogLevel])}"
+                  aria-pressed={logLevels[level as LogLevel]}
+                >
+                  {level}
+                </button>
+              {/each}
+            </div>
 
-        <div class="flex items-center gap-2 flex-wrap">
-          <label class="label cursor-pointer gap-2 py-0">
-            <input
-              type="checkbox"
-              class="toggle toggle-sm toggle-accent"
-              bind:checked={autoScrollActive}
-              aria-label="Toggle auto-scroll"
-            />
-            <span class="label-text text-sm">Auto-scroll</span>
-          </label>
-          <button onclick={() => exportLogs()} class="btn btn-sm btn-outline gap-1">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
-            </svg>
-            Export
-          </button>
-          <button onclick={clearLogs} class="btn btn-sm btn-outline gap-1">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
-              <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-            </svg>
-            Clear
-          </button>
+            <div class="flex items-center gap-2 flex-wrap">
+              <label class="label cursor-pointer gap-2 py-0">
+                <input
+                  type="checkbox"
+                  class="toggle toggle-sm toggle-accent"
+                  bind:checked={autoScrollActive}
+                  aria-label="Toggle auto-scroll"
+                />
+                <span class="label-text text-sm">Auto-scroll</span>
+              </label>
+              <button onclick={() => exportLogs()} class="btn btn-sm btn-outline gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+                </svg>
+                Export
+              </button>
+              <button onclick={clearLogs} class="btn btn-sm btn-outline gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                </svg>
+                Clear
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
