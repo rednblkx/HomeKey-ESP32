@@ -1,5 +1,6 @@
 import type { Hooks } from 'sv-router';
 import type { MiscConfig, EthConfig, NfcGpioPinsPreset } from '$lib/types/api';
+import { setLoadingState } from '$lib/stores/system.svelte';
 
 declare module 'sv-router' {
   interface RouteMeta {
@@ -10,6 +11,7 @@ declare module 'sv-router' {
 export default {
   async beforeLoad({ meta }) {
     try {
+      setLoadingState(true);
       const [miscRes, ethRes, nfcRes] = await Promise.all([
         fetch('/config?type=misc').then(r => r.json()),
         fetch('/eth_get_config').then(r => r.json()),
@@ -27,6 +29,8 @@ export default {
     } catch (error) {
       console.error('Failed to load misc config:', error);
       meta.miscData = { misc: null, eth: null, nfcPresets: null, error: error instanceof Error ? error.message : 'Unknown error' };
+    } finally {
+      setLoadingState(false);
     }
   },
 } satisfies Hooks;

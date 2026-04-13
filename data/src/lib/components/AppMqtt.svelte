@@ -1,34 +1,20 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import {
-    type CertificatesStatus,
-    type CertificateType,
-    type MqttConfig,
-  } from '$lib/types/api';
-  import {
-    saveConfig,
-    uploadCertificate,
-    getCertificateStatus,
-    deleteCertificate,
-  } from '$lib/services/api.js';
+  import type { CertificatesStatus, CertificateType, MqttConfig } from '$lib/types/api';
+  import { saveConfig, uploadCertificate, getCertificateStatus, deleteCertificate } from '$lib/services/api.js';
   import { diff } from '$lib/utils/objDiff';
 
-  let { mqtt, error }: { mqtt: MqttConfig | null; error: string | null } =
-    $props();
+  let { mqtt, error }: { mqtt: MqttConfig; error: string | null } = $props();
 
   // svelte-ignore state_referenced_locally
-    let mqttConfig = $state<MqttConfig>($state.snapshot(mqtt));
-
+  let mqttConfig = $state<MqttConfig>($state.snapshot(mqtt));
+  let activeTab = $state<'broker' | 'topics' | 'ssl'>('broker');
   let certificateStatus = $state<CertificatesStatus>();
-
   let uploadProgress = $state({ ca: 0, client: 0, privateKey: 0 });
-
   let uploadErrors = $state({ ca: '', client: '', privateKey: '' });
 
   onMount(() => {
-    if (mqtt) {
-      fetchCertificateStatus();
-    }
+    if (mqtt) fetchCertificateStatus();
   });
 
   const fetchCertificateStatus = async () => {
@@ -36,8 +22,6 @@
       const response = await getCertificateStatus();
       if (response.success && response.data) {
         certificateStatus = response.data;
-      } else {
-        console.error('Error fetching certificate status:', response.success);
       }
     } catch (e) {
       console.error('Error fetching certificate status:', e);
@@ -45,9 +29,7 @@
   };
 
   const handleCertificateUpload = async (event: Event) => {
-    const type = (event.target as HTMLInputElement).dataset[
-      'type'
-    ] as keyof typeof uploadErrors;
+    const type = (event.target as HTMLInputElement).dataset['type'] as keyof typeof uploadErrors;
     const file = (event.target as HTMLInputElement).files?.[0];
     if (!file) return;
     uploadErrors[type] = '';
@@ -58,17 +40,14 @@
     const fileExtension = '.' + extension.toLowerCase();
 
     if (!validExtensions.includes(fileExtension)) {
-      uploadErrors.ca =
-        'Invalid file type. Must be .pem, .crt, .cer, .der, or .key';
+      uploadErrors[type] = 'Invalid file type. Must be .pem, .crt, .cer, .der, or .key';
       return;
     }
 
     uploadProgress[type] = 0;
-
     const reader = new FileReader();
-    reader.onloadstart = () => {
-      uploadProgress[type] = 10;
-    };
+
+    reader.onloadstart = () => { uploadProgress[type] = 10; };
     reader.onprogress = (e) => {
       if (e.lengthComputable) {
         uploadProgress[type] = Math.min(90, (e.loaded / e.total) * 100);
@@ -85,14 +64,9 @@
         }
         await uploadCertificate(type, content);
         uploadProgress[type] = 100;
-
         await fetchCertificateStatus();
-
         (event.target as HTMLInputElement).value = '';
-
-        setTimeout(() => {
-          uploadProgress[type] = 0;
-        }, 1000);
+        setTimeout(() => { uploadProgress[type] = 0; }, 1000);
       } catch (error) {
         uploadErrors[type] = `Upload failed: ${(error as Error).message}`;
         uploadProgress[type] = 0;
@@ -111,17 +85,12 @@
   };
 
   const deleteCertificateHandler = async (type: CertificateType) => {
-    if (!confirm(`Are you sure you want to delete the ${type} certificate?`)) {
-      return;
-    }
-
+    if (!confirm(`Are you sure you want to delete the ${type} certificate?`)) return;
     try {
       await deleteCertificate(type);
       await fetchCertificateStatus();
     } catch (e) {
-      alert(
-        `Error deleting certificate: ${e instanceof Error ? e.message : String(e)}`,
-      );
+      alert(`Error deleting certificate: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
 
@@ -131,11 +100,11 @@
     }
   };
 
-  const saveMqttConfig = async (e: any) => {
+  const saveMqttConfig = async (e: Event) => {
     e.preventDefault();
     try {
       if (!mqttConfig || !mqtt) return;
-      const result = await saveConfig('mqtt', diff(mqtt, mqttConfig));
+      const result = await saveConfig('mqtt', diff(mqtt as MqttConfig, mqttConfig));
       if (result.success) {
         mqttConfig = result.data;
         mqtt = result.data;
@@ -147,801 +116,614 @@
   };
 
   const resetForm = () => {
-    if (mqtt) {
-      mqttConfig = mqtt;
-    }
+    if (mqtt) mqttConfig = $state.snapshot(mqtt);
   };
 </script>
 
 <div class="w-full py-6">
-  <h1 class="md:text-3xl text-2xl font-bold mb-8">
-    MQTT Settings
-    <div
-      class="tooltip tooltip-bottom tooltip-info"
-      data-tip="Reboot required to apply!"
-    >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke-width="1.5"
-        stroke="currentColor"
-        class="size-6"
-      >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z"
-        />
-      </svg>
-    </div>
-  </h1>
+  <!-- Header -->
+  <div class="mb-6">
+    <h1 class="text-2xl font-bold text-base-content flex items-center gap-2">
+      MQTT Settings
+      <div class="tooltip tooltip-bottom tooltip-info" data-tip="Device will reboot to apply changes!">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-5 text-info">
+          <path stroke-linecap="round" stroke-linejoin="round" d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z" />
+        </svg>
+      </div>
+    </h1>
+    <p class="text-sm text-base-content/60">Configure MQTT broker connection and topic mappings.</p>
+  </div>
+
   {#if !mqtt && error}
     <div class="text-center text-error">
       <p>Error: {error}</p>
     </div>
   {:else if mqtt}
-    <form onsubmit={saveMqttConfig} class="flex flex-col items-center">
-      <div class="flex flex-col max-w-4xl">
-        <div class="card bg-base-200 shadow-xl">
-          <div class="card-body p-4">
-            <div class="collapse collapse-arrow bg-base-100">
-              <input type="checkbox" name="mqtt-accordion" checked />
-              <div class="collapse-title font-medium flex items-center">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke-width="1.5"
-                  stroke="currentColor"
-                  class="w-5 mr-2"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M21.75 17.25v-.228a4.5 4.5 0 0 0-.12-1.03l-2.268-9.64a3.375 3.375 0 0 0-3.285-2.602H7.923a3.375 3.375 0 0 0-3.285 2.602l-2.268 9.64a4.5 4.5 0 0 0-.12 1.03v.228m19.5 0a3 3 0 0 1-3 3H5.25a3 3 0 0 1-3-3m19.5 0a3 3 0 0 0-3-3H5.25a3 3 0 0 0-3 3m16.5 0h.008v.008h-.008v-.008Zm-3 0h.008v.008h-.008v-.008Z"
-                  />
-                </svg>
-                Broker
+    <form onsubmit={saveMqttConfig} class="max-w-5xl">
+      <!-- Tabs -->
+      <div class="flex bg-base-300 p-1 rounded-xl gap-1 mb-4">
+        <button
+          type="button"
+          class="flex-1 tab flex-col py-2 rounded-lg transition-colors {activeTab === 'broker' ? 'bg-base-100 text-primary font-medium shadow-sm' : 'text-base-content/60 hover:bg-base-200'}"
+          onclick={() => activeTab = 'broker'}
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke-width="1.5"
+            stroke="currentColor"
+            class="size-4"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M21.75 17.25v-.228a4.5 4.5 0 0 0-.12-1.03l-2.268-9.64a3.375 3.375 0 0 0-3.285-2.602H7.923a3.375 3.375 0 0 0-3.285 2.602l-2.268 9.64a4.5 4.5 0 0 0-.12 1.03v.228m19.5 0a3 3 0 0 1-3 3H5.25a3 3 0 0 1-3-3m19.5 0a3 3 0 0 0-3-3H5.25a3 3 0 0 0-3 3m16.5 0h.008v.008h-.008v-.008Zm-3 0h.008v.008h-.008v-.008Z"
+            />
+          </svg>
+          <span class="text-[10px] sm:text-xs mt-0.5">Broker</span>
+        </button>
+        <button
+          type="button"
+          class="flex-1 tab flex-col py-2 rounded-lg transition-colors {activeTab === 'topics' ? 'bg-base-100 text-primary font-medium shadow-sm' : 'text-base-content/60 hover:bg-base-200'}"
+          onclick={() => activeTab = 'topics'}
+        >
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" class="size-4">
+            <path d="M6 8V7C6 3.68629 8.68629 1 12 1C15.3137 1 18 3.68629 18 7V8H20C20.5523 8 21 8.44772 21 9V21C21 21.5523 20.5523 22 20 22H4C3.44772 22 3 21.5523 3 21V9C3 8.44772 3.44772 8 4 8H6ZM19 10H5V20H19V10ZM11 15.7324C10.4022 15.3866 10 14.7403 10 14C10 12.8954 10.8954 12 12 12C13.1046 12 14 12.8954 14 14C14 14.7403 13.5978 15.3866 13 15.7324V18H11V15.7324ZM8 8H16V7C16 4.79086 14.2091 3 12 3C9.79086 3 8 4.79086 8 7V8Z">
+            </path>
+          </svg>
+          <span class="text-[10px] sm:text-xs mt-0.5">Topics</span>
+        </button>
+        <button
+          type="button"
+          class="flex-1 tab flex-col py-2 rounded-lg transition-colors {activeTab === 'ssl' ? 'bg-base-100 text-primary font-medium shadow-sm' : 'text-base-content/60 hover:bg-base-200'}"
+          onclick={() => activeTab = 'ssl'}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z" />
+          </svg>
+          <span class="text-[10px] sm:text-xs mt-0.5">SSL/TLS</span>
+        </button>
+      </div>
+
+      <!-- Tab Content -->
+      <div class="card bg-base-200 shadow-xl">
+        <div class="card-body p-4">
+        {#if activeTab === 'broker'}
+          <!-- Broker Configuration -->
+          <div class="space-y-6">
+            <div>
+              <h3 class="font-semibold text-base-content">Broker Configuration</h3>
+              <p class="text-sm text-base-content/60">Configure the MQTT broker connection settings.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div class="form-control">
+                <label class="label">
+                  <span class="label-text text-sm">Broker Address</span>
+                </label>
+                <input
+                  type="text"
+                  bind:value={mqttConfig.mqttBroker}
+                  placeholder="192.168.1.100"
+                  class="input input-sm input-bordered w-full"
+                  required
+                />
               </div>
-              <div class="collapse-content">
-                <div
-                  class="text-xs uppercase font-semibold opacity-60 mb-4"
-                  class:hidden={mqttConfig.useSSL}
-                >
-                  TCP - Without TLS
-                </div>
-                <div
-                  class="text-xs uppercase font-semibold opacity-60 mb-4"
-                  class:hidden={!mqttConfig.useSSL}
-                >
-                  TCP - With TLS/SSL
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div class="form-control">
-                    <!-- svelte-ignore a11y_label_has_associated_control -->
-                    <label class="label">
-                      <span class="label-text">Address</span>
-                    </label>
-                    <input
-                      type="text"
-                      bind:value={mqttConfig.mqttBroker}
-                      placeholder="0.0.0.0"
-                      class="input input-bordered w-full"
-                      required
-                    />
-                  </div>
-                  <div class="form-control">
-                    <!-- svelte-ignore a11y_label_has_associated_control -->
-                    <label class="label">
-                      <span class="label-text">Port</span>
-                    </label>
-                    <input
-                      type="number"
-                      bind:value={mqttConfig.mqttPort}
-                      placeholder="1883"
-                      class="input input-bordered w-full"
-                      required
-                      inputmode="numeric"
-                      min="0"
-                      max="65535"
-                    />
-                  </div>
-                  <div class="form-control">
-                    <!-- svelte-ignore a11y_label_has_associated_control -->
-                    <label class="label">
-                      <span class="label-text">Client ID</span>
-                    </label>
-                    <input
-                      type="text"
-                      bind:value={mqttConfig.mqttClientId}
-                      placeholder="homekey_mqtt"
-                      class="input input-bordered w-full"
-                      required
-                    />
-                  </div>
-                  <div class="form-control">
-                    <!-- svelte-ignore a11y_label_has_associated_control -->
-                    <label class="label">
-                      <span class="label-text">LWT Topic</span>
-                    </label>
-                    <input
-                      type="text"
-                      bind:value={mqttConfig.lwtTopic}
-                      placeholder="homekey_mqtt/status"
-                      class="input input-bordered w-full"
-                      required
-                    />
-                  </div>
-                  <div class="form-control">
-                    <!-- svelte-ignore a11y_label_has_associated_control -->
-                    <label class="label">
-                      <span class="label-text">Username</span>
-                    </label>
-                    <input
-                      type="text"
-                      bind:value={mqttConfig.mqttUsername}
-                      placeholder="username"
-                      class="input input-bordered w-full"
-                    />
-                  </div>
-                  <div class="form-control">
-                    <!-- svelte-ignore a11y_label_has_associated_control -->
-                    <label class="label">
-                      <span class="label-text">Password</span>
-                    </label>
-                    <input
-                      type="password"
-                      bind:value={mqttConfig.mqttPassword}
-                      placeholder="password"
-                      class="input input-bordered w-full"
-                    />
-                  </div>
-                  <div class="form-control md:col-span-2 mb-4">
-                    <label class="label cursor-pointer">
-                      <span class="label-text">HASS MQTT Discovery</span>
-                      <input
-                        type="checkbox"
-                        bind:checked={mqttConfig.hassMqttDiscoveryEnabled}
-                        class="toggle toggle-primary"
-                      />
-                    </label>
-                  </div>
-                  <div class="form-control md:col-span-2 mb-4">
-                    <label class="label cursor-pointer">
-                      <span class="label-text">Enable SSL/TLS</span>
-                      <input
-                        type="checkbox"
-                        bind:checked={mqttConfig.useSSL}
-                        class="toggle toggle-primary"
-                        onchange={onSSLToggleChange}
-                      />
-                    </label>
-                  </div>
-                </div>
-                <!-- SSL/TLS Configuration Section -->
-                {#if mqttConfig.useSSL}
-                  <div class="collapse collapse-arrow bg-base-200">
-                    <input type="checkbox" name="mqtt-accordion" />
-                    <div class="collapse-title font-medium flex items-center">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke-width="1.5"
-                        stroke="currentColor"
-                        class="w-5 mr-2"
-                      >
-                        <path
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                          d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"
-                        />
-                      </svg>
-                      SSL/TLS Settings
-                    </div>
-                    <div class="collapse-content">
-                      <div class="space-y-6">
-                        <div class="form-control">
-                          <label class="label cursor-pointer">
-                            <span class="label-text"
-                              >Skip cert CN validation</span
-                            >
-                            <input
-                              type="checkbox"
-                              bind:checked={mqttConfig.allowInsecure}
-                              class="toggle toggle-warning"
-                            />
-                          </label>
-                        </div>
-
-                        <!-- Certificate Status Display -->
-                        <div class="bg-base-200 rounded-lg">
-                          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <!-- CA Certificate -->
-                            <div
-                              class="flex flex-col p-3 bg-base-100 rounded-lg"
-                            >
-                              <div
-                                class="flex items-center justify-between mb-2"
-                              >
-                                <div class="flex items-center">
-                                  <svg
-                                    class="w-5 h-5 mr-2"
-                                    class:text-success={certificateStatus?.ca}
-                                    class:text-error={!certificateStatus?.ca}
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                  >
-                                    <path
-                                      stroke-linecap="round"
-                                      stroke-linejoin="round"
-                                      d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                    />
-                                  </svg>
-                                  <div class="flex flex-col">
-                                    <span class="text-sm font-medium"
-                                      >CA Certificate</span
-                                    >
-                                    <span
-                                      class="text-sm font-medium text-base-content/75"
-                                      >{certificateStatus?.ca?.expiration.from} -
-                                      {certificateStatus?.ca?.expiration
-                                        .to}</span
-                                    >
-                                    <span
-                                      class="text-sm font-medium text-base-content/50"
-                                      >Subject: {certificateStatus?.ca
-                                        ?.subject}</span
-                                    >
-                                    <span
-                                      class="text-sm font-medium text-base-content/50"
-                                      >Issuer: {certificateStatus?.ca
-                                        ?.issuer}</span
-                                    >
-                                  </div>
-                                </div>
-                                {#if certificateStatus?.ca}
-                                  <button
-                                    type="button"
-                                    onclick={() =>
-                                      deleteCertificateHandler('ca')}
-                                    class="btn btn-ghost btn-xs btn-error"
-                                    >Delete</button
-                                  >
-                                {/if}
-                              </div>
-                            </div>
-
-                            <!-- Client Certificate -->
-                            <div
-                              class="flex flex-col p-3 bg-base-100 rounded-lg"
-                            >
-                              <div
-                                class="flex items-center justify-between mb-2"
-                              >
-                                <div class="flex items-center">
-                                  <svg
-                                    class="w-5 h-5 mr-2"
-                                    class:text-success={certificateStatus?.client}
-                                    class:text-error={!certificateStatus?.client}
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                  >
-                                    <path
-                                      stroke-linecap="round"
-                                      stroke-linejoin="round"
-                                      d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                    />
-                                  </svg>
-                                  <div class="flex flex-col">
-                                    <span class="text-sm font-medium"
-                                      >Client Certificate</span
-                                    >
-                                    <span
-                                      class="text-sm font-medium text-base-content/75"
-                                      >{certificateStatus?.client?.expiration
-                                        .from} - {certificateStatus?.client
-                                        ?.expiration.to}</span
-                                    >
-                                    <span
-                                      class="text-sm font-medium text-base-content/50"
-                                      >Subject: {certificateStatus?.client
-                                        ?.subject}</span
-                                    >
-                                    <span
-                                      class="text-sm font-medium text-base-content/50"
-                                      >Issuer: {certificateStatus?.client
-                                        ?.issuer}</span
-                                    >
-                                  </div>
-                                </div>
-                                {#if certificateStatus?.client}
-                                  <button
-                                    type="button"
-                                    onclick={() =>
-                                      deleteCertificateHandler('client')}
-                                    class="btn btn-ghost btn-xs btn-error"
-                                    >Delete</button
-                                  >
-                                {/if}
-                              </div>
-                              {#if !certificateStatus?.client?.keyMatchesCert && certificateStatus?.privateKey?.exists}
-                                <span class="text-sm font-medium text-error"
-                                  >Private Key doesn't match the certificate
-                                  public key</span
-                                >
-                              {/if}
-                              {#if certificateStatus?.ca && certificateStatus.ca.subject != certificateStatus.client?.issuer}
-                                <span class="text-sm font-medium text-error"
-                                  >Certificate Issuer doesn't match the CA
-                                  certificate</span
-                                >
-                              {/if}
-                            </div>
-
-                            <!-- Private Key -->
-                            <div
-                              class="flex flex-col p-3 bg-base-100 rounded-lg"
-                            >
-                              <div
-                                class="flex items-center justify-between mb-2"
-                              >
-                                <div class="flex items-center">
-                                  <svg
-                                    class="w-5 h-5 mr-2"
-                                    class:text-success={certificateStatus
-                                      ?.privateKey?.exists}
-                                    class:text-error={!certificateStatus
-                                      ?.privateKey?.exists}
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                  >
-                                    <path
-                                      stroke-linecap="round"
-                                      stroke-linejoin="round"
-                                      d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                    />
-                                  </svg>
-                                  <div class="flex flex-col">
-                                    <span class="text-sm font-medium"
-                                      >Private Key</span
-                                    >
-                                  </div>
-                                </div>
-                                {#if certificateStatus?.privateKey}
-                                  <button
-                                    type="button"
-                                    onclick={() =>
-                                      deleteCertificateHandler('privateKey')}
-                                    class="btn btn-ghost btn-xs btn-error"
-                                    >Delete</button
-                                  >
-                                {/if}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        <!-- Certificate Upload Section -->
-                        <div class="form-control">
-                          <!-- svelte-ignore a11y_label_has_associated_control -->
-                          <label class="label">
-                            <span class="label-text">CA Certificate</span>
-                          </label>
-                          <input
-                            type="file"
-                            onchange={(e) => handleCertificateUpload(e)}
-                            accept=".pem,.crt,.cer,.der,.key"
-                            class="file-input file-input-bordered w-full"
-                            disabled={uploadProgress.ca > 0 &&
-                              uploadProgress.ca < 100}
-                            data-type="ca"
-                          />
-                          {#if uploadProgress.ca > 0 && uploadProgress.ca < 100}
-                            <div class="progress progress-info mt-2">
-                              <div
-                                class="progress-bar"
-                                style="width: {uploadProgress.ca}%"
-                              ></div>
-                            </div>
-                          {/if}
-                          {#if uploadErrors.ca}
-                            <div class="text-error text-sm mt-1">
-                              {uploadErrors.ca}
-                            </div>
-                          {/if}
-                        </div>
-                        <div class="form-control">
-                          <!-- svelte-ignore a11y_label_has_associated_control -->
-                          <label class="label">
-                            <span class="label-text">Client Certificate</span>
-                          </label>
-                          <input
-                            type="file"
-                            onchange={(e) => handleCertificateUpload(e)}
-                            accept=".pem,.crt,.cer,.der,.key"
-                            class="file-input file-input-bordered w-full"
-                            disabled={uploadProgress.ca > 0 &&
-                              uploadProgress.ca < 100}
-                            data-type="client"
-                          />
-                          {#if uploadProgress.ca > 0 && uploadProgress.ca < 100}
-                            <div class="progress progress-info mt-2">
-                              <div
-                                class="progress-bar"
-                                style="width: {uploadProgress.ca}%"
-                              ></div>
-                            </div>
-                          {/if}
-                          {#if uploadErrors.ca}
-                            <div class="text-error text-sm mt-1">
-                              {uploadErrors.ca}
-                            </div>
-                          {/if}
-                        </div>
-                        <div class="form-control">
-                          <!-- svelte-ignore a11y_label_has_associated_control -->
-                          <label class="label">
-                            <span class="label-text">Private Key</span>
-                          </label>
-                          <input
-                            type="file"
-                            onchange={(e) => handleCertificateUpload(e)}
-                            accept=".pem,.crt,.cer,.der,.key"
-                            class="file-input file-input-bordered w-full"
-                            disabled={uploadProgress.ca > 0 &&
-                              uploadProgress.ca < 100}
-                            data-type="privateKey"
-                          />
-                          {#if uploadProgress.ca > 0 && uploadProgress.ca < 100}
-                            <div class="progress progress-info mt-2">
-                              <div
-                                class="progress-bar"
-                                style="width: {uploadProgress.ca}%"
-                              ></div>
-                            </div>
-                          {/if}
-                          {#if uploadErrors.ca}
-                            <div class="text-error text-sm mt-1">
-                              {uploadErrors.ca}
-                            </div>
-                          {/if}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                {/if}
+              <div class="form-control">
+                <label class="label">
+                  <span class="label-text text-sm">Port</span>
+                </label>
+                <input
+                  type="number"
+                  bind:value={mqttConfig.mqttPort}
+                  placeholder="1883"
+                  class="input input-sm input-bordered w-full"
+                  required
+                  min="0"
+                  max="65535"
+                />
+              </div>
+              <div class="form-control md:col-span-2">
+                <label class="label">
+                  <span class="label-text text-sm">Client ID</span>
+                </label>
+                <input
+                  type="text"
+                  bind:value={mqttConfig.mqttClientId}
+                  placeholder="homekey-esp32-lock"
+                  class="input input-sm input-bordered w-full"
+                  required
+                />
+              </div>
+              <div class="form-control">
+                <label class="label">
+                  <span class="label-text text-sm">Username</span>
+                </label>
+                <input
+                  type="text"
+                  bind:value={mqttConfig.mqttUsername}
+                  placeholder="homeassistant"
+                  class="input input-sm input-bordered w-full"
+                />
+              </div>
+              <div class="form-control">
+                <label class="label">
+                  <span class="label-text text-sm">Password</span>
+                </label>
+                <input
+                  type="password"
+                  bind:value={mqttConfig.mqttPassword}
+                  placeholder="••••••••"
+                  class="input input-sm input-bordered w-full"
+                />
+              </div>
+              <div class="form-control md:col-span-2">
+                <label class="label">
+                  <span class="label-text text-sm">LWT Topic</span>
+                </label>
+                <input
+                  type="text"
+                  bind:value={mqttConfig.lwtTopic}
+                  placeholder="homekey/lock/status"
+                  class="input input-sm input-bordered w-full"
+                  required
+                />
               </div>
             </div>
 
-            <div class="collapse collapse-arrow bg-base-100">
-              <input type="checkbox" name="mqtt-accordion" />
-              <div class="collapse-title font-medium flex items-center">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke-width="1.5"
-                  stroke="currentColor"
-                  class="w-5 mr-2"
-                >
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M21.75 6.75a4.5 4.5 0 0 1-4.884 4.484c-1.076-.091-2.264.071-2.95.904l-7.152 8.684a2.548 2.548 0 1 1-3.586-3.586l8.684-7.152c.833-.686.995-1.874.904-2.95a4.5 4.5 0 0 1 6.336-4.486l-3.276 3.276a3.004 3.004 0 0 0 2.25 2.25l3.276-3.276c.256.565.398 1.192.398 1.852Z"
-                  />
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M4.867 19.125h.008v.008h-.008v-.008Z"
-                  />
-                </svg>
-                Topics
+            <!-- Home Assistant Discovery Toggle -->
+            <div class="flex items-center justify-between py-2 px-3 bg-base-100 rounded-lg">
+              <div>
+                <p class="font-medium text-sm text-base-content">Home Assistant MQTT Discovery</p>
+                <p class="text-xs text-base-content/70">Enable automatic device discovery in Home Assistant</p>
               </div>
-              <div class="collapse-content">
-                <div class="space-y-2">
-                  <div class="collapse collapse-arrow bg-base-200">
-                    <input type="checkbox" name="topics-accordion" />
-                    <div class="collapse-title font-medium">Core</div>
-                    <div class="collapse-content">
-                      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="form-control">
-                          <!-- svelte-ignore a11y_label_has_associated_control -->
-                          <label class="label">
-                            <span class="label-text">NFC/HK Topic</span>
-                          </label>
-                          <input
-                            type="text"
-                            bind:value={mqttConfig.hkTopic}
-                            placeholder="topic/auth"
-                            class="input input-bordered w-full"
-                            required
-                          />
-                        </div>
-                        <div class="form-control self-center">
-                          <label class="label cursor-pointer">
-                            <span class="label-text">Ignore NFC Tags</span>
-                            <input
-                              type="checkbox"
-                              bind:checked={mqttConfig.nfcTagNoPublish}
-                              class="toggle toggle-primary"
-                            />
-                          </label>
-                        </div>
-                        <div class="form-control">
-                          <!-- svelte-ignore a11y_label_has_associated_control -->
-                          <label class="label">
-                            <span class="label-text"
-                              >Secondary action Topic</span
-                            >
-                          </label>
-                          <input
-                            type="text"
-                            bind:value={mqttConfig.hkAltActionTopic}
-                            placeholder="topic/alt_action"
-                            class="input input-bordered w-full"
-                            required
-                          />
-                        </div>
-                        <div class="form-control">
-                          <!-- svelte-ignore a11y_label_has_associated_control -->
-                          <label class="label">
-                            <span class="label-text">Lock State Topic</span>
-                          </label>
-                          <input
-                            type="text"
-                            bind:value={mqttConfig.lockStateTopic}
-                            placeholder="topic/state"
-                            class="input input-bordered w-full"
-                            required
-                          />
-                        </div>
-                        <div class="form-control">
-                          <!-- svelte-ignore a11y_label_has_associated_control -->
-                          <label class="label">
-                            <span class="label-text">Lock State Cmd Topic</span>
-                          </label>
-                          <input
-                            type="text"
-                            bind:value={mqttConfig.lockStateCmd}
-                            placeholder="topic/set_state"
-                            class="input input-bordered w-full"
-                            required
-                          />
-                        </div>
-                        <div class="form-control">
-                          <!-- svelte-ignore a11y_label_has_associated_control -->
-                          <label class="label">
-                            <span class="label-text"
-                              >Lock Current State Cmd Topic</span
-                            >
-                          </label>
-                          <input
-                            type="text"
-                            bind:value={mqttConfig.lockCStateCmd}
-                            placeholder="topic/set_current_state"
-                            class="input input-bordered w-full"
-                            required
-                          />
-                        </div>
-                        <div class="form-control">
-                          <!-- svelte-ignore a11y_label_has_associated_control -->
-                          <label class="label">
-                            <span class="label-text"
-                              >Lock Target State Cmd Topic</span
-                            >
-                          </label>
-                          <input
-                            type="text"
-                            bind:value={mqttConfig.lockTStateCmd}
-                            placeholder="topic/set_target_state"
-                            class="input input-bordered w-full"
-                            required
-                          />
-                        </div>
-                        <div class="form-control">
-                          <!-- svelte-ignore a11y_label_has_associated_control -->
-                          <label class="label">
-                            <span class="label-text"
-                              >SmartLock battery level Cmd Topic</span
-                            >
-                          </label>
-                          <input
-                            type="text"
-                            bind:value={mqttConfig.btrLvlCmdTopic}
-                            placeholder="topic/set_battery_level"
-                            class="input input-bordered w-full"
-                            required
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="collapse collapse-arrow bg-base-200">
-                    <input type="checkbox" name="topics-accordion" />
-                    <div class="collapse-title font-medium">Custom</div>
-                    <div class="collapse-content">
-                      <div class="form-control mb-4">
-                        <label class="label cursor-pointer">
-                          <span class="label-text">Enable Custom State</span>
-                          <input
-                            type="checkbox"
-                            bind:checked={mqttConfig.lockEnableCustomState}
-                            class="toggle toggle-primary"
-                          />
-                        </label>
-                      </div>
-                      {#if mqttConfig.lockEnableCustomState}
-                        <div class="form-control mb-4">
-                          <!-- svelte-ignore a11y_label_has_associated_control -->
-                          <label class="label">
-                            <span class="label-text">Custom State Topic</span>
-                          </label>
-                          <input
-                            type="text"
-                            bind:value={mqttConfig.lockCustomStateTopic}
-                            placeholder="topic/set_target_state"
-                            class="input input-bordered w-full"
-                          />
-                        </div>
-                        <div class="form-control mb-4">
-                          <!-- svelte-ignore a11y_label_has_associated_control -->
-                          <label class="label">
-                            <span class="label-text"
-                              >Custom State Cmd Topic</span
-                            >
-                          </label>
-                          <input
-                            type="text"
-                            bind:value={mqttConfig.lockCustomStateCmd}
-                            placeholder="topic/set_target_state"
-                            class="input input-bordered w-full"
-                          />
-                        </div>
-                        <div class="divider">Custom Lock Actions</div>
-                        <div class="grid grid-cols-2 gap-6">
-                          <div class="form-control">
-                            <!-- svelte-ignore a11y_label_has_associated_control -->
-                            <label class="label">
-                              <span class="label-text">Unlock</span>
-                            </label>
-                            <input
-                              type="number"
-                              bind:value={mqttConfig.customLockActions!.UNLOCK}
-                              placeholder="255"
-                              class="input input-bordered w-full"
-                              min="0"
-                              max="255"
-                            />
-                          </div>
-                          <div class="form-control">
-                            <!-- svelte-ignore a11y_label_has_associated_control -->
-                            <label class="label">
-                              <span class="label-text">Lock</span>
-                            </label>
-                            <input
-                              type="number"
-                              bind:value={mqttConfig.customLockActions!.LOCK}
-                              placeholder="255"
-                              class="input input-bordered w-full"
-                              min="0"
-                              max="255"
-                            />
-                          </div>
-                        </div>
-                        <div class="divider">Custom Lock States</div>
-                        <div class="grid grid-cols-2 md:grid-cols-3 gap-6">
-                          <div class="form-control">
-                            <!-- svelte-ignore a11y_label_has_associated_control -->
-                            <label class="label">
-                              <span class="label-text">Unlocking</span>
-                            </label>
-                            <input
-                              type="number"
-                              bind:value={
-                                mqttConfig.customLockStates!.C_UNLOCKING
-                              }
-                              placeholder="255"
-                              class="input input-bordered w-full"
-                              min="0"
-                              max="255"
-                            />
-                          </div>
-                          <div class="form-control">
-                            <!-- svelte-ignore a11y_label_has_associated_control -->
-                            <label class="label">
-                              <span class="label-text">Locking</span>
-                            </label>
-                            <input
-                              type="number"
-                              bind:value={
-                                mqttConfig.customLockStates!.C_LOCKING
-                              }
-                              placeholder="255"
-                              class="input input-bordered w-full"
-                              min="0"
-                              max="255"
-                            />
-                          </div>
-                          <div class="form-control">
-                            <!-- svelte-ignore a11y_label_has_associated_control -->
-                            <label class="label">
-                              <span class="label-text">Unlocked</span>
-                            </label>
-                            <input
-                              type="number"
-                              bind:value={
-                                mqttConfig.customLockStates!.C_UNLOCKED
-                              }
-                              placeholder="255"
-                              class="input input-bordered w-full"
-                              min="0"
-                              max="255"
-                            />
-                          </div>
-                          <div class="form-control">
-                            <!-- svelte-ignore a11y_label_has_associated_control -->
-                            <label class="label">
-                              <span class="label-text">Locked</span>
-                            </label>
-                            <input
-                              type="number"
-                              bind:value={mqttConfig.customLockStates!.C_LOCKED}
-                              placeholder="255"
-                              class="input input-bordered w-full"
-                              min="0"
-                              max="255"
-                            />
-                          </div>
-                          <div class="form-control">
-                            <!-- svelte-ignore a11y_label_has_associated_control -->
-                            <label class="label">
-                              <span class="label-text">Jammed</span>
-                            </label>
-                            <input
-                              type="number"
-                              bind:value={mqttConfig.customLockStates!.C_JAMMED}
-                              placeholder="255"
-                              class="input input-bordered w-full"
-                              min="0"
-                              max="255"
-                            />
-                          </div>
-                          <div class="form-control">
-                            <!-- svelte-ignore a11y_label_has_associated_control -->
-                            <label class="label">
-                              <span class="label-text">Unknown</span>
-                            </label>
-                            <input
-                              type="number"
-                              bind:value={
-                                mqttConfig.customLockStates!.C_UNKNOWN
-                              }
-                              placeholder="255"
-                              class="input input-bordered w-full"
-                              min="0"
-                              max="255"
-                            />
-                          </div>
-                        </div>
-                      {/if}
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <input
+                type="checkbox"
+                bind:checked={mqttConfig.hassMqttDiscoveryEnabled}
+                class="toggle toggle-primary toggle-md"
+              />
             </div>
           </div>
+        {/if}
+
+        {#if activeTab === 'topics'}
+          <!-- Topic Configuration -->
+          <div class="space-y-6">
+            <div>
+              <h3 class="font-semibold text-base-content">Topic Configuration</h3>
+              <p class="text-sm text-base-content/60">Configure MQTT topics for different events.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div class="form-control">
+                <label class="label">
+                  <span class="label-text text-sm">HomeKey Topic</span>
+                </label>
+                <input
+                  type="text"
+                  bind:value={mqttConfig.hkTopic}
+                  placeholder="homekey/lock/homekey"
+                  class="input input-sm input-bordered w-full"
+                  required
+                />
+              </div>
+              <div class="form-control">
+                <label class="label">
+                  <span class="label-text text-sm">Lock State Topic</span>
+                </label>
+                <input
+                  type="text"
+                  bind:value={mqttConfig.lockStateTopic}
+                  placeholder="homekey/lock/state"
+                  class="input input-sm input-bordered w-full"
+                  required
+                />
+              </div>
+              <div class="form-control">
+                <label class="label">
+                  <span class="label-text text-sm">Lock State Command</span>
+                </label>
+                <input
+                  type="text"
+                  bind:value={mqttConfig.lockStateCmd}
+                  placeholder="homekey/lock/set"
+                  class="input input-sm input-bordered w-full"
+                  required
+                />
+              </div>
+              <div class="form-control">
+                <label class="label">
+                  <span class="label-text text-sm">Lock Continuous State Command</span>
+                </label>
+                <input
+                  type="text"
+                  bind:value={mqttConfig.lockCStateCmd}
+                  placeholder="homekey/lock/current"
+                  class="input input-sm input-bordered w-full"
+                  required
+                />
+              </div>
+              <div class="form-control">
+                <label class="label">
+                  <span class="label-text text-sm">Lock Timed State Command</span>
+                </label>
+                <input
+                  type="text"
+                  bind:value={mqttConfig.lockTStateCmd}
+                  placeholder="homekey/lock/target"
+                  class="input input-sm input-bordered w-full"
+                  required
+                />
+              </div>
+              <div class="form-control">
+                <label class="label">
+                  <span class="label-text text-sm">Battery Level Topic</span>
+                </label>
+                <input
+                  type="text"
+                  bind:value={mqttConfig.btrLvlCmdTopic}
+                  placeholder="homekey/lock/battery"
+                  class="input input-sm input-bordered w-full"
+                  required
+                />
+              </div>
+              <div class="form-control md:col-span-2">
+                <label class="label">
+                  <span class="label-text text-sm">Alt Action Topic</span>
+                </label>
+                <input
+                  type="text"
+                  bind:value={mqttConfig.hkAltActionTopic}
+                  placeholder="homekey/lock/alt_action"
+                  class="input input-sm input-bordered w-full"
+                  required
+                />
+              </div>
+            </div>
+
+            <!-- Ignore NFC Tags Toggle -->
+            <div class="flex items-center justify-between py-2 px-3 bg-base-100 rounded-lg">
+              <div>
+                <p class="font-medium text-sm text-base-content">Ignore NFC Tags</p>
+                <p class="text-xs text-base-content/70">Do not publish NFC tag events to MQTT</p>
+              </div>
+              <input
+                type="checkbox"
+                bind:checked={mqttConfig.nfcTagNoPublish}
+                class="toggle toggle-primary toggle-md"
+              />
+            </div>
+
+            <!-- Custom Lock States Toggle -->
+            <div class="flex items-center justify-between py-2 mb-0 px-3 bg-base-100 rounded-lg">
+              <div>
+                <p class="font-medium text-sm text-base-content">Custom Lock States</p>
+                <p class="text-xs text-base-content/70">Enable custom lock state mappings</p>
+              </div>
+              <input
+                type="checkbox"
+                bind:checked={mqttConfig.lockEnableCustomState}
+                class="toggle toggle-primary toggle-md"
+              />
+            </div>
+
+            {#if mqttConfig.lockEnableCustomState}
+              <div class="space-y-4 border-t border-base-200 p-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div class="form-control">
+                    <label class="label">
+                      <span class="label-text text-sm">Custom State Topic</span>
+                    </label>
+                    <input
+                      type="text"
+                      bind:value={mqttConfig.lockCustomStateTopic}
+                      placeholder="homekey/lock/custom_state"
+                      class="input input-sm input-bordered w-full"
+                    />
+                  </div>
+                  <div class="form-control">
+                    <label class="label">
+                      <span class="label-text text-sm">Custom State Cmd Topic</span>
+                    </label>
+                    <input
+                      type="text"
+                      bind:value={mqttConfig.lockCustomStateCmd}
+                      placeholder="homekey/lock/custom_cmd"
+                      class="input input-sm input-bordered w-full"
+                    />
+                  </div>
+                </div>
+
+                <!-- Custom Lock Actions -->
+                <div class="bg-base-100 rounded-lg p-3">
+                  <p class="font-medium text-sm mb-2">Custom Lock Actions</p>
+                  <div class="grid grid-cols-2 gap-3">
+                    <div class="form-control">
+                      <label class="label py-1">
+                        <span class="label-text text-sm">Unlock</span>
+                      </label>
+                      <input
+                        type="number"
+                        bind:value={mqttConfig.customLockActions['UNLOCK']}
+                        class="input input-sm input-bordered w-full"
+                      />
+                    </div>
+                    <div class="form-control">
+                      <label class="label py-1">
+                        <span class="label-text text-sm">Lock</span>
+                      </label>
+                      <input
+                        type="number"
+                        bind:value={mqttConfig.customLockActions['LOCK']}
+                        class="input input-sm input-bordered w-full"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Custom Lock States -->
+                <div class="bg-base-100 rounded-lg p-3">
+                  <p class="font-medium text-sm mb-2">Custom Lock States</p>
+                  <div class="grid grid-cols-3 gap-3">
+                    <div class="form-control">
+                      <label class="label py-1">
+                        <span class="label-text text-sm">Unlocking</span>
+                      </label>
+                      <input
+                        type="number"
+                        bind:value={mqttConfig.customLockStates['C_UNLOCKING']}
+                        class="input input-sm input-bordered w-full"
+                      />
+                    </div>
+                    <div class="form-control">
+                      <label class="label py-1">
+                        <span class="label-text text-sm">Locking</span>
+                      </label>
+                      <input
+                        type="number"
+                        bind:value={mqttConfig.customLockStates['C_LOCKING']}
+                        class="input input-sm input-bordered w-full"
+                      />
+                    </div>
+                    <div class="form-control">
+                      <label class="label py-1">
+                        <span class="label-text text-sm">Unlocked</span>
+                      </label>
+                      <input
+                        type="number"
+                        bind:value={mqttConfig.customLockStates['C_UNLOCKED']}
+                        class="input input-sm input-bordered w-full"
+                      />
+                    </div>
+                    <div class="form-control">
+                      <label class="label py-1">
+                        <span class="label-text text-sm">Locked</span>
+                      </label>
+                      <input
+                        type="number"
+                        bind:value={mqttConfig.customLockStates['C_LOCKED']}
+                        class="input input-sm input-bordered w-full"
+                      />
+                    </div>
+                    <div class="form-control">
+                      <label class="label py-1">
+                        <span class="label-text text-sm">Jammed</span>
+                      </label>
+                      <input
+                        type="number"
+                        bind:value={mqttConfig.customLockStates['C_JAMMED']}
+                        class="input input-sm input-bordered w-full"
+                      />
+                    </div>
+                    <div class="form-control">
+                      <label class="label py-1">
+                        <span class="label-text text-sm">Unknown</span>
+                      </label>
+                      <input
+                        type="number"
+                        bind:value={mqttConfig.customLockStates['C_UNKNOWN']}
+                        class="input input-sm input-bordered w-full"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            {/if}
+          </div>
+        {/if}
+
+        {#if activeTab === 'ssl'}
+          <!-- SSL/TLS Configuration -->
+          <div class="space-y-6">
+            <div>
+              <h3 class="font-semibold text-base-content">SSL/TLS Configuration</h3>
+              <p class="text-sm text-base-content/60">Secure your MQTT connection with TLS certificates.</p>
+            </div>
+
+            <!-- Enable SSL/TLS Toggle -->
+            <div class="flex items-center justify-between py-2 px-3 bg-base-100 rounded-lg">
+              <div>
+                <p class="font-medium text-sm text-base-content">Enable SSL/TLS</p>
+                <p class="text-xs text-base-content/70">Use encrypted connection to the broker</p>
+              </div>
+              <input
+                type="checkbox"
+                bind:checked={mqttConfig.useSSL}
+                class="toggle toggle-primary toggle-md"
+                onchange={onSSLToggleChange}
+              />
+            </div>
+
+            {#if mqttConfig.useSSL}
+              <!-- Skip Certificate Validation -->
+              <div class="bg-error/10 border border-error/20 rounded-lg p-4 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-5 text-error">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+                  </svg>
+                  <div>
+                    <p class="font-medium text-sm">Skip Certificate Validation</p>
+                    <p class="text-xs text-error">Not recommended for production</p>
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  bind:checked={mqttConfig.allowInsecure}
+                  class="toggle toggle-error toggle-md"
+                />
+              </div>
+
+              <!-- Certificate Upload Section -->
+              <div class="space-y-4 pt-4">
+                <!-- CA Certificate -->
+                <div class="bg-base-100 rounded-lg p-4">
+                  <div class="flex items-center justify-between mb-3">
+                    <div>
+                      <p class="font-medium text-sm text-base-content">CA Certificate</p>
+                      <p class="text-xs text-base-content/70">
+                        {certificateStatus?.ca ? `${certificateStatus.ca.subject} (Expires: ${certificateStatus.ca.expiration.to})` : 'Not uploaded'}
+                      </p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      {#if certificateStatus?.ca}
+                        <button
+                          type="button"
+                          onclick={() => deleteCertificateHandler('ca')}
+                          class="btn btn-ghost btn-xs text-error"
+                          aria-label="Delete CA Certificate"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                          </svg>
+                        </button>
+                      {/if}
+                      <label class="btn btn-ghost btn-xs">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                        </svg>
+                        <span class="ml-1">Upload</span>
+                        <input
+                          type="file"
+                          onchange={handleCertificateUpload}
+                          accept=".pem,.crt,.cer,.der"
+                          class="hidden"
+                          data-type="ca"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                  {#if uploadProgress.ca > 0 && uploadProgress.ca < 100}
+                    <progress class="progress progress-primary w-full" value={uploadProgress.ca} max="100"></progress>
+                  {/if}
+                  {#if uploadErrors.ca}
+                    <p class="text-error text-xs mt-2">{uploadErrors.ca}</p>
+                  {/if}
+                </div>
+
+                <!-- Client Certificate -->
+                <div class="bg-base-100 rounded-lg p-4">
+                  <div class="flex items-center justify-between mb-3">
+                    <div>
+                      <p class="font-medium text-sm text-base-content">Client Certificate</p>
+                      <p class="text-xs text-base-content/70">
+                        {certificateStatus?.client ? `${certificateStatus.client.subject} (Expires: ${certificateStatus.client.expiration.to})` : 'Not uploaded'}
+                      </p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      {#if certificateStatus?.client}
+                        <button
+                          type="button"
+                          onclick={() => deleteCertificateHandler('client')}
+                          class="btn btn-ghost btn-xs text-error"
+                          aria-label="Delete Client Certificate"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                          </svg>
+                        </button>
+                      {/if}
+                      <label class="btn btn-ghost btn-xs">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                        </svg>
+                        <span class="ml-1">Upload</span>
+                        <input
+                          type="file"
+                          onchange={handleCertificateUpload}
+                          accept=".pem,.crt,.cer,.der"
+                          class="hidden"
+                          data-type="client"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                  {#if uploadProgress.client > 0 && uploadProgress.client < 100}
+                    <progress class="progress progress-primary w-full" value={uploadProgress.client} max="100"></progress>
+                  {/if}
+                  {#if uploadErrors.client}
+                    <p class="text-error text-xs mt-2">{uploadErrors.client}</p>
+                  {/if}
+                  {#if certificateStatus?.client && certificateStatus?.privateKey?.exists && !certificateStatus.client.keyMatchesCert}
+                    <p class="text-error text-xs mt-2">Private Key doesn't match the certificate public key</p>
+                  {/if}
+                </div>
+
+                <!-- Private Key -->
+                <div class="bg-base-100 rounded-lg p-4">
+                  <div class="flex items-center justify-between mb-3">
+                    <div>
+                      <p class="font-medium text-sm text-base-content">Private Key</p>
+                      <p class="text-xs text-base-content/70">
+                        {certificateStatus?.privateKey?.exists ? 'Uploaded' : 'Not uploaded'}
+                      </p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      {#if certificateStatus?.privateKey?.exists}
+                        <button
+                          type="button"
+                          onclick={() => deleteCertificateHandler('privateKey')}
+                          class="btn btn-ghost btn-xs text-error"
+                          aria-label="Delete Private Key"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                          </svg>
+                        </button>
+                      {/if}
+                      <label class="btn btn-ghost btn-xs">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                        </svg>
+                        <span class="ml-1">Upload</span>
+                        <input
+                          type="file"
+                          onchange={handleCertificateUpload}
+                          accept=".pem,.key,.der"
+                          class="hidden"
+                          data-type="privateKey"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                  {#if uploadProgress.privateKey > 0 && uploadProgress.privateKey < 100}
+                    <progress class="progress progress-primary w-full" value={uploadProgress.privateKey} max="100"></progress>
+                  {/if}
+                  {#if uploadErrors.privateKey}
+                    <p class="text-error text-xs mt-2">{uploadErrors.privateKey}</p>
+                  {/if}
+                </div>
+              </div>
+            {/if}
+          </div>
+        {/if}
         </div>
-        <div class="card-actions mt-6 px-2 self-end">
-          <button type="submit" class="btn btn-primary">Save & Apply</button>
-          <button type="button" class="btn btn-ghost" onclick={resetForm}
-            >Reset Form</button
-          >
-        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex gap-3 mt-6">
+        <button type="submit" class="btn btn-primary">Save & Apply changes</button>
+        <button type="button" class="btn btn-ghost" onclick={resetForm}>Reset</button>
       </div>
     </form>
   {/if}

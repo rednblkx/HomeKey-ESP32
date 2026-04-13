@@ -28,3 +28,14 @@ export const systemInfo : SystemInfo = $state({
 export function updateSystemInfo(newInfo : Partial<SystemInfo>) {
   Object.assign(systemInfo, newInfo);
 }
+
+
+let loadingState = $state(false);
+
+export function setLoadingState(value: boolean) {
+  loadingState = value;
+}
+
+export function getLoadingState() {
+  return loadingState;
+}

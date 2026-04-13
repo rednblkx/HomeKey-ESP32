@@ -1,6 +1,6 @@
 type WebSocketConnectionState = 'disconnected' | 'connecting' | 'open' | 'reconnecting' | 'failed' | 'error';
 
-type WebSocketState = {
+export type WebSocketState = {
   connected : boolean,
   state : WebSocketConnectionState,
   url: string,

@@ -15,19 +15,19 @@ class NotificationStore {
     }
   }
 
-  addSuccess(message : string, timeout : number) {
+  addSuccess(message : string, timeout? : number) {
     this.add('success', message, timeout);
   }
 
-  addError(message : string, timeout : number) {
+  addError(message : string, timeout? : number) {
     this.add('error', message, timeout);
   }
 
-  addWarning(message : string, timeout : number) {
+  addWarning(message : string, timeout? : number) {
     this.add('warning', message, timeout);
   }
 
-  addInfo(message : string, timeout : number) {
+  addInfo(message : string, timeout? : number) {
     this.add('info', message, timeout);
   }
 
