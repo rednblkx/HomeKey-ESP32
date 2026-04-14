@@ -404,6 +404,7 @@
 							<!-- PN532 -->
 							<div class="py-2 px-3 bg-base-100 rounded-lg">
 								<p class="text-sm font-medium mb-2">PN532 NFC Reader</p>
+								<SpiEthernetNote spiNumBuses={ethConfig.numSpiBuses} selectedBus={miscConfig.ethSpiBus}/>
 								<div class="form-control mb-2">
 									<label class="label">
 										<span class="label-text text-xs">Preset</span>
@@ -526,6 +527,7 @@
 							</div>
 
 							{#if miscConfig.ethernetEnabled}
+								<SpiEthernetNote spiNumBuses={ethConfig.numSpiBuses} selectedBus={miscConfig.ethSpiBus}/>
 								<div class="form-control">
 									<label class="label">
 										<span class="label-text text-xs">Board Preset</span>
@@ -626,6 +628,21 @@
 									<div class="py-2 px-3 bg-base-100 rounded-lg">
 										<p class="text-sm font-medium mb-2">SPI Configuration</p>
 										<div class="grid grid-cols-4 gap-2">
+											<div class="form-control">
+												<!-- svelte-ignore a11y_label_has_associated_control -->
+												<label class="label">
+													<span class="label-text">SPI Bus</span>
+												</label>
+												<select
+														bind:value={miscConfig.ethSpiBus}
+														disabled={miscConfig.ethActivePreset !== 255 || ethConfig.numSpiBuses === 1}
+														class="select select-bordered w-full">
+														<option value={1}>SPI2</option>
+													{#if ethConfig.numSpiBuses === 2}
+														<option value={2}>SPI3</option>
+													{/if}
+												</select>
+											</div>
 											<div class="form-control">
 												<label class="label">
 													<span class="label-text text-xs">Freq (MHz)</span>
