@@ -9,7 +9,8 @@
 #include "msgpack/object.h"
 
 struct CertificateStatus {
-  std::string type;
+  espConfig::CertType type;
+  std::string typeStr;
   std::string issuer = "";
   std::string subject = "";
   struct {
@@ -52,20 +53,14 @@ public:
     template <typename ConfigType>
     std::string updateFromJson(const std::string& json_string);
 
-    bool saveCertificate(const std::string& certType, const std::string& certContent);
-    bool deleteCertificate(const std::string& certType);
+    bool saveCertificate(espConfig::CertType certType, const std::string& certContent);
+    bool deleteCertificate(espConfig::CertType certType);
     
-    bool validateCertificateContent(const std::string& certContent, const std::string& certType);
+    bool validateCertificateContent(const std::string& certContent, espConfig::CertType certType);
     bool validatePrivateKeyMatchesCertificate();
     std::vector<CertificateStatus> getCertificatesStatus();
-    const espConfig::mqtt_ssl_t* getMqttSslConfig() const {
-      static bool configured = false;
-      if (!configured) {
-        configured = true;
-        return &m_mqttSslConfig;
-      }
-      ESP_LOGE(TAG, "SSL config already retrieved - only MqttManager should access this");
-      return nullptr;
+    const espConfig::mqtt_ssl_t& getMqttSslConfig() const {
+      return m_mqttSslConfig;
     }
 
   private:
@@ -84,9 +79,8 @@ public:
     void loadConfigFromNvs(const char* key);
     bool saveConfigToNvs(const char* key);
 
-    std::string loadCertificate(const std::string& certType);
-    bool validateCertificateFormat(const std::string& certContent);
-    bool validateCertificateWithMbedTLS(const std::string& certContent, const std::string& certType);
+    std::string loadCertificate(espConfig::CertType certType);
+    bool validateCertificateWithMbedTLS(const std::string& certContent, espConfig::CertType certType);
     bool validatePrivateKeyContent(const std::string& keyContent);
 
     std::map<std::string, ConfigMapType> m_configMap;
