@@ -28,11 +28,11 @@ static EventBus::Bus& event_bus = EventBus::Bus::instance();
  */
 MqttManager::MqttManager(const ConfigManager& configManager)
     : m_mqttConfig(configManager.getConfig<espConfig::mqttConfig_t>()),
+      m_mqttSslConfig(configManager.getMqttSslConfig()),
       m_client(nullptr),
       device_name(configManager.getConfig<espConfig::misc_config_t>().deviceName),
       m_sslConfigured(false)
 {
-  m_mqttSslConfig = configManager.getMqttSslConfig();
 }
 
 /**
@@ -121,12 +121,8 @@ bool MqttManager::begin(std::string deviceID) {
         ESP_LOGI(TAG, "SSL/TLS is enabled for MQTT connection");
         mqtt_cfg.broker.address.transport = MQTT_TRANSPORT_OVER_SSL;
         
-        if (m_mqttConfig.useSSL && m_mqttConfig.allowInsecure) {
+        if (m_mqttConfig.allowInsecure) {
             ESP_LOGW(TAG, "Security warning: SSL/TLS is enabled but certificate validation is disabled");
-        }
-        if(!m_mqttSslConfig){
-          ESP_LOGE(TAG, "SSL config ptr is null");
-          return false;
         }
         if (!configureSSL(mqtt_cfg)) {
             ESP_LOGE(TAG, "Failed to configure SSL/TLS for MQTT connection");
@@ -305,12 +301,18 @@ void MqttManager::onConnected() {
 
     publish(m_mqttConfig.lwtTopic, "online", 1, true);
 
-    esp_mqtt_client_subscribe(m_client, m_mqttConfig.lockStateCmd.c_str(), 0);
-    esp_mqtt_client_subscribe(m_client, m_mqttConfig.lockCStateCmd.c_str(), 0);
-    esp_mqtt_client_subscribe(m_client, m_mqttConfig.lockTStateCmd.c_str(), 0);
-    esp_mqtt_client_subscribe(m_client, m_mqttConfig.btrLvlCmdTopic.c_str(), 0);
+    int ret;
+    ret = esp_mqtt_client_subscribe(m_client, m_mqttConfig.lockStateCmd.c_str(), 0);
+    if (ret < 0) ESP_LOGW(TAG, "Failed to subscribe to lockStateCmd");
+    ret = esp_mqtt_client_subscribe(m_client, m_mqttConfig.lockCStateCmd.c_str(), 0);
+    if (ret < 0) ESP_LOGW(TAG, "Failed to subscribe to lockCStateCmd");
+    ret = esp_mqtt_client_subscribe(m_client, m_mqttConfig.lockTStateCmd.c_str(), 0);
+    if (ret < 0) ESP_LOGW(TAG, "Failed to subscribe to lockTStateCmd");
+    ret = esp_mqtt_client_subscribe(m_client, m_mqttConfig.btrLvlCmdTopic.c_str(), 0);
+    if (ret < 0) ESP_LOGW(TAG, "Failed to subscribe to btrLvlCmdTopic");
     if (m_mqttConfig.lockEnableCustomState) {
-        esp_mqtt_client_subscribe(m_client, m_mqttConfig.lockCustomStateCmd.c_str(), 0);
+        ret = esp_mqtt_client_subscribe(m_client, m_mqttConfig.lockCustomStateCmd.c_str(), 0);
+        if (ret < 0) ESP_LOGW(TAG, "Failed to subscribe to lockCustomStateCmd");
     }
 
     if (m_mqttConfig.hassMqttDiscoveryEnabled) {
@@ -615,8 +617,8 @@ void MqttManager::publishHassDiscovery() {
  */
 bool MqttManager::configureSSL(esp_mqtt_client_config_t& mqtt_cfg) {
     mqtt_cfg.broker.verification.use_global_ca_store = false;
-    if (!m_mqttSslConfig->caCert.empty()) {
-        mqtt_cfg.broker.verification.certificate = m_mqttSslConfig->caCert.c_str();
+    if (!m_mqttSslConfig.caCert.empty()) {
+        mqtt_cfg.broker.verification.certificate = m_mqttSslConfig.caCert.c_str();
         mqtt_cfg.broker.verification.skip_cert_common_name_check = m_mqttConfig.allowInsecure;
         ESP_LOGI(TAG, "Certificate validation mode: %s", m_mqttConfig.allowInsecure ? "SKIP_COMMON_NAME" : "FULL_VALIDATION");
     } else if (m_mqttConfig.allowInsecure) {
@@ -626,13 +628,12 @@ bool MqttManager::configureSSL(esp_mqtt_client_config_t& mqtt_cfg) {
         return false;
     }
 
-    if (!m_mqttSslConfig->clientCert.empty() && !m_mqttSslConfig->clientKey.empty()) {
-        mqtt_cfg.credentials.authentication.certificate = m_mqttSslConfig->clientCert.c_str();
-        mqtt_cfg.credentials.authentication.key = m_mqttSslConfig->clientKey.c_str();
-        ESP_LOGI(TAG, "TLS authentication configured");
+    if (!m_mqttSslConfig.clientCert.empty() && !m_mqttSslConfig.clientKey.empty()) {
+        mqtt_cfg.credentials.authentication.certificate = m_mqttSslConfig.clientCert.c_str();
+        mqtt_cfg.credentials.authentication.key = m_mqttSslConfig.clientKey.c_str();
+        ESP_LOGI(TAG, "TLS client authentication configured");
     } else {
-        ESP_LOGI(TAG, "No client certificate and/or private key configured");
-        return false;
+        ESP_LOGI(TAG, "No client certificate configured - using server-only authentication");
     }
 
     m_sslConfigured = true;
@@ -675,9 +676,9 @@ void MqttManager::logSSLError(const char* operation, esp_err_t error) {
         ESP_LOGI(TAG, "SSL Configuration state: useSSL=%s, allowInsecure=%s, hasCACert=%s, hasClientCert=%s, hasClientKey=%s",
                  m_mqttConfig.useSSL ? "true" : "false",
                  m_mqttConfig.allowInsecure ? "true" : "false",
-                 !m_mqttSslConfig->caCert.empty() ? "true" : "false",
-                 !m_mqttSslConfig->clientCert.empty() ? "true" : "false",
-                 !m_mqttSslConfig->clientKey.empty() ? "true" : "false");
+                 !m_mqttSslConfig.caCert.empty() ? "true" : "false",
+                 !m_mqttSslConfig.clientCert.empty() ? "true" : "false",
+                 !m_mqttSslConfig.clientKey.empty() ? "true" : "false");
     }
 }
 
