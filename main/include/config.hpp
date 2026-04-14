@@ -120,6 +120,12 @@ namespace espConfig
     std::string clientKey = MQTT_CLIENT_KEY;
   };
 
+  enum class CertType {
+    CA,
+    CLIENT,
+    PRIVATE_KEY
+  };
+
   struct misc_config_t
   {
     std::string deviceName = DEVICE_NAME;
