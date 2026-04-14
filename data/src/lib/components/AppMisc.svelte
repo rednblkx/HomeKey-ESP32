@@ -404,7 +404,9 @@
 							<!-- PN532 -->
 							<div class="py-2 px-3 bg-base-100 rounded-lg">
 								<p class="text-sm font-medium mb-2">PN532 NFC Reader</p>
-								<SpiEthernetNote spiNumBuses={ethConfig.numSpiBuses} selectedBus={miscConfig.ethSpiBus}/>
+								{#if miscConfig.ethernetEnabled}
+									<SpiEthernetNote spiNumBuses={ethConfig.numSpiBuses} selectedBus={miscConfig.ethSpiBus}/>
+								{/if}
 								<div class="form-control mb-2">
 									<label class="label">
 										<span class="label-text text-xs">Preset</span>
@@ -470,7 +472,7 @@
 
 							<!-- HomeSpan -->
 							<div class="py-2 px-3 bg-base-100 rounded-lg">
-								<p class="text-sm font-medium mb-2">HomeSpan</p>
+								<p class="text-sm font-medium mb-2">HomeSpan - <a class="text-xs text-base-content/60 underline mb-2" href="https://github.com/HomeSpan/HomeSpan/blob/master/docs/UserGuide.md#device-configuration-mode">User Guide</a></p>
 								<div class="form-control mb-2">
 									<label class="label">
 										<span class="label-text text-xs">OTA Password</span>
