@@ -776,19 +776,6 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     } else if (keyStr == "neoPixelType") {
       rebootNeeded = true;
       rebootMsg = "Pixel Type changed, reboot needed! Rebooting...";
-    } else if (keyStr == "useSSL") {
-      esp_chip_info_t chip_info;
-      esp_chip_info(&chip_info);
-      if(chip_info.model == CHIP_ESP32) {
-        httpd_resp_set_type(req, "application/json");
-        cJSON *res = cJSON_CreateObject();
-        cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-        cJSON_AddItemToObject(res, "error", cJSON_CreateString("TLS currently not available on the ESP32 chip model due to memory constraints"));
-        httpd_resp_set_status(req, HTTPD_500);
-        std::string response = cjson_to_string_and_free(res);
-        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-        return ESP_FAIL;
-      }
     }
     it = it->next;
   }
