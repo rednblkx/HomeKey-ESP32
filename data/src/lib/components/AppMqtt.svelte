@@ -1,8 +1,9 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import type { CertificatesStatus, CertificateType, MqttConfig } from '$lib/types/api';
+  import { onMount, onDestroy } from 'svelte';
+  import type { CertificatesStatus, CertificateType, MqttConfig, MetricsMessage } from '$lib/types/api';
   import { saveConfig, uploadCertificate, getCertificateStatus, deleteCertificate } from '$lib/services/api';
   import { diff } from '$lib/utils/objDiff';
+  import ws from '$lib/services/ws';
 
   let { mqtt, error }: { mqtt: MqttConfig; error: string | null } = $props();
 
@@ -13,8 +14,33 @@
   let uploadProgress = $state({ ca: 0, client: 0, privateKey: 0 });
   let uploadErrors = $state({ ca: '', client: '', privateKey: '' });
 
+  // MQTT connection status
+  let mqttConnected = $state<boolean | undefined>(undefined);
+  let mqttErrorCode = $state<number>(0);
+  let mqttErrorMessage = $state<string>('');
+
+  let unsubscribeWs: (() => void) | null = null;
+
   onMount(() => {
     if (mqtt) fetchCertificateStatus();
+
+    // Subscribe to WebSocket metrics
+    unsubscribeWs = ws.on((event) => {
+      if (event.type === 'message' && typeof event.data === 'object' && event.data !== null && 'type' in event.data && event.data.type === 'metrics') {
+        const metrics = event.data as MetricsMessage;
+        if (metrics.mqtt_connected !== undefined) {
+          mqttConnected = metrics.mqtt_connected;
+          mqttErrorCode = metrics.mqtt_error_code ?? 0;
+          mqttErrorMessage = metrics.mqtt_error_message ?? '';
+        }
+      }
+    });
+  });
+
+  onDestroy(() => {
+    if (unsubscribeWs) {
+      unsubscribeWs();
+    }
   });
 
   const fetchCertificateStatus = async () => {
@@ -195,6 +221,32 @@
             <div>
               <h3 class="font-semibold text-base-content">Broker Configuration</h3>
               <p class="text-sm text-base-content/60">Configure the MQTT broker connection settings.</p>
+            </div>
+
+            <!-- MQTT Connection Status -->
+            <div class="flex items-center gap-3 py-2 px-3 bg-base-100 rounded-lg">
+              <div class="flex items-center gap-2">
+                <span class="inline-flex h-3 w-3 rounded-full {mqttConnected === true ? 'bg-success' : mqttConnected === false ? (mqttErrorCode > 0 ? 'bg-error' : 'bg-warning') : 'bg-base-300'}"></span>
+                <span class="text-sm font-medium">
+                  {#if mqttConnected === true}
+                    <span class="text-success">Connected</span>
+                  {:else if mqttConnected === false}
+                    {#if mqttErrorCode > 0}
+                      <span class="text-error">Error</span>
+                    {:else}
+                      <span class="text-warning">Disconnected</span>
+                    {/if}
+                  {:else}
+                    <span class="text-base-content/50">Unknown</span>
+                  {/if}
+                </span>
+              </div>
+              {#if mqttConnected === false && mqttErrorCode > 0 && mqttErrorMessage}
+                <span class="text-xs text-error">({mqttErrorMessage})</span>
+              {/if}
+              {#if mqttConnected === false && mqttErrorCode > 0 && !mqttErrorMessage}
+                <span class="text-xs text-error">(Code: {mqttErrorCode})</span>
+              {/if}
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">

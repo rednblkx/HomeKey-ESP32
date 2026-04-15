@@ -1,5 +1,6 @@
 #pragma once
 #include "event_bus.hpp"
+#include "eventStructs.hpp"
 #include "mqtt_client.h"
 #include <string>
 #include <vector>
@@ -84,6 +85,7 @@ private:
     // --- Publishing Logic ---
     void publish(const std::string& topic, const std::string& payload, int qos = 0, bool retain = false);
     void publishHassDiscovery();
+    void publishMqttStatus(bool connected, MqttErrorCode errorCode, const std::string& errorMessage = "");
 
     // --- SSL/TLS Configuration ---
     bool configureSSL(esp_mqtt_client_config_t& mqtt_cfg);
@@ -104,5 +106,6 @@ private:
     EventBus::SubscriberHandle m_lock_state_changed;
     EventBus::SubscriberHandle m_alt_action;
     EventBus::SubscriberHandle m_nfc_event;
+    EventBus::TopicHandle m_mqtt_status_topic;
 };
 

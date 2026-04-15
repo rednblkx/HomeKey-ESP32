@@ -186,6 +186,11 @@ private:
   EventBus::SubscriberHandle m_nfc_status_subscriber;
   std::atomic<bool> m_nfc_connected{false};
 
+  EventBus::SubscriberHandle m_mqtt_status_subscriber;
+  std::atomic<bool> m_mqtt_connected{false};
+  std::atomic<uint8_t> m_mqtt_error_code{0};
+  std::string m_mqtt_error_message;
+
   std::atomic<bool> m_otaInProgress{false};
   bool m_isInitialized{false};
 };

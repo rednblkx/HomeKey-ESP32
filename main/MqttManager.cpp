@@ -31,7 +31,8 @@ MqttManager::MqttManager(const ConfigManager& configManager)
       m_mqttSslConfig(configManager.getMqttSslConfig()),
       m_client(nullptr),
       device_name(configManager.getConfig<espConfig::misc_config_t>().deviceName),
-      m_sslConfigured(false)
+      m_sslConfigured(false),
+      m_mqtt_status_topic(event_bus.register_topic(MQTT_STATUS_TOPIC))
 {
 }
 
@@ -237,11 +238,14 @@ void MqttManager::onMqttEvent(esp_event_base_t base, int32_t event_id, void* eve
     switch (event->event_id) {
         case MQTT_EVENT_CONNECTED:
             ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED: Connection established successfully");
+            m_isConnected = true;
+            publishMqttStatus(true, MqttErrorCode::NONE);
             onConnected();
             break;
         case MQTT_EVENT_DISCONNECTED:
             ESP_LOGW(TAG, "MQTT_EVENT_DISCONNECTED: Client disconnected from broker");
             m_isConnected = false;
+            publishMqttStatus(false, MqttErrorCode::NONE);
             break;
         case MQTT_EVENT_SUBSCRIBED:
             ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED: Successfully subscribed to topic (msg_id=%d)", event->msg_id);
@@ -265,28 +269,39 @@ void MqttManager::onMqttEvent(esp_event_base_t base, int32_t event_id, void* eve
             break;
         case MQTT_EVENT_ERROR:
             ESP_LOGE(TAG, "MQTT_EVENT_ERROR: Connection or protocol error occurred");
-            if (event->error_handle) {
-                ESP_LOGE(TAG, "MQTT Error Type: %d", event->error_handle->error_type);
+            {
+                MqttErrorCode errCode = MqttErrorCode::UNKNOWN;
+                std::string errMsg;
+                if (event->error_handle) {
+                    ESP_LOGE(TAG, "MQTT Error Type: %d", event->error_handle->error_type);
 
-                // Categorize and handle different error types with detailed logging
-                switch (event->error_handle->error_type) {
-                    case MQTT_ERROR_TYPE_TCP_TRANSPORT:
-                        if (event->error_handle->esp_transport_sock_errno != 0) {
-                            ESP_LOGE(TAG, "Transport socket error: errno=%d (%s)",
-                                     event->error_handle->esp_transport_sock_errno,
-                                     strerror(event->error_handle->esp_transport_sock_errno));
-                        }
-                        break;
-                    case MQTT_ERROR_TYPE_CONNECTION_REFUSED:
-                        ESP_LOGE(TAG, "Connection refused - broker may be down or rejecting connection");
-                        break;
-                    case MQTT_ERROR_TYPE_SUBSCRIBE_FAILED:
-                        ESP_LOGE(TAG, "Subscribe failed - check topic permissions");
-                        break;
-                    default:
-                        ESP_LOGE(TAG, "Unknown MQTT error type: %d", event->error_handle->error_type);
-                        break;
-                }
+                    // Categorize and handle different error types with detailed logging
+                    switch (event->error_handle->error_type) {
+                        case MQTT_ERROR_TYPE_TCP_TRANSPORT:
+                            errCode = MqttErrorCode::NETWORK_ERROR;
+                            if (event->error_handle->esp_transport_sock_errno != 0) {
+                                errMsg = "Transport socket error";
+                                ESP_LOGE(TAG, "Transport socket error: errno=%d (%s)",
+                                         event->error_handle->esp_transport_sock_errno,
+                                         strerror(event->error_handle->esp_transport_sock_errno));
+                            }
+                            break;
+                        case MQTT_ERROR_TYPE_CONNECTION_REFUSED:
+                            errCode = MqttErrorCode::CONNECTION_REFUSED;
+                            errMsg = "Connection refused";
+                            ESP_LOGE(TAG, "Connection refused - broker may be down or rejecting connection");
+                            break;
+                        case MQTT_ERROR_TYPE_SUBSCRIBE_FAILED:
+                            errCode = MqttErrorCode::AUTH_FAILED;
+                            errMsg = "Subscribe failed";
+                            ESP_LOGE(TAG, "Subscribe failed - check topic permissions");
+                            break;
+                        default:
+                            errCode = MqttErrorCode::UNKNOWN;
+                            errMsg = "Unknown error";
+                            ESP_LOGE(TAG, "Unknown MQTT error type: %d", event->error_handle->error_type);
+                            break;
+                    }
 
                 if (event->error_handle->esp_tls_last_esp_err != 0) {
                     logSSLError("MQTT SSL/TLS connection", event->error_handle->esp_tls_last_esp_err);
@@ -299,8 +314,11 @@ void MqttManager::onMqttEvent(esp_event_base_t base, int32_t event_id, void* eve
                 ESP_LOGI(TAG, "Connection attempt details: broker=%s:%d, client_id=%s, ssl=%s",
                          m_mqttConfig.mqttBroker.c_str(), m_mqttConfig.mqttPort,
                          m_mqttConfig.mqttClientId.c_str(), m_mqttConfig.useSSL ? "enabled" : "disabled");
-            } else {
-                ESP_LOGE(TAG, "MQTT error occurred but no error handle available");
+                    publishMqttStatus(false, errCode, errMsg);
+                } else {
+                    ESP_LOGE(TAG, "MQTT error occurred but no error handle available");
+                    publishMqttStatus(false, MqttErrorCode::UNKNOWN, "No error details");
+                }
             }
             break;
         default:
@@ -704,4 +722,16 @@ void MqttManager::logSSLError(const char* operation, esp_err_t error) {
 
 bool MqttManager::isConnected() const {
     return m_isConnected;
+}
+
+void MqttManager::publishMqttStatus(bool connected, MqttErrorCode errorCode, const std::string& errorMessage) {
+    EventMqttStatus status{
+        .connected = connected,
+        .errorCode = errorCode,
+        .errorMessage = errorMessage
+    };
+    std::vector<uint8_t> data;
+    alpaca::serialize(status, data);
+    event_bus.publish({m_mqtt_status_topic, 0, data.data(), data.size()});
+    ESP_LOGD(TAG, "Published MQTT status: connected=%s, errorCode=%d", connected ? "true" : "false", static_cast<uint8_t>(errorCode));
 }

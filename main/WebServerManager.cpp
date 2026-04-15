@@ -100,6 +100,10 @@ WebServerManager::~WebServerManager() {
     event_bus.unsubscribe(m_nfc_status_subscriber);
   }
 
+  if (m_mqtt_status_subscriber.is_valid()) {
+    event_bus.unsubscribe(m_mqtt_status_subscriber);
+  }
+
   if (m_server) {
     httpd_stop(m_server);
     m_server = nullptr;
@@ -193,6 +197,20 @@ void WebServerManager::begin() {
       EventNfcStatus status = alpaca::deserialize<EventNfcStatus>(payload, ec);
       if (!ec) {
         instance->m_nfc_connected.store(status.connected, std::memory_order_relaxed);
+      }
+    }, this);
+
+  m_mqtt_status_subscriber = event_bus.subscribe(event_bus.get_topic(MQTT_STATUS_TOPIC).value_or(EventBus::INVALID_TOPIC),
+    [](const EventBus::Event& event, void* context) {
+      if (event.payload_size == 0 || event.payload == nullptr) return;
+      auto* instance = static_cast<WebServerManager*>(context);
+      std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
+      std::error_code ec;
+      EventMqttStatus status = alpaca::deserialize<EventMqttStatus>(payload, ec);
+      if (!ec) {
+        instance->m_mqtt_connected.store(status.connected, std::memory_order_relaxed);
+        instance->m_mqtt_error_code.store(static_cast<uint8_t>(status.errorCode), std::memory_order_relaxed);
+        instance->m_mqtt_error_message = status.errorMessage;
       }
     }, this);
 
@@ -1899,6 +1917,11 @@ std::string WebServerManager::getDeviceMetrics() {
   cJSON_AddNumberToObject(status, "free_heap", esp_get_free_heap_size());
   cJSON_AddNumberToObject(status, "wifi_rssi", WiFi.RSSI());
   cJSON_AddBoolToObject(status, "nfc_connected", m_nfc_connected.load(std::memory_order_relaxed));
+  cJSON_AddBoolToObject(status, "mqtt_connected", m_mqtt_connected.load(std::memory_order_relaxed));
+  cJSON_AddNumberToObject(status, "mqtt_error_code", m_mqtt_error_code.load(std::memory_order_relaxed));
+  if (!m_mqtt_error_message.empty()) {
+    cJSON_AddStringToObject(status, "mqtt_error_message", m_mqtt_error_message.c_str());
+  }
   return cjson_to_string_and_free(status);
 }
 
