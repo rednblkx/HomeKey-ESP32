@@ -117,6 +117,15 @@ void setup() {
   hardwareManager->begin();
   homekitLock->begin();
   lockManager->begin();
+  WiFi.onEvent([](arduino_event_id_t event){
+    static uint8_t count = 0;
+    if(count >= 6){
+      homeSpan.processSerialCommand("A");
+      count = 0;
+    } else {
+      count++;
+    }
+  }, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
 }
 
 /**
