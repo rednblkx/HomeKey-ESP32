@@ -2,7 +2,7 @@
 	import { route } from 'sv-router/generated';
 	import { saveCaptivePortalConfig, rebootDevice, scanWiFi } from '$lib/services/api.js';
 	import type { CaptivePortalConfig, WiFiNetwork, EthConfig, NfcGpioPinsPreset } from '$lib/types/api';
-    import SpiEthernetNote from '$lib/components/SpiEthernetNote.svelte';
+    import HardwareConfig from '$lib/components/HardwareConfig.svelte';
 
 	const colorOptions = [
 		{ value: 0, label: 'Tan', class: 'bg-[#ddd5cc]' },
@@ -34,15 +34,9 @@
 	let activeTab = $state<'wifi' | 'hardware' | 'network'>('wifi');
 
 	// Derived values for NFC/Ethernet presets
-	let nfcPresets : NfcGpioPinsPreset = $derived(route.meta.captivePortalData?.nfcPresets ?? null);
-	let ethConfig : EthConfig = $derived(route.meta.captivePortalData?.ethConfig ?? null);
+	let nfcPresets : NfcGpioPinsPreset = $derived(route.meta.captivePortalData?.nfcPresets ?? { presets: [] });
+	let ethConfig : EthConfig = $derived(route.meta.captivePortalData?.ethConfig ?? { boardPresets: [], supportedChips: [], numSpiBuses: 1, ethEnabled: false });
 
-	let currentEthChip = $derived(() => {
-		if (config.ethPhyType !== undefined && ethConfig?.supportedChips) {
-			return ethConfig.supportedChips[config.ethPhyType];
-		}
-		return null;
-	});
 
 	$effect(() => {
 		if (route.meta.captivePortalData?.config) {
@@ -86,39 +80,41 @@
 		return null;
 	}
 
-	function handleNfcPresetChange() {
-		if (config.nfcPinsPreset !== undefined && config.nfcPinsPreset !== 255 && nfcPresets) {
-			const preset = nfcPresets.presets[config.nfcPinsPreset];
-			if (preset) {
-				config.nfcGpioPins = [preset.gpioPins[0], preset.gpioPins[1], preset.gpioPins[2], preset.gpioPins[3]];
+	function handleNfcPresetChange(preset: number) {
+		config.nfcPinsPreset = preset;
+		if (preset !== 255 && nfcPresets) {
+			const presetData = nfcPresets.presets[preset];
+			if (presetData) {
+				config.nfcGpioPins = [presetData.gpioPins[0], presetData.gpioPins[1], presetData.gpioPins[2], presetData.gpioPins[3]];
 			}
 		}
 	}
 
-	function handleEthPresetChange() {
-		if (config.ethActivePreset !== undefined && config.ethActivePreset !== 255 && ethConfig?.boardPresets) {
-			const preset = ethConfig.boardPresets[config.ethActivePreset];
-			if (preset) {
-				config.ethPhyType = preset.ethChip.phy_type;
-				if (preset.spi_conf) {
+	function handleEthPresetChange(preset: number) {
+		config.ethActivePreset = preset;
+		if (preset !== 255 && ethConfig?.boardPresets) {
+			const presetData = ethConfig.boardPresets[preset];
+			if (presetData) {
+				config.ethPhyType = presetData.ethChip.phy_type;
+				if (presetData.spi_conf) {
 					config.ethSpiConfig = [
-						preset.spi_conf.spi_freq_mhz,
-						preset.spi_conf.pin_cs,
-						preset.spi_conf.pin_irq,
-						preset.spi_conf.pin_rst,
-						preset.spi_conf.pin_sck,
-						preset.spi_conf.pin_miso,
-						preset.spi_conf.pin_mosi,
+						presetData.spi_conf.spi_freq_mhz,
+						presetData.spi_conf.pin_cs,
+						presetData.spi_conf.pin_irq,
+						presetData.spi_conf.pin_rst,
+						presetData.spi_conf.pin_sck,
+						presetData.spi_conf.pin_miso,
+						presetData.spi_conf.pin_mosi,
 					];
 					config.ethRmiiConfig = config.ethRmiiConfig || [0, -1, -1, -1, 0];
 				}
-				if (preset.rmii_conf) {
+				if (presetData.rmii_conf) {
 					config.ethRmiiConfig = [
-						preset.rmii_conf.phy_addr,
-						preset.rmii_conf.pin_mcd,
-						preset.rmii_conf.pin_mdio,
-						preset.rmii_conf.pin_power,
-						preset.rmii_conf.pin_rmii_clock,
+						presetData.rmii_conf.phy_addr,
+						presetData.rmii_conf.pin_mcd,
+						presetData.rmii_conf.pin_mdio,
+						presetData.rmii_conf.pin_power,
+						presetData.rmii_conf.pin_rmii_clock,
 					];
 					config.ethSpiConfig = config.ethSpiConfig || [20, -1, -1, -1, -1, -1, -1];
 				}
@@ -179,7 +175,7 @@
 	}
 </script>
 
-<div class="card bg-base-100 shadow-xl border border-base-300">
+<div class="card bg-base-200 shadow-xl border border-base-300">
 	<div class="card-body">
 		{#if saved}
 		<div class="alert alert-success mb-4">
@@ -385,267 +381,29 @@
 							<p class="text-xs text-base-content/60">Configure GPIO pins for PN532 NFC reader and optional Ethernet connectivity.</p>
 						</div>
 
-						<!-- PN532 -->
-						<div class="py-2 px-3 bg-base-100 rounded-lg">
-							<p class="text-sm font-medium mb-2">PN532 NFC Reader</p>
-							{#if config.ethernetEnabled}
-								<SpiEthernetNote spiNumBuses={ethConfig.numSpiBuses} selectedBus={config.ethSpiBus}/>
-							{/if}
-							<div class="form-control mb-2">
-								<label class="label">
-									<span class="label-text text-xs">Preset</span>
-								</label>
-								<select
-									bind:value={config.nfcPinsPreset}
-									onchange={handleNfcPresetChange}
-									class="select select-sm select-bordered w-full"
-									disabled={loading}
-								>
-									{#if nfcPresets?.presets}
-										{#each nfcPresets.presets as preset, i}
-											<option value={i}>{preset.name}</option>
-										{/each}
-									{/if}
-									<option value={255}>Custom</option>
-								</select>
-							</div>
-							<div class="grid grid-cols-4 gap-2">
-								<div class="form-control">
-									<label class="label">
-										<span class="label-text text-xs">SS Pin</span>
-									</label>
-									<input
-										type="number"
-										disabled={config.nfcPinsPreset !== 255 || loading}
-										bind:value={config.nfcGpioPins[0]}
-										class="input input-sm input-bordered w-full"
-									/>
-								</div>
-								<div class="form-control">
-									<label class="label">
-										<span class="label-text text-xs">SCK Pin</span>
-									</label>
-									<input
-										type="number"
-										disabled={config.nfcPinsPreset !== 255 || loading}
-										bind:value={config.nfcGpioPins[1]}
-										class="input input-sm input-bordered w-full"
-									/>
-								</div>
-								<div class="form-control">
-									<label class="label">
-										<span class="label-text text-xs">MISO Pin</span>
-									</label>
-									<input
-										type="number"
-										disabled={config.nfcPinsPreset !== 255 || loading}
-										bind:value={config.nfcGpioPins[2]}
-										class="input input-sm input-bordered w-full"
-									/>
-								</div>
-								<div class="form-control">
-									<label class="label">
-										<span class="label-text text-xs">MOSI Pin</span>
-									</label>
-									<input
-										type="number"
-										disabled={config.nfcPinsPreset !== 255 || loading}
-										bind:value={config.nfcGpioPins[3]}
-										class="input input-sm input-bordered w-full"
-									/>
-								</div>
-							</div>
-						</div>
-
-						<!-- Ethernet -->
-						<div class="py-2 px-3 bg-base-100 rounded-lg">
-							<p class="text-sm font-medium mb-2">Ethernet Configuration</p>
-
-							<div class="flex items-center justify-between mb-3">
-								<div>
-									<p class="text-sm font-medium">Enable Ethernet</p>
-									<p class="text-xs text-base-content/60">Use wired Ethernet instead of WiFi</p>
-								</div>
-								<input
-									type="checkbox"
-									bind:checked={config.ethernetEnabled}
-									class="toggle toggle-primary toggle-sm"
-									disabled={loading}
-								/>
-							</div>
-
-						{#if config.ethernetEnabled}
-							<div class="form-control">
-								<label class="label">
-									<span class="label-text text-xs">Board Preset</span>
-								</label>
-								<select
-									bind:value={config.ethActivePreset}
-									onchange={handleEthPresetChange}
-									class="select select-sm select-bordered w-full"
-									disabled={loading}
-								>
-									{#if ethConfig?.boardPresets}
-										{#each ethConfig.boardPresets as preset, i}
-											<option value={i}>{preset.name}</option>
-										{/each}
-									{/if}
-									<option value={255}>Custom</option>
-								</select>
-							</div>
-
-							<div class="form-control">
-								<label class="label">
-									<span class="label-text text-xs">PHY Type</span>
-								</label>
-								<select
-									bind:value={config.ethPhyType}
-									disabled={config.ethActivePreset !== 255 || loading}
-									class="select select-sm select-bordered w-full"
-								>
-									{#if ethConfig?.supportedChips}
-										{#each ethConfig.supportedChips as chip}
-											<option value={chip.phy_type}>{chip.name}</option>
-										{/each}
-									{/if}
-								</select>
-							</div>
-
-							{#if currentEthChip()?.emac}
-								<div class="py-2 px-3 bg-base-100 rounded-lg">
-									<p class="text-sm font-medium mb-2">RMII Configuration</p>
-									<div class="grid grid-cols-2 md:grid-cols-3 gap-2">
-										<div class="form-control">
-											<label class="label">
-												<span class="label-text text-xs">PHY Address</span>
-											</label>
-											<input
-												type="number"
-												bind:value={config.ethRmiiConfig[0]}
-												disabled={config.ethActivePreset !== 255 || loading}
-												class="input input-sm input-bordered w-full"
-											/>
-										</div>
-										<div class="form-control">
-											<label class="label">
-												<span class="label-text text-xs">Pin MDC</span>
-											</label>
-											<input
-												type="number"
-												bind:value={config.ethRmiiConfig[1]}
-												disabled={config.ethActivePreset !== 255 || loading}
-												class="input input-sm input-bordered w-full"
-											/>
-										</div>
-										<div class="form-control">
-											<label class="label">
-												<span class="label-text text-xs">Pin MDIO</span>
-											</label>
-											<input
-												type="number"
-												bind:value={config.ethRmiiConfig[2]}
-												disabled={config.ethActivePreset !== 255 || loading}
-												class="input input-sm input-bordered w-full"
-											/>
-										</div>
-										<div class="form-control">
-											<label class="label">
-												<span class="label-text text-xs">Pin Power</span>
-											</label>
-											<input
-												type="number"
-												bind:value={config.ethRmiiConfig[3]}
-												disabled={config.ethActivePreset !== 255 || loading}
-												class="input input-sm input-bordered w-full"
-											/>
-										</div>
-										<div class="form-control">
-											<label class="label">
-												<span class="label-text text-xs">RMII Clock</span>
-											</label>
-											<select
-												bind:value={config.ethRmiiConfig[4]}
-												disabled={config.ethActivePreset !== 255 || loading}
-												class="select select-sm select-bordered w-full"
-											>
-												<option value={0}>GPIO0_IN</option>
-												<option value={1}>GPIO0_OUT</option>
-												<option value={2}>GPIO16_OUT</option>
-												<option value={3}>GPIO17_OUT</option>
-											</select>
-										</div>
-									</div>
-								</div>
-							{:else}
-								<div class="py-2 px-3 bg-base-100 rounded-lg">
-									<p class="text-sm font-medium mb-2">SPI Configuration</p>
-									<div class="grid grid-cols-2 md:grid-cols-4 gap-2">
-										<div class="form-control">
-											<label class="label">
-												<span class="label-text text-xs">SPI Bus</span>
-											</label>
-											<select
-												bind:value={config.ethSpiBus}
-												disabled={config.ethActivePreset !== 255 || loading || ethConfig?.numSpiBuses === 1}
-												class="select select-sm select-bordered w-full"
-											>
-												<option value={1}>SPI2</option>
-												{#if ethConfig?.numSpiBuses === 2}
-													<option value={2}>SPI3</option>
-												{/if}
-											</select>
-										</div>
-										<div class="form-control">
-											<label class="label">
-												<span class="label-text text-xs">Freq (MHz)</span>
-											</label>
-											<input
-												type="number"
-												bind:value={config.ethSpiConfig[0]}
-												disabled={config.ethActivePreset !== 255 || loading}
-												class="input input-sm input-bordered w-full"
-											/>
-										</div>
-										<div class="form-control">
-											<label class="label">
-												<span class="label-text text-xs">CS Pin</span>
-											</label>
-											<input
-												type="number"
-												bind:value={config.ethSpiConfig[1]}
-												disabled={config.ethActivePreset !== 255 || loading}
-												class="input input-sm input-bordered w-full"
-											/>
-										</div>
-										<div class="form-control">
-											<label class="label">
-												<span class="label-text text-xs">IRQ Pin</span>
-											</label>
-											<input
-												type="number"
-												bind:value={config.ethSpiConfig[2]}
-												disabled={config.ethActivePreset !== 255 || loading}
-												class="input input-sm input-bordered w-full"
-											/>
-										</div>
-										<div class="form-control">
-											<label class="label">
-												<span class="label-text text-xs">RST Pin</span>
-											</label>
-											<input
-												type="number"
-												bind:value={config.ethSpiConfig[3]}
-												disabled={config.ethActivePreset !== 255 || loading}
-												class="input input-sm input-bordered w-full"
-											/>
-										</div>
-									</div>
-								</div>
-							{/if}
-						{/if}
+						<HardwareConfig
+							nfcGpioPins={config.nfcGpioPins}
+							nfcPinsPreset={config.nfcPinsPreset}
+							nfcPresets={nfcPresets}
+							ethernetEnabled={config.ethernetEnabled}
+							ethActivePreset={config.ethActivePreset}
+							ethPhyType={config.ethPhyType}
+							ethSpiBus={config.ethSpiBus}
+							ethRmiiConfig={config.ethRmiiConfig}
+							ethSpiConfig={config.ethSpiConfig}
+							ethConfig={ethConfig}
+							loading={loading}
+							onNfcPresetChange={handleNfcPresetChange}
+							onEthPresetChange={handleEthPresetChange}
+							onNfcPinsChange={(pins) => config.nfcGpioPins = pins}
+							onEthernetToggle={(enabled) => config.ethernetEnabled = enabled}
+							onEthPhyTypeChange={(phyType) => config.ethPhyType = phyType}
+							onEthSpiBusChange={(bus) => config.ethSpiBus = bus}
+							onEthRmiiConfigChange={(cfg) => config.ethRmiiConfig = cfg}
+							onEthSpiConfigChange={(cfg) => config.ethSpiConfig = cfg}
+						/>
 					</div>
-				</div>
-			{/if}
+				{/if}
 
 			<!-- Error Message -->
 				{#if error}
