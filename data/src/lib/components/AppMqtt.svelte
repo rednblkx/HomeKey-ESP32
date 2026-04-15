@@ -334,7 +334,7 @@
               </div>
               <div class="form-control">
                 <label class="label">
-                  <span class="label-text text-sm">Lock Continuous State Command</span>
+                  <span class="label-text text-sm">Lock Current State Command</span>
                 </label>
                 <input
                   type="text"
@@ -346,7 +346,7 @@
               </div>
               <div class="form-control">
                 <label class="label">
-                  <span class="label-text text-sm">Lock Timed State Command</span>
+                  <span class="label-text text-sm">Lock Target State Command</span>
                 </label>
                 <input
                   type="text"
