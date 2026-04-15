@@ -205,8 +205,9 @@
 		</div>
 
 		{#if ethernetEnabled}
-			<SpiEthernetNote spiNumBuses={ethConfig?.numSpiBuses ?? 1} selectedBus={ethSpiBus} />
-
+			{#if !currentEthChip()?.emac}
+				<SpiEthernetNote spiNumBuses={ethConfig?.numSpiBuses ?? 1} selectedBus={ethSpiBus} />
+			{/if}
 			<div class="form-control">
 				<label class="label" for="ethPreset">
 					<span class="label-text text-xs">Board Preset</span>
