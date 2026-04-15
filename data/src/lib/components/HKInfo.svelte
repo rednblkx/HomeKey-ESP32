@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { HKInfo } from "$lib/types/api.js";
+  import type { HKInfo } from "$lib/types/api";
   import { systemInfo } from "$lib/stores/system.svelte.js";
   import { calculateWifiSignal } from "$lib/utils/wifi.js";
   const version: string = __DEV__ ? "dev" : __VERSION__;

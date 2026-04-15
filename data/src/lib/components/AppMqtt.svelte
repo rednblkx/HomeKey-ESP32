@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { CertificatesStatus, CertificateType, MqttConfig } from '$lib/types/api';
-  import { saveConfig, uploadCertificate, getCertificateStatus, deleteCertificate } from '$lib/services/api.js';
+  import { saveConfig, uploadCertificate, getCertificateStatus, deleteCertificate } from '$lib/services/api';
   import { diff } from '$lib/utils/objDiff';
 
   let { mqtt, error }: { mqtt: MqttConfig; error: string | null } = $props();

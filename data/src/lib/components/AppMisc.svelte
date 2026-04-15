@@ -5,7 +5,7 @@
 		resetWifi,
 		saveConfig,
 		startConfigAP,
-	} from "$lib/services/api.js";
+	} from "$lib/services/api";
 	import type {
 		EthConfig,
 		MiscConfig,

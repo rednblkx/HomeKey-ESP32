@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { saveConfig } from '$lib/services/api.js';
+  import { saveConfig } from '$lib/services/api';
   import type { ActionsConfig } from '$lib/types/api';
   import { diff } from '$lib/utils/objDiff';
 

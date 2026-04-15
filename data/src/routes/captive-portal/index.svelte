@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { route } from 'sv-router/generated';
-	import { saveCaptivePortalConfig, rebootDevice, scanWiFi } from '$lib/services/api.js';
+	import { saveCaptivePortalConfig, rebootDevice, scanWiFi } from '$lib/services/api';
 	import type { CaptivePortalConfig, WiFiNetwork, EthConfig, NfcGpioPinsPreset } from '$lib/types/api';
     import HardwareConfig from '$lib/components/HardwareConfig.svelte';
 
