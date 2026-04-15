@@ -188,15 +188,8 @@
     let data: string;
     let filename: string;
 
-    if (format === 'json') {
-      data = JSON.stringify(logsToExport, null, 2);
-      filename = `logs-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.json`;
-    } else {
-      data = logsToExport
-        .map((log) => `[${log.localts}] [${log.level}] ${log.msg}`)
-        .join('\n');
-      filename = `logs-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.txt`;
-    }
+    data = JSON.stringify(logsToExport, null, 2);
+    filename = `logs-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.json`;
 
     const blob = new Blob([data], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
