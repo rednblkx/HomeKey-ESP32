@@ -395,6 +395,45 @@
 								class="input input-sm input-bordered w-full"
 							/>
 						</div>
+						<div class="form-control">
+							<label class="label" for="ethSckPin">
+								<span class="label-text text-xs">SCK Pin</span>
+							</label>
+							<input
+								id="ethSckPin"
+								type="number"
+								value={ethSpiConfig[4]}
+								onchange={(e) => updateSpiConfig(4, parseInt((e.target as HTMLInputElement).value, 10))}
+								disabled={ethActivePreset !== 255 || loading}
+								class="input input-sm input-bordered w-full"
+							/>
+						</div>
+						<div class="form-control">
+							<label class="label" for="ethMisoPin">
+								<span class="label-text text-xs">MISO Pin</span>
+							</label>
+							<input
+								id="ethMisoPin"
+								type="number"
+								value={ethSpiConfig[5]}
+								onchange={(e) => updateSpiConfig(5, parseInt((e.target as HTMLInputElement).value, 10))}
+								disabled={ethActivePreset !== 255 || loading}
+								class="input input-sm input-bordered w-full"
+							/>
+						</div>
+						<div class="form-control">
+							<label class="label" for="ethMosiPin">
+								<span class="label-text text-xs">MOSI Pin</span>
+							</label>
+							<input
+								id="ethMosiPin"
+								type="number"
+								value={ethSpiConfig[6]}
+								onchange={(e) => updateSpiConfig(6, parseInt((e.target as HTMLInputElement).value, 10))}
+								disabled={ethActivePreset !== 255 || loading}
+								class="input input-sm input-bordered w-full"
+							/>
+						</div>
 					</div>
 				</div>
 			{/if}
