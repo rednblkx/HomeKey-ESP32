@@ -459,7 +459,7 @@ void NfcManager::handleTagPresence(const std::vector<uint8_t>& uid, const std::a
  * auth precompute task, and modify internal auth-cache queues.
  */
 void NfcManager::handleHomeKeyAuth() {
-    auto publishAuthResult = [](
+    auto publishAuthResult = [this](
         const std::tuple<std::vector<uint8_t>, std::vector<uint8_t>, KeyFlow>& authResult,
         const std::vector<uint8_t>& readerId
     ) {
@@ -471,7 +471,7 @@ void NfcManager::handleHomeKeyAuth() {
             NfcEvent event{.type=HOMEKEY_TAP, .data=d};
             std::vector<uint8_t> event_data;
             alpaca::serialize(event, event_data);
-            event_bus.publish({event_bus.get_topic(NFC_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, event_data.data(), event_data.size()});
+            event_bus.publish({m_nfc_topic, 0, event_data.data(), event_data.size()});
         } else {
             ESP_LOGW(TAG, "HomeKey authentication failed.");
             EventHKTap s{.status = false, .issuerId = {}, .endpointId = {}, .readerId = {} };
@@ -480,7 +480,7 @@ void NfcManager::handleHomeKeyAuth() {
             NfcEvent event{.type=HOMEKEY_TAP, .data=d};
             std::vector<uint8_t> event_data;
             alpaca::serialize(event, event_data);
-            event_bus.publish({event_bus.get_topic(NFC_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, event_data.data(), event_data.size()});
+            event_bus.publish({m_nfc_topic, 0, event_data.data(), event_data.size()});
         }
     };
 
@@ -585,5 +585,5 @@ void NfcManager::handleGenericTag(const std::vector<uint8_t>& uid, const std::ar
     NfcEvent event{.type=TAG_TAP, .data=d};
     std::vector<uint8_t> event_data;
     alpaca::serialize(event, event_data);
-    event_bus.publish({event_bus.get_topic(NFC_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, event_data.data(), event_data.size()});
+    event_bus.publish({m_nfc_topic, 0, event_data.data(), event_data.size()});
 }
