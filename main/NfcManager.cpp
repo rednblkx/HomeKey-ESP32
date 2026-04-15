@@ -216,7 +216,8 @@ NfcManager::NfcManager(ReaderDataManager& readerDataManager, const std::array<ui
       m_pollingTaskHandle(nullptr),
       m_retryTaskHandle(nullptr),
       m_ecpData({ 0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0 }),
-      m_nfc_topic(event_bus.register_topic(NFC_BUS_TOPIC))
+      m_nfc_topic(event_bus.register_topic(NFC_BUS_TOPIC)),
+      m_nfc_status_topic(event_bus.register_topic(NFC_STATUS_TOPIC, true))
 {
   m_hk_event = event_bus.subscribe(event_bus.get_topic(HK_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), [&](const EventBus::Event& event, void* context){
     if(event.payload_size == 0 || event.payload == nullptr) return;
@@ -302,6 +303,10 @@ bool NfcManager::initializeReader() {
         return false;
     }
     ESP_LOGI(TAG, "Found chip PN532, Firmware ver. %d.%d", (versiondata >> 24) & 0xFF, (versiondata >> 16) & 0xFF);
+    EventNfcStatus status{.connected = true, .firmwareVersionMajor = static_cast<uint8_t>((versiondata >> 24) & 0xFF), .firmwareVersionMinor = static_cast<uint8_t>((versiondata >> 16) & 0xFF)};
+    std::vector<uint8_t> d;
+    alpaca::serialize(status, d);
+    event_bus.publish({m_nfc_status_topic, 0, d.data(), d.size()});
     m_nfc->RFConfiguration(0x01, {0x03});
     m_nfc->setPassiveActivationRetries(0);
     m_nfc->RFConfiguration(0x02, {0x00, 0x0B, 0x10});
@@ -387,6 +392,10 @@ void NfcManager::pollingTask() {
     while (true) {
         if (m_nfc->WriteRegister({0x63,0x3d,0x0}) != pn532::SUCCESS) {
             ESP_LOGE(TAG, "PN532 is unresponsive. Attempting to reconnect...");
+            EventNfcStatus status{.connected = false, .firmwareVersionMajor = 0, .firmwareVersionMinor = 0};
+            std::vector<uint8_t> d;
+            alpaca::serialize(status, d);
+            event_bus.publish({m_nfc_status_topic, 0, d.data(), d.size()});
             startRetryTask();
             vTaskSuspend(NULL);
             continue;

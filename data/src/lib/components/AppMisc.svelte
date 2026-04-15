@@ -14,7 +14,7 @@
 	import { diff } from "$lib/utils/objDiff";
 	import SpiEthernetNote from "$lib/components/SpiEthernetNote.svelte";
 
-	let { misc, eth, nfcPresets, error } = $props();
+	let { misc, eth, nfcPresets, nfcConnected = $bindable(false), error } = $props();
 
 	let activeTab = $state<'homekit' | 'hardware' | 'network' | 'auth'>('homekit');
 
@@ -403,7 +403,22 @@
 
 							<!-- PN532 -->
 							<div class="py-2 px-3 bg-base-100 rounded-lg">
-								<p class="text-sm font-medium mb-2">PN532 NFC Reader</p>
+								<div class="flex items-center justify-between mb-2">
+									<p class="text-sm font-medium">PN532 NFC Reader</p>
+									<div class="flex items-center gap-2">
+										<span class="relative flex h-2.5 w-2.5">
+											{#if nfcConnected}
+												<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+												<span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-success"></span>
+											{:else}
+												<span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-error"></span>
+											{/if}
+										</span>
+										<span class="text-xs font-medium {nfcConnected ? 'text-success' : 'text-error'}">
+											{nfcConnected ? 'Connected' : 'Disconnected'}
+										</span>
+									</div>
+								</div>
 								{#if miscConfig.ethernetEnabled}
 									<SpiEthernetNote spiNumBuses={ethConfig.numSpiBuses} selectedBus={miscConfig.ethSpiBus}/>
 								{/if}

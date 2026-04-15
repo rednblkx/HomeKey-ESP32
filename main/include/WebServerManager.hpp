@@ -4,6 +4,7 @@
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
 #include "esp_timer.h"
+#include "event_bus.hpp"
 #include <memory>
 #include <atomic>
 #include <mutex>
@@ -50,7 +51,6 @@ public:
   ~WebServerManager();
 
   void begin();
-  void stop();
 
   /**
    * @brief Stops the web server and cleans up all resources.
@@ -182,6 +182,9 @@ private:
   std::mutex m_wsClientsMutex;
   esp_timer_handle_t m_statusTimer;
   std::vector<std::vector<uint8_t>> m_wsBroadcastBuffer;
+
+  EventBus::SubscriberHandle m_nfc_status_subscriber;
+  std::atomic<bool> m_nfc_connected{false};
 
   std::atomic<bool> m_otaInProgress{false};
   bool m_isInitialized{false};

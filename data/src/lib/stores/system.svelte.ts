@@ -7,7 +7,8 @@ export type SystemInfo = {
   wifi_rssi: number,
   eth_enabled: boolean,
   log_level: number,
-  chip_model: number
+  chip_model: number,
+  nfc_connected: boolean
 };
 
 export const systemInfo : SystemInfo = $state({
@@ -19,7 +20,8 @@ export const systemInfo : SystemInfo = $state({
   wifi_rssi: 0,
   eth_enabled: false,
   log_level: 2,
-  chip_model: 0
+  chip_model: 0,
+  nfc_connected: false
 });
 
 /**

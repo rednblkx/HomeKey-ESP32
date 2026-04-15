@@ -86,4 +86,5 @@ private:
     static const char* TAG;
     EventBus::SubscriberHandle m_hk_event;
     EventBus::TopicHandle m_nfc_topic;
+    EventBus::TopicHandle m_nfc_status_topic;
 };

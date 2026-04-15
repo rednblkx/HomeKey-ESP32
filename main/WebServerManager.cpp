@@ -3,6 +3,7 @@
 // ============================================================================
 
 #include "esp_ota_ops.h"
+#include "event_bus.hpp"
 #include "fmt/ranges.h"
 #include "WebServerManager.hpp"
 #include "ConfigManager.hpp"
@@ -95,6 +96,10 @@ WebServerManager::WebServerManager(ConfigManager &configManager,
 WebServerManager::~WebServerManager() {
   ESP_LOGI(TAG, "WebServerManager destructor called");
 
+  if (m_nfc_status_subscriber.is_valid()) {
+    event_bus.unsubscribe(m_nfc_status_subscriber);
+  }
+
   if (m_server) {
     httpd_stop(m_server);
     m_server = nullptr;
@@ -178,13 +183,20 @@ void WebServerManager::begin() {
   }
 
   ESP_LOGI(TAG, "Web server initialization complete");
-  m_isInitialized = true;
-}
 
-void WebServerManager::stop() {
-  ESP_LOGI(TAG, "Stopping WebServerManager");
-  httpd_stop(m_server);
-  m_server = nullptr;
+  m_nfc_status_subscriber = event_bus.subscribe(event_bus.get_topic(NFC_STATUS_TOPIC).value_or(EventBus::INVALID_TOPIC),
+    [](const EventBus::Event& event, void* context) {
+      if (event.payload_size == 0 || event.payload == nullptr) return;
+      auto* instance = static_cast<WebServerManager*>(context);
+      std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
+      std::error_code ec;
+      EventNfcStatus status = alpaca::deserialize<EventNfcStatus>(payload, ec);
+      if (!ec) {
+        instance->m_nfc_connected.store(status.connected, std::memory_order_relaxed);
+      }
+    }, this);
+
+  m_isInitialized = true;
 }
 
 /**
@@ -1204,7 +1216,7 @@ esp_err_t WebServerManager::handleStartConfigAP(httpd_req_t *req) {
   std::string response = cjson_to_string_and_free(res);
   httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
   vTaskDelay(pdMS_TO_TICKS(1000));
-  instance->stop();
+  instance->end();
   homeSpan.processSerialCommand("A");
   return ESP_OK;
 }
@@ -1886,6 +1898,7 @@ std::string WebServerManager::getDeviceMetrics() {
   cJSON_AddNumberToObject(status, "uptime", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::duration<int64_t, std::micro>(esp_timer_get_time())).count());
   cJSON_AddNumberToObject(status, "free_heap", esp_get_free_heap_size());
   cJSON_AddNumberToObject(status, "wifi_rssi", WiFi.RSSI());
+  cJSON_AddBoolToObject(status, "nfc_connected", m_nfc_connected.load(std::memory_order_relaxed));
   return cjson_to_string_and_free(status);
 }
 

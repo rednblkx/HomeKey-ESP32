@@ -438,6 +438,23 @@ export interface Notification {
 
 // API Response Types
 /**
+ * WebSocket metrics message format
+ * @type {MetricsMessage}
+ */
+export interface MetricsMessage {
+  /** Message type identifier */
+  type: 'metrics';
+  /** System uptime in milliseconds */
+  uptime: number;
+  /** Free heap memory in bytes */
+  free_heap: number;
+  /** WiFi signal strength in dBm */
+  wifi_rssi: number;
+  /** NFC module connection status */
+  nfc_connected?: boolean;
+}
+
+/**
  * API error response structure
  * @type {ApiError}
  */
