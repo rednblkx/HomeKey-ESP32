@@ -12,7 +12,10 @@
     "checkJs": true,
     "isolatedModules": true,
     "paths": {
-      "$lib/*": ["./src/lib/*"]
+      "$lib/*": ["./src/lib/*"],
+      "sv-router/generated": [
+        ".router/router.ts"
+      ]
     }
   },
   "include": [
