@@ -42,6 +42,14 @@ public:
      */
     bool isConnected() const;
 
+    /**
+     * @brief Stops the MQTT client and unsubscribes from all EventBus listeners.
+     *
+     * Performs a clean shutdown of the MQTT client by stopping and destroying it,
+     * then removes all EventBus subscriptions registered by this instance.
+     */
+    void end();
+
 private:
     /**
       * @brief Publishes the current state of the lock.

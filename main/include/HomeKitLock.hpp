@@ -48,6 +48,7 @@ private:
     static void ethEventHandler(arduino_event_id_t event, arduino_event_info_t info);
 
     static void connectionEstablished(int status);
+    static void apStarted();
 
     static void staticControllerCallback();
     void controllerCallback();

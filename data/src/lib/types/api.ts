@@ -80,6 +80,44 @@ export interface MqttConfig {
  * Miscellaneous configuration structure for device settings and hardware configuration
  * @type {MiscConfig}
  */
+export interface CaptivePortalConfig {
+  /** WiFi SSID to connect to */
+  wifiSsid: string;
+  /** WiFi password */
+  wifiPassword: string;
+  /** HomeKit setup code for pairing */
+  setupCode: string;
+  /** HomeKey LED color (TAN=0, GOLD=1, SILVER=2, BLACK=3) */
+  hk_key_color: number;
+  /** NFC GPIO pin configuration preset index */
+  nfcPinsPreset: number;
+  /** NFC GPIO pin configuration [SS, SCK, MISO, MOSI] */
+  nfcGpioPins: [number, number, number, number];
+  /** Enable Ethernet connectivity */
+  ethernetEnabled: boolean;
+  /** Active Ethernet preset index */
+  ethActivePreset: number;
+  /** Ethernet PHY type */
+  ethPhyType: number;
+  /** Ethernet SPI host (1=SPI2, 2=SPI3) */
+  ethSpiBus: number;
+  /** RMII configuration [phy_addr, pin_mcd, pin_mdio, pin_power, pin_rmii_clock] */
+  ethRmiiConfig: [number, number, number, number, number];
+  /** SPI configuration [freq_mhz, pin_cs, pin_irq, pin_rst, pin_sck, pin_miso, pin_mosi] */
+  ethSpiConfig: [number, number, number, number, number, number, number];
+}
+
+export interface WiFiNetwork {
+  /** Network SSID */
+  ssid: string;
+  /** Signal strength in dBm */
+  rssi: number;
+  /** WiFi channel */
+  channel: number;
+  /** Authentication type (OPEN, WEP, WPA_PSK, WPA2_PSK, etc.) */
+  auth: string;
+}
+
 export interface MiscConfig {
   /** Device name displayed in HomeKit and web interface */
   deviceName: string;

@@ -254,6 +254,7 @@ void HomeKitLock::begin() {
     homeSpan.setControllerCallback(staticControllerCallback);
     homeSpan.setConnectionCallback(connectionEstablished);
     homeSpan.setConnectionTimes(1, 15, 3);
+    homeSpan.setApFunction(apStarted);
     ESP_LOGI(TAG, "HomeSpan setup complete.");
 }
 
@@ -449,6 +450,10 @@ void HomeKitLock::staticControllerCallback() {
  */
 void HomeKitLock::connectionEstablished(int status) {
     if (s_instance) s_instance->conn_cb(status);
+}
+
+void HomeKitLock::apStarted() {
+    if (s_instance) s_instance->conn_cb(0);
 }
 
 /**

@@ -52,6 +52,26 @@ MqttManager::~MqttManager() {
 }
 
 /**
+ * @brief Stops the MQTT client and unsubscribes from all EventBus listeners.
+ *
+ * Performs a clean shutdown of the MQTT client by stopping and destroying it,
+ * then removes all EventBus subscriptions registered by this instance.
+ */
+void MqttManager::end() {
+    if (m_client) {
+        ESP_LOGI(TAG, "Stopping MQTT client...");
+        esp_mqtt_client_stop(m_client);
+        esp_mqtt_client_destroy(m_client);
+        m_client = nullptr;
+        m_isConnected = false;
+        ESP_LOGI(TAG, "MQTT client stopped");
+    }
+    event_bus.unsubscribe(m_lock_state_changed);
+    event_bus.unsubscribe(m_alt_action);
+    event_bus.unsubscribe(m_nfc_event);
+}
+
+/**
  * @brief Configure and start the MQTT client using the manager's stored configuration and a device identifier.
  *
  * Initializes the MQTT client configuration (including optional SSL/TLS), registers the instance event handler,

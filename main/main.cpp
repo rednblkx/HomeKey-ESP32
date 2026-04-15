@@ -1,7 +1,11 @@
+#include <cstdint>
 #include <memory>
 #include "ConsoleLogSinker.h"
+#include "HomeSpan.h"
+#include "WiFi.h"
 #include "config.hpp"
 #include "eth_structs.hpp"
+#include "dns_server.h"
 #include "HomeKitLock.hpp"
 #include "LockManager.hpp"
 #include "NfcManager.hpp"
@@ -17,6 +21,7 @@
 #include "loggable.hpp"
 #include "loggable_espidf.hpp"
 #include "WebSocketLogSinker.h"
+#include "lwip/inet.h"
 
 std::unique_ptr<LockManager> lockManager;
 std::unique_ptr<ReaderDataManager> readerDataManager;
@@ -27,12 +32,54 @@ std::unique_ptr<WebServerManager> webServerManager;
 std::unique_ptr<HomeKitLock> homekitLock;
 std::unique_ptr<NfcManager> nfcManager;
 
+static dns_server_handle_t dns_server = NULL;
+
+bool pollHS = false;
+
+static void dhcp_set_captiveportal_url(void) {
+    esp_netif_ip_info_t ip_info;
+    esp_netif_get_ip_info(esp_netif_get_handle_from_ifkey("WIFI_AP_DEF"), &ip_info);
+
+    char ip_addr[16];
+    inet_ntoa_r(ip_info.ip.addr, ip_addr, 16);
+    ESP_LOGI("Main", "Setting up captive portal on IP: %s", ip_addr);
+
+    char captiveportal_uri[32];
+    snprintf(captiveportal_uri, sizeof(captiveportal_uri), "http://%s", ip_addr);
+
+    esp_netif_t* netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+
+    ESP_ERROR_CHECK_WITHOUT_ABORT(esp_netif_dhcps_stop(netif));
+    ESP_ERROR_CHECK(esp_netif_dhcps_option(netif, ESP_NETIF_OP_SET, ESP_NETIF_CAPTIVEPORTAL_URI, captiveportal_uri, strlen(captiveportal_uri)));
+    ESP_ERROR_CHECK_WITHOUT_ABORT(esp_netif_dhcps_start(netif));
+}
+
+static void start_captive_portal(void)
+{
+    dhcp_set_captiveportal_url();
+
+    dns_server_config_t dns_config = DNS_SERVER_CONFIG_SINGLE("*", "WIFI_AP_DEF");
+    dns_server = start_dns_server(&dns_config);
+    ESP_LOGI("Main", "DNS server started for captive portal");
+}
+
 std::function<void(int)> lambda = [](int status) {
   if (status == 1) {
     char identifier[18];
     sprintf(identifier, "%.2s%.2s%.2s%.2s%.2s%.2s", HAPClient::accessory.ID, HAPClient::accessory.ID + 3, HAPClient::accessory.ID + 6, HAPClient::accessory.ID + 9, HAPClient::accessory.ID + 12, HAPClient::accessory.ID + 15);
     mqttManager->begin(std::string(identifier));
     webServerManager->begin(); 
+  } else if (status == 0){
+    pollHS = false;
+    mqttManager->end();
+    webServerManager->end();
+    WiFi.mode(WIFI_AP);
+    WiFi.softAP("HomeKey-ESP32", "homekey123", 11, false, 2, false, WIFI_AUTH_WPA2_WPA3_PSK, WIFI_CIPHER_TYPE_AES_CMAC128); 
+    start_captive_portal();
+    webServerManager->begin();
+    while(true){
+      vTaskDelay(pdMS_TO_TICKS(100));
+    }
   }
 };
 using namespace loggable;
@@ -126,16 +173,18 @@ void setup() {
       count++;
     }
   }, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+  pollHS = true;
 }
 
 /**
  * @brief Run the main application loop: service HomeSpan events and yield to the RTOS.
- *
+*
  * Polls HomeSpan to process HomeKit and internal events, then delays 50 ms to allow other
  * FreeRTOS tasks to run.
  */
 
 void loop() {
+  if(pollHS)
     homeSpan.poll();
-    vTaskDelay(pdMS_TO_TICKS(50));
+  vTaskDelay(pdMS_TO_TICKS(50));
 }

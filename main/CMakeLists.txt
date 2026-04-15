@@ -4,7 +4,7 @@ idf_component_register(SRCS "main.cpp" "ConfigManager.cpp" "ReaderDataManager.cp
                     "ConsoleLogSinker.cpp"
                     INCLUDE_DIRS "include"
                     PRIV_REQUIRES HomeSpan pn532_hal DigitalDoorKey esp_http_server mqtt libsodium event_bus
-                    msgpack-c json loggable loggable_espidf)
+                    msgpack-c json loggable loggable_espidf esp_wifi dns_server)
 
 include(FetchContent)
 
