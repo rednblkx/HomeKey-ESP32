@@ -80,6 +80,44 @@ export interface MqttConfig {
  * Miscellaneous configuration structure for device settings and hardware configuration
  * @type {MiscConfig}
  */
+export interface CaptivePortalConfig {
+  /** WiFi SSID to connect to */
+  wifiSsid: string;
+  /** WiFi password */
+  wifiPassword: string;
+  /** HomeKit setup code for pairing */
+  setupCode: string;
+  /** HomeKey LED color (TAN=0, GOLD=1, SILVER=2, BLACK=3) */
+  hk_key_color: number;
+  /** NFC GPIO pin configuration preset index */
+  nfcPinsPreset: number;
+  /** NFC GPIO pin configuration [SS, SCK, MISO, MOSI] */
+  nfcGpioPins: [number, number, number, number];
+  /** Enable Ethernet connectivity */
+  ethernetEnabled: boolean;
+  /** Active Ethernet preset index */
+  ethActivePreset: number;
+  /** Ethernet PHY type */
+  ethPhyType: number;
+  /** Ethernet SPI host (1=SPI2, 2=SPI3) */
+  ethSpiBus: number;
+  /** RMII configuration [phy_addr, pin_mcd, pin_mdio, pin_power, pin_rmii_clock] */
+  ethRmiiConfig: [number, number, number, number, number];
+  /** SPI configuration [freq_mhz, pin_cs, pin_irq, pin_rst, pin_sck, pin_miso, pin_mosi] */
+  ethSpiConfig: [number, number, number, number, number, number, number];
+}
+
+export interface WiFiNetwork {
+  /** Network SSID */
+  ssid: string;
+  /** Signal strength in dBm */
+  rssi: number;
+  /** WiFi channel */
+  channel: number;
+  /** Authentication type (OPEN, WEP, WPA_PSK, WPA2_PSK, etc.) */
+  auth: string;
+}
+
 export interface MiscConfig {
   /** Device name displayed in HomeKit and web interface */
   deviceName: string;
@@ -400,6 +438,29 @@ export interface Notification {
 
 // API Response Types
 /**
+ * WebSocket metrics message format
+ * @type {MetricsMessage}
+ */
+export interface MetricsMessage {
+  /** Message type identifier */
+  type: 'metrics';
+  /** System uptime in milliseconds */
+  uptime: number;
+  /** Free heap memory in bytes */
+  free_heap: number;
+  /** WiFi signal strength in dBm */
+  wifi_rssi: number;
+  /** NFC module connection status */
+  nfc_connected?: boolean;
+  /** MQTT broker connection status */
+  mqtt_connected?: boolean;
+  /** MQTT error code (0=none, 1=connection_refused, 2=auth_failed, 3=network_error, etc.) */
+  mqtt_error_code?: number;
+  /** MQTT error message description */
+  mqtt_error_message?: string;
+}
+
+/**
  * API error response structure
  * @type {ApiError}
  */
@@ -433,7 +494,7 @@ export type ApiResponse<T = any> = ApiSuccess<T> | ApiError;
 export { isApiSuccess, isApiError, isLogLevel, isNotificationType, isCertificateType } from '$lib/utils/index.js';
 
 type Only<T, U> = {
-[P in keyof T]: T[P];
+  [P in keyof T]: T[P];
 } & {
   [P in keyof U]?: never;
 };

@@ -1,4 +1,4 @@
-import type { ApiResponse, ApiSuccess, ApiError, LogLevel, NotificationType, CertificateType } from '$lib/types/api.js';
+import type { ApiResponse, ApiSuccess, ApiError, LogLevel, NotificationType, CertificateType } from '$lib/types/api';
 
 /**
  * Type guard to check if an API response is successful

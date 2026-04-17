@@ -5,83 +5,26 @@
 		resetWifi,
 		saveConfig,
 		startConfigAP,
-	} from "$lib/services/api.js";
-	import HKFinish0 from "$lib/assets/hk-finish-0.webp?inline";
-	import HKFinish1 from "$lib/assets/hk-finish-1.webp?inline";
-	import HKFinish2 from "$lib/assets/hk-finish-2.webp?inline";
-	import HKFinish3 from "$lib/assets/hk-finish-3.webp?inline";
+	} from "$lib/services/api";
 	import type {
 		EthConfig,
 		MiscConfig,
 		NfcGpioPinsPreset,
 	} from "$lib/types/api";
 	import { diff } from "$lib/utils/objDiff";
-	import SpiEthernetNote from "$lib/components/SpiEthernetNote.svelte";
-	import { systemInfo } from "$lib/stores/system.svelte";
+	import HardwareConfig from "$lib/components/HardwareConfig.svelte";
 
-	let { misc, eth, nfcPresets, error } = $props();
-	
-	let chipModel = $derived(() => systemInfo.chip_model || 0);
+	let { misc, eth, nfcPresets, nfcConnected = $bindable(false), error } = $props();
 
-	let miscConfig = $state<MiscConfig>(
-		misc ?? {
-			deviceName: "",
-			otaPasswd: "",
-			hk_key_color: 0,
-			setupCode: "",
-			lockAlwaysUnlock: false,
-			lockAlwaysLock: false,
-			hkAuthPrecomputeEnabled: false,
-			proxBatEnabled: false,
-			btrLowStatusThreshold: 10,
-			webAuthEnabled: false,
-			webUsername: "",
-			webPassword: "",
-			nfcPinsPreset: 255,
-			nfcGpioPins: [5, 18, 19, 23],
-			ethernetEnabled: false,
-			ethActivePreset: 255,
-			ethPhyType: 0,
-			ethSpiBus: 0,
-			ethRmiiConfig: [0, 0, 0, 0, 0],
-			ethSpiConfig: [20, -1, -1, -1, -1, -1, -1],
-			controlPin: 26,
-			hsStatusPin: 2,
-		},
-	);
-	let ethConfig = $state<EthConfig>(
-		eth ?? {
-			supportedChips: [],
-			boardPresets: [],
-			ethEnabled: false,
-		},
-	);
-	let nfcPresetsList = $state<NfcGpioPinsPreset>(
-		nfcPresets ?? {
-			presets: [],
-		},
-	);
+	let activeTab = $state<'homekit' | 'hardware' | 'network' | 'auth'>('homekit');
 
-	const hkFinishColors = [
-		{ name: "Tan", value: 0, image: HKFinish0 },
-		{ name: "Gold", value: 1, image: HKFinish1 },
-		{ name: "Silver", value: 2, image: HKFinish2 },
-		{ name: "Black", value: 3, image: HKFinish3 },
-	];
+	// svelte-ignore state_referenced_locally
+	let miscConfig = $state<MiscConfig>($state.snapshot(misc));
+	// svelte-ignore state_referenced_locally
+	let ethConfig = $state<EthConfig>($state.snapshot(eth));
+	// svelte-ignore state_referenced_locally
+	let nfcPresetsList = $state<NfcGpioPinsPreset>($state.snapshot(nfcPresets));
 
-	let hkFinishImage = $derived(() => {
-		const color = hkFinishColors.find(
-			(c) => c.value === miscConfig.hk_key_color,
-		);
-		return color?.image || HKFinish0;
-	});
-
-	let currentEthChip = $derived(() => {
-		if (miscConfig.ethPhyType) {
-			return ethConfig!.supportedChips?.[miscConfig.ethPhyType];
-		}
-		return null;
-	});
 
 	const saveMiscConfig = async (e: any) => {
 		e.preventDefault();
@@ -99,56 +42,50 @@
 		}
 	};
 
-	const handleNfcPresetChange = () => {
-		if (
-			miscConfig.nfcPinsPreset !== undefined &&
-			miscConfig.nfcPinsPreset !== 255 &&
-			nfcPresets
-		) {
-			const preset = nfcPresets.presets[miscConfig.nfcPinsPreset];
-			if (preset) {
+	const handleNfcPresetChange = (preset: number) => {
+		miscConfig.nfcPinsPreset = preset;
+		if (preset !== 255 && nfcPresets) {
+			const presetData = nfcPresets.presets[preset];
+			if (presetData) {
 				miscConfig.nfcGpioPins = [
-					preset.gpioPins[0],
-					preset.gpioPins[1],
-					preset.gpioPins[2],
-					preset.gpioPins[3],
+					presetData.gpioPins[0],
+					presetData.gpioPins[1],
+					presetData.gpioPins[2],
+					presetData.gpioPins[3],
 				];
 			}
-		} else if (miscConfig.nfcPinsPreset === 255) {
+		} else if (preset === 255 && misc) {
 			miscConfig.nfcGpioPins = misc.nfcGpioPins;
 		}
 	};
 
-	const handleEthPresetChange = () => {
-		if (
-			miscConfig.ethActivePreset !== undefined &&
-			miscConfig.ethActivePreset !== 255 &&
-			ethConfig!.boardPresets
-		) {
-			const preset = ethConfig!.boardPresets[miscConfig.ethActivePreset];
-			if (preset) {
-				miscConfig.ethPhyType = preset.ethChip.phy_type;
-				if (preset.spi_conf) {
+	const handleEthPresetChange = (preset: number) => {
+		miscConfig.ethActivePreset = preset;
+		if (preset !== 255 && ethConfig!.boardPresets) {
+			const presetData = ethConfig!.boardPresets[preset];
+			if (presetData) {
+				miscConfig.ethPhyType = presetData.ethChip.phy_type;
+				if (presetData.spi_conf) {
 					miscConfig.ethSpiConfig = [
-						preset.spi_conf.spi_freq_mhz,
-						preset.spi_conf.pin_cs,
-						preset.spi_conf.pin_irq,
-						preset.spi_conf.pin_rst,
-						preset.spi_conf.pin_sck,
-						preset.spi_conf.pin_miso,
-						preset.spi_conf.pin_mosi,
+						presetData.spi_conf.spi_freq_mhz,
+						presetData.spi_conf.pin_cs,
+						presetData.spi_conf.pin_irq,
+						presetData.spi_conf.pin_rst,
+						presetData.spi_conf.pin_sck,
+						presetData.spi_conf.pin_miso,
+						presetData.spi_conf.pin_mosi,
 					];
 					miscConfig.ethRmiiConfig = misc?.ethRmiiConfig || [
 						0, -1, -1, -1, 0,
 					];
 				}
-				if (preset.rmii_conf) {
+				if (presetData.rmii_conf) {
 					miscConfig.ethRmiiConfig = [
-						preset.rmii_conf.phy_addr,
-						preset.rmii_conf.pin_mcd,
-						preset.rmii_conf.pin_mdio,
-						preset.rmii_conf.pin_power,
-						preset.rmii_conf.pin_rmii_clock,
+						presetData.rmii_conf.phy_addr,
+						presetData.rmii_conf.pin_mcd,
+						presetData.rmii_conf.pin_mdio,
+						presetData.rmii_conf.pin_power,
+						presetData.rmii_conf.pin_rmii_clock,
 					];
 					miscConfig.ethSpiConfig = misc?.ethSpiConfig || [
 						20, -1, -1, -1, -1, -1, -1,
@@ -165,882 +102,395 @@
 	};
 
 	$effect(() => {
-		if (misc?.ethActivePreset !== 255) {
-			handleEthPresetChange();
+		if (misc?.ethActivePreset !== 255 && misc) {
+			handleEthPresetChange(misc.ethActivePreset);
 		}
 	});
 </script>
 
-<div class="flex flex-col py-6">
-	<h1 class="md:text-3xl text-3xl font-bold mb-4 self-start">
-		System Settings
-		<span
-			class="max-sm:before:transform-[translateX(-80%)!important] tooltip tooltip-bottom sm:tooltip-right tooltip-info sm:ml-2"
-			data-tip="Reboot required to apply!"
-		>
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				fill="none"
-				viewBox="0 0 24 24"
-				stroke-width="1.5"
-				stroke="currentColor"
-				class="size-6"
-			>
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z"
-				/>
-			</svg>
-		</span>
-	</h1>
+<div class="w-full py-6">
+	<!-- Header -->
+	<div class="mb-6">
+		<h1 class="text-2xl font-bold text-base-content flex items-center gap-2">
+			System Settings
+			<div class="tooltip tooltip-bottom tooltip-info" data-tip="Device will reboot to apply changes!">
+				<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-5 text-info">
+				<path stroke-linecap="round" stroke-linejoin="round" d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z" />
+				</svg>
+			</div>
+		</h1>
+		<p class="text-base-content/60">
+			Configure device settings, HomeKit options, and hardware pins.
+		</p>
+	</div>
+
 	{#if !misc && error}
 		<div class="text-center text-error">
 			<p>Error: {error}</p>
 		</div>
 	{:else if misc}
-		<div class="flex gap-2 justify-center mb-4">
-			<div class="flex flex-wrap justify-center gap-2 max-w-sm">
-				<button
-					class="btn btn-soft btn-warning"
-					aria-label="Reboot Device"
-					onclick={async () => {
-						if (
-							confirm(
-								"This will restart the device, please confirm.",
-							)
-						) {
-							await rebootDevice();
-						}
-					}}
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke-width="1.5"
-						stroke="currentColor"
-						class="size-6"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"
-						/>
-					</svg>
-					Reboot
-				</button>
-				<button
-					class="btn btn-soft btn-accent"
-					onclick={async () => {
-						if (
-							confirm(
-								"This will start the configuration AP, please confirm.\n\n Note that the WiFi connection will be dropped as it can only be in access point mode or station mode, not both.",
-							)
-						) {
-							await startConfigAP();
-						}
-					}}
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke-width="1.5"
-						stroke="currentColor"
-						class="size-6"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"
-						/>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
-						/>
-					</svg>
-					Start AP
-				</button>
-				<button
-					class="btn btn-soft btn-error"
-					onclick={async () => {
-						if (
-							confirm(
-								"This will reset the HomeKit pairings, please confirm.",
-							)
-						) {
-							await resetPairings();
-						}
-					}}
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke-width="1.5"
-						stroke="currentColor"
-						class="size-6"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"
-						/>
-					</svg>
-					Reset HomeKit
-				</button>
-				<button
-					class="btn btn-soft btn-error"
-					onclick={async () => {
-						if (
-							confirm(
-								"This will reset the WiFi credentials, please confirm.",
-							)
-						) {
-							await resetWifi();
-						}
-					}}
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke-width="1.5"
-						stroke="currentColor"
-						class="size-6"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"
-						/>
-					</svg>
-					Reset WiFi
-				</button>
-			</div>
-		</div>
-		<form onsubmit={saveMiscConfig} class="self-center">
+		<form onsubmit={saveMiscConfig} class="space-y-4 max-w-4xl">
+			<!-- Quick Actions -->
 			<div class="card bg-base-200 shadow-xl">
 				<div class="card-body p-4">
-					<div class="space-y-2">
-						<div class="collapse collapse-arrow bg-base-100">
-							<input type="checkbox" name="misc-collapse" />
-							<div class="collapse-title font-medium">
-								HomeKit
+					<h2 class="text-lg font-semibold mb-1">Quick Actions</h2>
+					<p class="text-sm text-base-content/60 mb-4">Device management and reset options</p>
+					<div class="flex flex-wrap gap-2">
+						<button
+							type="button"
+							class="btn btn-sm btn-outline"
+							onclick={async () => {
+								if (confirm("This will restart the device, please confirm.")) {
+									await rebootDevice();
+								}
+							}}
+						>
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+							</svg>
+							Reboot
+						</button>
+						<button
+							type="button"
+							class="btn btn-sm btn-outline"
+							onclick={async () => {
+								if (confirm("This will start the configuration AP, please confirm.\n\nNote that the WiFi connection will be dropped.")) {
+									await startConfigAP();
+								}
+							}}
+						>
+							<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="size-4">
+							<path fill-rule="evenodd" d="M14.188 7.063a8.75 8.75 0 0 0-12.374 0 .75.75 0 0 1-1.061-1.06c4.003-4.004 10.493-4.004 14.496 0a.75.75 0 1 1-1.061 1.06Zm-2.121 2.121a5.75 5.75 0 0 0-8.132 0 .75.75 0 0 1-1.06-1.06 7.25 7.25 0 0 1 10.252 0 .75.75 0 0 1-1.06 1.06Zm-2.122 2.122a2.75 2.75 0 0 0-3.889 0 .75.75 0 1 1-1.06-1.061 4.25 4.25 0 0 1 6.01 0 .75.75 0 0 1-1.06 1.06Zm-2.828 1.06a1.25 1.25 0 0 1 1.768 0 .75.75 0 0 1 0 1.06l-.355.355a.75.75 0 0 1-1.06 0l-.354-.354a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+							</svg>
+							Start AP
+						</button>
+						<button
+							type="button"
+							class="btn btn-sm btn-outline btn-error"
+							onclick={async () => {
+								if (confirm("This will reset the HomeKit pairings, please confirm.")) {
+									await resetPairings();
+								}
+							}}
+						>
+							<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+							</svg>
+							Reset HomeKit
+						</button>
+						<button
+							type="button"
+							class="btn btn-sm btn-outline btn-error"
+							onclick={async () => {
+								if (confirm("This will reset the WiFi credentials, please confirm.")) {
+									await resetWifi();
+								}
+							}}
+						>
+							<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="size-4">
+							<path fill-rule="evenodd" d="M14.188 7.063a8.75 8.75 0 0 0-12.374 0 .75.75 0 0 1-1.061-1.06c4.003-4.004 10.493-4.004 14.496 0a.75.75 0 1 1-1.061 1.06Zm-2.121 2.121a5.75 5.75 0 0 0-8.132 0 .75.75 0 0 1-1.06-1.06 7.25 7.25 0 0 1 10.252 0 .75.75 0 0 1-1.06 1.06Zm-2.122 2.122a2.75 2.75 0 0 0-3.889 0 .75.75 0 1 1-1.06-1.061 4.25 4.25 0 0 1 6.01 0 .75.75 0 0 1-1.06 1.06Zm-2.828 1.06a1.25 1.25 0 0 1 1.768 0 .75.75 0 0 1 0 1.06l-.355.355a.75.75 0 0 1-1.06 0l-.354-.354a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+							</svg>
+							Reset WiFi
+						</button>
+					</div>
+				</div>
+			</div>
+
+			<!-- Tabs -->
+			<div class="flex bg-base-300 p-1 rounded-xl gap-1">
+				<button
+					type="button"
+					class="flex-1 tab flex-col py-2 rounded-lg transition-colors {activeTab === 'homekit' ? 'bg-base-100 text-primary font-medium shadow-sm' : 'text-base-content/60 hover:bg-base-200'}"
+					onclick={() => activeTab = 'homekit'}
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+					</svg>
+					<span class="text-[10px] sm:text-xs mt-0.5">HomeKit</span>
+				</button>
+				<button
+					type="button"
+					class="flex-1 tab flex-col py-2 rounded-lg transition-colors {activeTab === 'hardware' ? 'bg-base-100 text-primary font-medium shadow-sm' : 'text-base-content/60 hover:bg-base-200'}"
+					onclick={() => activeTab = 'hardware'}
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+						<rect x="7" y="7" width="10" height="10" rx="1"/>
+						<path d="M9 7V5" stroke-linecap="round"/>
+						<path d="M12 7V5" stroke-linecap="round"/>
+						<path d="M15 7V5" stroke-linecap="round"/>
+						<path d="M9 19v-2" stroke-linecap="round"/>
+						<path d="M12 19v-2" stroke-linecap="round"/>
+						<path d="M15 19v-2" stroke-linecap="round"/>
+						<path d="M7 9H5" stroke-linecap="round"/>
+						<path d="M7 12H5" stroke-linecap="round"/>
+						<path d="M7 15H5" stroke-linecap="round"/>
+						<path d="M19 9h-2" stroke-linecap="round"/>
+						<path d="M19 12h-2" stroke-linecap="round"/>
+						<path d="M19 15h-2" stroke-linecap="round"/>
+					</svg>
+					<span class="text-[10px] sm:text-xs mt-0.5">Hardware</span>
+				</button>
+				<button
+					type="button"
+					class="flex-1 tab flex-col py-2 rounded-lg transition-colors {activeTab === 'auth' ? 'bg-base-100 text-primary font-medium shadow-sm' : 'text-base-content/60 hover:bg-base-200'}"
+					onclick={() => activeTab = 'auth'}
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+					</svg>
+					<span class="text-[10px] sm:text-xs mt-0.5">Auth</span>
+				</button>
+			</div>
+
+			<!-- Tab Content -->
+			<div class="card bg-base-200 shadow-xl">
+				<div class="card-body p-4">
+					{#if activeTab === 'homekit'}
+						<div class="space-y-4">
+							<div>
+								<h3 class="text-sm font-semibold">HomeKit Configuration</h3>
+								<p class="text-xs text-base-content/60">Configure HomeKit device settings and behavior.</p>
 							</div>
-							<div class="collapse-content flex flex-col gap-4">
+
+							<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 								<div class="form-control">
-									<!-- svelte-ignore a11y_label_has_associated_control -->
 									<label class="label">
-										<span class="label-text"
-											>Device Name</span
-										>
+										<span class="label-text text-xs">Device Name</span>
 									</label>
 									<input
 										type="text"
 										bind:value={miscConfig.deviceName}
-										placeholder="HK"
-										class="input input-bordered w-full"
+										placeholder="HomeKey-Lock"
+										class="input input-sm input-bordered w-full"
 										required
 									/>
 								</div>
 								<div class="form-control">
-									<!-- svelte-ignore a11y_label_has_associated_control -->
 									<label class="label">
-										<span class="label-text"
-											>Setup Code</span
-										>
+										<span class="label-text text-xs">Setup Code</span>
 									</label>
 									<input
 										type="text"
 										bind:value={miscConfig.setupCode}
-										placeholder="46637726"
+										placeholder="111-11-111"
 										maxlength="8"
-										class="input input-bordered w-full"
+										class="input input-sm input-bordered w-full"
 										required
 										inputmode="numeric"
 									/>
 								</div>
-								<div class="form-control">
-									<label class="label cursor-pointer">
-										<span class="label-text"
-											>Always Lock on HomeKey</span
-										>
-										<input
-											type="checkbox"
-											bind:checked={
-												miscConfig.lockAlwaysLock
-											}
-											class="toggle toggle-primary"
-										/>
-									</label>
-								</div>
-								<div class="form-control">
-									<label class="label cursor-pointer">
-										<span class="label-text"
-											>Always Unlock on HomeKey</span
-										>
-										<input
-											type="checkbox"
-											bind:checked={
-												miscConfig.lockAlwaysUnlock
-											}
-											class="toggle toggle-primary"
-										/>
-									</label>
-								</div>
-								<div class="form-control">
-									<label class="label cursor-pointer">
-										<span class="label-text"
-											>SmartLock battery reporting</span
-										>
-										<input
-											type="checkbox"
-											bind:checked={
-												miscConfig.proxBatEnabled
-											}
-											class="toggle toggle-primary"
-										/>
-									</label>
-								</div>
-								<div class="form-control">
-									<!-- svelte-ignore a11y_label_has_associated_control -->
-									<label class="label">
-										<span class="label-text"
-											>Battery low status Threshold</span
-										>
-									</label>
-									<input
-										type="number"
-										bind:value={
-											miscConfig.btrLowStatusThreshold
-										}
-										placeholder="10"
-										min="0"
-										max="100"
-										class="input input-bordered w-full"
-									/>
-								</div>
 							</div>
-						</div>
 
-						<div class="collapse collapse-arrow bg-base-100">
-							<input type="checkbox" name="misc-collapse" />
-							<div class="collapse-title font-medium">
-								HomeKey
-							</div>
-							<div class="collapse-content flex flex-col gap-4">
-								<div class="divider">HomeKey Card Finish</div>
-								<div class="flex flex-col items-center">
-									<img
-										src={hkFinishImage()}
-										alt="HomeKey Finish"
-										class="w-36 h-auto mb-2"
-									/>
-									<div class="grid grid-cols-2 gap-2">
-										{#each hkFinishColors as color}
-											<label class="label cursor-pointer">
-												<span class="label-text"
-													>{color.name}</span
-												>
-												<input
-													type="radio"
-													name="hk_key_color"
-													bind:group={
-														miscConfig.hk_key_color
-													}
-													value={color.value}
-													class="radio radio-primary"
-												/>
-											</label>
-										{/each}
+							<!-- Toggles -->
+							<div class="space-y-2">
+								<div class="flex items-center justify-between py-2 px-3 bg-base-100 rounded-lg">
+									<div>
+										<p class="text-sm font-medium">Always Lock on HomeKey</p>
+										<p class="text-xs text-base-content/60">Lock the device when HomeKey is tapped regardless of current state</p>
 									</div>
+									<input
+										type="checkbox"
+										bind:checked={miscConfig.lockAlwaysLock}
+										class="toggle toggle-primary toggle-sm"
+									/>
 								</div>
-								<div class="divider">Performance</div>
-								<div class="form-control">
-									<label class="label cursor-pointer">
-										<span class="label-text"
-											>Auth Precompute Cache</span
-										>
-										<input
-											type="checkbox"
-											bind:checked={
-												miscConfig.hkAuthPrecomputeEnabled
-											}
-											class="toggle toggle-primary"
-										/>
-									</label>
+								<div class="flex items-center justify-between py-2 px-3 bg-base-100 rounded-lg">
+									<div>
+										<p class="text-sm font-medium">Always Unlock on HomeKey</p>
+										<p class="text-xs text-base-content/60">Unlock the device when HomeKey is tapped regardless of current state</p>
+									</div>
+									<input
+										type="checkbox"
+										bind:checked={miscConfig.lockAlwaysUnlock}
+										class="toggle toggle-primary toggle-sm"
+									/>
+								</div>
+								<div class="flex items-center justify-between py-2 px-3 bg-base-100 rounded-lg">
+									<div>
+										<p class="text-sm font-medium">SmartLock Battery Reporting</p>
+										<p class="text-xs text-base-content/60">Enable battery level reporting to HomeKit</p>
+									</div>
+									<input
+										type="checkbox"
+										bind:checked={miscConfig.proxBatEnabled}
+										class="toggle toggle-primary toggle-sm"
+									/>
+								</div>
+								<div class="flex items-center justify-between py-2 px-3 bg-base-100 rounded-lg">
+									<div>
+										<p class="text-sm font-medium">Auth Precompute Cache</p>
+										<p class="text-xs text-base-content/60">Enable faster HomeKey authentication (higher CPU/RAM usage)</p>
+									</div>
+									<input
+										type="checkbox"
+										bind:checked={miscConfig.hkAuthPrecomputeEnabled}
+										class="toggle toggle-primary toggle-sm"
+									/>
 								</div>
 							</div>
-						</div>
-
-						<div class="collapse collapse-arrow bg-base-100">
-							<input type="checkbox" name="misc-collapse" />
-							<div class="collapse-title font-medium">PN532</div>
-							<div class="collapse-content flex flex-col gap-4">
-                {#if miscConfig.ethernetEnabled}
-								<SpiEthernetNote
-									spiNumBuses={ethConfig.numSpiBuses}
-                  selectedBus={miscConfig.ethSpiBus}
-								/>
-                {/if}
-								<div class="form-control">
-									<!-- svelte-ignore a11y_label_has_associated_control -->
-									<label class="label">
-										<span class="label-text">Preset</span>
-									</label>
-									<select
-										bind:value={miscConfig.nfcPinsPreset}
-										onchange={handleNfcPresetChange}
-										class="select select-bordered w-full"
+							<!-- Card Finish -->
+							<div class="p-2">
+								<p class="text-sm font-medium mb-2">HomeKey Card Finish</p>
+								<div class="grid grid-cols-4 gap-2">
+									<button
+										type="button"
+										class="btn btn-sm border-1 {miscConfig.hk_key_color === 0 ? 'border-primary ring-1 ring-primary' : 'border-transparent'}"
+										style="background-color: #ddd5cc; color: #3E2723;"
+										onclick={() => miscConfig.hk_key_color = 0}
 									>
-										{#each nfcPresetsList.presets as preset, i}
-											<option value={i}
-												>{preset.name}</option
-											>
-										{/each}
-										<option value={255}>Custom</option>
-									</select>
-								</div>
-								<div class="form-control">
-									<!-- svelte-ignore a11y_label_has_associated_control -->
-									<label class="label">
-										<span class="label-text">SS Pin</span>
-									</label>
-									<input
-										type="number"
-										disabled={miscConfig.nfcPinsPreset !==
-											255}
-										bind:value={miscConfig.nfcGpioPins![0]}
-										placeholder="5"
-										min="0"
-										max="255"
-										class="input input-bordered w-full"
-									/>
-								</div>
-								<div class="form-control">
-									<!-- svelte-ignore a11y_label_has_associated_control -->
-									<label class="label">
-										<span class="label-text">SCK Pin</span>
-									</label>
-									<input
-										type="number"
-										disabled={miscConfig.nfcPinsPreset !==
-											255}
-										bind:value={miscConfig.nfcGpioPins![1]}
-										placeholder="18"
-										min="0"
-										max="255"
-										class="input input-bordered w-full"
-									/>
-								</div>
-								<div class="form-control">
-									<!-- svelte-ignore a11y_label_has_associated_control -->
-									<label class="label">
-										<span class="label-text">MISO Pin</span>
-									</label>
-									<input
-										type="number"
-										disabled={miscConfig.nfcPinsPreset !==
-											255}
-										bind:value={miscConfig.nfcGpioPins![2]}
-										placeholder="19"
-										min="0"
-										max="255"
-										class="input input-bordered w-full"
-									/>
-								</div>
-								<div class="form-control">
-									<!-- svelte-ignore a11y_label_has_associated_control -->
-									<label class="label">
-										<span class="label-text">MOSI Pin</span>
-									</label>
-									<input
-										type="number"
-										disabled={miscConfig.nfcPinsPreset !==
-											255}
-										bind:value={miscConfig.nfcGpioPins![3]}
-										placeholder="23"
-										min="0"
-										max="255"
-										class="input input-bordered w-full"
-									/>
+										Tan
+									</button>
+									<button
+										type="button"
+										class="btn btn-sm border-1 {miscConfig.hk_key_color === 1 ? 'border-primary ring-1 ring-primary' : 'border-transparent'}"
+										style="background-color: #e6d1a8; color: #3E2723;"
+										onclick={() => miscConfig.hk_key_color = 1}
+									>
+										Gold
+									</button>
+									<button
+										type="button"
+										class="btn btn-sm border-1 {miscConfig.hk_key_color === 2 ? 'border-primary ring-1 ring-primary' : 'border-transparent'}"
+										style="background-color: #cecece; color: #212121;"
+										onclick={() => miscConfig.hk_key_color = 2}
+									>
+										Silver
+									</button>
+									<button
+										type="button"
+										class="btn btn-sm border-1 {miscConfig.hk_key_color === 3 ? 'border-primary ring-1 ring-primary' : 'border-transparent'}"
+										style="background-color: #2a2a2a; color: #FFFFFF;"
+										onclick={() => miscConfig.hk_key_color = 3}
+									>
+										Black
+									</button>
 								</div>
 							</div>
 						</div>
+					{/if}
 
-						<div class="collapse collapse-arrow bg-base-100">
-							<input type="checkbox" name="misc-collapse" />
-							<div class="collapse-title font-medium">
-								HomeSpan
+					{#if activeTab === 'hardware'}
+						<div class="space-y-4">
+							<div>
+								<h3 class="text-sm font-semibold">Hardware Configuration</h3>
+								<p class="text-xs text-base-content/60">Configure GPIO pins for PN532 NFC reader and optional Ethernet connectivity.</p>
 							</div>
-							<div class="collapse-content flex flex-col gap-4">
-								<a
-									href="https://github.com/HomeSpan/HomeSpan/blob/master/docs/GettingStarted.md#adding-a-control-button-and-status-led-optional"
-									class="link link-primary block"
-									target="_blank">HomeSpan Documentation</a
-								>
-								<div class="form-control">
-									<!-- svelte-ignore a11y_label_has_associated_control -->
+
+							<HardwareConfig
+								nfcGpioPins={miscConfig.nfcGpioPins}
+								nfcPinsPreset={miscConfig.nfcPinsPreset}
+								nfcPresets={nfcPresetsList}
+								ethernetEnabled={miscConfig.ethernetEnabled}
+								ethActivePreset={miscConfig.ethActivePreset}
+								ethPhyType={miscConfig.ethPhyType}
+								ethSpiBus={miscConfig.ethSpiBus}
+								ethRmiiConfig={miscConfig.ethRmiiConfig}
+								ethSpiConfig={miscConfig.ethSpiConfig}
+								ethConfig={ethConfig}
+								nfcConnected={nfcConnected}
+								onNfcPresetChange={handleNfcPresetChange}
+								onEthPresetChange={handleEthPresetChange}
+								onNfcPinsChange={(pins) => miscConfig.nfcGpioPins = pins}
+								onEthernetToggle={(enabled) => miscConfig.ethernetEnabled = enabled}
+								onEthPhyTypeChange={(phyType) => miscConfig.ethPhyType = phyType}
+								onEthSpiBusChange={(bus) => miscConfig.ethSpiBus = bus}
+								onEthRmiiConfigChange={(cfg) => miscConfig.ethRmiiConfig = cfg}
+								onEthSpiConfigChange={(cfg) => miscConfig.ethSpiConfig = cfg}
+							/>
+
+							<!-- HomeSpan -->
+							<div class="py-2 px-3 bg-base-100 rounded-lg">
+								<p class="text-sm font-medium mb-2">HomeSpan - <a class="text-xs text-base-content/60 underline mb-2" href="https://github.com/HomeSpan/HomeSpan/blob/master/docs/UserGuide.md#device-configuration-mode">User Guide</a></p>
+								<div class="form-control mb-2">
 									<label class="label">
-										<span class="label-text"
-											>OTA Password</span
-										>
+										<span class="label-text text-xs">OTA Password</span>
 									</label>
 									<input
 										type="password"
 										bind:value={miscConfig.otaPasswd}
-										placeholder="homespan-ota"
-										class="input input-bordered w-full"
-										required
+										class="input input-sm input-bordered w-full"
 									/>
 								</div>
-								<div class="form-control">
-									<!-- svelte-ignore a11y_label_has_associated_control -->
-									<label class="label">
-										<span class="label-text"
-											>Control GPIO Pin</span
-										>
-									</label>
-									<input
-										type="number"
-										bind:value={miscConfig.controlPin}
-										placeholder="26"
-										class="input input-bordered w-full"
-									/>
-								</div>
-								<div class="form-control">
-									<!-- svelte-ignore a11y_label_has_associated_control -->
-									<label class="label">
-										<span class="label-text"
-											>Status LED GPIO Pin</span
-										>
-									</label>
-									<input
-										type="number"
-										bind:value={miscConfig.hsStatusPin}
-										placeholder="2"
-										class="input input-bordered w-full"
-									/>
-								</div>
-							</div>
-						</div>
-
-						<div class="collapse collapse-arrow bg-base-100">
-							<input type="checkbox" name="misc-collapse" />
-							<div class="collapse-title font-medium">
-								Ethernet
-							</div>
-							<div class="collapse-content flex flex-col gap-4">
-								<div class="form-control">
-									<label class="label cursor-pointer">
-										<span class="label-text"
-											>Ethernet Enabled</span
-										>
+								<div class="grid grid-cols-2 gap-2">
+									<div class="form-control">
+										<label class="label">
+											<span class="label-text text-xs">Control GPIO Pin</span>
+										</label>
 										<input
-											type="checkbox"
-											bind:checked={
-												miscConfig.ethernetEnabled
-											}
-											class="toggle toggle-primary"
+											type="number"
+											bind:value={miscConfig.controlPin}
+											class="input input-sm input-bordered w-full"
 										/>
-									</label>
-								</div>
-
-								{#if miscConfig.ethernetEnabled}
-									<div class="flex flex-col gap-4">
-										<div class="form-control">
-											<!-- svelte-ignore a11y_label_has_associated_control -->
-											<label class="label">
-												<span class="label-text"
-													>Active Ethernet Preset</span
-												>
-											</label>
-											<select
-												bind:value={
-													miscConfig.ethActivePreset
-												}
-												onchange={handleEthPresetChange}
-												class="select select-bordered w-full"
-											>
-												{#each ethConfig!.boardPresets || [] as preset, i}
-													<option value={i}
-														>{preset.name}</option
-													>
-												{/each}
-												<option value={255}
-													>Custom</option
-												>
-											</select>
-										</div>
-
-										<div class="form-control">
-											<!-- svelte-ignore a11y_label_has_associated_control -->
-											<label class="label">
-												<span class="label-text"
-													>Ethernet PHY Type</span
-												>
-											</label>
-											<select
-												bind:value={
-													miscConfig.ethPhyType
-												}
-												disabled={miscConfig.ethActivePreset !==
-													255}
-												class="select select-bordered w-full"
-											>
-												{#each ethConfig!.supportedChips as chip}
-													<option
-														value={chip.phy_type}
-														>{chip.name}</option
-													>
-												{/each}
-											</select>
-										</div>
-
-										{#if currentEthChip()?.emac}
-											<div class="flex flex-col gap-4">
-												<h3 class="text-lg font-bold">
-													RMII Configuration
-												</h3>
-												<div
-													class="flex flex-col gap-4"
-												>
-													<div class="form-control">
-														<!-- svelte-ignore a11y_label_has_associated_control -->
-														<label class="label">
-															<span
-																class="label-text"
-																>PHY Address</span
-															>
-														</label>
-														<input
-															type="number"
-															bind:value={
-																miscConfig
-																	.ethRmiiConfig![0]
-															}
-															disabled={miscConfig.ethActivePreset !==
-																255}
-															class="input input-bordered w-full"
-														/>
-													</div>
-													<div class="form-control">
-														<!-- svelte-ignore a11y_label_has_associated_control -->
-														<label class="label">
-															<span
-																class="label-text"
-																>Pin MCD</span
-															>
-														</label>
-														<input
-															type="number"
-															bind:value={
-																miscConfig
-																	.ethRmiiConfig![1]
-															}
-															disabled={miscConfig.ethActivePreset !==
-																255}
-															class="input input-bordered w-full"
-														/>
-													</div>
-													<div class="form-control">
-														<!-- svelte-ignore a11y_label_has_associated_control -->
-														<label class="label">
-															<span
-																class="label-text"
-																>Pin MDIO</span
-															>
-														</label>
-														<input
-															type="number"
-															bind:value={
-																miscConfig
-																	.ethRmiiConfig![2]
-															}
-															disabled={miscConfig.ethActivePreset !==
-																255}
-															class="input input-bordered w-full"
-														/>
-													</div>
-													<div class="form-control">
-														<!-- svelte-ignore a11y_label_has_associated_control -->
-														<label class="label">
-															<span
-																class="label-text"
-																>Pin Power</span
-															>
-														</label>
-														<input
-															type="number"
-															bind:value={
-																miscConfig
-																	.ethRmiiConfig![3]
-															}
-															disabled={miscConfig.ethActivePreset !==
-																255}
-															class="input input-bordered w-full"
-														/>
-													</div>
-													<div class="form-control">
-														<!-- svelte-ignore a11y_label_has_associated_control -->
-														<label class="label">
-															<span
-																class="label-text"
-																>Pin RMII Clock</span
-															>
-														</label>
-														<select
-															bind:value={
-																miscConfig
-																	.ethRmiiConfig![4]
-															}
-															disabled={miscConfig.ethActivePreset !==
-																255}
-															class="select select-bordered w-full"
-														>
-															<option value={0}
-																>GPIO0_IN</option
-															>
-															<option value={1}
-																>GPIO0_OUT</option
-															>
-															<option value={2}
-																>GPIO16_OUT</option
-															>
-															<option value={3}
-																>GPIO17_OUT</option
-															>
-														</select>
-													</div>
-												</div>
-											</div>
-										{:else if !currentEthChip()?.emac}
-											<div class="flex flex-col gap-4">
-												<h3 class="text-lg font-bold">
-													SPI Configuration
-												</h3>
-												<SpiEthernetNote
-													spiNumBuses={ethConfig.numSpiBuses}
-                          selectedBus={miscConfig.ethSpiBus}
-												/>
-												<div
-													class="flex flex-col gap-4"
-												>
-													<div class="form-control">
-														<!-- svelte-ignore a11y_label_has_associated_control -->
-														<label class="label">
-															<span
-																class="label-text"
-																>SPI Freq MHz</span
-															>
-														</label>
-														<input
-															type="number"
-															bind:value={
-																miscConfig
-																	.ethSpiConfig![0]
-															}
-															disabled={miscConfig.ethActivePreset !==
-																255}
-															class="input input-bordered w-full"
-														/>
-													</div>
-													<div class="form-control">
-														<!-- svelte-ignore a11y_label_has_associated_control -->
-														<label class="label">
-															<span class="label-text">SPI Bus</span>
-														</label>
-														<select
-																bind:value={miscConfig.ethSpiBus}
-																disabled={miscConfig.ethActivePreset !== 255}
-																class="select select-bordered w-full">
-																<option value={1}>SPI2</option>
-															{#if ethConfig.numSpiBuses === 2}
-																<option value={2}>SPI3</option>
-															{/if}
-														</select>
-													</div>
-													<div class="form-control">
-														<!-- svelte-ignore a11y_label_has_associated_control -->
-														<label class="label">
-															<span
-																class="label-text"
-																>Pin CS</span
-															>
-														</label>
-														<input
-															type="number"
-															bind:value={
-																miscConfig
-																	.ethSpiConfig![1]
-															}
-															disabled={miscConfig.ethActivePreset !==
-																255}
-															class="input input-bordered w-full"
-														/>
-													</div>
-													<div class="form-control">
-														<!-- svelte-ignore a11y_label_has_associated_control -->
-														<label class="label">
-															<span
-																class="label-text"
-																>Pin IRQ</span
-															>
-														</label>
-														<input
-															type="number"
-															bind:value={
-																miscConfig
-																	.ethSpiConfig![2]
-															}
-															disabled={miscConfig.ethActivePreset !==
-																255}
-															class="input input-bordered w-full"
-														/>
-													</div>
-													<div class="form-control">
-														<!-- svelte-ignore a11y_label_has_associated_control -->
-														<label class="label">
-															<span
-																class="label-text"
-																>Pin RST</span
-															>
-														</label>
-														<input
-															type="number"
-															bind:value={
-																miscConfig
-																	.ethSpiConfig![3]
-															}
-															disabled={miscConfig.ethActivePreset !==
-																255}
-															class="input input-bordered w-full"
-														/>
-													</div>
-													<div class="form-control">
-														<!-- svelte-ignore a11y_label_has_associated_control -->
-														<label class="label">
-															<span
-																class="label-text"
-																>Pin SCK</span
-															>
-														</label>
-														<input
-															type="number"
-															bind:value={
-																miscConfig
-																	.ethSpiConfig![4]
-															}
-															disabled={miscConfig.ethActivePreset !==
-																255}
-															class="input input-bordered w-full"
-														/>
-													</div>
-													<div class="form-control">
-														<!-- svelte-ignore a11y_label_has_associated_control -->
-														<label class="label">
-															<span
-																class="label-text"
-																>Pin MISO</span
-															>
-														</label>
-														<input
-															type="number"
-															bind:value={
-																miscConfig
-																	.ethSpiConfig![5]
-															}
-															disabled={miscConfig.ethActivePreset !==
-																255}
-															class="input input-bordered w-full"
-														/>
-													</div>
-													<div class="form-control">
-														<!-- svelte-ignore a11y_label_has_associated_control -->
-														<label class="label">
-															<span
-																class="label-text"
-																>Pin MOSI</span
-															>
-														</label>
-														<input
-															type="number"
-															bind:value={
-																miscConfig
-																	.ethSpiConfig![6]
-															}
-															disabled={miscConfig.ethActivePreset !==
-																255}
-															class="input input-bordered w-full"
-														/>
-													</div>
-												</div>
-											</div>
-										{/if}
 									</div>
-								{/if}
-							</div>
-						</div>
-
-						<div class="collapse collapse-arrow bg-base-100">
-							<input type="checkbox" name="misc-collapse" />
-							<div class="collapse-title font-medium">WebUI</div>
-							<div class="collapse-content">
-								<div class="form-control my-4">
-									<label class="label cursor-pointer">
-										<span class="label-text"
-											>Authentication Enabled</span
-										>
+									<div class="form-control">
+										<label class="label">
+											<span class="label-text text-xs">Status LED GPIO Pin</span>
+										</label>
 										<input
-											type="checkbox"
-											bind:checked={
-												miscConfig.webAuthEnabled
-											}
-											class="toggle toggle-primary"
+											type="number"
+											bind:value={miscConfig.hsStatusPin}
+											class="input input-sm input-bordered w-full"
 										/>
-									</label>
-								</div>
-								<div class="form-control mb-4">
-									<!-- svelte-ignore a11y_label_has_associated_control -->
-									<label class="label">
-										<span class="label-text">Username</span>
-									</label>
-									<input
-										type="text"
-										bind:value={miscConfig.webUsername}
-										placeholder="admin"
-										class="input input-bordered w-full"
-										required
-									/>
-								</div>
-								<div class="form-control mb-2">
-									<!-- svelte-ignore a11y_label_has_associated_control -->
-									<label class="label">
-										<span class="label-text">Password</span>
-									</label>
-									<input
-										type="password"
-										bind:value={miscConfig.webPassword}
-										placeholder="password"
-										class="input input-bordered w-full"
-										required
-									/>
+									</div>
 								</div>
 							</div>
 						</div>
-					</div>
+					{/if}
+
+					{#if activeTab === 'auth'}
+						<div class="space-y-4">
+							<div>
+								<h3 class="text-sm font-semibold">Web Authentication</h3>
+								<p class="text-xs text-base-content/60">Configure web interface authentication settings.</p>
+							</div>
+
+							<div class="flex items-center justify-between py-2 px-3 bg-base-100 rounded-lg">
+								<div>
+									<p class="text-sm font-medium">Enable Web Authentication</p>
+									<p class="text-xs text-base-content/60">Require login to access the web interface</p>
+								</div>
+								<input
+									type="checkbox"
+									bind:checked={miscConfig.webAuthEnabled}
+									class="toggle toggle-primary toggle-sm"
+								/>
+							</div>
+
+							{#if miscConfig.webAuthEnabled}
+								<div class="grid grid-cols-2 gap-4">
+									<div class="form-control">
+										<label class="label">
+											<span class="label-text text-xs">Username</span>
+										</label>
+										<input
+											type="text"
+											bind:value={miscConfig.webUsername}
+											placeholder="admin"
+											class="input input-sm input-bordered w-full"
+										/>
+									</div>
+									<div class="form-control">
+										<label class="label">
+											<span class="label-text text-xs">Password</span>
+										</label>
+										<input
+											type="password"
+											bind:value={miscConfig.webPassword}
+											placeholder="••••••••"
+											class="input input-sm input-bordered w-full"
+										/>
+									</div>
+								</div>
+							{/if}
+						</div>
+					{/if}
 				</div>
 			</div>
-			<div class="card-actions justify-end mt-6 px-2">
-				<button type="submit" class="btn btn-primary"
-					>Save & Apply</button
-				>
-				<button type="button" class="btn btn-ghost" onclick={resetForm}
-					>Reset Form</button
-				>
+
+			<!-- Actions -->
+			<div class="flex gap-2">
+				<button type="submit" class="btn btn-primary">Save & Apply changes</button>
+				<button type="button" class="btn btn-outline" onclick={resetForm}>Reset</button>
 			</div>
 		</form>
 	{/if}

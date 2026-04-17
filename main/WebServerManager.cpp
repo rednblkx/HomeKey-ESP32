@@ -3,6 +3,7 @@
 // ============================================================================
 
 #include "esp_ota_ops.h"
+#include "event_bus.hpp"
 #include "fmt/ranges.h"
 #include "WebServerManager.hpp"
 #include "ConfigManager.hpp"
@@ -17,6 +18,7 @@
 #include "esp_http_server.h"
 #include "esp_log.h"
 #include "esp_log_level.h"
+#include "esp_wifi.h"
 #include "eth_structs.hpp"
 #include "eventStructs.hpp"
 #include "freertos/idf_additions.h"
@@ -94,6 +96,14 @@ WebServerManager::WebServerManager(ConfigManager &configManager,
 WebServerManager::~WebServerManager() {
   ESP_LOGI(TAG, "WebServerManager destructor called");
 
+  if (m_nfc_status_subscriber.is_valid()) {
+    event_bus.unsubscribe(m_nfc_status_subscriber);
+  }
+
+  if (m_mqtt_status_subscriber.is_valid()) {
+    event_bus.unsubscribe(m_mqtt_status_subscriber);
+  }
+
   if (m_server) {
     httpd_stop(m_server);
     m_server = nullptr;
@@ -131,7 +141,7 @@ void WebServerManager::begin() {
   }
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   config.server_port = 80;
-  config.max_uri_handlers = 20;
+  config.max_uri_handlers = 22;
   config.max_open_sockets = 6;
   config.stack_size = 8192;
   config.uri_match_fn = httpd_uri_match_wildcard;
@@ -159,7 +169,16 @@ void WebServerManager::begin() {
     return;
   }
 
-  setupRoutes();
+  wifi_mode_t currentMode;
+  esp_err_t wifiErr = esp_wifi_get_mode(&currentMode);
+  bool isApMode = (wifiErr == ESP_OK && (currentMode == WIFI_MODE_AP || currentMode == WIFI_MODE_APSTA));
+
+  if (isApMode) {
+    ESP_LOGI(TAG, "AP mode detected - setting up captive portal routes only");
+    setupCaptivePortalRoutes();
+  } else {
+    setupRoutes();
+  }
 
   esp_timer_create_args_t timerArgs = {
       .callback = &statusTimerCallback, .arg = this, .name = "statusTimer"};
@@ -168,12 +187,69 @@ void WebServerManager::begin() {
   }
 
   ESP_LOGI(TAG, "Web server initialization complete");
+
+  m_nfc_status_subscriber = event_bus.subscribe(event_bus.get_topic(NFC_STATUS_TOPIC).value_or(EventBus::INVALID_TOPIC),
+    [](const EventBus::Event& event, void* context) {
+      if (event.payload_size == 0 || event.payload == nullptr) return;
+      auto* instance = static_cast<WebServerManager*>(context);
+      std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
+      std::error_code ec;
+      EventNfcStatus status = alpaca::deserialize<EventNfcStatus>(payload, ec);
+      if (!ec) {
+        instance->m_nfc_connected.store(status.connected, std::memory_order_relaxed);
+      }
+    }, this);
+
+  m_mqtt_status_subscriber = event_bus.subscribe(event_bus.get_topic(MQTT_STATUS_TOPIC).value_or(EventBus::INVALID_TOPIC),
+    [](const EventBus::Event& event, void* context) {
+      if (event.payload_size == 0 || event.payload == nullptr) return;
+      auto* instance = static_cast<WebServerManager*>(context);
+      std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
+      std::error_code ec;
+      EventMqttStatus status = alpaca::deserialize<EventMqttStatus>(payload, ec);
+      if (!ec) {
+        instance->m_mqtt_connected.store(status.connected, std::memory_order_relaxed);
+        instance->m_mqtt_error_code.store(static_cast<uint8_t>(status.errorCode), std::memory_order_relaxed);
+        instance->m_mqtt_error_message = status.errorMessage;
+      }
+    }, this);
+
+  m_isInitialized = true;
 }
 
-void WebServerManager::stop() {
-  ESP_LOGI(TAG, "Stopping WebServerManager");
-  httpd_stop(m_server);
-  m_server = nullptr;
+/**
+ * @brief Stops the web server and cleans up all resources.
+ *
+ * Performs a complete shutdown of the web server by stopping the HTTP server,
+ * deleting the WebSocket task and queue, and stopping/deleting the status timer.
+ */
+void WebServerManager::end() {
+  ESP_LOGI(TAG, "Ending WebServerManager...");
+
+  if(!m_isInitialized) return;
+
+  if (m_server) {
+    httpd_stop(m_server);
+    m_server = nullptr;
+  }
+
+  if (m_wsTaskHandle) {
+    vTaskDelete(m_wsTaskHandle);
+    m_wsTaskHandle = nullptr;
+  }
+
+  if (m_wsQueue) {
+    vQueueDelete(m_wsQueue);
+    m_wsQueue = nullptr;
+  }
+
+  if (m_statusTimer) {
+    esp_timer_stop(m_statusTimer);
+    esp_timer_delete(m_statusTimer);
+    m_statusTimer = nullptr;
+  }
+
+  ESP_LOGI(TAG, "WebServerManager ended");
 }
 
 bool WebServerManager::basicAuth(httpd_req_t* req){
@@ -217,7 +293,7 @@ void WebServerManager::setupRoutes() {
   RouteConfig routes[] = {
       // Static files
       {"/static/*", HTTP_GET, handleStaticFiles, this},
-      {"/_app/*", HTTP_GET, handleStaticFiles, this},
+      {"/assets/*", HTTP_GET, handleStaticFiles, this},
 
       // Configuration endpoints
       {"/config", HTTP_GET, handleGetConfig, this},
@@ -243,7 +319,7 @@ void WebServerManager::setupRoutes() {
       {"/certificates/status", HTTP_GET, handleCertificateStatus, this},
       {"/certificates/*", HTTP_DELETE, handleCertificateDelete, this},
 
-      // Catch-all
+      // Catch-all (must be last)
       {"/*", HTTP_GET, handleRootOrHash, this}};
 
   for (auto &r : routes) {
@@ -254,8 +330,60 @@ void WebServerManager::setupRoutes() {
 #ifdef CONFIG_HTTPD_WS_SUPPORT
     uri.is_websocket = r.is_ws;
 #endif
-    httpd_register_uri_handler(m_server, &uri);
+    esp_err_t err = httpd_register_uri_handler(m_server, &uri);
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "Failed to register URI %s: %s", r.uri, esp_err_to_name(err));
+    }
   }
+  ESP_LOGI(TAG, "Routes setup complete");
+}
+
+// ============================================================================
+// Captive Portal Route Setup
+// ============================================================================
+
+void WebServerManager::setupCaptivePortalRoutes() {
+  ESP_LOGI(TAG, "Setting up captive portal routes...");
+
+  struct RouteConfig {
+    const char *uri;
+    httpd_method_t method;
+    esp_err_t (*handler)(httpd_req_t *);
+    void *ctx;
+  };
+
+  RouteConfig routes[] = {
+      // Captive portal API endpoints
+      {"/captive_portal_config", HTTP_GET, handleGetCaptivePortalConfig, this},
+      {"/captive_portal_config", HTTP_POST, handleSaveCaptivePortalConfig, this},
+      {"/nfc_get_presets", HTTP_GET, handleGetNfcPresets, this},
+      {"/eth_get_config", HTTP_GET, handleGetEthConfig, this},
+      {"/wifi_scan", HTTP_GET, handleWifiScan, this},
+      {"/reboot_device", HTTP_POST, handleReboot, this},
+      // Static files needed for the captive portal UI
+      {"/static/*", HTTP_GET, handleStaticFiles, this},
+      {"/assets/*", HTTP_GET, handleStaticFiles, this},
+
+      // The captive portal page itself
+      {"/captive-portal", HTTP_GET, handleRootOrHash, this},
+
+      // Catch-all redirect to captive portal (must be last)
+      {"/*", HTTP_GET, handleCaptivePortal, this}};
+
+  for (auto &r : routes) {
+    httpd_uri_t uri = {.uri = r.uri,
+                       .method = r.method,
+                       .handler = r.handler,
+                       .user_ctx = r.ctx,
+                       .is_websocket = false,
+                       .handle_ws_control_frames = false,
+                       .supported_subprotocol = nullptr};
+    esp_err_t err = httpd_register_uri_handler(m_server, &uri);
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "Failed to register captive portal URI %s: %s", r.uri, esp_err_to_name(err));
+    }
+  }
+  ESP_LOGI(TAG, "Captive portal routes setup complete");
 }
 
 // ============================================================================
@@ -266,6 +394,15 @@ WebServerManager *WebServerManager::getInstance(httpd_req_t *req) {
   return static_cast<WebServerManager *>(req->user_ctx);
 }
 
+esp_err_t WebServerManager::sendAuthFailure(httpd_req_t *req) {
+  ESP_LOGE(TAG, "HTTP Authorization failed!");
+  httpd_resp_set_type(req, "application/json");
+  httpd_resp_set_hdr(req, "Connection", "keep-alive");
+  httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
+  httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
+  return ESP_FAIL;
+}
+
 // ============================================================================
 // Static File Handler
 // ============================================================================
@@ -273,19 +410,16 @@ WebServerManager *WebServerManager::getInstance(httpd_req_t *req) {
 esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
   if(!instance->basicAuth(req)){
-    ESP_LOGE(TAG, "HTTP Authorization failed!");
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Connection", "keep-alive");
-    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
-    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
-    return ESP_FAIL;
+    return sendAuthFailure(req);
   }
-  const char *filename = strrchr(req->uri, '/') + 1;
-  if (strlen(filename) == 0)
-    filename = "/index.html";
-
+  const char *last_slash = strrchr(req->uri, '/');
+  const char *filename = last_slash ? last_slash + 1 : req->uri;
   std::string filepath = req->uri;
   bool use_compressed = false;
+  if (strlen(filename) == 0){
+    filename = "/index.html.gz";
+    use_compressed = true;
+  }
 
   // Check for gzip compressed version
   if (str_ends_with(filename, ".js") || str_ends_with(filename, ".css")) {
@@ -373,12 +507,7 @@ esp_err_t WebServerManager::handleRootOrHash(httpd_req_t *req) {
   size_t sessionIdLen = sizeof(sessionId);
   esp_err_t err = httpd_req_get_cookie_val(req, "sessionId", sessionId, &sessionIdLen);
   if(!instance->basicAuth(req)){
-    ESP_LOGE(TAG, "HTTP Authorization failed!");
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Connection", "keep-alive");
-    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
-    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
-    return ESP_FAIL;
+    return sendAuthFailure(req);
   }
   std::string sessionCookie;
   if(instance->m_sessionId.compare(sessionId) != 0 || err != ESP_OK){
@@ -386,13 +515,14 @@ esp_err_t WebServerManager::handleRootOrHash(httpd_req_t *req) {
     httpd_resp_set_hdr(req, "Set-Cookie", sessionCookie.c_str());
   }
 
-  File file = LittleFS.open("/app.html", "r");
+  File file = LittleFS.open("/index.html.gz", "r");
   if (!file) {
     httpd_resp_send_404(req);
     return ESP_FAIL;
   }
   httpd_resp_set_type(req, "text/html");
   httpd_resp_set_hdr(req, "Connection", "close");
+  httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
 
   char buffer[1024];
   size_t bytes_read;
@@ -416,12 +546,7 @@ esp_err_t WebServerManager::handleRootOrHash(httpd_req_t *req) {
 esp_err_t WebServerManager::handleGetConfig(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
   if(!instance->basicAuth(req)){
-    ESP_LOGE(TAG, "HTTP Authorization failed!");
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Connection", "keep-alive");
-    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
-    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
-    return ESP_FAIL;
+    return sendAuthFailure(req);
   }
   if (!instance) {
     httpd_resp_send_500(req);
@@ -505,12 +630,7 @@ esp_err_t WebServerManager::handleGetConfig(httpd_req_t *req) {
 esp_err_t WebServerManager::handleGetNfcPresets(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
   if(!instance->basicAuth(req)){
-    ESP_LOGE(TAG, "HTTP Authorization failed!");
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Connection", "keep-alive");
-    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
-    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
-    return ESP_FAIL;
+    return sendAuthFailure(req);
   }
   if (!instance) {
     httpd_resp_send_500(req);
@@ -541,12 +661,7 @@ esp_err_t WebServerManager::handleGetNfcPresets(httpd_req_t *req) {
 esp_err_t WebServerManager::handleGetEthConfig(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
   if(!instance->basicAuth(req)){
-    ESP_LOGE(TAG, "HTTP Authorization failed!");
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Connection", "keep-alive");
-    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
-    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
-    return ESP_FAIL;
+    return sendAuthFailure(req);
   }
   if (!instance) {
     httpd_resp_send_500(req);
@@ -634,12 +749,7 @@ esp_err_t WebServerManager::handleGetEthConfig(httpd_req_t *req) {
 esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
   if(!instance->basicAuth(req)){
-    ESP_LOGE(TAG, "HTTP Authorization failed!");
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Connection", "keep-alive");
-    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
-    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
-    return ESP_FAIL;
+    return sendAuthFailure(req);
   }
   if (!instance) {
     httpd_resp_send_500(req);
@@ -794,19 +904,6 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     } else if (keyStr == "neoPixelType") {
       rebootNeeded = true;
       rebootMsg = "Pixel Type changed, reboot needed! Rebooting...";
-    } else if (keyStr == "useSSL") {
-      esp_chip_info_t chip_info;
-      esp_chip_info(&chip_info);
-      if(chip_info.model == CHIP_ESP32) {
-        httpd_resp_set_type(req, "application/json");
-        cJSON *res = cJSON_CreateObject();
-        cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-        cJSON_AddItemToObject(res, "error", cJSON_CreateString("TLS currently not available on the ESP32 chip model due to memory constraints"));
-        httpd_resp_set_status(req, HTTPD_500);
-        std::string response = cjson_to_string_and_free(res);
-        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-        return ESP_FAIL;
-      }
     }
     it = it->next;
   }
@@ -1038,12 +1135,7 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
 esp_err_t WebServerManager::handleClearConfig(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
   if(!instance->basicAuth(req)){
-    ESP_LOGE(TAG, "HTTP Authorization failed!");
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Connection", "keep-alive");
-    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
-    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
-    return ESP_FAIL;
+    return sendAuthFailure(req);
   }
   if (!instance) {
     httpd_resp_send_500(req);
@@ -1098,12 +1190,7 @@ esp_err_t WebServerManager::handleReboot(httpd_req_t *req) {
 esp_err_t WebServerManager::handleHKReset(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
   if(!instance->basicAuth(req)){
-    ESP_LOGE(TAG, "HTTP Authorization failed!");
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Connection", "keep-alive");
-    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
-    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
-    return ESP_FAIL;
+    return sendAuthFailure(req);
   }
   if (!instance) {
     httpd_resp_send_500(req);
@@ -1123,12 +1210,7 @@ esp_err_t WebServerManager::handleHKReset(httpd_req_t *req) {
 esp_err_t WebServerManager::handleWifiReset(httpd_req_t *req) {
   WebServerManager* instance = getInstance(req);
   if(!instance->basicAuth(req)){
-    ESP_LOGE(TAG, "HTTP Authorization failed!");
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Connection", "keep-alive");
-    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
-    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
-    return ESP_FAIL;
+    return sendAuthFailure(req);
   }
   httpd_resp_set_type(req, "application/json");
   cJSON *res = cJSON_CreateObject();
@@ -1143,12 +1225,7 @@ esp_err_t WebServerManager::handleWifiReset(httpd_req_t *req) {
 esp_err_t WebServerManager::handleStartConfigAP(httpd_req_t *req) {
   WebServerManager* instance = getInstance(req);
   if(!instance->basicAuth(req)){
-    ESP_LOGE(TAG, "HTTP Authorization failed!");
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Connection", "keep-alive");
-    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
-    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
-    return ESP_FAIL;
+    return sendAuthFailure(req);
   }
   httpd_resp_set_type(req, "application/json");
   cJSON *res = cJSON_CreateObject();
@@ -1157,8 +1234,393 @@ esp_err_t WebServerManager::handleStartConfigAP(httpd_req_t *req) {
   std::string response = cjson_to_string_and_free(res);
   httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
   vTaskDelay(pdMS_TO_TICKS(1000));
-  instance->stop();
+  instance->end();
   homeSpan.processSerialCommand("A");
+  return ESP_OK;
+}
+
+// ============================================================================
+// Captive Portal
+// ============================================================================
+
+esp_err_t WebServerManager::handleCaptivePortal(httpd_req_t *req) {
+  httpd_resp_set_status(req, "302 Found");
+  httpd_resp_set_hdr(req, "Location", "/captive-portal");
+  httpd_resp_send(req, NULL, 0);
+  return ESP_OK;
+}
+
+esp_err_t WebServerManager::handleGetCaptivePortalConfig(httpd_req_t *req) {
+  WebServerManager *instance = getInstance(req);
+  if (!instance) {
+    httpd_resp_send_500(req);
+    return ESP_FAIL;
+  }
+
+  const auto &miscConfig = instance->m_configManager.getConfig<espConfig::misc_config_t>();
+
+  cJSON *config = cJSON_CreateObject();
+  cJSON_AddStringToObject(config, "setupCode", miscConfig.setupCode.c_str());
+  cJSON_AddNumberToObject(config, "hk_key_color", miscConfig.hk_key_color);
+
+  // NFC GPIO pins
+  cJSON_AddNumberToObject(config, "nfcPinsPreset", miscConfig.nfcPinsPreset);
+  cJSON *nfcGpioPins = cJSON_CreateArray();
+  for (auto &&pin : miscConfig.nfcGpioPins) {
+    cJSON_AddItemToArray(nfcGpioPins, cJSON_CreateNumber(pin));
+  }
+  cJSON_AddItemToObject(config, "nfcGpioPins", nfcGpioPins);
+
+  // Ethernet configuration
+  cJSON_AddBoolToObject(config, "ethernetEnabled", miscConfig.ethernetEnabled);
+  cJSON_AddNumberToObject(config, "ethActivePreset", miscConfig.ethActivePreset);
+  cJSON_AddNumberToObject(config, "ethPhyType", miscConfig.ethPhyType);
+  cJSON_AddNumberToObject(config, "ethSpiBus", miscConfig.ethSpiBus);
+
+  cJSON *ethRmiiConfig = cJSON_CreateArray();
+  for (auto &&val : miscConfig.ethRmiiConfig) {
+    cJSON_AddItemToArray(ethRmiiConfig, cJSON_CreateNumber(val));
+  }
+  cJSON_AddItemToObject(config, "ethRmiiConfig", ethRmiiConfig);
+
+  cJSON *ethSpiConfig = cJSON_CreateArray();
+  for (auto &&val : miscConfig.ethSpiConfig) {
+    cJSON_AddItemToArray(ethSpiConfig, cJSON_CreateNumber(val));
+  }
+  cJSON_AddItemToObject(config, "ethSpiConfig", ethSpiConfig);
+
+  httpd_resp_set_type(req, "application/json");
+  cJSON *res = cJSON_CreateObject();
+  cJSON_AddItemToObject(res, "success", cJSON_CreateBool(true));
+  cJSON_AddItemToObject(res, "data", config);
+  std::string response = cjson_to_string_and_free(res);
+  httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+  return ESP_OK;
+}
+
+static bool connectWiFi(const char* ssid, const char* password, int timeoutMs = 30000) {
+  ESP_LOGI("WiFiTest", "Testing connection to SSID: %s", ssid);
+
+  WiFi.begin(ssid, password);
+  WiFi.setAutoReconnect(true);
+  
+  int elapsed = 0;
+  const int checkInterval = 500;
+  bool connected = false;
+  
+  while (elapsed < timeoutMs) {
+    vTaskDelay(pdMS_TO_TICKS(checkInterval));
+    elapsed += checkInterval;
+    
+    if (WiFi.status() == WL_CONNECTED) {
+      ESP_LOGI("WiFiTest", "Connected to %s, RSSI: %d", ssid, WiFi.RSSI());
+      connected = true;
+      break;
+    }
+  }
+  
+  if (!connected) {
+    ESP_LOGE("WiFiTest", "Connection timeout after %d ms", timeoutMs);
+    WiFi.disconnect();
+  } else {
+    WiFi.disconnect();
+  }
+  
+  return connected;
+}
+
+esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
+  WebServerManager *instance = getInstance(req);
+  if (!instance) {
+    httpd_resp_send_500(req);
+    return ESP_FAIL;
+  }
+
+  const size_t max_content_size = 2048;
+  if (req->content_len >= max_content_size) {
+    httpd_resp_set_status(req, "413 Payload Too Large");
+    httpd_resp_set_type(req, "application/json");
+    cJSON *res = cJSON_CreateObject();
+    cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+    cJSON_AddItemToObject(res, "error", cJSON_CreateString("Request body too large"));
+    std::string response = cjson_to_string_and_free(res);
+    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+    return ESP_FAIL;
+  }
+
+  std::vector<char> content(max_content_size, 0);
+  int ret = httpd_req_recv(req, content.data(), content.size() - 1);
+  if (ret <= 0) {
+    httpd_resp_set_status(req, "400 Bad Request");
+    httpd_resp_set_type(req, "application/json");
+    cJSON *res = cJSON_CreateObject();
+    cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+    cJSON_AddItemToObject(res, "error", cJSON_CreateString("Invalid request body"));
+    std::string response = cjson_to_string_and_free(res);
+    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+    return ESP_FAIL;
+  }
+  content[ret] = '\0';
+
+  cJSON *obj = cJSON_Parse(content.data());
+  if (!obj) {
+    httpd_resp_set_status(req, "400 Bad Request");
+    httpd_resp_set_type(req, "application/json");
+    cJSON *res = cJSON_CreateObject();
+    cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+    cJSON_AddItemToObject(res, "error", cJSON_CreateString("Invalid JSON"));
+    std::string response = cjson_to_string_and_free(res);
+    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+    return ESP_FAIL;
+  }
+
+  cJSON *ssidItem = cJSON_GetObjectItem(obj, "wifiSsid");
+  cJSON *passwordItem = cJSON_GetObjectItem(obj, "wifiPassword");
+  cJSON *setupCodeItem = cJSON_GetObjectItem(obj, "setupCode");
+  cJSON *colorItem = cJSON_GetObjectItem(obj, "hk_key_color");
+  cJSON *ethEnabledItem = cJSON_GetObjectItem(obj, "ethernetEnabled");
+
+  bool ethernetEnabled = (ethEnabledItem && cJSON_IsBool(ethEnabledItem) && cJSON_IsTrue(ethEnabledItem));
+
+  const char *ssid = "";
+  const char *password = "";
+  bool wifiProvided = false;
+
+  if (ssidItem && cJSON_IsString(ssidItem)) {
+    ssid = ssidItem->valuestring;
+  }
+  if (passwordItem && cJSON_IsString(passwordItem)) {
+    password = passwordItem->valuestring;
+  }
+
+  if (strlen(ssid) > 0) {
+    wifiProvided = true;
+  }
+
+  if (!ethernetEnabled && !wifiProvided) {
+    cJSON_Delete(obj);
+    httpd_resp_set_status(req, "400 Bad Request");
+    httpd_resp_set_type(req, "application/json");
+    cJSON *res = cJSON_CreateObject();
+    cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+    cJSON_AddItemToObject(res, "error", cJSON_CreateString("WiFi SSID and password are required (or enable Ethernet)"));
+    std::string response = cjson_to_string_and_free(res);
+    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+    return ESP_FAIL;
+  }
+
+  if (wifiProvided) {
+    if (strlen(ssid) > 32 || strlen(password) < 8 || strlen(password) > 64) {
+      cJSON_Delete(obj);
+      httpd_resp_set_status(req, "400 Bad Request");
+      httpd_resp_set_type(req, "application/json");
+      cJSON *res = cJSON_CreateObject();
+      cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+      cJSON_AddItemToObject(res, "error", cJSON_CreateString("Invalid WiFi credentials length"));
+      std::string response = cjson_to_string_and_free(res);
+      httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+      return ESP_FAIL;
+    }
+
+    if (!connectWiFi(ssid, password, 15000)) {
+      cJSON_Delete(obj);
+      httpd_resp_set_status(req, "400 Bad Request");
+      httpd_resp_set_type(req, "application/json");
+      cJSON *errorRes = cJSON_CreateObject();
+      cJSON_AddItemToObject(errorRes, "success", cJSON_CreateBool(false));
+      cJSON_AddItemToObject(errorRes, "error", cJSON_CreateString("Failed to connect to WiFi network. Please check your credentials and try again."));
+      std::string response = cjson_to_string_and_free(errorRes);
+      httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+      return ESP_FAIL;
+    }
+
+    homeSpan.setWifiCredentials(ssid, password);
+  }
+
+  if (setupCodeItem && cJSON_IsString(setupCodeItem)) {
+    const char *setupCode = setupCodeItem->valuestring;
+    if (strlen(setupCode) == 8 && (strcmp(setupCode,"00000000") && strcmp(setupCode,"11111111") && strcmp(setupCode,"22222222") && strcmp(setupCode,"33333333") && 
+    strcmp(setupCode,"44444444") && strcmp(setupCode,"55555555") && strcmp(setupCode,"66666666") && strcmp(setupCode,"77777777") &&
+    strcmp(setupCode,"88888888") && strcmp(setupCode,"99999999") && strcmp(setupCode,"12345678") && strcmp(setupCode,"87654321"))) {
+      homeSpan.setPairingCode(setupCode, false);
+      cJSON *setupCodeUpdate = cJSON_CreateObject();
+      cJSON_AddStringToObject(setupCodeUpdate, "setupCode", setupCode);
+      char *setupCodeJson = cJSON_PrintUnformatted(setupCodeUpdate);
+      instance->m_configManager.updateFromJson<espConfig::misc_config_t>(setupCodeJson);
+      instance->m_configManager.saveConfig<espConfig::misc_config_t>();
+      cJSON_free(setupCodeJson);
+      cJSON_Delete(setupCodeUpdate);
+    } else {
+      cJSON_Delete(obj);
+      httpd_resp_set_status(req, "400 Bad Request");
+      httpd_resp_set_type(req, "application/json");
+      cJSON *res = cJSON_CreateObject();
+      cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+      cJSON_AddItemToObject(res, "error", cJSON_CreateString("Invalid Setup Code format or too simple"));
+      std::string response = cjson_to_string_and_free(res);
+      httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+      return ESP_FAIL;
+    }
+  }
+
+  if (colorItem && cJSON_IsNumber(colorItem)) {
+    uint8_t color = (uint8_t)colorItem->valueint;
+    if (color <= 3) {
+      cJSON *colorUpdate = cJSON_CreateObject();
+      cJSON_AddNumberToObject(colorUpdate, "hk_key_color", color);
+      char *colorJson = cJSON_PrintUnformatted(colorUpdate);
+      instance->m_configManager.updateFromJson<espConfig::misc_config_t>(colorJson);
+      instance->m_configManager.saveConfig<espConfig::misc_config_t>();
+      cJSON_free(colorJson);
+      cJSON_Delete(colorUpdate);
+    }
+  }
+
+  cJSON *nfcPresetItem = cJSON_GetObjectItem(obj, "nfcPinsPreset");
+  cJSON *nfcGpioPinsItem = cJSON_GetObjectItem(obj, "nfcGpioPins");
+  if (nfcPresetItem && cJSON_IsNumber(nfcPresetItem) && nfcGpioPinsItem && cJSON_IsArray(nfcGpioPinsItem)) {
+    cJSON *nfcUpdate = cJSON_CreateObject();
+    cJSON_AddNumberToObject(nfcUpdate, "nfcPinsPreset", nfcPresetItem->valueint);
+    cJSON_AddItemToObject(nfcUpdate, "nfcGpioPins", cJSON_Duplicate(nfcGpioPinsItem, true));
+    char *nfcJson = cJSON_PrintUnformatted(nfcUpdate);
+    instance->m_configManager.updateFromJson<espConfig::misc_config_t>(nfcJson);
+    instance->m_configManager.saveConfig<espConfig::misc_config_t>();
+    cJSON_free(nfcJson);
+    cJSON_Delete(nfcUpdate);
+  }
+
+  cJSON *ethPresetItem = cJSON_GetObjectItem(obj, "ethActivePreset");
+  cJSON *ethPhyItem = cJSON_GetObjectItem(obj, "ethPhyType");
+  cJSON *ethSpiBusItem = cJSON_GetObjectItem(obj, "ethSpiBus");
+  cJSON *ethRmiiItem = cJSON_GetObjectItem(obj, "ethRmiiConfig");
+  cJSON *ethSpiItem = cJSON_GetObjectItem(obj, "ethSpiConfig");
+
+  if (ethEnabledItem && cJSON_IsBool(ethEnabledItem)) {
+    cJSON *ethUpdate = cJSON_CreateObject();
+    cJSON_AddBoolToObject(ethUpdate, "ethernetEnabled", cJSON_IsTrue(ethEnabledItem));
+    if (ethPresetItem && cJSON_IsNumber(ethPresetItem)) {
+      cJSON_AddNumberToObject(ethUpdate, "ethActivePreset", ethPresetItem->valueint);
+    }
+    if (ethPhyItem && cJSON_IsNumber(ethPhyItem)) {
+      cJSON_AddNumberToObject(ethUpdate, "ethPhyType", ethPhyItem->valueint);
+    }
+    if (ethSpiBusItem && cJSON_IsNumber(ethSpiBusItem)) {
+      cJSON_AddNumberToObject(ethUpdate, "ethSpiBus", ethSpiBusItem->valueint);
+    }
+    if (ethRmiiItem && cJSON_IsArray(ethRmiiItem)) {
+      cJSON_AddItemToObject(ethUpdate, "ethRmiiConfig", cJSON_Duplicate(ethRmiiItem, true));
+    }
+    if (ethSpiItem && cJSON_IsArray(ethSpiItem)) {
+      cJSON_AddItemToObject(ethUpdate, "ethSpiConfig", cJSON_Duplicate(ethSpiItem, true));
+    }
+    char *ethJson = cJSON_PrintUnformatted(ethUpdate);
+    instance->m_configManager.updateFromJson<espConfig::misc_config_t>(ethJson);
+    instance->m_configManager.saveConfig<espConfig::misc_config_t>();
+    cJSON_free(ethJson);
+    cJSON_Delete(ethUpdate);
+  }
+
+  cJSON_Delete(obj);
+
+  httpd_resp_set_type(req, "application/json");
+  cJSON *res = cJSON_CreateObject();
+  cJSON_AddItemToObject(res, "success", cJSON_CreateBool(true));
+  cJSON_AddItemToObject(res, "message", cJSON_CreateString("Configuration saved successfully"));
+  std::string response = cjson_to_string_and_free(res);
+  httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+  return ESP_OK;
+}
+
+esp_err_t WebServerManager::handleWifiScan(httpd_req_t *req) {
+  ESP_LOGI(TAG, "Starting WiFi scan...");
+
+  wifi_mode_t current_mode;
+  esp_wifi_get_mode(&current_mode);
+
+  bool need_restore_mode = false;
+  if (current_mode == WIFI_MODE_AP) {
+    ESP_LOGI(TAG, "Temporarily enabling APSTA mode for scanning");
+    esp_err_t mode_err = esp_wifi_set_mode(WIFI_MODE_APSTA);
+    if (mode_err != ESP_OK) {
+      ESP_LOGE(TAG, "Failed to set APSTA mode: %s", esp_err_to_name(mode_err));
+      httpd_resp_set_status(req, "500 Internal Server Error");
+      httpd_resp_set_type(req, "application/json");
+      cJSON *res = cJSON_CreateObject();
+      cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+      cJSON_AddItemToObject(res, "error", cJSON_CreateString("Failed to enable scan mode"));
+      std::string response = cjson_to_string_and_free(res);
+      httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+      return ESP_OK;
+    }
+    need_restore_mode = true;
+  }
+
+  wifi_scan_config_t scan_config = {};
+  scan_config.channel = 0;
+  scan_config.scan_type = WIFI_SCAN_TYPE_ACTIVE;
+  scan_config.scan_time.active.min = 100;
+  scan_config.scan_time.active.max = 300;
+
+  esp_err_t err = esp_wifi_scan_start(&scan_config, true);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "WiFi scan failed to start: %s", esp_err_to_name(err));
+    if (need_restore_mode) {
+      esp_wifi_set_mode(current_mode);
+    }
+    httpd_resp_set_status(req, "500 Internal Server Error");
+    httpd_resp_set_type(req, "application/json");
+    cJSON *res = cJSON_CreateObject();
+    cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+    cJSON_AddItemToObject(res, "error", cJSON_CreateString("WiFi scan failed to start"));
+    std::string response = cjson_to_string_and_free(res);
+    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+  }
+
+  uint16_t ap_count = 0;
+  esp_wifi_scan_get_ap_num(&ap_count);
+  ESP_LOGI(TAG, "Found %d access points", ap_count);
+
+  wifi_ap_record_t *ap_records = new wifi_ap_record_t[ap_count];
+  esp_wifi_scan_get_ap_records(&ap_count, ap_records);
+
+  if (need_restore_mode) {
+    esp_wifi_set_mode(current_mode);
+    ESP_LOGI(TAG, "Restored WiFi mode to AP");
+  }
+
+  cJSON *networks = cJSON_CreateArray();
+  for (int i = 0; i < ap_count; i++) {
+    cJSON *network = cJSON_CreateObject();
+    cJSON_AddStringToObject(network, "ssid", (char*)ap_records[i].ssid);
+    cJSON_AddNumberToObject(network, "rssi", ap_records[i].rssi);
+    cJSON_AddNumberToObject(network, "channel", ap_records[i].primary);
+
+    const char* auth_mode;
+    switch (ap_records[i].authmode) {
+      case WIFI_AUTH_OPEN: auth_mode = "OPEN"; break;
+      case WIFI_AUTH_WEP: auth_mode = "WEP"; break;
+      case WIFI_AUTH_WPA_PSK: auth_mode = "WPA_PSK"; break;
+      case WIFI_AUTH_WPA2_PSK: auth_mode = "WPA2_PSK"; break;
+      case WIFI_AUTH_WPA_WPA2_PSK: auth_mode = "WPA_WPA2_PSK"; break;
+      case WIFI_AUTH_WPA2_ENTERPRISE: auth_mode = "WPA2_ENTERPRISE"; break;
+      case WIFI_AUTH_WPA3_PSK: auth_mode = "WPA3_PSK"; break;
+      case WIFI_AUTH_WPA2_WPA3_PSK: auth_mode = "WPA2_WPA3_PSK"; break;
+      default: auth_mode = "UNKNOWN"; break;
+    }
+    cJSON_AddStringToObject(network, "auth", auth_mode);
+
+    cJSON_AddItemToArray(networks, network);
+  }
+  delete[] ap_records;
+
+  httpd_resp_set_type(req, "application/json");
+  cJSON *res = cJSON_CreateObject();
+  cJSON_AddItemToObject(res, "success", cJSON_CreateBool(true));
+  cJSON_AddItemToObject(res, "data", networks);
+  cJSON_AddItemToObject(res, "message", cJSON_CreateString("WiFi scan complete"));
+  std::string response = cjson_to_string_and_free(res);
+  httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
   return ESP_OK;
 }
 
@@ -1195,13 +1657,8 @@ esp_err_t WebServerManager::handleWebSocket(httpd_req_t *req) {
     size_t sessionIdLen = 65;
     esp_err_t err = httpd_req_get_cookie_val(req, "sessionId", sessionId, &sessionIdLen);
     if(!instance->basicAuth(req) && (err != ESP_OK || strncmp(sessionId, instance->m_sessionId.c_str(), sessionIdLen) != 0)){
-      ESP_LOGE(TAG, "HTTP Authorization failed!");
-      httpd_resp_set_type(req, "application/json");
-      httpd_resp_set_hdr(req, "Connection", "keep-alive");
-      httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
-      httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
       delete[] sessionId;
-      return ESP_FAIL;
+      return sendAuthFailure(req);
     }
     delete[] sessionId;
     int sockfd = httpd_req_to_sockfd(req);
@@ -1459,6 +1916,12 @@ std::string WebServerManager::getDeviceMetrics() {
   cJSON_AddNumberToObject(status, "uptime", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::duration<int64_t, std::micro>(esp_timer_get_time())).count());
   cJSON_AddNumberToObject(status, "free_heap", esp_get_free_heap_size());
   cJSON_AddNumberToObject(status, "wifi_rssi", WiFi.RSSI());
+  cJSON_AddBoolToObject(status, "nfc_connected", m_nfc_connected.load(std::memory_order_relaxed));
+  cJSON_AddBoolToObject(status, "mqtt_connected", m_mqtt_connected.load(std::memory_order_relaxed));
+  cJSON_AddNumberToObject(status, "mqtt_error_code", m_mqtt_error_code.load(std::memory_order_relaxed));
+  if (!m_mqtt_error_message.empty()) {
+    cJSON_AddStringToObject(status, "mqtt_error_message", m_mqtt_error_message.c_str());
+  }
   return cjson_to_string_and_free(status);
 }
 
@@ -1495,12 +1958,7 @@ void WebServerManager::statusTimerCallback(void *arg) {
 esp_err_t WebServerManager::handleOTAUpload(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
   if (!instance->basicAuth(req)) {
-    ESP_LOGE(TAG, "HTTP Authorization failed!");
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Connection", "keep-alive");
-    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
-    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
-    return ESP_FAIL;
+    return sendAuthFailure(req);
   }
   
   if (req->content_len == 0) {
@@ -1554,7 +2012,7 @@ esp_err_t WebServerManager::handleOTAUpload(httpd_req_t *req) {
     instance->m_otaInProgress = false;
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_status(req, "500 Internal Server Error");
-    httpd_resp_sendstr(req, "\"success\":false,\"error\":\"Failed to start OTA\"");
+    httpd_resp_sendstr(req, "{\"success\":false,\"error\":\"Failed to start OTA\"}");
     return ESP_OK;
   }
 
@@ -1680,23 +2138,27 @@ void WebServerManager::otaTask(void *pvParameters) {
     }
   }
 
-  params->state->inProgress = false;
-  instance->broadcastOTAStatus(*params->state);
-  httpd_resp_set_type(req, "application/json");
-  httpd_resp_sendstr(req, "{\"success\":true,\"message\":\"Update Complete\"}");
-  httpd_req_async_handler_complete(req);
-  instance->m_otaInProgress = false;
-  
-  if (!params->skipReboot) {
-      vTaskDelay(pdMS_TO_TICKS(1000));
-      esp_restart();
+  {
+    bool shouldReboot = !params->skipReboot;
+    params->state->inProgress = false;
+    instance->broadcastOTAStatus(*params->state);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"success\":true,\"message\":\"Update Complete\"}");
+    httpd_req_async_handler_complete(req);
+    instance->m_otaInProgress = false;
+
+    if (buffer) free(buffer);
+    delete params->state;
+    delete params;
+
+    if (shouldReboot) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        esp_restart();
+    }
+
+    vTaskDelete(NULL);
+    return;
   }
-  
-  if (buffer) free(buffer);
-  delete params->state;
-  delete params;
-  vTaskDelete(NULL);
-  return;
 
 error:
   params->state->inProgress = false;
@@ -1766,12 +2228,7 @@ void WebServerManager::broadcastOTAStatus(const OTAState& state) {
 esp_err_t WebServerManager::handleCertificateUpload(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
   if(!instance->basicAuth(req)){
-    ESP_LOGE(TAG, "HTTP Authorization failed!");
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Connection", "keep-alive");
-    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
-    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
-    return ESP_FAIL;
+    return sendAuthFailure(req);
   }
   if (!instance) {
     httpd_resp_send_500(req);
@@ -1829,8 +2286,26 @@ esp_err_t WebServerManager::handleCertificateUpload(httpd_req_t *req) {
     remaining -= received;
   }
 
-  bool success = instance->m_configManager.saveCertificate(
-      std::string(type_param), certBuf);
+  // Convert string type to enum
+  espConfig::CertType certType;
+  if (strcmp(type_param, "ca") == 0) {
+    certType = espConfig::CertType::CA;
+  } else if (strcmp(type_param, "client") == 0) {
+    certType = espConfig::CertType::CLIENT;
+  } else if (strcmp(type_param, "privateKey") == 0) {
+    certType = espConfig::CertType::PRIVATE_KEY;
+  } else {
+    httpd_resp_set_type(req, "application/json");
+    cJSON *res = cJSON_CreateObject();
+    cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+    cJSON_AddItemToObject(res, "error", cJSON_CreateString("Invalid certificate type"));
+    httpd_resp_set_status(req, "400 Bad Request");
+    std::string response = cjson_to_string_and_free(res);
+    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+    return ESP_FAIL;
+  }
+
+  bool success = instance->m_configManager.saveCertificate(certType, certBuf);
 
   if (success) {
     cJSON *response = cJSON_CreateObject();
@@ -1859,12 +2334,7 @@ esp_err_t WebServerManager::handleCertificateUpload(httpd_req_t *req) {
 esp_err_t WebServerManager::handleCertificateStatus(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
   if(!instance->basicAuth(req)){
-    ESP_LOGE(TAG, "HTTP Authorization failed!");
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Connection", "keep-alive");
-    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
-    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
-    return ESP_FAIL;
+    return sendAuthFailure(req);
   }
   if (!instance) {
     httpd_resp_send_500(req);
@@ -1878,7 +2348,7 @@ esp_err_t WebServerManager::handleCertificateStatus(httpd_req_t *req) {
       instance->m_configManager.getCertificatesStatus();
   for (auto cert : status) {
     cJSON *certInfo = cJSON_CreateObject();
-    if (cert.type != "privateKey") {
+    if (cert.type != espConfig::CertType::PRIVATE_KEY) {
       if (!cert.issuer.empty())
         cJSON_AddStringToObject(certInfo, "issuer", cert.issuer.c_str());
       if (!cert.subject.empty())
@@ -1890,14 +2360,14 @@ esp_err_t WebServerManager::handleCertificateStatus(httpd_req_t *req) {
         cJSON_AddStringToObject(expiration, "to", cert.expiration.to.c_str());
         cJSON_AddItemToObject(certInfo, "expiration", expiration);
       }
-      if(cert.type == "client"){
+      if(cert.type == espConfig::CertType::CLIENT){
         cJSON_AddBoolToObject(certInfo, "keyMatchesCert", cert.keyMatchesCert);
       }
-    } else if (cert.type == "privateKey") {
+    } else if (cert.type == espConfig::CertType::PRIVATE_KEY) {
       cJSON_AddBoolToObject(certInfo, "exists", true);
     }
 
-    cJSON_AddItemToObject(certificates, cert.type.c_str(), certInfo);
+    cJSON_AddItemToObject(certificates, cert.typeStr.c_str(), certInfo);
   }
 
   cJSON_AddItemToObject(response, "data", certificates);
@@ -1912,12 +2382,7 @@ esp_err_t WebServerManager::handleCertificateStatus(httpd_req_t *req) {
 esp_err_t WebServerManager::handleCertificateDelete(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
   if(!instance->basicAuth(req)){
-    ESP_LOGE(TAG, "HTTP Authorization failed!");
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Connection", "keep-alive");
-    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
-    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
-    return ESP_FAIL;
+    return sendAuthFailure(req);
   }
   if (!instance) {
     httpd_resp_send_500(req);
@@ -1936,8 +2401,15 @@ esp_err_t WebServerManager::handleCertificateDelete(httpd_req_t *req) {
     return ESP_FAIL;
   }
 
-  std::string certType = type_start + 1;
-  if (certType != "ca" && certType != "client" && certType != "privateKey") {
+  std::string certTypeStr = type_start + 1;
+  espConfig::CertType certType;
+  if (certTypeStr == "ca") {
+    certType = espConfig::CertType::CA;
+  } else if (certTypeStr == "client") {
+    certType = espConfig::CertType::CLIENT;
+  } else if (certTypeStr == "privateKey") {
+    certType = espConfig::CertType::PRIVATE_KEY;
+  } else {
     httpd_resp_set_type(req, "application/json");
     cJSON *res = cJSON_CreateObject();
     cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
@@ -1953,7 +2425,7 @@ esp_err_t WebServerManager::handleCertificateDelete(httpd_req_t *req) {
   if (success) {
     cJSON *response = cJSON_CreateObject();
     cJSON_AddItemToObject(response, "success", cJSON_CreateBool(true));
-    cJSON_AddStringToObject(response, "message", fmt::format("Certificate '{}' deleted", certType).c_str());
+    cJSON_AddStringToObject(response, "message", fmt::format("Certificate '{}' deleted", certTypeStr).c_str());
     std::string resp = cjson_to_string_and_free(response);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, resp.c_str(), resp.length());

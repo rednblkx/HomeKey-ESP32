@@ -14,6 +14,24 @@
 #define HARDWARE_ACTION_BUS_TOPIC "hardware/action"
 #define HARDWARE_ALT_ACTION_BUS_TOPIC "hardware/altAction"
 #define HARDWARE_CONFIG_BUS_TOPIC "hardware/gpioPinChanged"
+#define NFC_STATUS_TOPIC "nfc/status"
+#define MQTT_STATUS_TOPIC "mqtt/status"
+
+enum class MqttErrorCode : uint8_t {
+    NONE = 0,
+    CONNECTION_REFUSED = 1,
+    AUTH_FAILED = 2,
+    NETWORK_ERROR = 3,
+    SSL_ERROR = 4,
+    TIMEOUT = 5,
+    UNKNOWN = 255
+};
+
+struct EventMqttStatus {
+    bool connected;
+    MqttErrorCode errorCode;
+    std::string errorMessage;
+};
 
 struct EventLockState {
   uint8_t currentState = 255;
@@ -67,4 +85,10 @@ enum HomekitEventType : uint8_t {
 struct HomekitEvent {
     HomekitEventType type;
     std::vector<uint8_t> data;
+};
+
+struct EventNfcStatus {
+    bool connected;
+    uint8_t firmwareVersionMajor;
+    uint8_t firmwareVersionMinor;
 };

@@ -1,297 +1,171 @@
 <script lang="ts">
-  import { onMount, type Component } from "svelte";
-  import type { HKInfo } from "$lib/types/api.js";
+  import type { HKInfo } from "$lib/types/api";
   import { systemInfo } from "$lib/stores/system.svelte.js";
-  import {
-    loadingStates,
-    setLoadingState,
-  } from "$lib/stores/loading.svelte.js";
   import { calculateWifiSignal } from "$lib/utils/wifi.js";
-  import { version } from "$app/environment";
+  const version: string = __DEV__ ? "dev" : __VERSION__;
 
-  /**
-   * Props for HKInfo component
-   * @type {HKInfo | null} hkInfo - HomeKey information data
-   * @type {string | null} error - Error message if data loading failed
-   */
   let { hkInfo, error }: { hkInfo: HKInfo | null; error: string | null } =
     $props();
-
-  let webSocketTestPromise: Promise<Component> | null = $state(null);
-
-  onMount(async (): Promise<void> => {
-    systemInfo.uptime == 0 && setLoadingState("systemInfoLoading", true);
-
-    if (import.meta.env.DEV) {
-      webSocketTestPromise = import(
-        "$lib/components/WebSocketTest.svelte"
-      ).then((module) => module.default);
-    }
-  });
 
   let wifi_rssi = $derived(systemInfo?.wifi_rssi);
   let wifi_signal = $derived.by(() => calculateWifiSignal(wifi_rssi));
 </script>
 
-<div class="w-full py-6 flex flex-col items-center">
-  <div class="flex flex-col max-w-4xl gap-6">
-    <!-- HomeKey Info Card -->
-    {#if loadingStates.hkInfoLoading}
-      <div
-        class="card bg-base-200 shadow-xl"
-        aria-live="polite"
-        aria-label="Loading HomeKey information"
-      >
-        <h2 class="card-title p-4 pb-0">
-          <div
-            class="badge badge-info badge-md"
-            aria-label="HomeKey information section"
-          >
-            Info
-          </div>
-          HomeKey
-        </h2>
-        <div class="card-body p-4">
-          <div class="flex justify-center">
-            <span
-              class="loading loading-spinner loading-lg"
-              aria-label="Loading HomeKey data"
-            ></span>
-          </div>
-        </div>
-      </div>
-    {:else if error}
-      <div class="text-center text-error" aria-live="assertive">
-        <p>Error: {error}</p>
-      </div>
-    {:else if hkInfo}
-      <div class="card bg-base-200 shadow-xl">
-        <h2 class="card-title p-4 pb-0">
-          <div class="badge badge-info badge-md">Info</div>
-          HomeKey
-        </h2>
-        <div class="card-body p-4">
-          <div>
-            <div
-              class="stats stats-vertical md:stats-horizontal shadow bg-base-100 w-full"
-            >
-              <div class="stat">
-                <div class="stat-title">Reader GID</div>
-                <div class="stat-value text-xl">
-                  {hkInfo.group_identifier || "N/A"}
-                </div>
-              </div>
-              <div class="stat">
-                <div class="stat-title">Reader ID</div>
-                <div class="stat-value text-xl">
-                  {hkInfo.unique_identifier || "N/A"}
-                </div>
-              </div>
-              <div class="stat">
-                <div class="stat-title">Issuers</div>
-                <div class="stat-value text-xl">
-                  {hkInfo.issuers ? hkInfo.issuers.length : 0}
-                </div>
-              </div>
-            </div>
+<div class="w-full py-6">
+  <div class="mb-6">
+    <h1 class="text-2xl font-bold">Dashboard</h1>
+    <p class="text-base-content/60">
+      Monitor your HomeKey-ESP32 device status and configuration.
+    </p>
+  </div>
 
-            {#if hkInfo.issuers && hkInfo.issuers.length > 0}
-              <div class="mt-8 space-y-2">
-                {#each hkInfo.issuers as issuer, index (`issuer-${index}`)}
-                  <div class="list-row">
-                    <div class="collapse collapse-arrow bg-base-100 shadow">
-                      <input type="checkbox" name="info-collapse" />
-                      <div class="collapse-title font-semibold">
-                        <div class="text-xs uppercase font-semibold opacity-60">
-                          Issuer
-                        </div>
-                        {issuer.issuerId || "N/A"}
-                      </div>
-                      <div class="collapse-content text-sm">
-                        {#if issuer.endpoints && issuer.endpoints.length > 0}
-                          <ul class="ml-4">
-                            {#each issuer.endpoints as endpoint, epIndex (`ep-${epIndex}`)}
-                              <li>
-                                <div
-                                  class="text-xs uppercase font-semibold opacity-60"
-                                >
-                                  Endpoint Id:
-                                </div>
-                                {endpoint.endpointId || "N/A"}
-                                {#if epIndex < issuer.endpoints.length - 1}
-                                  <div class="divider my-2"></div>
-                                {/if}
-                              </li>
-                            {/each}
-                          </ul>
-                        {/if}
-                      </div>
-                    </div>
-                  </div>
-                {/each}
-              </div>
-            {/if}
-          </div>
-        </div>
-      </div>
-    {/if}
-
-    <div
-      class="card bg-base-200 shadow-xl"
-      aria-live="polite"
-      aria-label="System information"
-    >
-      <h2 class="card-title p-4 pb-0">
-        <div
-          class="badge badge-info badge-md"
-          aria-label="System information section"
-        >
-          Info
-        </div>
-        System
-      </h2>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 max-w-6xl items-start">
+    <!-- HomeKey Card -->
+    <div class="card bg-base-200 shadow-xl">
       <div class="card-body p-4">
-        {#if loadingStates.systemInfoLoading}
-          <div
-            class="flex flex-col gap-4"
-            aria-label="Loading system information"
-          >
-            <div
-              class="stats stats-vertical md:stats-horizontal shadow bg-base-100 w-full"
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-5 w-5 text-primary"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
             >
-              <div class="stat">
-                <div class="skeleton h-4 w-20 mb-2"></div>
-                <div class="skeleton h-6 w-32"></div>
-              </div>
-              <div class="stat">
-                <div class="skeleton h-4 w-16 mb-2"></div>
-                <div class="skeleton h-6 w-24"></div>
-              </div>
-              <div class="stat">
-                <div class="skeleton h-4 w-14 mb-2"></div>
-                <div class="skeleton h-6 w-28"></div>
-              </div>
-            </div>
-            <div
-              class="stats stats-vertical md:stats-horizontal shadow bg-base-100 w-full"
-            >
-              <div class="stat">
-                <div class="skeleton h-4 w-18 mb-2"></div>
-                <div class="skeleton h-6 w-36"></div>
-              </div>
-              <div class="stat">
-                <div class="skeleton h-4 w-16 mb-2"></div>
-                <div class="skeleton h-6 w-40"></div>
-              </div>
-              <div class="stat">
-                <div class="skeleton h-4 w-24 mb-2"></div>
-                <div class="skeleton h-6 w-12"></div>
-              </div>
-            </div>
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
+              />
+            </svg>
           </div>
-        {:else}
-          <div class="flex flex-col gap-4">
-            <div
-              class="stats stats-vertical md:stats-horizontal shadow bg-base-100 w-full"
-            >
-              <div class="stat">
-                <div class="stat-title">Version</div>
-                <div class="stat-value text-xl">
-                  {systemInfo?.version || "N/A"}
+          <div>
+            <h2 class="card-title text-lg">HomeKey</h2>
+            <p class="text-xs text-base-content/60">Reader Information</p>
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <div class="flex items-center justify-between py-2 px-3 bg-base-100 rounded-lg">
+            <span class="text-sm text-base-content/70">Reader GID</span>
+            <span class="text-sm font-medium">{hkInfo?.group_identifier || "N/A"}</span>
+          </div>
+          <div class="flex items-center justify-between py-2 px-3 bg-base-100 rounded-lg">
+            <span class="text-sm text-base-content/70">Reader ID</span>
+            <span class="text-sm font-medium">{hkInfo?.unique_identifier || "N/A"}</span>
+          </div>
+          <div class="flex items-center justify-between py-2 px-3 bg-base-100 rounded-lg">
+            <span class="text-sm text-base-content/70">Issuers</span>
+            <span class="text-sm font-medium">{hkInfo?.issuers?.length || 0}</span>
+          </div>
+        </div>
+
+        <!-- Issuers Section inside HomeKey Card -->
+        {#if hkInfo?.issuers && hkInfo.issuers.length > 0}
+          <div class="mt-4 space-y-1">
+            {#each hkInfo.issuers as issuer, index (`issuer-${index}`)}
+              <div class="collapse collapse-arrow bg-base-100 rounded-lg">
+                <input type="checkbox" name="info-collapse-{index}" />
+                <div class="collapse-title font-semibold py-3 flex items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-base-content/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  <span>Issuer {index + 1}</span>
                 </div>
-              </div>
-              <div class="stat">
-                <div class="stat-title">UI Version</div>
-                <div class="stat-value text-xl">{version || "N/A"}</div>
-              </div>
-            </div>
-            <div
-              class="stats stats-vertical md:stats-horizontal shadow bg-base-100 w-full"
-            >
-              <div class="stat">
-                <div class="stat-title">Device Name</div>
-                <div class="stat-value text-xl">
-                  {systemInfo?.deviceName || "N/A"}
-                </div>
-              </div>
-              <div class="stat">
-                <div class="stat-title">Uptime</div>
-                <div class="stat-value text-xl">
-                  {systemInfo?.uptime || "N/A"}
-                </div>
-              </div>
-              <div class="stat">
-                <div class="stat-title">Free Heap</div>
-                <div class="stat-value text-xl">
-                  {systemInfo?.free_heap || "N/A"}
-                </div>
-              </div>
-            </div>
-            <div
-              class="stats stats-vertical md:stats-horizontal shadow bg-base-100 w-full"
-            >
-              <div class="stat">
-                <div class="stat-title">WiFi SSID</div>
-                <div class="stat-value text-xl">
-                  {systemInfo?.wifi_ssid || "N/A"}
-                </div>
-              </div>
-              {#if !systemInfo?.eth_enabled}
-                <div class="stat">
-                  <div class="stat-title">WiFi RSSI</div>
-                  <div class="stat-value text-xl">
-                    {systemInfo?.wifi_rssi || "N/A"} ({wifi_signal})
+                <div class="collapse-content text-sm">
+                  <div class="py-2 px-3 bg-base-200 rounded-lg mb-2">
+                    <span class="text-xs text-base-content/60 block mb-1">Issuer ID</span>
+                    <span class="text-sm font-mono break-all">{issuer.issuerId || "N/A"}</span>
                   </div>
-                </div>
-              {/if}
-              <div class="stat">
-                <div class="stat-title">Ethernet enabled</div>
-                <div class="stat-value text-xl">
-                  {systemInfo?.eth_enabled ? "Yes" : "No"}
+                  {#if issuer.endpoints && issuer.endpoints.length > 0}
+                    <div class="mt-2">
+                      <span class="text-xs text-base-content/60 block mb-2">Endpoints</span>
+                      <ul class="space-y-2">
+                        {#each issuer.endpoints as endpoint, epIndex (`ep-${epIndex}`)}
+                          <li class="flex items-center gap-2 py-2 px-3 bg-base-200 rounded-lg">
+                            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" class="size-4 text-primary">
+                              <path d="M12 1C16.9706 1 21 5.02944 21 10V14C21 18.9706 16.9706 23 12 23C10.9137 23 9.8724 22.8076 8.90826 22.4549C9.03638 22.2782 9.15938 22.0977 9.27703 21.9134L9.44782 21.633C10.388 20.0636 10.9461 18.2391 10.9963 16.2884L11 16V9H13V16C13 17.7724 12.6453 19.4619 12.0031 21.0015C12.7954 21 13.5599 20.8673 14.2724 20.6229C14.7147 19.2616 14.966 17.8148 14.9968 16.3138L15 16L14.9998 12.999H16.9998L17 16C17 17.0885 16.8977 18.1531 16.7022 19.1847C18.0583 17.9552 18.9297 16.2 18.9959 14.2407L19 14V10C19 6.13401 15.866 3 12 3C10.4277 3 8.97638 3.51841 7.8078 4.39364L6.38282 2.96769C7.92242 1.73631 9.87522 1 12 1ZM7 10C7 7.23858 9.23858 5 12 5C14.7614 5 17 7.23858 17 10V11H15V10C15 8.34315 13.6569 7 12 7C10.4023 7 9.09634 8.24892 9.00509 9.82373L9 10V16C9 17.5669 8.5996 19.0402 7.89554 20.3233L7.87214 20.3627C7.64284 20.7771 7.38087 21.1711 7.09037 21.5417C6.6495 21.2545 6.23541 20.9297 5.85264 20.5719L5.5445 20.2711C3.96956 18.65 3 16.4382 3 14V10C3 7.87522 3.73631 5.92242 4.96769 4.38282L6.39364 5.8078C5.56325 6.91652 5.05405 8.27971 5.00406 9.75935L5 10V14C5 15.6748 5.58816 17.2122 6.56918 18.4169C6.82239 17.7351 6.97017 17.0034 6.99594 16.2407L7 16V10Z">
+                              </path>
+                            </svg>
+                            <span class="text-sm font-mono">{endpoint.endpointId || "N/A"}</span>
+                          </li>
+                        {/each}
+                      </ul>
+                    </div>
+                  {/if}
                 </div>
               </div>
-            </div>
+            {/each}
           </div>
         {/if}
       </div>
     </div>
 
-    <!-- WebSocket Test Component (lazy-loaded in dev mode) -->
-    {#if webSocketTestPromise}
-      {#await webSocketTestPromise}
-        <div
-          class="card bg-base-200 shadow-xl"
-          aria-live="polite"
-          aria-label="Loading WebSocket Test component"
-        >
-          <div class="card-body p-4">
-            <div class="flex justify-center">
-              <span
-                class="loading loading-spinner loading-lg"
-                aria-label="Loading WebSocket Test component"
-              ></span>
-              <span class="ml-2">Loading WebSocket Test...</span>
-            </div>
+    <!-- System Card -->
+    <div class="card bg-base-200 shadow-xl">
+      <div class="card-body p-4">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-lg bg-info/20 flex items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <rect x="7" y="7" width="10" height="10" rx="1"/>
+              <line x1="12" y1="5" x2="12" y2="3"/>
+              <line x1="12" y1="21" x2="12" y2="19"/>
+              <line x1="3" y1="12" x2="5" y2="12"/>
+              <line x1="21" y1="12" x2="19" y2="12"/>
+              <line x1="9" y1="5" x2="9" y2="3"/>
+              <line x1="15" y1="5" x2="15" y2="3"/>
+              <line x1="9" y1="21" x2="9" y2="19"/>
+              <line x1="15" y1="21" x2="15" y2="19"/>
+              <line x1="3" y1="9" x2="5" y2="9"/>
+              <line x1="3" y1="15" x2="5" y2="15"/>
+              <line x1="21" y1="9" x2="19" y2="9"/>
+              <line x1="21" y1="15" x2="19" y2="15"/>
+            </svg>
+          </div>
+          <div>
+            <h2 class="card-title text-lg">System</h2>
+            <p class="text-xs text-base-content/60">Device Information</p>
           </div>
         </div>
-      {:then WebSocketTest}
-        <WebSocketTest />
-      {:catch error}
-        <div
-          class="card bg-base-200 shadow-xl"
-          aria-live="assertive"
-          aria-label="Error loading WebSocket Test component"
-        >
-          <div class="card-body p-4">
-            <div class="text-center text-error">
-              <p>
-                Failed to load WebSocket Test component: {error.message ||
-                  "Unknown error"}
-              </p>
+
+        <div class="space-y-2">
+          <div class="flex items-center justify-between py-2 px-3 bg-base-100 rounded-lg">
+            <span class="text-sm text-base-content/70">Version</span>
+            <span class="text-sm font-medium">{systemInfo?.version || "N/A"}</span>
+          </div>
+          <div class="flex items-center justify-between py-2 px-3 bg-base-100 rounded-lg">
+            <span class="text-sm text-base-content/70">UI Version</span>
+            <span class="text-sm font-medium">{version}</span>
+          </div>
+          <div class="flex items-center justify-between py-2 px-3 bg-base-100 rounded-lg">
+            <span class="text-sm text-base-content/70">Device Name</span>
+            <span class="text-sm font-medium">{systemInfo?.deviceName || "N/A"}</span>
+          </div>
+          <div class="flex items-center justify-between py-2 px-3 bg-base-100 rounded-lg">
+            <span class="text-sm text-base-content/70">Uptime</span>
+            <span class="text-sm font-medium">{systemInfo?.uptime || "N/A"}</span>
+          </div>
+          <div class="flex items-center justify-between py-2 px-3 bg-base-100 rounded-lg">
+            <span class="text-sm text-base-content/70">Free Heap</span>
+            <span class="text-sm font-medium">{systemInfo?.free_heap || "N/A"}</span>
+          </div>
+          <div class="flex items-center justify-between py-2 px-3 bg-base-100 rounded-lg">
+            <span class="text-sm text-base-content/70">WiFi SSID</span>
+            <span class="text-sm font-medium">{systemInfo?.wifi_ssid || "N/A"}</span>
+          </div>
+          {#if !systemInfo?.eth_enabled}
+            <div class="flex items-center justify-between py-2 px-3 bg-base-100 rounded-lg">
+              <span class="text-sm text-base-content/70">WiFi RSSI</span>
+              <span class="text-sm font-medium">{systemInfo?.wifi_rssi || "N/A"} ({wifi_signal})</span>
             </div>
+          {/if}
+          <div class="flex items-center justify-between py-2 px-3 bg-base-100 rounded-lg">
+            <span class="text-sm text-base-content/70">Ethernet enabled</span>
+            <span class="text-sm font-medium">{systemInfo?.eth_enabled ? "Yes" : "No"}</span>
           </div>
         </div>
-      {/await}
-    {/if}
+      </div>
+    </div>
   </div>
 </div>

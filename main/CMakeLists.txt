@@ -4,7 +4,7 @@ idf_component_register(SRCS "main.cpp" "ConfigManager.cpp" "ReaderDataManager.cp
                     "ConsoleLogSinker.cpp"
                     INCLUDE_DIRS "include"
                     PRIV_REQUIRES HomeSpan pn532_hal DigitalDoorKey esp_http_server mqtt libsodium event_bus
-                    msgpack-c json loggable loggable_espidf)
+                    msgpack-c json loggable loggable_espidf esp_wifi dns_server)
 
 include(FetchContent)
 
@@ -19,11 +19,11 @@ if(NOT DEFINED ENV{CI})
     WORKING_DIRECTORY ${COMPONENT_DIR}/../data 
     COMMAND bun install
     COMMAND bun run build 
-    COMMAND sh -c "find build \\( -name '*.html.gz' -o -name '*.css' -o -name '*.br' -o -name '*.js' -o -name '*.json.gz' \\) -delete"
+    COMMAND sh -c "find dist \\( -name '*.css' -o -name '*.js' \\) -delete"
     VERBATIM
   )
-  littlefs_create_partition_image(spiffs ../data/build FLASH_IN_PROJECT DEPENDS webui)
+  littlefs_create_partition_image(spiffs ../data/dist FLASH_IN_PROJECT DEPENDS webui)
 else()
-  littlefs_create_partition_image(spiffs ../data/build FLASH_IN_PROJECT)
+  littlefs_create_partition_image(spiffs ../data/dist FLASH_IN_PROJECT)
 endif()
 target_compile_definitions(${COMPONENT_LIB} PUBLIC "-DLOG_LOCAL_LEVEL=ESP_LOG_VERBOSE")

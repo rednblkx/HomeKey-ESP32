@@ -1,5 +1,6 @@
 #pragma once
 #include "event_bus.hpp"
+#include "eventStructs.hpp"
 #include "mqtt_client.h"
 #include <string>
 #include <vector>
@@ -42,6 +43,14 @@ public:
      */
     bool isConnected() const;
 
+    /**
+     * @brief Stops the MQTT client and unsubscribes from all EventBus listeners.
+     *
+     * Performs a clean shutdown of the MQTT client by stopping and destroying it,
+     * then removes all EventBus subscriptions registered by this instance.
+     */
+    void end();
+
 private:
     /**
       * @brief Publishes the current state of the lock.
@@ -76,6 +85,7 @@ private:
     // --- Publishing Logic ---
     void publish(const std::string& topic, const std::string& payload, int qos = 0, bool retain = false);
     void publishHassDiscovery();
+    void publishMqttStatus(bool connected, MqttErrorCode errorCode, const std::string& errorMessage = "");
 
     // --- SSL/TLS Configuration ---
     bool configureSSL(esp_mqtt_client_config_t& mqtt_cfg);
@@ -84,10 +94,10 @@ private:
     // --- Member Variables ---
     std::string deviceID;
     const espConfig::mqttConfig_t& m_mqttConfig;
-    const espConfig::mqtt_ssl_t* m_mqttSslConfig;
+    const espConfig::mqtt_ssl_t& m_mqttSslConfig;
     esp_mqtt_client_handle_t m_client;
     const std::string &device_name;
-    bool m_isConnected;
+    bool m_isConnected = false;
     
     // SSL/TLS related members
     bool m_sslConfigured;
@@ -96,5 +106,6 @@ private:
     EventBus::SubscriberHandle m_lock_state_changed;
     EventBus::SubscriberHandle m_alt_action;
     EventBus::SubscriberHandle m_nfc_event;
+    EventBus::TopicHandle m_mqtt_status_topic;
 };
 

@@ -1,4 +1,4 @@
-import type { CertificatesStatus, CertificateType, MqttConfig, MiscConfig, ApiResponse, ActionsConfig, ApiError, ApiSuccess } from '../types/api';
+import type { CertificatesStatus, CertificateType, MqttConfig, MiscConfig, ApiResponse, ActionsConfig, ApiError, ApiSuccess, CaptivePortalConfig, WiFiNetwork } from '../types/api';
 import { notifications } from '../stores/notifications.svelte.js';
 
 export async function rebootDevice() {
@@ -168,6 +168,63 @@ export async function deleteCertificate(type: CertificateType): Promise<ApiRespo
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error occurred';
     notifications.addError(`Failed to delete ${type} certificate: ${message}`);
+    return { success: false, error: message };
+  }
+}
+
+export async function getCaptivePortalConfig(): Promise<ApiResponse<CaptivePortalConfig>> {
+  try {
+    const response = await fetch(`/captive_portal_config`);
+
+    if (!response.ok) {
+      const errorData: ApiError = await response.json();
+      return errorData;
+    }
+
+    const result: ApiResponse<CaptivePortalConfig> = await response.json();
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    return { success: false, error: message };
+  }
+}
+
+export async function saveCaptivePortalConfig(config: CaptivePortalConfig): Promise<ApiResponse<void>> {
+  try {
+    const response = await fetch(`/captive_portal_config`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(config),
+    });
+
+    if (!response.ok) {
+      const errorData: ApiError = await response.json();
+      return errorData;
+    }
+
+    const result: ApiSuccess = await response.json();
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    return { success: false, error: message };
+  }
+}
+
+export async function scanWiFi(): Promise<ApiResponse<WiFiNetwork[]>> {
+  try {
+    const response = await fetch(`/wifi_scan`);
+
+    if (!response.ok) {
+      const errorData: ApiError = await response.json();
+      return errorData;
+    }
+
+    const result: ApiResponse<WiFiNetwork[]> = await response.json();
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
     return { success: false, error: message };
   }
 }

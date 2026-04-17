@@ -2,7 +2,7 @@
   import { notifications } from "../stores/notifications.svelte.js";
 
   /**
-   * @param {import('../types/api.js').NotificationType} type
+   * @param {import('../types/api').NotificationType} type
    * @returns {string}
    */
   function getAlertClass(type) {

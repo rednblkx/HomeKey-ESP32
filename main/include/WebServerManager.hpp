@@ -4,6 +4,7 @@
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
 #include "esp_timer.h"
+#include "event_bus.hpp"
 #include <memory>
 #include <atomic>
 #include <mutex>
@@ -50,7 +51,14 @@ public:
   ~WebServerManager();
 
   void begin();
-  void stop();
+
+  /**
+   * @brief Stops the web server and cleans up all resources.
+   *
+   * Performs a complete shutdown of the web server by stopping the HTTP server,
+   * deleting the WebSocket task and queue, and stopping/deleting the status timer.
+   */
+  void end();
   bool basicAuth(httpd_req_t* req);
   void setMqttManager(MqttManager *mqttManager) { m_mqttManager = mqttManager; }
   void broadcastWs(const uint8_t *payload, size_t len, httpd_ws_type_t type);
@@ -116,12 +124,18 @@ private:
   static esp_err_t handleCertificateStatus(httpd_req_t *req);
   static esp_err_t handleCertificateDelete(httpd_req_t *req);
 
+  static esp_err_t handleCaptivePortal(httpd_req_t *req);
+  static esp_err_t handleGetCaptivePortalConfig(httpd_req_t *req);
+  static esp_err_t handleSaveCaptivePortalConfig(httpd_req_t *req);
+  static esp_err_t handleWifiScan(httpd_req_t *req);
+
   // ------------------------------------------------------------------------
   // Core Internal Methods
   // ------------------------------------------------------------------------
 
   // Server setup
   void setupRoutes();
+  void setupCaptivePortalRoutes();
 
   // WebSocket management
   void addWebSocketClient(int fd);
@@ -145,6 +159,7 @@ private:
   static esp_err_t ws_send_frame(httpd_handle_t server, int fd,
                                  const uint8_t *payload, size_t len,
                                  httpd_ws_type_t type = HTTPD_WS_TYPE_TEXT);
+  static esp_err_t sendAuthFailure(httpd_req_t *req);
 
   // ------------------------------------------------------------------------
   // Member Variables
@@ -168,5 +183,14 @@ private:
   esp_timer_handle_t m_statusTimer;
   std::vector<std::vector<uint8_t>> m_wsBroadcastBuffer;
 
+  EventBus::SubscriberHandle m_nfc_status_subscriber;
+  std::atomic<bool> m_nfc_connected{false};
+
+  EventBus::SubscriberHandle m_mqtt_status_subscriber;
+  std::atomic<bool> m_mqtt_connected{false};
+  std::atomic<uint8_t> m_mqtt_error_code{0};
+  std::string m_mqtt_error_message;
+
   std::atomic<bool> m_otaInProgress{false};
+  bool m_isInitialized{false};
 };

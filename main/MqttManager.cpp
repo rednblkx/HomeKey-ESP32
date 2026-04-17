@@ -3,12 +3,12 @@
 #include "MqttManager.hpp"
 #include "LockManager.hpp"
 #include "ConfigManager.hpp"
+#include "JsonGuard.hpp"
 #include <cstdint>
 #include <cstdlib>
 #include <esp_log.h>
 #include <esp_app_desc.h>
 #include "eventStructs.hpp"
-#include <cJSON.h>
 #include <string>
 #include <sys/_types.h>
 #include <vector>
@@ -28,11 +28,12 @@ static EventBus::Bus& event_bus = EventBus::Bus::instance();
  */
 MqttManager::MqttManager(const ConfigManager& configManager)
     : m_mqttConfig(configManager.getConfig<espConfig::mqttConfig_t>()),
+      m_mqttSslConfig(configManager.getMqttSslConfig()),
       m_client(nullptr),
       device_name(configManager.getConfig<espConfig::misc_config_t>().deviceName),
-      m_sslConfigured(false)
+      m_sslConfigured(false),
+      m_mqtt_status_topic(event_bus.register_topic(MQTT_STATUS_TOPIC))
 {
-  m_mqttSslConfig = configManager.getMqttSslConfig();
 }
 
 /**
@@ -49,6 +50,26 @@ MqttManager::~MqttManager() {
   event_bus.unsubscribe(m_lock_state_changed);
   event_bus.unsubscribe(m_alt_action);
   event_bus.unsubscribe(m_nfc_event);
+}
+
+/**
+ * @brief Stops the MQTT client and unsubscribes from all EventBus listeners.
+ *
+ * Performs a clean shutdown of the MQTT client by stopping and destroying it,
+ * then removes all EventBus subscriptions registered by this instance.
+ */
+void MqttManager::end() {
+    if (m_client) {
+        ESP_LOGI(TAG, "Stopping MQTT client...");
+        esp_mqtt_client_stop(m_client);
+        esp_mqtt_client_destroy(m_client);
+        m_client = nullptr;
+        m_isConnected = false;
+        ESP_LOGI(TAG, "MQTT client stopped");
+    }
+    event_bus.unsubscribe(m_lock_state_changed);
+    event_bus.unsubscribe(m_alt_action);
+    event_bus.unsubscribe(m_nfc_event);
 }
 
 /**
@@ -121,12 +142,8 @@ bool MqttManager::begin(std::string deviceID) {
         ESP_LOGI(TAG, "SSL/TLS is enabled for MQTT connection");
         mqtt_cfg.broker.address.transport = MQTT_TRANSPORT_OVER_SSL;
         
-        if (m_mqttConfig.useSSL && m_mqttConfig.allowInsecure) {
+        if (m_mqttConfig.allowInsecure) {
             ESP_LOGW(TAG, "Security warning: SSL/TLS is enabled but certificate validation is disabled");
-        }
-        if(!m_mqttSslConfig){
-          ESP_LOGE(TAG, "SSL config ptr is null");
-          return false;
         }
         if (!configureSSL(mqtt_cfg)) {
             ESP_LOGE(TAG, "Failed to configure SSL/TLS for MQTT connection");
@@ -221,11 +238,14 @@ void MqttManager::onMqttEvent(esp_event_base_t base, int32_t event_id, void* eve
     switch (event->event_id) {
         case MQTT_EVENT_CONNECTED:
             ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED: Connection established successfully");
+            m_isConnected = true;
+            publishMqttStatus(true, MqttErrorCode::NONE);
             onConnected();
             break;
         case MQTT_EVENT_DISCONNECTED:
             ESP_LOGW(TAG, "MQTT_EVENT_DISCONNECTED: Client disconnected from broker");
             m_isConnected = false;
+            publishMqttStatus(false, MqttErrorCode::NONE);
             break;
         case MQTT_EVENT_SUBSCRIBED:
             ESP_LOGI(TAG, "MQTT_EVENT_SUBSCRIBED: Successfully subscribed to topic (msg_id=%d)", event->msg_id);
@@ -249,28 +269,39 @@ void MqttManager::onMqttEvent(esp_event_base_t base, int32_t event_id, void* eve
             break;
         case MQTT_EVENT_ERROR:
             ESP_LOGE(TAG, "MQTT_EVENT_ERROR: Connection or protocol error occurred");
-            if (event->error_handle) {
-                ESP_LOGE(TAG, "MQTT Error Type: %d", event->error_handle->error_type);
+            {
+                MqttErrorCode errCode = MqttErrorCode::UNKNOWN;
+                std::string errMsg;
+                if (event->error_handle) {
+                    ESP_LOGE(TAG, "MQTT Error Type: %d", event->error_handle->error_type);
 
-                // Categorize and handle different error types with detailed logging
-                switch (event->error_handle->error_type) {
-                    case MQTT_ERROR_TYPE_TCP_TRANSPORT:
-                        if (event->error_handle->esp_transport_sock_errno != 0) {
-                            ESP_LOGE(TAG, "Transport socket error: errno=%d (%s)",
-                                     event->error_handle->esp_transport_sock_errno,
-                                     strerror(event->error_handle->esp_transport_sock_errno));
-                        }
-                        break;
-                    case MQTT_ERROR_TYPE_CONNECTION_REFUSED:
-                        ESP_LOGE(TAG, "Connection refused - broker may be down or rejecting connection");
-                        break;
-                    case MQTT_ERROR_TYPE_SUBSCRIBE_FAILED:
-                        ESP_LOGE(TAG, "Subscribe failed - check topic permissions");
-                        break;
-                    default:
-                        ESP_LOGE(TAG, "Unknown MQTT error type: %d", event->error_handle->error_type);
-                        break;
-                }
+                    // Categorize and handle different error types with detailed logging
+                    switch (event->error_handle->error_type) {
+                        case MQTT_ERROR_TYPE_TCP_TRANSPORT:
+                            errCode = MqttErrorCode::NETWORK_ERROR;
+                            if (event->error_handle->esp_transport_sock_errno != 0) {
+                                errMsg = "Transport socket error";
+                                ESP_LOGE(TAG, "Transport socket error: errno=%d (%s)",
+                                         event->error_handle->esp_transport_sock_errno,
+                                         strerror(event->error_handle->esp_transport_sock_errno));
+                            }
+                            break;
+                        case MQTT_ERROR_TYPE_CONNECTION_REFUSED:
+                            errCode = MqttErrorCode::CONNECTION_REFUSED;
+                            errMsg = "Connection refused";
+                            ESP_LOGE(TAG, "Connection refused - broker may be down or rejecting connection");
+                            break;
+                        case MQTT_ERROR_TYPE_SUBSCRIBE_FAILED:
+                            errCode = MqttErrorCode::AUTH_FAILED;
+                            errMsg = "Subscribe failed";
+                            ESP_LOGE(TAG, "Subscribe failed - check topic permissions");
+                            break;
+                        default:
+                            errCode = MqttErrorCode::UNKNOWN;
+                            errMsg = "Unknown error";
+                            ESP_LOGE(TAG, "Unknown MQTT error type: %d", event->error_handle->error_type);
+                            break;
+                    }
 
                 if (event->error_handle->esp_tls_last_esp_err != 0) {
                     logSSLError("MQTT SSL/TLS connection", event->error_handle->esp_tls_last_esp_err);
@@ -283,8 +314,11 @@ void MqttManager::onMqttEvent(esp_event_base_t base, int32_t event_id, void* eve
                 ESP_LOGI(TAG, "Connection attempt details: broker=%s:%d, client_id=%s, ssl=%s",
                          m_mqttConfig.mqttBroker.c_str(), m_mqttConfig.mqttPort,
                          m_mqttConfig.mqttClientId.c_str(), m_mqttConfig.useSSL ? "enabled" : "disabled");
-            } else {
-                ESP_LOGE(TAG, "MQTT error occurred but no error handle available");
+                    publishMqttStatus(false, errCode, errMsg);
+                } else {
+                    ESP_LOGE(TAG, "MQTT error occurred but no error handle available");
+                    publishMqttStatus(false, MqttErrorCode::UNKNOWN, "No error details");
+                }
             }
             break;
         default:
@@ -305,12 +339,18 @@ void MqttManager::onConnected() {
 
     publish(m_mqttConfig.lwtTopic, "online", 1, true);
 
-    esp_mqtt_client_subscribe(m_client, m_mqttConfig.lockStateCmd.c_str(), 0);
-    esp_mqtt_client_subscribe(m_client, m_mqttConfig.lockCStateCmd.c_str(), 0);
-    esp_mqtt_client_subscribe(m_client, m_mqttConfig.lockTStateCmd.c_str(), 0);
-    esp_mqtt_client_subscribe(m_client, m_mqttConfig.btrLvlCmdTopic.c_str(), 0);
+    int ret;
+    ret = esp_mqtt_client_subscribe(m_client, m_mqttConfig.lockStateCmd.c_str(), 0);
+    if (ret < 0) ESP_LOGW(TAG, "Failed to subscribe to lockStateCmd");
+    ret = esp_mqtt_client_subscribe(m_client, m_mqttConfig.lockCStateCmd.c_str(), 0);
+    if (ret < 0) ESP_LOGW(TAG, "Failed to subscribe to lockCStateCmd");
+    ret = esp_mqtt_client_subscribe(m_client, m_mqttConfig.lockTStateCmd.c_str(), 0);
+    if (ret < 0) ESP_LOGW(TAG, "Failed to subscribe to lockTStateCmd");
+    ret = esp_mqtt_client_subscribe(m_client, m_mqttConfig.btrLvlCmdTopic.c_str(), 0);
+    if (ret < 0) ESP_LOGW(TAG, "Failed to subscribe to btrLvlCmdTopic");
     if (m_mqttConfig.lockEnableCustomState) {
-        esp_mqtt_client_subscribe(m_client, m_mqttConfig.lockCustomStateCmd.c_str(), 0);
+        ret = esp_mqtt_client_subscribe(m_client, m_mqttConfig.lockCustomStateCmd.c_str(), 0);
+        if (ret < 0) ESP_LOGW(TAG, "Failed to subscribe to lockCustomStateCmd");
     }
 
     if (m_mqttConfig.hassMqttDiscoveryEnabled) {
@@ -473,16 +513,13 @@ void MqttManager::publishLockState(const int currentState, const int targetState
  * @param readerId Byte sequence of the reader identifier; encoded as an uppercase hex string in the `readerId` JSON field.
  */
 void MqttManager::publishHomeKeyTap(const std::vector<uint8_t>& issuerId, const std::vector<uint8_t>& endpointId, const std::vector<uint8_t>& readerId) {
-    cJSON *doc = cJSON_CreateObject();
-    cJSON_AddStringToObject(doc, "issuerId", fmt::format("{:02X}", fmt::join(issuerId, "")).c_str());
-    cJSON_AddStringToObject(doc, "endpointId", fmt::format("{:02X}", fmt::join(endpointId, "")).c_str());
-    cJSON_AddStringToObject(doc, "readerId", fmt::format("{:02X}", fmt::join(readerId, "")).c_str());
-    cJSON_AddBoolToObject(doc, "homekey", true);
-    char *payload_cstr = cJSON_Print(doc);
-    std::string payload(payload_cstr);
-    free(payload_cstr);
+    std::string payload = JsonBuilder::object()
+        .addString("issuerId", fmt::format("{:02X}", fmt::join(issuerId, "")))
+        .addString("endpointId", fmt::format("{:02X}", fmt::join(endpointId, "")))
+        .addString("readerId", fmt::format("{:02X}", fmt::join(readerId, "")))
+        .addBool("homekey", true)
+        .toStringUnformatted();
     publish(m_mqttConfig.hkTopic, payload);
-    cJSON_Delete(doc);
 }
 
 /**
@@ -500,17 +537,14 @@ void MqttManager::publishHomeKeyTap(const std::vector<uint8_t>& issuerId, const 
  */
 void MqttManager::publishUidTap(const std::vector<uint8_t>& uid, const std::array<uint8_t,2> &atqa, const uint8_t &sak) {
     if(!m_mqttConfig.nfcTagNoPublish){
-      cJSON *doc = cJSON_CreateObject();
-      cJSON_AddStringToObject(doc, "uid", fmt::format("{:02X}", fmt::join(uid, "")).c_str());
-      cJSON_AddBoolToObject(doc, "homekey", false);
-      cJSON_AddStringToObject(doc, "atqa", fmt::format("{:02X}", fmt::join(atqa, "")).c_str());
-      cJSON_AddStringToObject(doc, "sak", fmt::format("{:02X}", sak).c_str());
-      cJSON_AddStringToObject(doc, "readerId", this->deviceID.c_str());
-      char *payload_cstr = cJSON_Print(doc);
-      std::string payload(payload_cstr);
-      free(payload_cstr);
+      std::string payload = JsonBuilder::object()
+          .addString("uid", fmt::format("{:02X}", fmt::join(uid, "")))
+          .addBool("homekey", false)
+          .addString("atqa", fmt::format("{:02X}", fmt::join(atqa, "")))
+          .addString("sak", fmt::format("{:02X}", sak))
+          .addString("readerId", this->deviceID)
+          .toStringUnformatted();
       publish(m_mqttConfig.hkTopic, payload);
-      cJSON_Delete(doc);
     } else ESP_LOGW(TAG, "MQTT publishing of Tag UID not enabled, ignoring!");
 }
 
@@ -621,8 +655,8 @@ void MqttManager::publishHassDiscovery() {
  */
 bool MqttManager::configureSSL(esp_mqtt_client_config_t& mqtt_cfg) {
     mqtt_cfg.broker.verification.use_global_ca_store = false;
-    if (!m_mqttSslConfig->caCert.empty()) {
-        mqtt_cfg.broker.verification.certificate = m_mqttSslConfig->caCert.c_str();
+    if (!m_mqttSslConfig.caCert.empty()) {
+        mqtt_cfg.broker.verification.certificate = m_mqttSslConfig.caCert.c_str();
         mqtt_cfg.broker.verification.skip_cert_common_name_check = m_mqttConfig.allowInsecure;
         ESP_LOGI(TAG, "Certificate validation mode: %s", m_mqttConfig.allowInsecure ? "SKIP_COMMON_NAME" : "FULL_VALIDATION");
     } else if (m_mqttConfig.allowInsecure) {
@@ -632,13 +666,12 @@ bool MqttManager::configureSSL(esp_mqtt_client_config_t& mqtt_cfg) {
         return false;
     }
 
-    if (!m_mqttSslConfig->clientCert.empty() && !m_mqttSslConfig->clientKey.empty()) {
-        mqtt_cfg.credentials.authentication.certificate = m_mqttSslConfig->clientCert.c_str();
-        mqtt_cfg.credentials.authentication.key = m_mqttSslConfig->clientKey.c_str();
-        ESP_LOGI(TAG, "TLS authentication configured");
+    if (!m_mqttSslConfig.clientCert.empty() && !m_mqttSslConfig.clientKey.empty()) {
+        mqtt_cfg.credentials.authentication.certificate = m_mqttSslConfig.clientCert.c_str();
+        mqtt_cfg.credentials.authentication.key = m_mqttSslConfig.clientKey.c_str();
+        ESP_LOGI(TAG, "TLS client authentication configured");
     } else {
-        ESP_LOGI(TAG, "No client certificate and/or private key configured");
-        return false;
+        ESP_LOGI(TAG, "No client certificate configured - using server-only authentication");
     }
 
     m_sslConfigured = true;
@@ -681,12 +714,24 @@ void MqttManager::logSSLError(const char* operation, esp_err_t error) {
         ESP_LOGI(TAG, "SSL Configuration state: useSSL=%s, allowInsecure=%s, hasCACert=%s, hasClientCert=%s, hasClientKey=%s",
                  m_mqttConfig.useSSL ? "true" : "false",
                  m_mqttConfig.allowInsecure ? "true" : "false",
-                 !m_mqttSslConfig->caCert.empty() ? "true" : "false",
-                 !m_mqttSslConfig->clientCert.empty() ? "true" : "false",
-                 !m_mqttSslConfig->clientKey.empty() ? "true" : "false");
+                 !m_mqttSslConfig.caCert.empty() ? "true" : "false",
+                 !m_mqttSslConfig.clientCert.empty() ? "true" : "false",
+                 !m_mqttSslConfig.clientKey.empty() ? "true" : "false");
     }
 }
 
 bool MqttManager::isConnected() const {
     return m_isConnected;
+}
+
+void MqttManager::publishMqttStatus(bool connected, MqttErrorCode errorCode, const std::string& errorMessage) {
+    EventMqttStatus status{
+        .connected = connected,
+        .errorCode = errorCode,
+        .errorMessage = errorMessage
+    };
+    std::vector<uint8_t> data;
+    alpaca::serialize(status, data);
+    event_bus.publish({m_mqtt_status_topic, 0, data.data(), data.size()});
+    ESP_LOGD(TAG, "Published MQTT status: connected=%s, errorCode=%d", connected ? "true" : "false", static_cast<uint8_t>(errorCode));
 }

@@ -15,6 +15,9 @@
     constexpr auto ETH_SPI_BUS = SPI2_HOST;
 #endif
 
+// Named constant for unset pin configurations
+inline constexpr uint8_t PIN_UNSET = 255;
+
 enum HK_COLOR { TAN, GOLD, SILVER, BLACK };
 enum class gpioMomentaryStateStatus : uint8_t {
   M_DISABLED = 0,
@@ -115,6 +118,12 @@ namespace espConfig
     std::string caCert = MQTT_CA_CERT;
     std::string clientCert = MQTT_CLIENT_CERT;
     std::string clientKey = MQTT_CLIENT_KEY;
+  };
+
+  enum class CertType {
+    CA,
+    CLIENT,
+    PRIVATE_KEY
   };
 
   struct misc_config_t

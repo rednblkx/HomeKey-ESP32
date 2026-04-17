@@ -1,4 +1,5 @@
 #include "ConfigManager.hpp"
+#include "MbedtlsHelpers.hpp"
 #include "cJSON.h"
 #include "config.hpp"
 #include <ranges>
@@ -20,35 +21,10 @@
 
 const char* ConfigManager::TAG = "ConfigManager";
 
-namespace {
-    struct ScopedEntropy {
-        mbedtls_entropy_context ctx;
-        ScopedEntropy() { mbedtls_entropy_init(&ctx); }
-        ~ScopedEntropy() { mbedtls_entropy_free(&ctx); }
-        mbedtls_entropy_context* get() { return &ctx; }
-    };
-
-    struct ScopedCtrDrbg {
-        mbedtls_ctr_drbg_context ctx;
-        ScopedCtrDrbg() { mbedtls_ctr_drbg_init(&ctx); }
-        ~ScopedCtrDrbg() { mbedtls_ctr_drbg_free(&ctx); }
-        mbedtls_ctr_drbg_context* get() { return &ctx; }
-    };
-
-    struct ScopedPk {
-        mbedtls_pk_context ctx;
-        ScopedPk() { mbedtls_pk_init(&ctx); }
-        ~ScopedPk() { mbedtls_pk_free(&ctx); }
-        mbedtls_pk_context* get() { return &ctx; }
-    };
-
-    struct ScopedX509Crt {
-        mbedtls_x509_crt ctx;
-        ScopedX509Crt() { mbedtls_x509_crt_init(&ctx); }
-        ~ScopedX509Crt() { mbedtls_x509_crt_free(&ctx); }
-        mbedtls_x509_crt* get() { return &ctx; }
-    };
-}
+using crypto::ScopedEntropy;
+using crypto::ScopedCtrDrbg;
+using crypto::ScopedPk;
+using crypto::ScopedX509Crt;
 
 /**
  * @brief Initialize ConfigManager and build the configuration key-to-field map.
@@ -1087,18 +1063,12 @@ template bool ConfigManager::deserializeFromJson<espConfig::actions_config_t>(co
 template bool ConfigManager::deserializeFromJson<espConfig::mqttConfig_t>(const std::string& json_string);
 
 // Certificate storage implementation
-bool ConfigManager::saveCertificate(const std::string& certType, const std::string& certContent) {
+bool ConfigManager::saveCertificate(espConfig::CertType certType, const std::string& certContent) {
     if (!m_isInitialized) {
         ESP_LOGE(TAG, "Cannot save certificate, ConfigManager not initialized.");
         return false;
     }
 
-    // Validate certificate type
-    if (certType != "ca" && certType != "client" && certType != "privateKey") {
-        ESP_LOGE(TAG, "Invalid certificate type: '%s' - Must be 'ca', 'client', or 'privateKey'", certType.c_str());
-        return false;
-    }
- 
     // Validate certificate content length to prevent heap exhaustion
     const size_t MAX_CERT_SIZE = 16384; // 16KB max certificate size
     if (certContent.length() > MAX_CERT_SIZE) {
@@ -1109,198 +1079,100 @@ bool ConfigManager::saveCertificate(const std::string& certType, const std::stri
 
     // Validate the actual content
     if(!validateCertificateContent(certContent, certType)) { 
-        ESP_LOGE(TAG, "Unable to validate certificate type: %s", certType.c_str());
+        ESP_LOGE(TAG, "Unable to validate certificate");
         return false;
     }
 
-    if(certType == "ca"){
-      m_mqttSslConfig.caCert = certContent;
-    } else if(certType == "client"){
-      m_mqttSslConfig.clientCert = certContent;
-    } else if(certType == "privateKey"){
-      m_mqttSslConfig.clientKey = certContent;
+    switch(certType) {
+        case espConfig::CertType::CA:
+            m_mqttSslConfig.caCert = certContent;
+            ESP_LOGI(TAG, "CA certificate saved successfully");
+            break;
+        case espConfig::CertType::CLIENT:
+            m_mqttSslConfig.clientCert = certContent;
+            ESP_LOGI(TAG, "Client certificate saved successfully");
+            break;
+        case espConfig::CertType::PRIVATE_KEY:
+            m_mqttSslConfig.clientKey = certContent;
+            ESP_LOGI(TAG, "Private key saved successfully");
+            break;
     }
 
     saveConfig<espConfig::mqtt_ssl_t>();
-
-    ESP_LOGI(TAG, "Certificate saved successfully: %s", certType.c_str());
     return true;
 }
 
-std::string ConfigManager::loadCertificate(const std::string& certType) {
+std::string ConfigManager::loadCertificate(espConfig::CertType certType) {
     if (!m_isInitialized) {
         ESP_LOGE(TAG, "Cannot load certificate, ConfigManager not initialized.");
         return "";
     }
 
-    // Validate certificate type
-    if (certType != "ca" && certType != "client" && certType != "privateKey") {
-        ESP_LOGE(TAG, "Invalid certificate type: %s. Must be 'ca', 'client', or 'key'.", certType.c_str());
-        return "";
-    }
-
     std::string content;
+    const char* typeStr = "";
 
-    if(certType == "ca"){
-      content = m_mqttSslConfig.caCert;
-    } else if(certType == "client"){
-      content = m_mqttSslConfig.clientCert;
-    } else if(certType == "privateKey"){
-      content = m_mqttSslConfig.clientKey;
+    switch(certType) {
+        case espConfig::CertType::CA:
+            content = m_mqttSslConfig.caCert;
+            typeStr = "CA";
+            break;
+        case espConfig::CertType::CLIENT:
+            content = m_mqttSslConfig.clientCert;
+            typeStr = "Client";
+            break;
+        case espConfig::CertType::PRIVATE_KEY:
+            content = m_mqttSslConfig.clientKey;
+            typeStr = "Private Key";
+            break;
     }
 
-    ESP_LOGI(TAG, "Certificate loaded successfully: %s (size: %zu bytes)", certType.c_str(), content.length());
+    ESP_LOGI(TAG, "%s loaded successfully (size: %zu bytes)", typeStr, content.length());
     return content;
 }
 
-bool ConfigManager::deleteCertificate(const std::string& certType) {
+bool ConfigManager::deleteCertificate(espConfig::CertType certType) {
     if (!m_isInitialized) {
         ESP_LOGE(TAG, "Cannot delete certificate, ConfigManager not initialized.");
         return false;
     }
 
-    // Validate certificate type
-    if (certType != "ca" && certType != "client" && certType != "privateKey") {
-        ESP_LOGE(TAG, "Invalid certificate type: %s. Must be 'ca', 'client', or 'key'.", certType.c_str());
-        return false;
+    const char* typeStr = "";
+
+    switch(certType) {
+        case espConfig::CertType::CA:
+            m_mqttSslConfig.caCert.clear();
+            typeStr = "CA";
+            break;
+        case espConfig::CertType::CLIENT:
+            m_mqttSslConfig.clientCert.clear();
+            typeStr = "Client";
+            break;
+        case espConfig::CertType::PRIVATE_KEY:
+            m_mqttSslConfig.clientKey.clear();
+            typeStr = "Private Key";
+            break;
     }
-  
-    if(certType == "ca"){
-      m_mqttSslConfig.caCert.clear();
-    } else if(certType == "client"){
-      m_mqttSslConfig.clientCert.clear();
-    } else if(certType == "privateKey"){
-      m_mqttSslConfig.clientKey.clear();
-    }
- 
+
     saveConfig<espConfig::mqtt_ssl_t>();
 
-    ESP_LOGI(TAG, "Certificate deleted successfully: %s", certType.c_str());
+    ESP_LOGI(TAG, "%s deleted successfully", typeStr);
     return true;
 }
 
-bool ConfigManager::validateCertificateFormat(const std::string& certContent) {
-    // Enhanced PEM format validation
-    if (certContent.empty()) {
-        ESP_LOGE(TAG, "Certificate content is empty");
-        return false;
+bool ConfigManager::validateCertificateContent(const std::string& certContent, espConfig::CertType certType) {
+    switch(certType) {
+        case espConfig::CertType::PRIVATE_KEY:
+            // Validate private key using mbedTLS
+            return validatePrivateKeyContent(certContent);
+        case espConfig::CertType::CA:
+        case espConfig::CertType::CLIENT:
+            // Validate certificate using mbedTLS
+            return validateCertificateWithMbedTLS(certContent, certType);
     }
-
-    // Check for BEGIN and END markers
-    size_t beginPos = certContent.find("-----BEGIN");
-    size_t endPos = certContent.find("-----END");
-
-    if (beginPos == std::string::npos || endPos == std::string::npos) {
-        ESP_LOGE(TAG, "Certificate missing required PEM BEGIN/END markers");
-        return false;
-    }
-
-    if (beginPos >= endPos) {
-        ESP_LOGE(TAG, "Invalid PEM format: END marker appears before BEGIN marker");
-        return false;
-    }
-
-    // Extract the type from BEGIN marker (e.g., "CERTIFICATE", "PRIVATE KEY", etc.)
-    size_t beginEnd = certContent.find("-----", beginPos + 11);
-    if (beginEnd == std::string::npos) {
-        ESP_LOGE(TAG, "Invalid PEM BEGIN marker format");
-        return false;
-    }
-    std::string beginType = certContent.substr(beginPos + 11, beginEnd - (beginPos + 11));
-
-    // Extract the type from END marker
-    size_t endEnd = certContent.find("-----", endPos + 9);
-    if (endEnd == std::string::npos) {
-        ESP_LOGE(TAG, "Invalid PEM END marker format");
-        return false;
-    }
-    std::string endType = certContent.substr(endPos + 9, endEnd - (endPos + 9));
-
-    // Ensure BEGIN and END types match
-    if (beginType != endType) {
-        ESP_LOGE(TAG, "PEM BEGIN and END marker types don't match: '%s' vs '%s'", beginType.c_str(), endType.c_str());
-        return false;
-    }
-
-    // Find the actual content start (after BEGIN marker line)
-    size_t contentStart = certContent.find('\n', beginEnd + 5);
-    if (contentStart == std::string::npos) {
-        ESP_LOGE(TAG, "Invalid PEM format: no newline after BEGIN marker");
-        return false;
-    }
-    contentStart++; // Move past the newline
-
-    // Find content end (before END marker line)
-    size_t contentEnd = certContent.rfind('\n', endPos);
-    if (contentEnd == std::string::npos || contentEnd <= contentStart) {
-        ESP_LOGE(TAG, "Invalid PEM format: no content between markers");
-        return false;
-    }
-
-    std::string base64Content = certContent.substr(contentStart, contentEnd - contentStart);
-
-    // Remove all whitespace
-    base64Content.erase(std::remove_if(base64Content.begin(), base64Content.end(), ::isspace), base64Content.end());
-
-    if (base64Content.empty()) {
-        ESP_LOGE(TAG, "Certificate base64 content is empty");
-        return false;
-    }
-
-    // Validate base64 characters and padding
-    bool validBase64 = true;
-    int paddingCount = 0;
-    for (size_t i = 0; i < base64Content.length(); ++i) {
-        char c = base64Content[i];
-        if (c == '=') {
-            paddingCount++;
-            // Padding can only appear at the end
-            if (i < base64Content.length() - 1 && base64Content[i + 1] != '=') {
-                validBase64 = false;
-                break;
-            }
-        } else if (!isalnum(c) && c != '+' && c != '/') {
-            validBase64 = false;
-            break;
-        }
-    }
-
-    if (!validBase64) {
-        ESP_LOGE(TAG, "Invalid base64 characters in certificate content");
-        return false;
-    }
-
-    // Validate padding (must be 0, 1, or 2 padding characters)
-    if (paddingCount > 2) {
-        ESP_LOGE(TAG, "Invalid base64 padding: too many '=' characters");
-        return false;
-    }
-
-    // Note: Removed strict base64 length validation as mbedTLS will validate the actual decoding
-
-    ESP_LOGD(TAG, "PEM format validation passed for type: %s", beginType.c_str());
-    return true;
-}
-
-bool ConfigManager::validateCertificateContent(const std::string& certContent, const std::string& certType) {
-    // First, validate basic PEM format
-    if (!validateCertificateFormat(certContent)) {
-        return false;
-    }
-
-    if (certType == "privateKey") {
-        // Validate private key using mbedTLS
-        return validatePrivateKeyContent(certContent);
-    } else if (certType == "ca" || certType == "client") {
-        // Validate certificate using mbedTLS
-        return validateCertificateWithMbedTLS(certContent, certType);
-    }
-
-    ESP_LOGE(TAG, "Unknown certificate type: %s", certType.c_str());
     return false;
 }
 
-bool ConfigManager::validateCertificateWithMbedTLS(const std::string& certContent, const std::string& certType) {
+bool ConfigManager::validateCertificateWithMbedTLS(const std::string& certContent, espConfig::CertType certType) {
     ScopedX509Crt cert;
 
     int ret = mbedtls_x509_crt_parse(cert.get(), reinterpret_cast<const unsigned char*>(certContent.c_str()), certContent.length() + 1);
@@ -1338,41 +1210,7 @@ bool ConfigManager::validateCertificateWithMbedTLS(const std::string& certConten
         ESP_LOGE(TAG, "Certificate has invalid validity dates");
         isValid = false;
     }
-
-    // Check expiration
-    time_t now = time(nullptr);
-    struct tm* tm_now = gmtime(&now);
-
-    if (tm_now) {
-        struct tm cert_not_after = {
-            .tm_sec = cert.get()->valid_to.sec,
-            .tm_min = cert.get()->valid_to.min,
-            .tm_hour = cert.get()->valid_to.hour,
-            .tm_mday = cert.get()->valid_to.day,
-            .tm_mon = cert.get()->valid_to.mon - 1,  // mbedTLS months are 1-based
-            .tm_year = cert.get()->valid_to.year - 1900,
-            .tm_isdst = -1
-        };
-
-        time_t cert_expiry = mktime(&cert_not_after);
-        if (cert_expiry == -1) {
-            ESP_LOGE(TAG, "Failed to parse certificate expiration date");
-            isValid = false;
-        } else if (now > cert_expiry) {
-            ESP_LOGE(TAG, "Certificate has expired");
-            isValid = false;
-        } else {
-            // Check if certificate expires soon (within 30 days)
-            time_t thirty_days = 30 * 24 * 60 * 60;
-            if (cert_expiry - now < thirty_days) {
-                ESP_LOGW(TAG, "Certificate expires soon (within 30 days)");
-            }
-        }
-    } else {
-        ESP_LOGE(TAG, "Failed to get current time for expiration check");
-        isValid = false;
-    }
-
+    
     // Check if certificate has public key
     if (mbedtls_pk_get_type(&cert.get()->pk) == MBEDTLS_PK_NONE) {
         ESP_LOGE(TAG, "Certificate missing public key");
@@ -1380,7 +1218,7 @@ bool ConfigManager::validateCertificateWithMbedTLS(const std::string& certConten
     }
 
     // Additional checks for CA certificates
-    if (certType == "ca") {
+    if (certType == espConfig::CertType::CA) {
         // CA certificates should have basic constraints extension
         if (!(cert.get()->MBEDTLS_PRIVATE(ca_istrue))) {
             ESP_LOGW(TAG, "CA certificate does not have CA:true in basic constraints");
@@ -1537,42 +1375,50 @@ bool ConfigManager::validatePrivateKeyMatchesCertificate() {
 
 std::vector<CertificateStatus> ConfigManager::getCertificatesStatus(){
   std::vector<CertificateStatus> certificates;
-  std::array<std::string, 3> types{"ca", "client", "privateKey"};
+  std::array<espConfig::CertType, 3> types{espConfig::CertType::CA, espConfig::CertType::CLIENT, espConfig::CertType::PRIVATE_KEY};
   std::string certStr;
-  for (auto c : types) {
+  for (auto certType : types) {
     ScopedX509Crt cert;
-    certStr = loadCertificate(c);
-    if(!certStr.empty() && c != "privateKey"){
+    certStr = loadCertificate(certType);
+    const char* typeStr = "";
+    switch(certType) {
+        case espConfig::CertType::CA: typeStr = "ca"; break;
+        case espConfig::CertType::CLIENT: typeStr = "client"; break;
+        case espConfig::CertType::PRIVATE_KEY: typeStr = "privateKey"; break;
+    }
+
+    if(!certStr.empty() && certType != espConfig::CertType::PRIVATE_KEY){
 
       int ret = mbedtls_x509_crt_parse(cert.get(), reinterpret_cast<const unsigned char*>(certStr.c_str()), certStr.length() + 1);
       if(ret){
-        ESP_LOGE(TAG, "Unable to parse '%s' certificate: %d", c.c_str(), ret);
+        ESP_LOGE(TAG, "Unable to parse '%s' certificate: %d", typeStr, ret);
         continue;
       }
       char subject[256], issuer[256];
       ret = mbedtls_x509_dn_gets(subject, sizeof(subject), &cert.get()->subject);
       if(ret < 0){
-        ESP_LOGE(TAG, "Unable to retrieve subject DN for '%s' certificate: %d", c.c_str(), ret);
+        ESP_LOGE(TAG, "Unable to retrieve subject DN for '%s' certificate: %d", typeStr, ret);
         continue;
       }
       ret = mbedtls_x509_dn_gets(issuer, sizeof(issuer), &cert.get()->issuer);
       if(ret < 0){
-        ESP_LOGE(TAG, "Unable to retrieve issuer DN for '%s' certificate: %d", c.c_str(), ret);
+        ESP_LOGE(TAG, "Unable to retrieve issuer DN for '%s' certificate: %d", typeStr, ret);
         continue;
       }
       mbedtls_x509_time valid_from = cert.get()->valid_from;
       mbedtls_x509_time valid_to = cert.get()->valid_to;
       certificates.emplace_back(CertificateStatus{
-          c,
+          certType,
+          typeStr,
           issuer,
           subject,
           {.from = fmt::format("{}/{}/{}", valid_from.day, valid_from.mon,
                                valid_from.year),
            .to = fmt::format("{}/{}/{}", valid_to.day, valid_to.mon,
                              valid_to.year)},
-          c == "client" ? validatePrivateKeyMatchesCertificate() : false});
-    } else if(not certStr.empty() && c == "privateKey"){ 
-      certificates.emplace_back(CertificateStatus{c});
+          certType == espConfig::CertType::CLIENT ? validatePrivateKeyMatchesCertificate() : false});
+    } else if(not certStr.empty() && certType == espConfig::CertType::PRIVATE_KEY){
+      certificates.emplace_back(CertificateStatus{certType, typeStr});
     }
   }
   return certificates;
