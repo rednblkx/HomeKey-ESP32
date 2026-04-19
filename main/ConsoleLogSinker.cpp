@@ -2,25 +2,9 @@
 #include "fmt/color.h"
 #include <ctime>
 
-#ifdef CONFIG_IDF_TARGET_ESP32C3
-#define LOCAL static
-#else
-#define LOCAL thread_local
-#endif
-
 namespace loggable {
 
 void ConsoleLogSinker::consume(const LogMessage& message) {
-
-    LOCAL bool flag = false;
-    if (flag) return;
-
-    struct Guard {
-        bool& flag;
-        explicit Guard(bool& f) : flag(f) { flag = true; }
-        ~Guard() { flag = false; }
-    } guard(flag);
-
     fmt::detail::color_type c = fmt::color::white;
     std::string level = "NONE";
     switch (message.get_level()) {
