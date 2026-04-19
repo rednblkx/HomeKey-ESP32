@@ -1,4 +1,4 @@
 CompileFlags:
   CompilationDatabase: build
   Add: [-ferror-limit=0]
-  Remove: [-fno-tree-switch-conversion, -fstrict-volatile-bitfields, -march=rv32imc_zicsr_zifencei]
+  Remove: [-fno-tree-switch-conversion, -fstrict-volatile-bitfields, -march=rv32imc_zicsr_zifencei, -fno-shrink-wrap]
