@@ -7,6 +7,8 @@
 #include <vector>
 #include <limits>
 #include "esp_log.h"
+#include "fmt/ranges.h"
+#include "mbedtls/sha256.h"
 #include "mbedtls/x509.h"
 #include "msgpack.h"
 #include <LittleFS.h>
@@ -71,6 +73,13 @@ ConfigManager::ConfigManager() : m_isInitialized(false) {
         {"clientKey", &m_mqttSslConfig.clientKey},
       }
     },
+    {
+      "https", {
+        {"serverCert", &m_httpsCertsConfig.serverCert},
+        {"privateKey", &m_httpsCertsConfig.privateKey},
+        {"caCert", &m_httpsCertsConfig.caCert},
+      }
+    },
     {"misc",{
       // Miscellaneous Config
       {"deviceName", &m_miscConfig.deviceName},
@@ -85,6 +94,7 @@ ConfigManager::ConfigManager() : m_isInitialized(false) {
       {"webAuthEnabled", &m_miscConfig.webAuthEnabled},
       {"webUsername", &m_miscConfig.webUsername},
       {"webPassword", &m_miscConfig.webPassword},
+      {"webHttpsEnabled", &m_miscConfig.webHttpsEnabled},
       {"nfcGpioPins", &m_miscConfig.nfcGpioPins},
       {"nfcPinsPreset", &m_miscConfig.nfcPinsPreset},
       {"btrLowStatusThreshold", &m_miscConfig.btrLowStatusThreshold},
@@ -181,6 +191,7 @@ bool ConfigManager::begin() {
   loadConfigFromNvs("MQTTDATA");
   loadConfigFromNvs("MQTTSSLDATA");
   loadConfigFromNvs("MISCDATA");
+  loadConfigFromNvs("HTTPSDATA");
 
   ESP_LOGI(TAG, "Initialization complete.");
   return true;
@@ -270,7 +281,16 @@ bool ConfigManager::deleteConfig() {
   } else if constexpr(std::is_same_v<ConfigType, espConfig::actions_config_t>){
     m_actionsConfig = {};
     return saveConfig<espConfig::actions_config_t>();
-  }else {
+  } else if constexpr(std::is_same_v<ConfigType, espConfig::https_certs_t>){
+    m_httpsCertsConfig = {};
+    esp_err_t err = nvs_erase_key(m_nvsHandle, "HTTPSDATA");
+    if (err == ESP_OK || err == ESP_ERR_NVS_NOT_FOUND) {
+      esp_err_t commit_err = nvs_commit(m_nvsHandle);
+      return commit_err == ESP_OK;
+    }
+    ESP_LOGE(TAG, "Failed to erase HTTPSDATA: %s", esp_err_to_name(err));
+    return false;
+  } else {
     static_assert(std::is_void_v<ConfigType> && false, "Unsupported ConfigType for deleteConfig");
   }
   return false;
@@ -294,6 +314,8 @@ bool ConfigManager::saveConfig() {
     key = "MQTTSSLDATA";
   } else if constexpr(std::is_same_v<ConfigType, espConfig::misc_config_t> || std::is_same_v<ConfigType, espConfig::actions_config_t>){
     key = "MISCDATA";
+  } else if constexpr(std::is_same_v<ConfigType, espConfig::https_certs_t>){
+    key = "HTTPSDATA";
   } else {
     static_assert(std::is_void_v<ConfigType> && false, "Unsupported ConfigType for saveConfig");
   }
@@ -380,6 +402,8 @@ void ConfigManager::loadConfigFromNvs(const char *key) {
     } else if(!strcmp(key, "MISCDATA")){
       deserialize(obj, "misc");
       deserialize(obj, "actions");
+    } else if(!strcmp(key, "HTTPSDATA")){
+      deserialize(obj, "https");
     } else {ESP_LOGE(TAG, "Key '%s' not valid", key);return;}
   } else {
     ESP_LOGE(TAG, "Failed to parse msgpack for key '%s'. Using defaults.", key);
@@ -408,6 +432,8 @@ bool ConfigManager::saveConfigToNvs(const char *key) {
     buf = serialize<espConfig::mqtt_ssl_t>();
   } else if (!strcmp(key, "MQTTDATA")){
     buf = serialize<espConfig::mqttConfig_t>();
+  } else if (!strcmp(key, "HTTPSDATA")){
+    buf = serialize<espConfig::https_certs_t>();
   }
 
   esp_err_t set_err = nvs_set_blob(m_nvsHandle, key, buf.data(), buf.size());
@@ -585,6 +611,8 @@ std::vector<uint8_t> ConfigManager::serialize() {
     configMap = m_configMap["ssl"];
   } else if constexpr (std::is_same_v<espConfig::mqttConfig_t, ConfigType>){
     configMap = m_configMap["mqtt"];
+  } else if constexpr (std::is_same_v<espConfig::https_certs_t, ConfigType>){
+    configMap = m_configMap["https"];
   }
   msgpack_pack_map(&pk, configMap.size()); // Pack the map size
 
@@ -1069,37 +1097,60 @@ bool ConfigManager::saveCertificate(espConfig::CertType certType, const std::str
         return false;
     }
 
-    // Validate certificate content length to prevent heap exhaustion
-    const size_t MAX_CERT_SIZE = 16384; // 16KB max certificate size
+    const size_t MAX_CERT_SIZE = 16384;
     if (certContent.length() > MAX_CERT_SIZE) {
         ESP_LOGE(TAG, "Certificate too large: %zu bytes (max: %zu)", 
                  certContent.length(), MAX_CERT_SIZE);
         return false;
     }
 
-    // Validate the actual content
     if(!validateCertificateContent(certContent, certType)) { 
         ESP_LOGE(TAG, "Unable to validate certificate");
         return false;
     }
 
+    const char* typeStr = "";
+    bool isHttps = false;
+
     switch(certType) {
-        case espConfig::CertType::CA:
+        case espConfig::CertType::MQTT_CA:
             m_mqttSslConfig.caCert = certContent;
-            ESP_LOGI(TAG, "CA certificate saved successfully");
+            typeStr = "CA certificate";
             break;
-        case espConfig::CertType::CLIENT:
+        case espConfig::CertType::MQTT_CLIENT:
             m_mqttSslConfig.clientCert = certContent;
-            ESP_LOGI(TAG, "Client certificate saved successfully");
+            typeStr = "Client certificate";
             break;
-        case espConfig::CertType::PRIVATE_KEY:
+        case espConfig::CertType::MQTT_PRIVATE_KEY:
             m_mqttSslConfig.clientKey = certContent;
-            ESP_LOGI(TAG, "Private key saved successfully");
+            typeStr = "Private key";
             break;
+        case espConfig::CertType::HTTPS_SERVER_CERT:
+            m_httpsCertsConfig.serverCert = certContent;
+            typeStr = "HTTPS server certificate";
+            isHttps = true;
+            break;
+        case espConfig::CertType::HTTPS_PRIVATE_KEY:
+            m_httpsCertsConfig.privateKey = certContent;
+            typeStr = "HTTPS private key";
+            isHttps = true;
+            break;
+        case espConfig::CertType::HTTPS_CA_CERT:
+            m_httpsCertsConfig.caCert = certContent;
+            typeStr = "HTTPS CA certificate";
+            isHttps = true;
+            break;
+        default:
+    		break;
     }
 
-    saveConfig<espConfig::mqtt_ssl_t>();
-    return true;
+    ESP_LOGI(TAG, "%s saved successfully", typeStr);
+
+    if (isHttps) {
+        return saveConfig<espConfig::https_certs_t>();
+    } else {
+        return saveConfig<espConfig::mqtt_ssl_t>();
+    }
 }
 
 std::string ConfigManager::loadCertificate(espConfig::CertType certType) {
@@ -1112,21 +1163,35 @@ std::string ConfigManager::loadCertificate(espConfig::CertType certType) {
     const char* typeStr = "";
 
     switch(certType) {
-        case espConfig::CertType::CA:
+        case espConfig::CertType::MQTT_CA:
             content = m_mqttSslConfig.caCert;
             typeStr = "CA";
             break;
-        case espConfig::CertType::CLIENT:
+        case espConfig::CertType::MQTT_CLIENT:
             content = m_mqttSslConfig.clientCert;
             typeStr = "Client";
             break;
-        case espConfig::CertType::PRIVATE_KEY:
+        case espConfig::CertType::MQTT_PRIVATE_KEY:
             content = m_mqttSslConfig.clientKey;
             typeStr = "Private Key";
             break;
+        case espConfig::CertType::HTTPS_SERVER_CERT:
+            content = m_httpsCertsConfig.serverCert;
+            typeStr = "HTTPS Server";
+            break;
+        case espConfig::CertType::HTTPS_PRIVATE_KEY:
+            content = m_httpsCertsConfig.privateKey;
+            typeStr = "HTTPS Private Key";
+            break;
+        case espConfig::CertType::HTTPS_CA_CERT:
+            content = m_httpsCertsConfig.caCert;
+            typeStr = "HTTPS CA";
+            break;
+        default:
+    		break;
     }
 
-    ESP_LOGI(TAG, "%s loaded successfully (size: %zu bytes)", typeStr, content.length());
+    ESP_LOGD(TAG, "%s loaded successfully (size: %zu bytes)", typeStr, content.length());
     return content;
 }
 
@@ -1137,37 +1202,61 @@ bool ConfigManager::deleteCertificate(espConfig::CertType certType) {
     }
 
     const char* typeStr = "";
+    bool isHttps = false;
 
     switch(certType) {
-        case espConfig::CertType::CA:
+        case espConfig::CertType::MQTT_CA:
             m_mqttSslConfig.caCert.clear();
             typeStr = "CA";
             break;
-        case espConfig::CertType::CLIENT:
+        case espConfig::CertType::MQTT_CLIENT:
             m_mqttSslConfig.clientCert.clear();
             typeStr = "Client";
             break;
-        case espConfig::CertType::PRIVATE_KEY:
+        case espConfig::CertType::MQTT_PRIVATE_KEY:
             m_mqttSslConfig.clientKey.clear();
             typeStr = "Private Key";
             break;
+        case espConfig::CertType::HTTPS_SERVER_CERT:
+            m_httpsCertsConfig.serverCert.clear();
+            typeStr = "HTTPS server certificate";
+            isHttps = true;
+            break;
+        case espConfig::CertType::HTTPS_PRIVATE_KEY:
+            m_httpsCertsConfig.privateKey.clear();
+            typeStr = "HTTPS private key";
+            isHttps = true;
+            break;
+        case espConfig::CertType::HTTPS_CA_CERT:
+            m_httpsCertsConfig.caCert.clear();
+            typeStr = "HTTPS CA certificate";
+            isHttps = true;
+            break;
+        default:
+    		break;
     }
 
-    saveConfig<espConfig::mqtt_ssl_t>();
-
     ESP_LOGI(TAG, "%s deleted successfully", typeStr);
-    return true;
+
+    if (isHttps) {
+        return saveConfig<espConfig::https_certs_t>();
+    } else {
+        return saveConfig<espConfig::mqtt_ssl_t>();
+    }
 }
 
 bool ConfigManager::validateCertificateContent(const std::string& certContent, espConfig::CertType certType) {
     switch(certType) {
-        case espConfig::CertType::PRIVATE_KEY:
-            // Validate private key using mbedTLS
+        case espConfig::CertType::MQTT_PRIVATE_KEY:
+        case espConfig::CertType::HTTPS_PRIVATE_KEY:
             return validatePrivateKeyContent(certContent);
-        case espConfig::CertType::CA:
-        case espConfig::CertType::CLIENT:
-            // Validate certificate using mbedTLS
+        case espConfig::CertType::MQTT_CA:
+        case espConfig::CertType::MQTT_CLIENT:
+        case espConfig::CertType::HTTPS_SERVER_CERT:
+        case espConfig::CertType::HTTPS_CA_CERT:
             return validateCertificateWithMbedTLS(certContent, certType);
+        default:
+    		break;
     }
     return false;
 }
@@ -1184,48 +1273,40 @@ bool ConfigManager::validateCertificateWithMbedTLS(const std::string& certConten
         return false;
     }
 
-    // Validate certificate structure and basic fields
     bool isValid = true;
 
-    // Check if certificate has valid version
     if (cert.get()->version == 0) {
         ESP_LOGE(TAG, "Certificate has invalid version");
         isValid = false;
     }
 
-    // Check if certificate has subject
     if (cert.get()->subject_raw.len == 0) {
         ESP_LOGE(TAG, "Certificate missing subject");
         isValid = false;
     }
 
-    // Check if certificate has issuer
     if (cert.get()->issuer_raw.len == 0) {
         ESP_LOGE(TAG, "Certificate missing issuer");
         isValid = false;
     }
 
-    // Check if certificate has valid dates
     if (cert.get()->valid_from.year == 0 || cert.get()->valid_to.year == 0) {
         ESP_LOGE(TAG, "Certificate has invalid validity dates");
         isValid = false;
     }
     
-    // Check if certificate has public key
     if (mbedtls_pk_get_type(&cert.get()->pk) == MBEDTLS_PK_NONE) {
         ESP_LOGE(TAG, "Certificate missing public key");
         isValid = false;
     }
 
-    // Additional checks for CA certificates
-    if (certType == espConfig::CertType::CA) {
+    if (certType == espConfig::CertType::MQTT_CA || certType == espConfig::CertType::HTTPS_CA_CERT) {
         // CA certificates should have basic constraints extension
         if (!(cert.get()->MBEDTLS_PRIVATE(ca_istrue))) {
             ESP_LOGW(TAG, "CA certificate does not have CA:true in basic constraints");
         }
     }
 
-    // Log certificate information
     if (isValid) {
         char subject[256];
         char issuer[256];
@@ -1255,14 +1336,12 @@ bool ConfigManager::validatePrivateKeyContent(const std::string& keyContent) {
         return false;
     }
 
-    // Check key type
     mbedtls_pk_type_t key_type = mbedtls_pk_get_type(pk.get());
     if (key_type != MBEDTLS_PK_RSA && key_type != MBEDTLS_PK_ECKEY && key_type != MBEDTLS_PK_ECKEY_DH && key_type != MBEDTLS_PK_ECDSA) {
         ESP_LOGE(TAG, "Unsupported private key type: %d", key_type);
         return false;
     }
 
-    // For RSA keys, check minimum key size
     if (key_type == MBEDTLS_PK_RSA) {
         size_t key_bits = mbedtls_pk_get_bitlen(pk.get());
         if (key_bits < 2048) {
@@ -1270,7 +1349,6 @@ bool ConfigManager::validatePrivateKeyContent(const std::string& keyContent) {
         }
     }
 
-    // For EC keys, check curve
     if (key_type == MBEDTLS_PK_ECKEY || key_type == MBEDTLS_PK_ECKEY_DH || key_type == MBEDTLS_PK_ECDSA) {
         const mbedtls_ecp_keypair* ec_key = mbedtls_pk_ec(*pk.get());
         if (ec_key) {
@@ -1290,12 +1368,11 @@ bool ConfigManager::validatePrivateKeyContent(const std::string& keyContent) {
     return true;
 }
 
-bool ConfigManager::validatePrivateKeyMatchesCertificate() {
-    if (m_mqttSslConfig.clientKey.empty() || m_mqttSslConfig.clientCert.empty()) {
-        ESP_LOGE(TAG, "Private key or certificate is empty");
+bool ConfigManager::validateKeyCertPair(const std::string& privateKey, const std::string& certificate, const char* context) {
+    if (privateKey.empty() || certificate.empty()) {
+        ESP_LOGE("ConfigManager", "%s private key or certificate is empty", context);
         return false;
     }
-
 
     ScopedEntropy entropy;
     ScopedCtrDrbg ctr_drbg;
@@ -1303,59 +1380,53 @@ bool ConfigManager::validatePrivateKeyMatchesCertificate() {
     int ret = mbedtls_ctr_drbg_seed(ctr_drbg.get(), mbedtls_entropy_func, entropy.get(),
                                   nullptr, 0);
     if (ret != 0) {
-        ESP_LOGE(TAG, "mbedtls_ctr_drbg_seed: %d", ret);
+        ESP_LOGE("ConfigManager", "mbedtls_ctr_drbg_seed: %d", ret);
         return false;
     }
 
-    // Parse the private key
     ScopedPk pk;
-    ret = mbedtls_pk_parse_key(pk.get(), reinterpret_cast<const unsigned char*>(m_mqttSslConfig.clientKey.c_str()), m_mqttSslConfig.clientKey.length() + 1, nullptr, 0, mbedtls_ctr_drbg_random, ctr_drbg.get());
+    ret = mbedtls_pk_parse_key(pk.get(), reinterpret_cast<const unsigned char*>(privateKey.c_str()), privateKey.length() + 1, nullptr, 0, mbedtls_ctr_drbg_random, ctr_drbg.get());
     if (ret != 0) {
         char error_buf[100];
         mbedtls_strerror(ret, error_buf, sizeof(error_buf));
-        ESP_LOGE(TAG, "Failed to parse private key: %s (error code: %d)", error_buf, ret);
+        ESP_LOGE("ConfigManager", "Failed to parse %s private key: %s (error code: %d)", context, error_buf, ret);
         return false;
     }
 
-    // Parse the certificate
     ScopedX509Crt cert;
-    ret = mbedtls_x509_crt_parse(cert.get(), reinterpret_cast<const unsigned char*>(m_mqttSslConfig.clientCert.c_str()), m_mqttSslConfig.clientCert.length() + 1);
+    ret = mbedtls_x509_crt_parse(cert.get(), reinterpret_cast<const unsigned char*>(certificate.c_str()), certificate.length() + 1);
     if (ret != 0) {
         char error_buf[100];
         mbedtls_strerror(ret, error_buf, sizeof(error_buf));
-        ESP_LOGE(TAG, "Failed to parse certificate: %s (error code: %d)", error_buf, ret);
+        ESP_LOGE("ConfigManager", "Failed to parse %s certificate: %s (error code: %d)", context, error_buf, ret);
         return false;
     }
 
-    // Check if the private key and certificate public key match
     ret = mbedtls_pk_check_pair(&cert.get()->pk, pk.get(), mbedtls_ctr_drbg_random, ctr_drbg.get());
     if (ret != 0) {
         char error_buf[100];
         mbedtls_strerror(ret, error_buf, sizeof(error_buf));
-        ESP_LOGE(TAG, "Private key does not match certificate public key: %s (error code: %d)", error_buf, ret);
+        ESP_LOGE("ConfigManager", "%s private key does not match certificate public key: %s (error code: %d)", context, error_buf, ret);
         return false;
     }
 
-    // Additional checks for key type compatibility
     mbedtls_pk_type_t cert_key_type = mbedtls_pk_get_type(&cert.get()->pk);
     mbedtls_pk_type_t key_type = mbedtls_pk_get_type(pk.get());
 
     if (cert_key_type != key_type) {
-        ESP_LOGE(TAG, "Certificate and private key have different types (cert: %d, key: %d)", cert_key_type, key_type);
+        ESP_LOGE("ConfigManager", "%s certificate and private key have different types (cert: %d, key: %d)", context, cert_key_type, key_type);
         return false;
     }
 
-    // For RSA keys, check key sizes match
     if (key_type == MBEDTLS_PK_RSA) {
         size_t cert_key_bits = mbedtls_pk_get_bitlen(&cert.get()->pk);
         size_t key_bits = mbedtls_pk_get_bitlen(pk.get());
         if (cert_key_bits != key_bits) {
-            ESP_LOGE(TAG, "RSA key sizes don't match (cert: %zu bits, key: %zu bits)", cert_key_bits, key_bits);
+            ESP_LOGE("ConfigManager", "%s RSA key sizes don't match (cert: %zu bits, key: %zu bits)", context, cert_key_bits, key_bits);
             return false;
         }
     }
 
-    // For EC keys, check curve matches
     if (key_type == MBEDTLS_PK_ECKEY || key_type == MBEDTLS_PK_ECKEY_DH || key_type == MBEDTLS_PK_ECDSA) {
         const mbedtls_ecp_keypair* cert_ec = mbedtls_pk_ec(cert.get()->pk);
         const mbedtls_ecp_keypair* key_ec = mbedtls_pk_ec(*pk.get());
@@ -1363,38 +1434,52 @@ bool ConfigManager::validatePrivateKeyMatchesCertificate() {
             mbedtls_ecp_group_id cert_curve = cert_ec->MBEDTLS_PRIVATE(grp).id;
             mbedtls_ecp_group_id key_curve = key_ec->MBEDTLS_PRIVATE(grp).id;
             if (cert_curve != key_curve) {
-                ESP_LOGE(TAG, "EC curves don't match (cert: %d, key: %d)", cert_curve, key_curve);
+                ESP_LOGE("ConfigManager", "%s EC curves don't match (cert: %d, key: %d)", context, cert_curve, key_curve);
                 return false;
             }
         }
     }
 
-    ESP_LOGI(TAG, "Private key and certificate are cryptographically compatible");
+    ESP_LOGI("ConfigManager", "%s private key and certificate are cryptographically compatible", context);
     return true;
 }
 
 std::vector<CertificateStatus> ConfigManager::getCertificatesStatus(){
   std::vector<CertificateStatus> certificates;
-  std::array<espConfig::CertType, 3> types{espConfig::CertType::CA, espConfig::CertType::CLIENT, espConfig::CertType::PRIVATE_KEY};
+  std::array<espConfig::CertType, 6> types{
+    espConfig::CertType::MQTT_CA,
+    espConfig::CertType::MQTT_CLIENT,
+    espConfig::CertType::MQTT_PRIVATE_KEY,
+    espConfig::CertType::HTTPS_SERVER_CERT,
+    espConfig::CertType::HTTPS_PRIVATE_KEY,
+    espConfig::CertType::HTTPS_CA_CERT
+  };
   std::string certStr;
   for (auto certType : types) {
     ScopedX509Crt cert;
     certStr = loadCertificate(certType);
     const char* typeStr = "";
     switch(certType) {
-        case espConfig::CertType::CA: typeStr = "ca"; break;
-        case espConfig::CertType::CLIENT: typeStr = "client"; break;
-        case espConfig::CertType::PRIVATE_KEY: typeStr = "privateKey"; break;
+        case espConfig::CertType::MQTT_CA: typeStr = "ca"; break;
+        case espConfig::CertType::MQTT_CLIENT: typeStr = "client"; break;
+        case espConfig::CertType::MQTT_PRIVATE_KEY: typeStr = "privateKey"; break;
+        case espConfig::CertType::HTTPS_SERVER_CERT: typeStr = "https_server"; break;
+        case espConfig::CertType::HTTPS_PRIVATE_KEY: typeStr = "https_private_key"; break;
+        case espConfig::CertType::HTTPS_CA_CERT: typeStr = "https_ca"; break;
+        default:
+    		break;
     }
 
-    if(!certStr.empty() && certType != espConfig::CertType::PRIVATE_KEY){
+    bool isPrivateKey = (certType == espConfig::CertType::MQTT_PRIVATE_KEY || certType == espConfig::CertType::HTTPS_PRIVATE_KEY);
+
+    if(!certStr.empty() && !isPrivateKey){
 
       int ret = mbedtls_x509_crt_parse(cert.get(), reinterpret_cast<const unsigned char*>(certStr.c_str()), certStr.length() + 1);
       if(ret){
         ESP_LOGE(TAG, "Unable to parse '%s' certificate: %d", typeStr, ret);
         continue;
       }
-      char subject[256], issuer[256];
+      char subject[256], issuer[256], serial[256];
       ret = mbedtls_x509_dn_gets(subject, sizeof(subject), &cert.get()->subject);
       if(ret < 0){
         ESP_LOGE(TAG, "Unable to retrieve subject DN for '%s' certificate: %d", typeStr, ret);
@@ -1405,20 +1490,54 @@ std::vector<CertificateStatus> ConfigManager::getCertificatesStatus(){
         ESP_LOGE(TAG, "Unable to retrieve issuer DN for '%s' certificate: %d", typeStr, ret);
         continue;
       }
+      ret = mbedtls_x509_serial_gets(serial, sizeof(serial), &cert.get()->serial);
+      if(ret < 0){
+        ESP_LOGE(TAG, "Unable to retrieve serial number for '%s' certificate: %d", typeStr, ret);
+        continue;
+      }
+      unsigned char sha256_hash[32];
+      mbedtls_sha256(cert.get()->raw.p, cert.get()->raw.len, sha256_hash, 0);
       mbedtls_x509_time valid_from = cert.get()->valid_from;
       mbedtls_x509_time valid_to = cert.get()->valid_to;
+
+      bool keyMatches = false;
+      if (certType == espConfig::CertType::HTTPS_SERVER_CERT) {
+        keyMatches = validateKeyCertPair(m_httpsCertsConfig.privateKey, m_httpsCertsConfig.serverCert, "HTTPS");
+      } else if (certType == espConfig::CertType::MQTT_CLIENT) {
+        keyMatches = validateKeyCertPair(m_mqttSslConfig.clientKey, m_mqttSslConfig.clientCert, "MQTT");
+      }
+
       certificates.emplace_back(CertificateStatus{
           certType,
-          typeStr,
           issuer,
           subject,
-          {.from = fmt::format("{}/{}/{}", valid_from.day, valid_from.mon,
-                               valid_from.year),
-           .to = fmt::format("{}/{}/{}", valid_to.day, valid_to.mon,
-                             valid_to.year)},
-          certType == espConfig::CertType::CLIENT ? validatePrivateKeyMatchesCertificate() : false});
-    } else if(not certStr.empty() && certType == espConfig::CertType::PRIVATE_KEY){
-      certificates.emplace_back(CertificateStatus{certType, typeStr});
+          serial,
+          fmt::format("{:02X}", fmt::join(sha256_hash, ":")),
+          {.from = fmt::format("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", valid_from.year, valid_from.mon,
+                               valid_from.day, valid_from.hour, valid_from.min, valid_from.sec),
+           .to = fmt::format("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", valid_to.year, valid_to.mon,
+                             valid_to.day, valid_to.hour, valid_to.min, valid_to.sec)},
+          keyMatches});
+    } else if(not certStr.empty() && isPrivateKey){
+      ScopedPk pk;
+
+      int ret = mbedtls_pk_parse_key(pk.get(), reinterpret_cast<const unsigned char*>(certStr.c_str()), certStr.length() + 1, nullptr, 0, nullptr, nullptr);
+
+      if (ret != 0) {
+          char error_buf[100];
+          mbedtls_strerror(ret, error_buf, sizeof(error_buf));
+          ESP_LOGE(TAG, "Private key parsing failed: %s (error code: %d)", error_buf, ret);
+          continue;
+      }
+
+      mbedtls_pk_type_t key_type = mbedtls_pk_get_type(pk.get());
+      if (key_type != MBEDTLS_PK_RSA && key_type != MBEDTLS_PK_ECKEY && key_type != MBEDTLS_PK_ECKEY_DH && key_type != MBEDTLS_PK_ECDSA) {
+          ESP_LOGE(TAG, "Unsupported private key type: %d", key_type);
+          continue;
+      }
+      certificates.emplace_back(CertificateStatus{
+          .type = certType,
+          .keyType = std::string(mbedtls_pk_get_name(pk.get()))});
     }
   }
   return certificates;

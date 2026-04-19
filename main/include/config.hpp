@@ -120,10 +120,20 @@ namespace espConfig
     std::string clientKey = MQTT_CLIENT_KEY;
   };
 
+  struct https_certs_t {
+    std::string serverCert = "";
+    std::string privateKey = "";
+    std::string caCert = "";
+  };
+
   enum class CertType {
-    CA,
-    CLIENT,
-    PRIVATE_KEY
+    MQTT_CA,
+    MQTT_CLIENT,
+    MQTT_PRIVATE_KEY,
+    HTTPS_SERVER_CERT,
+    HTTPS_PRIVATE_KEY,
+    HTTPS_CA_CERT,
+    MAX
   };
 
   struct misc_config_t
@@ -140,6 +150,7 @@ namespace espConfig
     bool webAuthEnabled = WEB_AUTH_ENABLED;
     std::string webUsername = WEB_AUTH_USERNAME;
     std::string webPassword = WEB_AUTH_PASSWORD;
+    bool webHttpsEnabled = false;
     uint8_t nfcPinsPreset = 255;
     std::array<uint8_t, 4> nfcGpioPins{SS_PIN, SCK_PIN, MISO_PIN, MOSI_PIN};
     uint8_t btrLowStatusThreshold = BTR_PROX_BAT_LOW_THRESHOLD;

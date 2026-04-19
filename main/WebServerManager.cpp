@@ -2,6 +2,7 @@
 // WebServerManager.cpp - ESP32 Web Server Implementation
 // ============================================================================
 
+#include "esp_https_server.h"
 #include "esp_ota_ops.h"
 #include "event_bus.hpp"
 #include "fmt/ranges.h"
@@ -139,19 +140,50 @@ void WebServerManager::begin() {
     ESP_LOGI(TAG, "LittleFS mounted: %d/%d bytes", LittleFS.usedBytes(),
             LittleFS.totalBytes());
   }
-  httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-  config.server_port = 80;
-  config.max_uri_handlers = 22;
-  config.max_open_sockets = 6;
-  config.stack_size = 8192;
-  config.uri_match_fn = httpd_uri_match_wildcard;
-  config.lru_purge_enable = true;
+  wifi_mode_t currentMode;
+  esp_err_t wifiErr = esp_wifi_get_mode(&currentMode);
+  bool isApMode = (wifiErr == ESP_OK && (currentMode == WIFI_MODE_AP || currentMode == WIFI_MODE_APSTA));
+  bool isHttpsEnabled = m_configManager.getConfig<espConfig::misc_config_t>().webHttpsEnabled;
+  httpd_ssl_config_t ssl_config = HTTPD_SSL_CONFIG_DEFAULT();
+  ssl_config.httpd.max_uri_handlers = 22;
+  ssl_config.httpd.max_open_sockets = 4;
+  ssl_config.httpd.stack_size = 16384;
+  ssl_config.httpd.uri_match_fn = httpd_uri_match_wildcard;
+  ssl_config.httpd.lru_purge_enable = true;
+  ssl_config.httpd.backlog_conn = 3;
 
-  if (httpd_start(&m_server, &config) != ESP_OK) {
-    ESP_LOGE(TAG, "Error starting server");
-    return;
+  if(isApMode || !isHttpsEnabled){
+    ssl_config.transport_mode = HTTPD_SSL_TRANSPORT_INSECURE;
   }
 
+  if (isHttpsEnabled) {
+    const auto& httpsCerts = m_configManager.getHttpsCertsConfig();
+    if (!httpsCerts.serverCert.empty() && !httpsCerts.privateKey.empty()) {
+      ssl_config.servercert = reinterpret_cast<const uint8_t *>(httpsCerts.serverCert.c_str());
+      ssl_config.servercert_len = httpsCerts.serverCert.length() + 1;
+      ssl_config.prvtkey_pem = reinterpret_cast<const uint8_t *>(httpsCerts.privateKey.c_str());
+      ssl_config.prvtkey_len = httpsCerts.privateKey.length() + 1;
+      if (!httpsCerts.caCert.empty()) {
+        ssl_config.cacert_len = httpsCerts.caCert.length() + 1;
+        ssl_config.cacert_pem = reinterpret_cast<const uint8_t *>(httpsCerts.caCert.c_str());
+      }
+      ESP_LOGI(TAG, "Loaded user HTTPS certificates (%d bytes cert, %d bytes key)",
+              httpsCerts.serverCert.length(), httpsCerts.privateKey.length());
+    } else ESP_LOGI(TAG, "No user HTTPS certificates found");
+  }
+
+  if (httpd_ssl_start(&m_server, &ssl_config) == ESP_OK) {
+    ESP_LOGI(TAG, "HTTP server started");
+  } else {
+    ESP_LOGE(TAG, "Failed to start HTTP server");
+    ssl_config.transport_mode = HTTPD_SSL_TRANSPORT_INSECURE;
+    if (httpd_ssl_start(&m_server, &ssl_config) == ESP_OK) {
+      ESP_LOGI(TAG, "HTTP server started (INSECURE)");
+    } else {
+      ESP_LOGE(TAG, "Failed to start HTTP server in INSECURE mode as well!");
+      return;
+    }
+  }
   m_wsQueue = xQueueCreate(20, sizeof(WsFrame *));
   if (!m_wsQueue) {
     ESP_LOGE(TAG, "Failed to create WebSocket queue");
@@ -169,12 +201,7 @@ void WebServerManager::begin() {
     return;
   }
 
-  wifi_mode_t currentMode;
-  esp_err_t wifiErr = esp_wifi_get_mode(&currentMode);
-  bool isApMode = (wifiErr == ESP_OK && (currentMode == WIFI_MODE_AP || currentMode == WIFI_MODE_APSTA));
-
   if (isApMode) {
-    ESP_LOGI(TAG, "AP mode detected - setting up captive portal routes only");
     setupCaptivePortalRoutes();
   } else {
     setupRoutes();
@@ -315,9 +342,9 @@ void WebServerManager::setupRoutes() {
       {"/ota/*", HTTP_POST, handleOTAUpload, this},
 
       // Certificate endpoints
-      {"/certificates/upload", HTTP_POST, handleCertificateUpload, this},
-      {"/certificates/status", HTTP_GET, handleCertificateStatus, this},
-      {"/certificates/*", HTTP_DELETE, handleCertificateDelete, this},
+      {"/certificates", HTTP_POST, handleCertificateUpload, this},
+      {"/certificates", HTTP_GET, handleCertificateStatus, this},
+      {"/certificates", HTTP_DELETE, handleCertificateDelete, this},
 
       // Catch-all (must be last)
       {"/*", HTTP_GET, handleRootOrHash, this}};
@@ -2234,8 +2261,22 @@ esp_err_t WebServerManager::handleCertificateUpload(httpd_req_t *req) {
     httpd_resp_send_500(req);
     return ESP_FAIL;
   }
-
-  size_t content_len = req->content_len;
+  char query[256], type_param[2];
+  if(httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK ||
+      (httpd_query_key_value(query, "type", type_param, sizeof(type_param)) !=
+           ESP_OK )){
+    httpd_resp_set_type(req, "application/json");
+    cJSON *res = cJSON_CreateObject();
+    cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+    cJSON_AddItemToObject(res, "error", cJSON_CreateString("Missing 'type' parameter"));
+    httpd_resp_set_status(req, "400 Bad Request");
+    std::string response = cjson_to_string_and_free(res);
+    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+    return ESP_FAIL;
+  }
+  uint8_t type_int = std::stoi(type_param);
+  const espConfig::CertType type = type_int > (static_cast<uint8_t>(espConfig::CertType::MAX) - 1) ? espConfig::CertType::MAX : static_cast<espConfig::CertType>(type_int);
+  const size_t content_len = req->content_len;
   if (content_len == 0 || content_len > 8192) {
     httpd_resp_set_type(req, "application/json");
     cJSON *res = cJSON_CreateObject();
@@ -2246,17 +2287,11 @@ esp_err_t WebServerManager::handleCertificateUpload(httpd_req_t *req) {
     httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
     return ESP_FAIL;
   }
-
-  char query[256], type_param[128];
-  if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK ||
-      (httpd_query_key_value(query, "type", type_param, sizeof(type_param)) !=
-           ESP_OK &&
-       (strcmp(type_param, "client") || strcmp(type_param, "ca") ||
-        strcmp(type_param, "privateKey")))) {
+  if (type == espConfig::CertType::MAX) {
     httpd_resp_set_type(req, "application/json");
     cJSON *res = cJSON_CreateObject();
     cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-    cJSON_AddItemToObject(res, "error", cJSON_CreateString("Missing 'type' parameter"));
+    cJSON_AddItemToObject(res, "error", cJSON_CreateString("Invalid 'type' parameter"));
     httpd_resp_set_status(req, "400 Bad Request");
     std::string response = cjson_to_string_and_free(res);
     httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
@@ -2286,34 +2321,14 @@ esp_err_t WebServerManager::handleCertificateUpload(httpd_req_t *req) {
     remaining -= received;
   }
 
-  // Convert string type to enum
-  espConfig::CertType certType;
-  if (strcmp(type_param, "ca") == 0) {
-    certType = espConfig::CertType::CA;
-  } else if (strcmp(type_param, "client") == 0) {
-    certType = espConfig::CertType::CLIENT;
-  } else if (strcmp(type_param, "privateKey") == 0) {
-    certType = espConfig::CertType::PRIVATE_KEY;
-  } else {
-    httpd_resp_set_type(req, "application/json");
-    cJSON *res = cJSON_CreateObject();
-    cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-    cJSON_AddItemToObject(res, "error", cJSON_CreateString("Invalid certificate type"));
-    httpd_resp_set_status(req, "400 Bad Request");
-    std::string response = cjson_to_string_and_free(res);
-    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-    return ESP_FAIL;
-  }
-
-  bool success = instance->m_configManager.saveCertificate(certType, certBuf);
+  bool success = instance->m_configManager.saveCertificate(type, certBuf);
 
   if (success) {
     cJSON *response = cJSON_CreateObject();
     cJSON_AddItemToObject(response, "success", cJSON_CreateBool(true));
     cJSON_AddStringToObject(
         response, "message",
-        fmt::format("Certificate '{}' saved successfully!", type_param)
-            .c_str());
+        "Certificate saved successfully!");
     cJSON_AddNumberToObject(response, "size", content_len);
     std::string resp = cjson_to_string_and_free(response);
     httpd_resp_set_type(req, "application/json");
@@ -2348,11 +2363,21 @@ esp_err_t WebServerManager::handleCertificateStatus(httpd_req_t *req) {
       instance->m_configManager.getCertificatesStatus();
   for (auto cert : status) {
     cJSON *certInfo = cJSON_CreateObject();
-    if (cert.type != espConfig::CertType::PRIVATE_KEY) {
+
+    bool isPrivateKey = (cert.type == espConfig::CertType::MQTT_PRIVATE_KEY ||
+                         cert.type == espConfig::CertType::HTTPS_PRIVATE_KEY);
+    bool isCA = (cert.type == espConfig::CertType::MQTT_CA ||
+                         cert.type == espConfig::CertType::HTTPS_CA_CERT);
+
+    if (!isPrivateKey) {
       if (!cert.issuer.empty())
         cJSON_AddStringToObject(certInfo, "issuer", cert.issuer.c_str());
       if (!cert.subject.empty())
         cJSON_AddStringToObject(certInfo, "subject", cert.subject.c_str());
+      if (!cert.serial.empty())
+        cJSON_AddStringToObject(certInfo, "serial", cert.serial.c_str());
+      if (!cert.fingerprint.empty())
+        cJSON_AddStringToObject(certInfo, "fingerprint", cert.fingerprint.c_str());
       if (!cert.expiration.from.empty() && !cert.expiration.to.empty()) {
         cJSON *expiration = cJSON_CreateObject();
         cJSON_AddStringToObject(expiration, "from",
@@ -2360,14 +2385,15 @@ esp_err_t WebServerManager::handleCertificateStatus(httpd_req_t *req) {
         cJSON_AddStringToObject(expiration, "to", cert.expiration.to.c_str());
         cJSON_AddItemToObject(certInfo, "expiration", expiration);
       }
-      if(cert.type == espConfig::CertType::CLIENT){
+      if(!isCA){
         cJSON_AddBoolToObject(certInfo, "keyMatchesCert", cert.keyMatchesCert);
       }
-    } else if (cert.type == espConfig::CertType::PRIVATE_KEY) {
+    } else {
       cJSON_AddBoolToObject(certInfo, "exists", true);
+      cJSON_AddStringToObject(certInfo, "keyType", cert.keyType.c_str());
     }
 
-    cJSON_AddItemToObject(certificates, cert.typeStr.c_str(), certInfo);
+    cJSON_AddItemToObject(certificates, std::to_string(static_cast<uint8_t>(cert.type)).c_str(), certInfo);
   }
 
   cJSON_AddItemToObject(response, "data", certificates);
@@ -2388,28 +2414,22 @@ esp_err_t WebServerManager::handleCertificateDelete(httpd_req_t *req) {
     httpd_resp_send_500(req);
     return ESP_FAIL;
   }
-
-  const char *type_start = strrchr(req->uri, '/');
-  if (!type_start || strlen(type_start) <= 1) {
+  char query[256], type_param[2];
+  if(httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK ||
+      (httpd_query_key_value(query, "type", type_param, sizeof(type_param)) !=
+           ESP_OK )){
     httpd_resp_set_type(req, "application/json");
     cJSON *res = cJSON_CreateObject();
     cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-    cJSON_AddItemToObject(res, "error", cJSON_CreateString("Missing certificate type"));
+    cJSON_AddItemToObject(res, "error", cJSON_CreateString("Missing 'type' parameter"));
     httpd_resp_set_status(req, "400 Bad Request");
     std::string response = cjson_to_string_and_free(res);
     httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
     return ESP_FAIL;
   }
-
-  std::string certTypeStr = type_start + 1;
-  espConfig::CertType certType;
-  if (certTypeStr == "ca") {
-    certType = espConfig::CertType::CA;
-  } else if (certTypeStr == "client") {
-    certType = espConfig::CertType::CLIENT;
-  } else if (certTypeStr == "privateKey") {
-    certType = espConfig::CertType::PRIVATE_KEY;
-  } else {
+  uint8_t type_int = std::stoi(type_param);
+  const espConfig::CertType type = type_int > (static_cast<uint8_t>(espConfig::CertType::MAX) - 1) ? espConfig::CertType::MAX : static_cast<espConfig::CertType>(type_int);
+  if (type == espConfig::CertType::MAX) {
     httpd_resp_set_type(req, "application/json");
     cJSON *res = cJSON_CreateObject();
     cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
@@ -2420,12 +2440,12 @@ esp_err_t WebServerManager::handleCertificateDelete(httpd_req_t *req) {
     return ESP_FAIL;
   }
 
-  bool success = instance->m_configManager.deleteCertificate(certType);
+  bool success = instance->m_configManager.deleteCertificate(type);
 
   if (success) {
     cJSON *response = cJSON_CreateObject();
     cJSON_AddItemToObject(response, "success", cJSON_CreateBool(true));
-    cJSON_AddStringToObject(response, "message", fmt::format("Certificate '{}' deleted", certTypeStr).c_str());
+    cJSON_AddStringToObject(response, "message", "Certificate deleted");
     std::string resp = cjson_to_string_and_free(response);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, resp.c_str(), resp.length());

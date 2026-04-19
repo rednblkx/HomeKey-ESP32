@@ -98,9 +98,9 @@ export async function saveConfig<T = MqttConfig | MiscConfig | ActionsConfig>(ty
 }
 
 // Certificate management endpoints
-export async function uploadCertificate(type: string, content: string | ArrayBuffer): Promise<ApiResponse<undefined>> {
+export async function uploadCertificate(type: CertificateType, content: string | ArrayBuffer): Promise<ApiResponse<undefined>> {
   try {
-    const response = await fetch(`/certificates/upload?type=${type}`, {
+    const response = await fetch(`/certificates?type=${type}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-pem-file',
@@ -110,7 +110,7 @@ export async function uploadCertificate(type: string, content: string | ArrayBuf
 
     if (!response.ok) {
       const errorData : ApiError = await response.json();
-      notifications.addError(`Failed to upload certificate bundle: ${errorData.error}`);
+      notifications.addError(`Failed to upload certificate: ${errorData.error}`);
       return errorData;
     }
 
@@ -123,14 +123,14 @@ export async function uploadCertificate(type: string, content: string | ArrayBuf
     return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error occurred';
-    notifications.addError(`Failed to upload certificate bundle: ${message}`);
+    notifications.addError(`Failed to upload certificate: ${message}`);
     return { success: false, error: message };
   }
 }
 
 export async function getCertificateStatus(): Promise<ApiResponse<CertificatesStatus>> {
   try {
-    const response = await fetch(`/certificates/status`);
+    const response = await fetch(`/certificates`);
     console.log(response);
     if (!response.ok) {
       const errorData : ApiError = await response.json();
@@ -148,7 +148,7 @@ export async function getCertificateStatus(): Promise<ApiResponse<CertificatesSt
 
 export async function deleteCertificate(type: CertificateType): Promise<ApiResponse<undefined>> {
   try {
-    const response = await fetch(`/certificates/${type}`, {
+    const response = await fetch(`/certificates?type=${type}`, {
       method: 'DELETE',
     });
 
@@ -160,9 +160,9 @@ export async function deleteCertificate(type: CertificateType): Promise<ApiRespo
 
     const result: ApiResponse<undefined> = await response.json();
     if (result.success) {
-      notifications.addSuccess(`${type} certificate deleted successfully`);
+      notifications.addSuccess(result.message);
     } else {
-      notifications.addError(`Failed to delete ${type} certificate: ${result.error || 'Unknown error'}`);
+      notifications.addError(`Failed to delete '${type}' certificate: ${result.error || 'Unknown error'}`);
     }
     return result;
   } catch (error) {

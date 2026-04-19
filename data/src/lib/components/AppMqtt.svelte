@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import type { CertificatesStatus, CertificateType, MqttConfig, MetricsMessage } from '$lib/types/api';
+  import type { CertificatesStatus, MqttConfig, MetricsMessage } from '$lib/types/api';
+  import { CertificateType } from '$lib/types/api';
   import { saveConfig, uploadCertificate, getCertificateStatus, deleteCertificate } from '$lib/services/api';
   import { diff } from '$lib/utils/objDiff';
   import ws from '$lib/services/ws';
@@ -11,8 +12,16 @@
   let mqttConfig = $state<MqttConfig>($state.snapshot(mqtt));
   let activeTab = $state<'broker' | 'topics' | 'ssl'>('broker');
   let certificateStatus = $state<CertificatesStatus>();
-  let uploadProgress = $state({ ca: 0, client: 0, privateKey: 0 });
-  let uploadErrors = $state({ ca: '', client: '', privateKey: '' });
+  let uploadProgress : { [key in CertificateType]?: number } = $state({
+    [CertificateType.MQTT_CA]: 0,
+    [CertificateType.MQTT_CLIENT]: 0,
+    [CertificateType.MQTT_PRIVATE_KEY]: 0
+  });
+  let uploadErrors : { [key in CertificateType]?: string } = $state({
+    [CertificateType.MQTT_CA]: '',
+    [CertificateType.MQTT_CLIENT]: '',
+    [CertificateType.MQTT_PRIVATE_KEY]: ''
+  });
 
   // MQTT connection status
   let mqttConnected = $state<boolean | undefined>(undefined);
@@ -55,7 +64,7 @@
   };
 
   const handleCertificateUpload = async (event: Event) => {
-    const type = (event.target as HTMLInputElement).dataset['type'] as keyof typeof uploadErrors;
+    const type = (event.target as HTMLInputElement).dataset['type'] as CertificateType;
     const file = (event.target as HTMLInputElement).files?.[0];
     if (!file) return;
     uploadErrors[type] = '';
@@ -634,14 +643,14 @@
                     <div>
                       <p class="font-medium text-sm text-base-content">CA Certificate</p>
                       <p class="text-xs text-base-content/70">
-                        {certificateStatus?.ca ? `${certificateStatus.ca.subject} (Expires: ${certificateStatus.ca.expiration.to})` : 'Not uploaded'}
+                        {certificateStatus[CertificateType.MQTT_CA] ? `${certificateStatus[CertificateType.MQTT_CA].subject} (Expires: ${certificateStatus[CertificateType.MQTT_CA].expiration.to})` : 'Not uploaded'}
                       </p>
                     </div>
                     <div class="flex items-center gap-2">
-                      {#if certificateStatus?.ca}
+                      {#if certificateStatus[CertificateType.MQTT_CA]}
                         <button
                           type="button"
-                          onclick={() => deleteCertificateHandler('ca')}
+                          onclick={() => deleteCertificateHandler(CertificateType.MQTT_CA)}
                           class="btn btn-ghost btn-xs text-error"
                           aria-label="Delete CA Certificate"
                         >
@@ -660,7 +669,7 @@
                           onchange={handleCertificateUpload}
                           accept=".pem,.crt,.cer,.der"
                           class="hidden"
-                          data-type="ca"
+                          data-type={CertificateType.MQTT_CA}
                         />
                       </label>
                     </div>
@@ -679,14 +688,14 @@
                     <div>
                       <p class="font-medium text-sm text-base-content">Client Certificate</p>
                       <p class="text-xs text-base-content/70">
-                        {certificateStatus?.client ? `${certificateStatus.client.subject} (Expires: ${certificateStatus.client.expiration.to})` : 'Not uploaded'}
+                        {certificateStatus?.[CertificateType.MQTT_CLIENT] ? `${certificateStatus[CertificateType.MQTT_CLIENT].subject} (Expires: ${certificateStatus[CertificateType.MQTT_CLIENT].expiration.to})` : 'Not uploaded'}
                       </p>
                     </div>
                     <div class="flex items-center gap-2">
-                      {#if certificateStatus?.client}
+                      {#if certificateStatus?.[CertificateType.MQTT_CLIENT]}
                         <button
                           type="button"
-                          onclick={() => deleteCertificateHandler('client')}
+                          onclick={() => deleteCertificateHandler(CertificateType.MQTT_CLIENT)}
                           class="btn btn-ghost btn-xs text-error"
                           aria-label="Delete Client Certificate"
                         >
@@ -705,7 +714,7 @@
                           onchange={handleCertificateUpload}
                           accept=".pem,.crt,.cer,.der"
                           class="hidden"
-                          data-type="client"
+                          data-type={CertificateType.MQTT_CLIENT}
                         />
                       </label>
                     </div>
@@ -716,7 +725,7 @@
                   {#if uploadErrors.client}
                     <p class="text-error text-xs mt-2">{uploadErrors.client}</p>
                   {/if}
-                  {#if certificateStatus?.client && certificateStatus?.privateKey?.exists && !certificateStatus.client.keyMatchesCert}
+                  {#if certificateStatus?.[CertificateType.MQTT_CLIENT] && certificateStatus?.[CertificateType.MQTT_PRIVATE_KEY]?.exists && !certificateStatus[CertificateType.MQTT_CLIENT].keyMatchesCert}
                     <p class="text-error text-xs mt-2">Private Key doesn't match the certificate public key</p>
                   {/if}
                 </div>
@@ -727,14 +736,14 @@
                     <div>
                       <p class="font-medium text-sm text-base-content">Private Key</p>
                       <p class="text-xs text-base-content/70">
-                        {certificateStatus?.privateKey?.exists ? 'Uploaded' : 'Not uploaded'}
+                        {certificateStatus?.[CertificateType.MQTT_PRIVATE_KEY]?.exists ? 'Uploaded' : 'Not uploaded'}
                       </p>
                     </div>
                     <div class="flex items-center gap-2">
-                      {#if certificateStatus?.privateKey?.exists}
+                      {#if certificateStatus?.[CertificateType.MQTT_PRIVATE_KEY]?.exists}
                         <button
                           type="button"
-                          onclick={() => deleteCertificateHandler('privateKey')}
+                          onclick={() => deleteCertificateHandler(CertificateType.MQTT_PRIVATE_KEY)}
                           class="btn btn-ghost btn-xs text-error"
                           aria-label="Delete Private Key"
                         >
@@ -753,7 +762,7 @@
                           onchange={handleCertificateUpload}
                           accept=".pem,.key,.der"
                           class="hidden"
-                          data-type="privateKey"
+                          data-type={CertificateType.MQTT_PRIVATE_KEY}
                         />
                       </label>
                     </div>

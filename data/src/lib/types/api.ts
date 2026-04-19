@@ -143,6 +143,8 @@ export interface MiscConfig {
   webUsername: string;
   /** Web interface password */
   webPassword: string;
+  /** Web HTTPS Status */
+  webHttpsEnabled: boolean;
   /** NFC GPIO pin configuration preset index */
   nfcPinsPreset: number;
   /** NFC GPIO pin configuration [pin1, pin2, pin3, pin4] */
@@ -335,11 +337,15 @@ export interface OTAStatus {
  */
 export interface CertificatesStatus {
   /** CA certificate status */
-  ca?: {
+  [CertificateType.MQTT_CA]?: {
     /** Certificate issuer information */
     issuer: string;
     /** Certificate subject information */
     subject: string;
+    /** Certificate serial number */
+    serial: string;
+    /** Certificate fingerprint */
+    fingerprint: string;
     /** Certificate expiration date */
     expiration: {
       from: string,
@@ -347,11 +353,15 @@ export interface CertificatesStatus {
     };
   };
   /** Client certificate status */
-  client?: {
+  [CertificateType.MQTT_CLIENT]?: {
     /** Certificate issuer information */
     issuer: string;
     /** Certificate subject information */
     subject: string;
+    /** Certificate serial number */
+    serial: string;
+    /** Certificate fingerprint */
+    fingerprint: string;
     /** Certificate expiration date */
     expiration: {
       from: string,
@@ -361,17 +371,64 @@ export interface CertificatesStatus {
     keyMatchesCert?: boolean;
   };
   /** Private key status */
-  privateKey?: {
+  [CertificateType.MQTT_PRIVATE_KEY]?: {
     /** Whether the private key exists */
     exists: boolean;
   };
+  /** HTTPS server certificate status */
+  [CertificateType.HTTPS_SERVER_CERT]?: {
+    /** Certificate issuer information */
+    issuer: string;
+    /** Certificate subject information */
+    subject: string;
+    /** Certificate serial number */
+    serial: string;
+    /** Certificate fingerprint */
+    fingerprint: string;
+    /** Certificate expiration date */
+    expiration: {
+      from: string,
+      to: string
+    };
+    /** Whether the private key matches this certificate */
+    keyMatchesCert?: boolean;
+  };
+  /** HTTPS private key status */
+  [CertificateType.HTTPS_PRIVATE_KEY]?: {
+    /** Whether the private key exists */
+    exists: boolean;
+    keyType: string;
+  };
+  [CertificateType.HTTPS_CA_CERT]?: {
+    /** Certificate issuer information */
+    issuer: string;
+    /** Certificate subject information */
+    subject: string;
+    /** Certificate serial number */
+    serial: string;
+    /** Certificate fingerprint */
+    fingerprint: string;
+    /** Certificate expiration date */
+    expiration: {
+      from: string,
+      to: string
+    };
+  }
 }
 
 /**
  * Certificate type identifiers for SSL/TLS operations
  * @type {CertificateType}
  */
-export type CertificateType = 'ca' | 'client' | 'privateKey';
+export enum CertificateType {
+    MQTT_CA,
+    MQTT_CLIENT,
+    MQTT_PRIVATE_KEY,
+    HTTPS_SERVER_CERT,
+    HTTPS_PRIVATE_KEY,
+    HTTPS_CA_CERT,
+    MAX
+  };
 
 // Log Viewer Types
 

@@ -5,18 +5,21 @@
 		resetWifi,
 		saveConfig,
 		startConfigAP,
+		getCertificateStatus
 	} from "$lib/services/api";
 	import type {
+		CertificatesStatus,
 		EthConfig,
 		MiscConfig,
 		NfcGpioPinsPreset,
 	} from "$lib/types/api";
 	import { diff } from "$lib/utils/objDiff";
 	import HardwareConfig from "$lib/components/HardwareConfig.svelte";
+	import HttpsCertManager from "$lib/components/HttpsCertManager.svelte";
 
 	let { misc, eth, nfcPresets, nfcConnected = $bindable(false), error } = $props();
 
-	let activeTab = $state<'homekit' | 'hardware' | 'network' | 'auth'>('homekit');
+	let activeTab = $state<'homekit' | 'hardware' | 'network' | 'security'>('homekit');
 
 	// svelte-ignore state_referenced_locally
 	let miscConfig = $state<MiscConfig>($state.snapshot(misc));
@@ -25,6 +28,8 @@
 	// svelte-ignore state_referenced_locally
 	let nfcPresetsList = $state<NfcGpioPinsPreset>($state.snapshot(nfcPresets));
 
+	// HTTPS certificate management state
+	let certStatus = $state<CertificatesStatus | undefined>(undefined);
 
 	const saveMiscConfig = async (e: any) => {
 		e.preventDefault();
@@ -101,9 +106,27 @@
 		}
 	};
 
+	const fetchCertStatus = async () => {
+		if (!miscConfig.webHttpsEnabled) return;
+		try {
+			const result = await getCertificateStatus();
+			if (result.success) {
+				certStatus = result.data;
+			}
+		} catch (error) {
+			console.error('Failed to fetch certificate status:', error);
+		}
+	};
+
 	$effect(() => {
 		if (misc?.ethActivePreset !== 255 && misc) {
 			handleEthPresetChange(misc.ethActivePreset);
+		}
+	});
+
+	$effect(() => {
+		if (activeTab === 'security' && miscConfig.webHttpsEnabled) {
+			fetchCertStatus();
 		}
 	});
 </script>
@@ -232,13 +255,13 @@
 				</button>
 				<button
 					type="button"
-					class="flex-1 tab flex-col py-2 rounded-lg transition-colors {activeTab === 'auth' ? 'bg-base-100 text-primary font-medium shadow-sm' : 'text-base-content/60 hover:bg-base-200'}"
-					onclick={() => activeTab = 'auth'}
+					class="flex-1 tab flex-col py-2 rounded-lg transition-colors {activeTab === 'security' ? 'bg-base-100 text-primary font-medium shadow-sm' : 'text-base-content/60 hover:bg-base-200'}"
+					onclick={() => activeTab = 'security'}
 				>
 					<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
 					</svg>
-					<span class="text-[10px] sm:text-xs mt-0.5">Auth</span>
+					<span class="text-[10px] sm:text-xs mt-0.5">Security</span>
 				</button>
 			</div>
 
@@ -437,51 +460,92 @@
 						</div>
 					{/if}
 
-					{#if activeTab === 'auth'}
-						<div class="space-y-4">
-							<div>
-								<h3 class="text-sm font-semibold">Web Authentication</h3>
-								<p class="text-xs text-base-content/60">Configure web interface authentication settings.</p>
-							</div>
-
-							<div class="flex items-center justify-between py-2 px-3 bg-base-100 rounded-lg">
+					{#if activeTab === 'security'}
+						<div class="space-y-6">
+							<!-- Web Authentication Section -->
+							<div class="space-y-4">
 								<div>
-									<p class="text-sm font-medium">Enable Web Authentication</p>
-									<p class="text-xs text-base-content/60">Require login to access the web interface</p>
+									<h3 class="text-sm font-semibold">Web Authentication</h3>
+									<p class="text-xs text-base-content/60">Configure web interface authentication settings.</p>
 								</div>
-								<input
-									type="checkbox"
-									bind:checked={miscConfig.webAuthEnabled}
-									class="toggle toggle-primary toggle-sm"
-								/>
+
+								<div class="flex items-center justify-between py-2 px-3 bg-base-100 rounded-lg">
+									<div>
+										<p class="text-sm font-medium">Enable Web Authentication</p>
+										<p class="text-xs text-base-content/60">Require login to access the web interface</p>
+									</div>
+									<input
+										type="checkbox"
+										bind:checked={miscConfig.webAuthEnabled}
+										class="toggle toggle-primary toggle-sm"
+									/>
+								</div>
+
+								{#if miscConfig.webAuthEnabled}
+									<div class="grid grid-cols-2 gap-4">
+										<div class="form-control">
+											<label class="label">
+												<span class="label-text text-xs">Username</span>
+											</label>
+											<input
+												type="text"
+												bind:value={miscConfig.webUsername}
+												placeholder="admin"
+												class="input input-sm input-bordered w-full"
+											/>
+										</div>
+										<div class="form-control">
+											<label class="label">
+												<span class="label-text text-xs">Password</span>
+											</label>
+											<input
+												type="password"
+												bind:value={miscConfig.webPassword}
+												placeholder="••••••••"
+												class="input input-sm input-bordered w-full"
+											/>
+										</div>
+									</div>
+								{/if}
 							</div>
 
-							{#if miscConfig.webAuthEnabled}
-								<div class="grid grid-cols-2 gap-4">
-									<div class="form-control">
-										<label class="label">
-											<span class="label-text text-xs">Username</span>
-										</label>
-										<input
-											type="text"
-											bind:value={miscConfig.webUsername}
-											placeholder="admin"
-											class="input input-sm input-bordered w-full"
-										/>
-									</div>
-									<div class="form-control">
-										<label class="label">
-											<span class="label-text text-xs">Password</span>
-										</label>
-										<input
-											type="password"
-											bind:value={miscConfig.webPassword}
-											placeholder="••••••••"
-											class="input input-sm input-bordered w-full"
-										/>
-									</div>
+							<!-- HTTPS Section -->
+							<div class="space-y-4 border-t border-base-300 pt-4">
+								<div>
+									<h3 class="text-sm font-semibold">HTTPS Encryption</h3>
+									<p class="text-xs text-base-content/60">Secure the web interface with SSL/TLS encryption.</p>
 								</div>
-							{/if}
+
+								<div class="flex items-center justify-between py-2 px-3 bg-base-100 rounded-lg">
+									<div>
+										<p class="text-sm font-medium">Enable HTTPS</p>
+										<p class="text-xs text-base-content/60">Access the web interface securely via HTTPS (Port 443)</p>
+									</div>
+									<input
+										type="checkbox"
+										bind:checked={miscConfig.webHttpsEnabled}
+										class="toggle toggle-primary toggle-sm"
+									/>
+								</div>
+
+								{#if miscConfig.webHttpsEnabled}
+									<div class="flex items-center justify-between py-2 px-3 bg-warning/10 rounded-lg">
+										<div class="flex items-start gap-2">
+											<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-warning mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+												<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+											</svg>
+											<div>
+												<p class="text-sm font-medium text-warning">Device Reboot Required</p>
+												<p class="text-xs text-base-content/60">HTTPS settings require a device reboot to take effect.</p>
+											</div>
+										</div>
+									</div>
+									<HttpsCertManager
+										{certStatus}
+										onStatusRefresh={fetchCertStatus}
+									/>
+								{/if}
+							</div>
 						</div>
 					{/if}
 				</div>
