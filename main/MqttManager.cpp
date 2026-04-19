@@ -4,13 +4,11 @@
 #include "LockManager.hpp"
 #include "ConfigManager.hpp"
 #include "JsonGuard.hpp"
-#include <cstdint>
 #include <cstdlib>
 #include <esp_log.h>
 #include <esp_app_desc.h>
 #include "eventStructs.hpp"
 #include <string>
-#include <sys/_types.h>
 #include <vector>
 #include <cstring>
 

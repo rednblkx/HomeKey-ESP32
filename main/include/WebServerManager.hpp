@@ -7,7 +7,6 @@
 #include "event_bus.hpp"
 #include <memory>
 #include <atomic>
-#include <mutex>
 #include <string>
 #include <vector>
 
