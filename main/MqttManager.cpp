@@ -656,20 +656,18 @@ bool MqttManager::configureSSL(esp_mqtt_client_config_t& mqtt_cfg) {
     if (!m_mqttSslConfig.caCert.empty()) {
         mqtt_cfg.broker.verification.certificate = m_mqttSslConfig.caCert.c_str();
         mqtt_cfg.broker.verification.skip_cert_common_name_check = m_mqttConfig.allowInsecure;
-        ESP_LOGI(TAG, "Certificate validation mode: %s", m_mqttConfig.allowInsecure ? "SKIP_COMMON_NAME" : "FULL_VALIDATION");
-    } else if (m_mqttConfig.allowInsecure) {
-        ESP_LOGW(TAG, "Server certificate validation: DISABLED - No CA certificate provided (allowInsecure=true)");
+        ESP_LOGI(TAG, "MQTT TLS: Certificate validation mode = %s", m_mqttConfig.allowInsecure ? "SKIP_COMMON_NAME" : "FULL_VALIDATION");
     } else {
-        ESP_LOGE(TAG, "Server certificate validation: FAILED - No CA certificate provided and allowInsecure is false");
+        ESP_LOGE(TAG, "MQTT TLS: FAILED - No CA certificate provided");
         return false;
     }
 
     if (!m_mqttSslConfig.clientCert.empty() && !m_mqttSslConfig.clientKey.empty()) {
         mqtt_cfg.credentials.authentication.certificate = m_mqttSslConfig.clientCert.c_str();
         mqtt_cfg.credentials.authentication.key = m_mqttSslConfig.clientKey.c_str();
-        ESP_LOGI(TAG, "TLS client authentication configured");
+        ESP_LOGI(TAG, "MQTT TLS: TLS client authentication configured");
     } else {
-        ESP_LOGI(TAG, "No client certificate configured - using server-only authentication");
+        ESP_LOGI(TAG, "MQTT TLS: No client certificate configured - using server-only authentication");
     }
 
     m_sslConfigured = true;
