@@ -368,54 +368,54 @@
 				</div>
 			</div>
 
-			<!-- CA Certificate Section -->
-			{#if caCertInfo}
-				<div class="divider my-2"></div>
-				<div class="space-y-2 text-xs">
-					<div class="flex items-center gap-2">
-						<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-						</svg>
-						<span class="font-medium text-info">CA Certificate Present</span>
-					</div>
-					{#if caCertInfo.issuer}
-						<div class="flex flex-col">
-							<span class="text-base-content/60">Issuer</span>
-							<span class="font-mono truncate" title={caCertInfo.issuer}>{caCertInfo.issuer}</span>
-						</div>
-					{/if}
-					{#if caCertInfo.subject}
-						<div class="flex flex-col">
-							<span class="text-base-content/60">Subject</span>
-							<span class="font-mono truncate" title={caCertInfo.subject}>{caCertInfo.subject}</span>
-						</div>
-					{/if}
-					{#if caCertInfo.serial}
-						<div class="flex flex-col">
-							<span class="text-base-content/60">Serial number</span>
-							<span class="font-mono break-words" title={caCertInfo.serial}>{caCertInfo.serial}</span>
-						</div>
-					{/if}
-
-					{#if caCertInfo.fingerprint}
-						<div class="flex flex-col">
-							<span class="text-base-content/60">SHA256 Fingerprint</span>
-							<span class="font-mono break-words" title={caCertInfo.fingerprint}>{caCertInfo.fingerprint}</span>
-						</div>
-					{/if}
-					{#if caCertInfo.expiration?.from && caCertInfo.expiration?.to}
-						<div class="flex flex-col">
-							<span class="text-base-content/60">Valid Period</span>
-							<span class="font-mono">
-								{formatDate(caCertInfo.expiration.from)} - {formatDate(caCertInfo.expiration.to)}
-							</span>
-						</div>
-					{/if}
-				</div>
-			{/if}
 		{:else}
 			<p class="text-xs text-base-content/60 italic">No certificate information available</p>
 		{/if}
+    <!-- CA Certificate Section -->
+    {#if caCertInfo}
+      <div class="divider my-2"></div>
+      <div class="space-y-2 text-xs">
+        <div class="flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+          </svg>
+          <span class="font-medium text-info">CA Certificate Present</span>
+        </div>
+        {#if caCertInfo.issuer}
+          <div class="flex flex-col">
+            <span class="text-base-content/60">Issuer</span>
+            <span class="font-mono truncate" title={caCertInfo.issuer}>{caCertInfo.issuer}</span>
+          </div>
+        {/if}
+        {#if caCertInfo.subject}
+          <div class="flex flex-col">
+            <span class="text-base-content/60">Subject</span>
+            <span class="font-mono truncate" title={caCertInfo.subject}>{caCertInfo.subject}</span>
+          </div>
+        {/if}
+        {#if caCertInfo.serial}
+          <div class="flex flex-col">
+            <span class="text-base-content/60">Serial number</span>
+            <span class="font-mono break-words" title={caCertInfo.serial}>{caCertInfo.serial}</span>
+          </div>
+        {/if}
+
+        {#if caCertInfo.fingerprint}
+          <div class="flex flex-col">
+            <span class="text-base-content/60">SHA256 Fingerprint</span>
+            <span class="font-mono break-words" title={caCertInfo.fingerprint}>{caCertInfo.fingerprint}</span>
+          </div>
+        {/if}
+        {#if caCertInfo.expiration?.from && caCertInfo.expiration?.to}
+          <div class="flex flex-col">
+            <span class="text-base-content/60">Valid Period</span>
+            <span class="font-mono">
+              {formatDate(caCertInfo.expiration.from)} - {formatDate(caCertInfo.expiration.to)}
+            </span>
+          </div>
+        {/if}
+      </div>
+    {/if}
 	</div>
 
 	<!-- Warning Messages -->
