@@ -30,7 +30,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Create tag
-        uses: actions/github-script@v5
+        uses: actions/github-script@v9
         with:
           script: |
             github.rest.git.createRef({
