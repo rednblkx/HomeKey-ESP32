@@ -33,15 +33,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           sparse-checkout: 'data'
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
@@ -60,13 +57,13 @@ jobs:
         run: littlefs-python create $(pwd)/dist littlefs.bin -v --fs-size=0x20000 --name-max=64 --block-size=4096
         working-directory: data
       - name: Archive build directory
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ui-build-directory
           path: data/dist
           retention-days: 1
       - name: Archive LittleFS image
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: littlefs-binary
           path: data/littlefs.bin
@@ -75,17 +72,17 @@ jobs:
     needs: littlefs
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           fetch-tags: true
           submodules: 'recursive'
       - name: Get UI Build Directory
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: ui-build-directory
           path: data/dist
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: |
             ~/.ccache
@@ -102,12 +99,12 @@ jobs:
       - name: Rename firmware
         run: sudo chown -R $USER:$USER build/ && mv build/HomeKey-ESP32.bin build/esp32.firmware.bin && mv build/merged-binary.bin build/esp32.firmware.factory.bin
       - name: Archive firmware
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: esp32-firmware
           path: build/esp32.firmware.bin
       - name: Archive merged binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: esp32-firmware-factory
           path: build/esp32.firmware.factory.bin
@@ -116,17 +113,17 @@ jobs:
     needs: littlefs
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           fetch-tags: true
           submodules: 'recursive'
       - name: Get UI Build Directory
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: ui-build-directory
           path: data/dist
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: |
             ~/.ccache
@@ -143,12 +140,12 @@ jobs:
       - name: Rename firmware
         run: sudo chown -R $USER:$USER build/ && mv build/HomeKey-ESP32.bin build/esp32c3.firmware.bin && mv build/merged-binary.bin build/esp32c3.firmware.factory.bin
       - name: Archive firmware
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: esp32c3-firmware
           path: build/esp32c3.firmware.bin
       - name: Archive merged binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: esp32c3-firmware-factory
           path: build/esp32c3.firmware.factory.bin
@@ -157,17 +154,17 @@ jobs:
     needs: littlefs
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           fetch-tags: true
           submodules: 'recursive'
       - name: Get UI Build Directory
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: ui-build-directory
           path: data/dist
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: |
             ~/.ccache
@@ -183,12 +180,12 @@ jobs:
       - name: Rename firmware
         run: sudo chown -R $USER:$USER build/ && mv build/HomeKey-ESP32.bin build/esp32c6.firmware.bin && mv build/merged-binary.bin build/esp32c6.firmware.factory.bin
       - name: Archive firmware
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: esp32c6-firmware
           path: build/esp32c6.firmware.bin
       - name: Archive merged binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: esp32c6-firmware-factory
           path: build/esp32c6.firmware.factory.bin
@@ -197,17 +194,17 @@ jobs:
     needs: littlefs
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           fetch-tags: true
           submodules: 'recursive'
       - name: Get UI Build Directory
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: ui-build-directory
           path: data/dist
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: |
             ~/.ccache
@@ -224,12 +221,12 @@ jobs:
       - name: Rename firmware
         run: sudo chown -R $USER:$USER build/ && mv build/HomeKey-ESP32.bin build/esp32s3.firmware.bin && mv build/merged-binary.bin build/esp32s3.firmware.factory.bin
       - name: Archive firmware
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: esp32s3-firmware
           path: build/esp32s3.firmware.bin
       - name: Archive merged binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: esp32s3-firmware-factory
           path: build/esp32s3.firmware.factory.bin
@@ -241,7 +238,7 @@ jobs:
     needs: [littlefs, esp32, esp32c3, esp32c6, esp32s3]
     steps:
       - name: Get Artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
