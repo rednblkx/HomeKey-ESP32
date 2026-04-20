@@ -85,7 +85,7 @@ jobs:
       - uses: actions/cache@v5
         with:
           path: |
-            ~/.ccache
+            $HOME/.ccache
             managed_components
           key: ${{ runner.os }}-esp32-build
       - name: ESP32 Build
@@ -94,7 +94,7 @@ jobs:
           esp_idf_version: v5.5.4
           target: esp32
           path: '.'
-          extra_docker_args: -v ~/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
+          extra_docker_args: -v $HOME/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
           command: CI=true idf.py --ccache build && idf.py merge-bin
       - name: Rename firmware
         run: sudo chown -R $USER:$USER build/ && mv build/HomeKey-ESP32.bin build/esp32.firmware.bin && mv build/merged-binary.bin build/esp32.firmware.factory.bin
@@ -126,7 +126,7 @@ jobs:
       - uses: actions/cache@v5
         with:
           path: |
-            ~/.ccache
+            $HOME/.ccache
             managed_components
           key: ${{ runner.os }}-esp32c3-build
       - name: ESP32C3 Build
@@ -135,7 +135,7 @@ jobs:
           esp_idf_version: v5.5.4
           target: esp32c3
           path: '.'
-          extra_docker_args: -v ~/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
+          extra_docker_args: -v $HOME/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
           command: CI=true idf.py --ccache build && idf.py merge-bin
       - name: Rename firmware
         run: sudo chown -R $USER:$USER build/ && mv build/HomeKey-ESP32.bin build/esp32c3.firmware.bin && mv build/merged-binary.bin build/esp32c3.firmware.factory.bin
@@ -167,7 +167,7 @@ jobs:
       - uses: actions/cache@v5
         with:
           path: |
-            ~/.ccache
+            $HOME/.ccache
             managed_components
           key: ${{ runner.os }}-esp32c6-build
       - name: ESP32C6 Build
@@ -207,7 +207,7 @@ jobs:
       - uses: actions/cache@v5
         with:
           path: |
-            ~/.ccache
+            $HOME/.ccache
             managed_components
           key: ${{ runner.os }}-esp32s3-build
       - name: ESP32S3 Build
@@ -216,7 +216,7 @@ jobs:
           esp_idf_version: v5.5.4
           target: esp32s3
           path: '.'
-          extra_docker_args: -v ~/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
+          extra_docker_args: -v $HOME/.ccache:/root/.ccache -e CCACHE_DIR=/root/.ccache
           command: CI=true idf.py --ccache build && idf.py merge-bin
       - name: Rename firmware
         run: sudo chown -R $USER:$USER build/ && mv build/HomeKey-ESP32.bin build/esp32s3.firmware.bin && mv build/merged-binary.bin build/esp32s3.firmware.factory.bin
