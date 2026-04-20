@@ -544,7 +544,7 @@
                   certType={CertificateType.MQTT_CLIENT}
                   keyType={CertificateType.MQTT_PRIVATE_KEY}
                   caType={CertificateType.MQTT_CA}
-                  title="Current Certificate"
+                  mode="mqtt"
                 />
               </div>
             {/if}

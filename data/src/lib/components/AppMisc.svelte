@@ -14,7 +14,7 @@
 	} from "$lib/types/api";
 	import { diff } from "$lib/utils/objDiff";
 	import HardwareConfig from "$lib/components/HardwareConfig.svelte";
-	import HttpsCertManager from "$lib/components/CertManager.svelte";
+	import CertManager from "$lib/components/CertManager.svelte";
 
 	let { misc, eth, nfcPresets, nfcConnected = $bindable(false), error } = $props();
 
@@ -518,12 +518,11 @@
 											</div>
 										</div>
 									</div>
-									<HttpsCertManager
+									<CertManager
 										certType={CertificateType.HTTPS_SERVER_CERT}
 										keyType={CertificateType.HTTPS_PRIVATE_KEY}
 										caType={CertificateType.HTTPS_CA_CERT}
-										title="Current Certificate"
-										description="Upload PEM-encoded certificate, private key, and optional CA certificate (for mTLS)."
+										mode="https"
 									/>
 								{/if}
 							</div>

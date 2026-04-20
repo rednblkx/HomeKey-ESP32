@@ -13,19 +13,20 @@
 		keyType: CertificateType;
 		/** Certificate type for the CA certificate (optional) */
 		caType?: CertificateType;
-		/** Section title */
-		title?: string;
-		/** Optional description text */
-		description?: string;
+		/** Mode determines certificate requirements - mqtt (CA required) or https (cert+key required) */
+		mode?: 'mqtt' | 'https';
 	}
 
 	let {
 		certType,
 		keyType,
 		caType,
-		title = 'Current Certificate',
-		description,
+		mode = 'https',
 	}: Props = $props();
+
+	let certLabel = $derived(mode === 'mqtt' ? 'Client Certificate' : 'Certificate File');
+	let keyLabel = $derived(mode === 'mqtt' ? 'Client Private Key' : 'Private Key');
+	let caLabel = $derived(mode === 'mqtt' ? 'CA Certificate (Required)' : 'CA Certificate File (Optional)');
 
 	let selectedCertFile: File | null = $state(null);
 	let selectedKeyFile: File | null = $state(null);
@@ -85,7 +86,6 @@
 
 	const VALID_CERT_EXTENSIONS = ['.pem', '.crt', '.cer'];
 	const VALID_KEY_EXTENSIONS = ['.pem', '.key'];
-	const VALID_CA_EXTENSIONS = ['.pem', '.crt', '.cer'];
 
 	function isValidCertFile(file: File): boolean {
 		const ext = '.' + file.name.split('.').pop()?.toLowerCase();
@@ -123,7 +123,7 @@
 
 	function isValidCaFile(file: File): boolean {
 		const ext = '.' + file.name.split('.').pop()?.toLowerCase();
-		return VALID_CA_EXTENSIONS.includes(ext);
+		return VALID_CERT_EXTENSIONS.includes(ext);
 	}
 
 	function handleCaFileChange(event: Event) {
@@ -145,34 +145,55 @@
 	});
 
 	async function handleUpload() {
-		if (!selectedCertFile || !selectedKeyFile) {
-			notifications.addError('Please select both certificate and private key files');
-			return;
+		if (mode === 'mqtt') {
+			if (!selectedCaFile) {
+				notifications.addError('Please select a CA certificate file for server verification');
+				return;
+			}
+			if (selectedCertFile && !selectedKeyFile) {
+				notifications.addError('Please select a private key file to match the client certificate');
+				return;
+			}
+			if (selectedKeyFile && !selectedCertFile) {
+				notifications.addError('Please select a client certificate file to match the private key');
+				return;
+			}
+		} else {
+			if (!selectedCertFile || !selectedKeyFile) {
+				notifications.addError('Please select both certificate and private key files');
+				return;
+			}
 		}
 
 		isUploading = true;
-		uploadProgress.cert = 10;
-		uploadProgress.key = 10;
+		uploadProgress.cert = selectedCertFile ? 10 : 0;
+		uploadProgress.key = selectedKeyFile ? 10 : 0;
+		uploadProgress.ca = selectedCaFile ? 10 : 0;
 
 		try {
-			const certContent = await selectedCertFile.text();
-			uploadProgress.cert = 50;
-			uploadProgress.key = 50;
-
-			const keyContent = await selectedKeyFile.text();
-
-			const certResult = await uploadCertificate(certType, certContent);
-			uploadProgress.cert = 90;
-			uploadProgress.key = 90;
-
-			const keyResult = await uploadCertificate(keyType, keyContent);
-
+			let certResult = { success: true };
+			let keyResult = { success: true };
 			let caResult = { success: true };
+
 			if (selectedCaFile && caType !== undefined) {
 				uploadProgress.ca = 50;
 				const caContent = await selectedCaFile.text();
 				caResult = await uploadCertificate(caType, caContent);
 				uploadProgress.ca = 90;
+			}
+
+			if (selectedCertFile) {
+				uploadProgress.cert = 50;
+				const certContent = await selectedCertFile.text();
+				certResult = await uploadCertificate(certType, certContent);
+				uploadProgress.cert = 90;
+			}
+
+			if (selectedKeyFile) {
+				uploadProgress.key = 50;
+				const keyContent = await selectedKeyFile.text();
+				keyResult = await uploadCertificate(keyType, keyContent);
+				uploadProgress.key = 90;
 			}
 
 			if (certResult.success && keyResult.success && caResult.success) {
@@ -218,7 +239,6 @@
 				return;
 			}
 
-			// Also delete CA cert if it exists
 			if (caType !== undefined) {
 				await deleteCertificate(caType);
 			}
@@ -247,7 +267,7 @@
 	<!-- Certificate Status Display -->
 	<div class="py-3 px-3 bg-base-100 rounded-lg">
 		<div class="flex items-center justify-between mb-3">
-			<h4 class="text-sm font-medium">{title}</h4>
+			<h4 class="text-sm font-medium">Certificates</h4>
 			{#if hasCustomCert}
 			<button
 				type="button"
@@ -265,12 +285,14 @@
 			{/if}
 		</div>
 
-		{#if description}
-			<p class="text-xs text-base-content/60 mb-3">{description}</p>
-		{/if}
-
 		{#if certInfo}
 			<div class="space-y-2 text-xs">
+				<div class="flex items-center gap-2">
+					<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+					</svg>
+					<span class="font-medium text-info">{mode === "https" ? "Server" : "Client"} Certificate Present</span>
+				</div>
 				{#if certInfo.issuer}
 					<div class="flex flex-col">
 						<span class="text-base-content/60">Issuer</span>
@@ -288,7 +310,7 @@
 				{#if certInfo.serial}
 					<div class="flex flex-col">
 						<span class="text-base-content/60">Serial number</span>
-						<span class="font-mono truncate" title={certInfo.serial}>{certInfo.serial}</span>
+						<span class="font-mono break-words" title={certInfo.serial}>{certInfo.serial}</span>
 					</div>
 				{/if}
 
@@ -358,19 +380,32 @@
 					</div>
 					{#if caCertInfo.issuer}
 						<div class="flex flex-col">
-							<span class="text-base-content/60">CA Issuer</span>
+							<span class="text-base-content/60">Issuer</span>
 							<span class="font-mono truncate" title={caCertInfo.issuer}>{caCertInfo.issuer}</span>
 						</div>
 					{/if}
 					{#if caCertInfo.subject}
 						<div class="flex flex-col">
-							<span class="text-base-content/60">CA Subject</span>
+							<span class="text-base-content/60">Subject</span>
 							<span class="font-mono truncate" title={caCertInfo.subject}>{caCertInfo.subject}</span>
+						</div>
+					{/if}
+					{#if caCertInfo.serial}
+						<div class="flex flex-col">
+							<span class="text-base-content/60">Serial number</span>
+							<span class="font-mono break-words" title={caCertInfo.serial}>{caCertInfo.serial}</span>
+						</div>
+					{/if}
+
+					{#if caCertInfo.fingerprint}
+						<div class="flex flex-col">
+							<span class="text-base-content/60">SHA256 Fingerprint</span>
+							<span class="font-mono break-words" title={caCertInfo.fingerprint}>{caCertInfo.fingerprint}</span>
 						</div>
 					{/if}
 					{#if caCertInfo.expiration?.from && caCertInfo.expiration?.to}
 						<div class="flex flex-col">
-							<span class="text-base-content/60">CA Valid Period</span>
+							<span class="text-base-content/60">Valid Period</span>
 							<span class="font-mono">
 								{formatDate(caCertInfo.expiration.from)} - {formatDate(caCertInfo.expiration.to)}
 							</span>
@@ -420,21 +455,42 @@
 	<!-- File Upload Section -->
 	<div class="space-y-3 py-2 px-3 bg-base-100 rounded-lg">
 		<h4 class="text-sm font-medium">Upload Certificate</h4>
-		<p class="text-xs text-base-content/60">Upload PEM-encoded certificate, private key, and optional CA certificate (for mTLS).</p>
-
+		<!-- Help Text -->
+		<div class="border-l-4 border-info bg-gradient-to-r from-info/10 to-transparent rounded-r-lg p-3 shadow-sm">
+			<div class="flex items-start gap-2">
+				<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-info mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+				</svg>
+				<div class="space-y-1.5">
+					<p class="text-xs font-semibold text-base-content">Certificate Requirements</p>
+					<ul class="text-xs text-base-content/75 list-disc list-inside space-y-0.5">
+						<li>Must be in PEM format</li>
+						<li>Supported keys: RSA (2048+ bits) and SECP256R1 (P-256)</li>
+						{#if mode === 'mqtt'}
+							<li><strong>CA certificate</strong> is required for verifying the MQTT broker's identity</li>
+							<li><strong>Client certificate + key</strong> are only needed for mutual TLS (mTLS) authentication</li>
+						{:else}
+							<li><strong>Server certificate + private key</strong> are required for HTTPS operation</li>
+							<li><strong>CA certificate</strong> is only needed if requiring client certificate validation (mTLS)</li>
+						{/if}
+					</ul>
+				</div>
+			</div>
+		</div>
 		<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 			<!-- Certificate File Input -->
 			<div class="form-control">
-				<label class="label" for="https-cert-file">
-					<span class="label-text text-xs">Certificate File (.pem, .crt, .cer)</span>
+				<label class="label" for="cert-file-input">
+					<span class="label-text text-xs">{certLabel} (.pem, .crt, .cer){mode === 'mqtt' ? ' - Optional' : ''}</span>
 				</label>
 				<input
-					id="https-cert-file"
+					id="cert-file-input"
 					type="file"
 					accept={VALID_CERT_EXTENSIONS.join(",")}
 					onchange={handleCertFileChange}
 					bind:this={certInputRef}
 					class="file-input file-input-sm file-input-bordered w-full text-xs"
+					disabled={isUploading}
 				/>
 				{#if selectedCertFile}
 					<p class="text-xs text-success mt-1">Selected: {selectedCertFile.name}</p>
@@ -446,16 +502,17 @@
 
 			<!-- Private Key File Input -->
 			<div class="form-control">
-				<label class="label" for="https-key-file">
-					<span class="label-text text-xs">Private Key File (.pem, .key)</span>
+				<label class="label" for="key-file-input">
+					<span class="label-text text-xs">{keyLabel} (.pem, .key){mode === 'mqtt' ? ' - Optional' : ''}</span>
 				</label>
 				<input
-					id="https-key-file"
+					id="key-file-input"
 					type="file"
 					accept={VALID_KEY_EXTENSIONS.join(",")}
 					onchange={handleKeyFileChange}
 					bind:this={keyInputRef}
 					class="file-input file-input-sm file-input-bordered w-full text-xs"
+					disabled={isUploading}
 				/>
 				{#if selectedKeyFile}
 					<p class="text-xs text-success mt-1">Selected: {selectedKeyFile.name}</p>
@@ -466,18 +523,19 @@
 			</div>
 		</div>
 
-		<!-- CA Certificate File Input -->
+		<!-- CA Certificate File Input - Full width for both modes -->
 		<div class="form-control mt-3">
-			<label class="label" for="https-ca-file">
-				<span class="label-text text-xs">CA Certificate File (.pem, .crt, .cer) - Optional</span>
+			<label class="label" for="ca-file-input">
+				<span class="label-text text-xs">{caLabel} (.pem, .crt, .cer)</span>
 			</label>
 			<input
-				id="https-ca-file"
+				id="ca-file-input"
 				type="file"
-				accept={VALID_CA_EXTENSIONS.join(",")}
+				accept={VALID_CERT_EXTENSIONS.join(",")}
 				onchange={handleCaFileChange}
 				bind:this={caInputRef}
 				class="file-input file-input-sm file-input-bordered w-full text-xs"
+				disabled={isUploading}
 			/>
 			{#if selectedCaFile}
 				<p class="text-xs text-success mt-1">Selected: {selectedCaFile.name}</p>
@@ -491,7 +549,7 @@
 		<button
 			type="button"
 			class="btn btn-sm btn-primary"
-			disabled={!selectedCertFile || !selectedKeyFile || isUploading}
+			disabled={isUploading || (mode === 'mqtt' ? !selectedCaFile : (!selectedCertFile || !selectedKeyFile))}
 			onclick={handleUpload}
 		>
 			{#if isUploading}
@@ -504,14 +562,5 @@
 				Upload
 			{/if}
 		</button>
-	</div>
-
-	<!-- Help Text -->
-	<div class="text-xs text-base-content/60 py-2 px-3 bg-base-100 rounded-lg">
-		<ul class="list-disc list-inside space-y-1">
-			<li>Certificate must be in PEM format</li>
-			<li>Supported keys: RSA (2048+ bits) and SECP256R1</li>
-			<li>CA certificate is optional and only used for client certificate validation (mTLS)</li>
-		</ul>
 	</div>
 </div>
