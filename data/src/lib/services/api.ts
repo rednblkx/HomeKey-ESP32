@@ -131,7 +131,6 @@ export async function uploadCertificate(type: CertificateType, content: string |
 export async function getCertificateStatus(): Promise<ApiResponse<CertificatesStatus>> {
   try {
     const response = await fetch(`/certificates`);
-    console.log(response);
     if (!response.ok) {
       const errorData : ApiError = await response.json();
       notifications.addError(`Failed to get certificate status: ${errorData.error}`);
