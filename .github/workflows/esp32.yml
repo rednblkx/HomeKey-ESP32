@@ -252,18 +252,22 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
-      - uses: "marvinpinto/action-automatic-releases@latest"
-        with:
-          repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          automatic_release_tag: "dev"
-          prerelease: true
-          files: |
-            artifacts/esp32.firmware.bin
-            artifacts/esp32.firmware.factory.bin
-            artifacts/esp32c3.firmware.bin
-            artifacts/esp32c3.firmware.factory.bin
-            artifacts/esp32c6.firmware.bin
-            artifacts/esp32c6.firmware.factory.bin
-            artifacts/esp32s3.firmware.bin
-            artifacts/esp32s3.firmware.factory.bin
-            artifacts/littlefs.bin
+      - name: Create release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ github.ref_name }}
+        run: |
+          gh release create dev \
+              --repo="$GITHUB_REPOSITORY" \
+              --title="development" \
+              --prerelease \
+              --generate-notes \
+              artifacts/esp32.firmware.bin \
+              artifacts/esp32.firmware.factory.bin \
+              artifacts/esp32c3.firmware.bin \
+              artifacts/esp32c3.firmware.factory.bin \
+              artifacts/esp32c6.firmware.bin \
+              artifacts/esp32c6.firmware.factory.bin \
+              artifacts/esp32s3.firmware.bin \
+              artifacts/esp32s3.firmware.factory.bin \
+              artifacts/littlefs.bin
