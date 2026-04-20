@@ -1,18 +1,31 @@
 <script lang="ts">
-	import type {CertificatesStatus } from '$lib/types/api';
+	import type { CertificatesStatus } from '$lib/types/api';
 	import { CertificateType } from "$lib/types/api"
-	import {deleteCertificate, uploadCertificate} from '$lib/services/api';
-	import {notifications} from '$lib/stores/notifications.svelte.js';
-	import {SvelteDate} from "svelte/reactivity";
+	import { deleteCertificate, getCertificateStatus, uploadCertificate } from '$lib/services/api';
+	import { notifications } from '$lib/stores/notifications.svelte.js';
+	import { SvelteDate } from "svelte/reactivity";
+    import { onMount } from 'svelte';
 
 	interface Props {
-		/** Current certificate status from the server */
-		certStatus?: CertificatesStatus;
-		/** Callback to refresh certificate status */
-		onStatusRefresh?: () => Promise<void>;
+		/** Certificate type for the main certificate */
+		certType: CertificateType;
+		/** Certificate type for the private key */
+		keyType: CertificateType;
+		/** Certificate type for the CA certificate (optional) */
+		caType?: CertificateType;
+		/** Section title */
+		title?: string;
+		/** Optional description text */
+		description?: string;
 	}
 
-	let { certStatus, onStatusRefresh }: Props = $props();
+	let {
+		certType,
+		keyType,
+		caType,
+		title = 'Current Certificate',
+		description,
+	}: Props = $props();
 
 	let selectedCertFile: File | null = $state(null);
 	let selectedKeyFile: File | null = $state(null);
@@ -23,10 +36,25 @@
 	let keyInputRef: HTMLInputElement | null = $state(null);
 	let caInputRef: HTMLInputElement | null = $state(null);
 
-	let hasCustomCert = $derived(certStatus?.[CertificateType.HTTPS_SERVER_CERT]);
-	let certInfo = $derived(certStatus?.[CertificateType.HTTPS_SERVER_CERT]);
-	let caCertInfo = $derived(certStatus?.[CertificateType.HTTPS_CA_CERT]);
-	let isKeyMatch = $derived(certStatus?.[CertificateType.HTTPS_SERVER_CERT]?.keyMatchesCert ?? false);
+	let certStatus = $state<CertificatesStatus>();
+	let hasCustomCert = $derived(certStatus?.[certType as keyof CertificatesStatus]);
+	let certInfo = $derived(certStatus?.[certType as keyof CertificatesStatus] as any);
+	let caCertInfo = $derived(certStatus?.[caType as keyof CertificatesStatus] as any);
+	let isKeyMatch = $derived((certStatus?.[certType as keyof CertificatesStatus] as any)?.keyMatchesCert ?? false);
+	let keyInfo = $derived(certStatus?.[keyType as keyof CertificatesStatus] as any);
+	const fetchCertificateStatus = async () => {
+		try {
+		const response = await getCertificateStatus();
+		if (response.success && response.data) {
+			certStatus = response.data;
+		}
+		} catch (e) {
+		console.error('Error fetching certificate status:', e);
+		}
+	};
+	onMount(() => {
+		fetchCertificateStatus();
+	});
 	let isExpired = $derived(() => {
 		if (!certInfo?.expiration?.to) return false;
 		const expiryDate = new Date(certInfo.expiration.to);
@@ -110,6 +138,12 @@
 		selectedCaFile = file || null;
 	}
 
+	let uploadProgress = $state<{ [key: string]: number }>({
+		cert: 0,
+		key: 0,
+		ca: 0
+	});
+
 	async function handleUpload() {
 		if (!selectedCertFile || !selectedKeyFile) {
 			notifications.addError('Please select both certificate and private key files');
@@ -117,14 +151,35 @@
 		}
 
 		isUploading = true;
+		uploadProgress.cert = 10;
+		uploadProgress.key = 10;
+
 		try {
-			const certResult = await uploadCertificate(CertificateType.HTTPS_SERVER_CERT, await selectedCertFile.text());
-			const keyResult = await uploadCertificate(CertificateType.HTTPS_PRIVATE_KEY, await selectedKeyFile.text());
+			const certContent = await selectedCertFile.text();
+			uploadProgress.cert = 50;
+			uploadProgress.key = 50;
+
+			const keyContent = await selectedKeyFile.text();
+
+			const certResult = await uploadCertificate(certType, certContent);
+			uploadProgress.cert = 90;
+			uploadProgress.key = 90;
+
+			const keyResult = await uploadCertificate(keyType, keyContent);
+
 			let caResult = { success: true };
-			if (selectedCaFile) {
-				caResult = await uploadCertificate(CertificateType.HTTPS_CA_CERT, await selectedCaFile.text());
+			if (selectedCaFile && caType !== undefined) {
+				uploadProgress.ca = 50;
+				const caContent = await selectedCaFile.text();
+				caResult = await uploadCertificate(caType, caContent);
+				uploadProgress.ca = 90;
 			}
+
 			if (certResult.success && keyResult.success && caResult.success) {
+				uploadProgress.cert = 100;
+				uploadProgress.key = 100;
+				uploadProgress.ca = selectedCaFile && caType !== undefined ? 100 : 0;
+
 				selectedCertFile = null;
 				selectedKeyFile = null;
 				selectedCaFile = null;
@@ -132,9 +187,11 @@
 				if (keyInputRef) keyInputRef.value = '';
 				if (caInputRef) caInputRef.value = '';
 
-				if (onStatusRefresh) {
-					await onStatusRefresh();
-				}
+				await fetchCertificateStatus();
+
+				setTimeout(() => {
+					uploadProgress = { cert: 0, key: 0, ca: 0 };
+				}, 1000);
 			}
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
@@ -151,24 +208,24 @@
 
 		isDeleting = true;
 		try {
-			const certResult = await deleteCertificate(CertificateType.HTTPS_SERVER_CERT);
+			const certResult = await deleteCertificate(certType);
 			if (!certResult.success) {
 				return;
 			}
 
-			const keyResult = await deleteCertificate(CertificateType.HTTPS_PRIVATE_KEY);
+			const keyResult = await deleteCertificate(keyType);
 			if (!keyResult.success) {
 				return;
 			}
 
 			// Also delete CA cert if it exists
-			await deleteCertificate(CertificateType.HTTPS_CA_CERT);
+			if (caType !== undefined) {
+				await deleteCertificate(caType);
+			}
 
 			notifications.addSuccess('Custom certificate deleted.');
 
-			if (onStatusRefresh) {
-				await onStatusRefresh();
-			}
+			await fetchCertificateStatus();
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
 			notifications.addError(`Delete failed: ${message}`);
@@ -190,7 +247,7 @@
 	<!-- Certificate Status Display -->
 	<div class="py-3 px-3 bg-base-100 rounded-lg">
 		<div class="flex items-center justify-between mb-3">
-			<h4 class="text-sm font-medium">Current Certificate</h4>
+			<h4 class="text-sm font-medium">{title}</h4>
 			{#if hasCustomCert}
 			<button
 				type="button"
@@ -207,6 +264,10 @@
 			</button>
 			{/if}
 		</div>
+
+		{#if description}
+			<p class="text-xs text-base-content/60 mb-3">{description}</p>
+		{/if}
 
 		{#if certInfo}
 			<div class="space-y-2 text-xs">
@@ -247,25 +308,25 @@
 					</div>
 				{/if}
 
-				{#if certStatus?.[CertificateType.HTTPS_PRIVATE_KEY]?.keyType}
+				{#if keyInfo?.keyType}
 					<div class="flex flex-col">
 						<span class="text-base-content/60">Key Type</span>
 						<span class="font-mono truncate">
-							{certStatus[CertificateType.HTTPS_PRIVATE_KEY].keyType}
+							{keyInfo.keyType}
 						</span>
-            {#if certStatus?.[CertificateType.HTTPS_PRIVATE_KEY]?.keyType === "RSA"}
-              <div class="flex items-center justify-between py-2 px-3 bg-warning/10 rounded-lg">
-                <div class="flex items-start gap-2">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-warning mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                  <div>
-                    <p class="text-sm font-medium text-warning">Switch to EC if possible</p>
-                    <p class="text-xs text-base-content/60">RSA is computationally intensive and significantly slows down requests processing times</p>
-                  </div>
-                </div>
-              </div>
-            {/if}
+						{#if keyInfo.keyType === "RSA"}
+							<div class="flex items-center justify-between py-2 px-3 bg-warning/10 rounded-lg">
+								<div class="flex items-start gap-2">
+									<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-warning mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+									</svg>
+									<div>
+										<p class="text-sm font-medium text-warning">Switch to EC if possible</p>
+										<p class="text-xs text-base-content/60">RSA is computationally intensive and significantly slows down requests processing times</p>
+									</div>
+								</div>
+							</div>
+						{/if}
 					</div>
 				{/if}
 
@@ -378,6 +439,9 @@
 				{#if selectedCertFile}
 					<p class="text-xs text-success mt-1">Selected: {selectedCertFile.name}</p>
 				{/if}
+				{#if uploadProgress.cert > 0}
+					<progress class="progress progress-primary w-full mt-2" value={uploadProgress.cert} max="100"></progress>
+				{/if}
 			</div>
 
 			<!-- Private Key File Input -->
@@ -395,6 +459,9 @@
 				/>
 				{#if selectedKeyFile}
 					<p class="text-xs text-success mt-1">Selected: {selectedKeyFile.name}</p>
+				{/if}
+				{#if uploadProgress.key > 0}
+					<progress class="progress progress-primary w-full mt-2" value={uploadProgress.key} max="100"></progress>
 				{/if}
 			</div>
 		</div>
@@ -414,6 +481,9 @@
 			/>
 			{#if selectedCaFile}
 				<p class="text-xs text-success mt-1">Selected: {selectedCaFile.name}</p>
+			{/if}
+			{#if uploadProgress.ca > 0}
+				<progress class="progress progress-primary w-full mt-2" value={uploadProgress.ca} max="100"></progress>
 			{/if}
 		</div>
 

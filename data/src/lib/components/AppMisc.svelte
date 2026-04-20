@@ -4,18 +4,17 @@
 		resetPairings,
 		resetWifi,
 		saveConfig,
-		startConfigAP,
-		getCertificateStatus
+		startConfigAP
 	} from "$lib/services/api";
-	import type {
-		CertificatesStatus,
-		EthConfig,
-		MiscConfig,
-		NfcGpioPinsPreset,
+	import {
+		CertificateType,
+		type EthConfig,
+		type MiscConfig,
+		type NfcGpioPinsPreset,
 	} from "$lib/types/api";
 	import { diff } from "$lib/utils/objDiff";
 	import HardwareConfig from "$lib/components/HardwareConfig.svelte";
-	import HttpsCertManager from "$lib/components/HttpsCertManager.svelte";
+	import HttpsCertManager from "$lib/components/CertManager.svelte";
 
 	let { misc, eth, nfcPresets, nfcConnected = $bindable(false), error } = $props();
 
@@ -27,9 +26,6 @@
 	let ethConfig = $state<EthConfig>($state.snapshot(eth));
 	// svelte-ignore state_referenced_locally
 	let nfcPresetsList = $state<NfcGpioPinsPreset>($state.snapshot(nfcPresets));
-
-	// HTTPS certificate management state
-	let certStatus = $state<CertificatesStatus | undefined>(undefined);
 
 	const saveMiscConfig = async (e: any) => {
 		e.preventDefault();
@@ -106,27 +102,9 @@
 		}
 	};
 
-	const fetchCertStatus = async () => {
-		if (!miscConfig.webHttpsEnabled) return;
-		try {
-			const result = await getCertificateStatus();
-			if (result.success) {
-				certStatus = result.data;
-			}
-		} catch (error) {
-			console.error('Failed to fetch certificate status:', error);
-		}
-	};
-
 	$effect(() => {
 		if (misc?.ethActivePreset !== 255 && misc) {
 			handleEthPresetChange(misc.ethActivePreset);
-		}
-	});
-
-	$effect(() => {
-		if (activeTab === 'security' && miscConfig.webHttpsEnabled) {
-			fetchCertStatus();
 		}
 	});
 </script>
@@ -541,8 +519,11 @@
 										</div>
 									</div>
 									<HttpsCertManager
-										{certStatus}
-										onStatusRefresh={fetchCertStatus}
+										certType={CertificateType.HTTPS_SERVER_CERT}
+										keyType={CertificateType.HTTPS_PRIVATE_KEY}
+										caType={CertificateType.HTTPS_CA_CERT}
+										title="Current Certificate"
+										description="Upload PEM-encoded certificate, private key, and optional CA certificate (for mTLS)."
 									/>
 								{/if}
 							</div>

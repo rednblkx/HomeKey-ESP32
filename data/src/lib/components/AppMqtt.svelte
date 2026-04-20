@@ -1,27 +1,16 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import type { CertificatesStatus, MqttConfig, MetricsMessage } from '$lib/types/api';
-  import { CertificateType } from '$lib/types/api';
-  import { saveConfig, uploadCertificate, getCertificateStatus, deleteCertificate } from '$lib/services/api';
+  import { type MqttConfig, type MetricsMessage, CertificateType } from '$lib/types/api';
+  import { saveConfig } from '$lib/services/api';
   import { diff } from '$lib/utils/objDiff';
   import ws from '$lib/services/ws';
+  import CertManager from './CertManager.svelte';
 
   let { mqtt, error }: { mqtt: MqttConfig; error: string | null } = $props();
 
   // svelte-ignore state_referenced_locally
   let mqttConfig = $state<MqttConfig>($state.snapshot(mqtt));
   let activeTab = $state<'broker' | 'topics' | 'ssl'>('broker');
-  let certificateStatus = $state<CertificatesStatus>();
-  let uploadProgress : { [key in CertificateType]?: number } = $state({
-    [CertificateType.MQTT_CA]: 0,
-    [CertificateType.MQTT_CLIENT]: 0,
-    [CertificateType.MQTT_PRIVATE_KEY]: 0
-  });
-  let uploadErrors : { [key in CertificateType]?: string } = $state({
-    [CertificateType.MQTT_CA]: '',
-    [CertificateType.MQTT_CLIENT]: '',
-    [CertificateType.MQTT_PRIVATE_KEY]: ''
-  });
 
   // MQTT connection status
   let mqttConnected = $state<boolean | undefined>(undefined);
@@ -31,8 +20,6 @@
   let unsubscribeWs: (() => void) | null = null;
 
   onMount(() => {
-    if (mqtt) fetchCertificateStatus();
-
     // Subscribe to WebSocket metrics
     unsubscribeWs = ws.on((event) => {
       if (event.type === 'message' && typeof event.data === 'object' && event.data !== null && 'type' in event.data && event.data.type === 'metrics') {
@@ -51,89 +38,6 @@
       unsubscribeWs();
     }
   });
-
-  const fetchCertificateStatus = async () => {
-    try {
-      const response = await getCertificateStatus();
-      if (response.success && response.data) {
-        certificateStatus = response.data;
-      }
-    } catch (e) {
-      console.error('Error fetching certificate status:', e);
-    }
-  };
-
-  const handleCertificateUpload = async (event: Event) => {
-    const type = (event.target as HTMLInputElement).dataset['type'] as CertificateType;
-    const file = (event.target as HTMLInputElement).files?.[0];
-    if (!file) return;
-    uploadErrors[type] = '';
-
-    const validExtensions = ['.pem', '.crt', '.cer', '.der', '.key'];
-    const fileNameParts = file.name.split('.');
-    const extension = fileNameParts.length > 1 ? fileNameParts.pop()! : '';
-    const fileExtension = '.' + extension.toLowerCase();
-
-    if (!validExtensions.includes(fileExtension)) {
-      uploadErrors[type] = 'Invalid file type. Must be .pem, .crt, .cer, .der, or .key';
-      return;
-    }
-
-    uploadProgress[type] = 0;
-    const reader = new FileReader();
-
-    reader.onloadstart = () => { uploadProgress[type] = 10; };
-    reader.onprogress = (e) => {
-      if (e.lengthComputable) {
-        uploadProgress[type] = Math.min(90, (e.loaded / e.total) * 100);
-      }
-    };
-    reader.onload = async (e) => {
-      try {
-        uploadProgress[type] = 95;
-        const content = e.target?.result ?? null;
-        if (content === null) {
-          uploadErrors[type] = 'Failed to read file content';
-          uploadProgress[type] = 0;
-          return;
-        }
-        await uploadCertificate(type, content);
-        uploadProgress[type] = 100;
-        await fetchCertificateStatus();
-        (event.target as HTMLInputElement).value = '';
-        setTimeout(() => { uploadProgress[type] = 0; }, 1000);
-      } catch (error) {
-        uploadErrors[type] = `Upload failed: ${(error as Error).message}`;
-        uploadProgress[type] = 0;
-      }
-    };
-    reader.onerror = () => {
-      uploadErrors[type] = 'Failed to read file';
-      uploadProgress[type] = 0;
-    };
-
-    if (fileExtension === '.der') {
-      reader.readAsArrayBuffer(file);
-    } else {
-      reader.readAsText(file);
-    }
-  };
-
-  const deleteCertificateHandler = async (type: CertificateType) => {
-    if (!confirm(`Are you sure you want to delete the ${type} certificate?`)) return;
-    try {
-      await deleteCertificate(type);
-      await fetchCertificateStatus();
-    } catch (e) {
-      alert(`Error deleting certificate: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  };
-
-  const onSSLToggleChange = () => {
-    if (!mqttConfig.useSSL) {
-      mqttConfig!.allowInsecure = false;
-    }
-  };
 
   const saveMqttConfig = async (e: Event) => {
     e.preventDefault();
@@ -612,7 +516,6 @@
                 type="checkbox"
                 bind:checked={mqttConfig.useSSL}
                 class="toggle toggle-primary toggle-md"
-                onchange={onSSLToggleChange}
               />
             </div>
 
@@ -637,143 +540,12 @@
 
               <!-- Certificate Upload Section -->
               <div class="space-y-4 pt-4">
-                <!-- CA Certificate -->
-                <div class="bg-base-100 rounded-lg p-4">
-                  <div class="flex items-center justify-between mb-3">
-                    <div>
-                      <p class="font-medium text-sm text-base-content">CA Certificate</p>
-                      <p class="text-xs text-base-content/70">
-                        {certificateStatus[CertificateType.MQTT_CA] ? `${certificateStatus[CertificateType.MQTT_CA].subject} (Expires: ${certificateStatus[CertificateType.MQTT_CA].expiration.to})` : 'Not uploaded'}
-                      </p>
-                    </div>
-                    <div class="flex items-center gap-2">
-                      {#if certificateStatus[CertificateType.MQTT_CA]}
-                        <button
-                          type="button"
-                          onclick={() => deleteCertificateHandler(CertificateType.MQTT_CA)}
-                          class="btn btn-ghost btn-xs text-error"
-                          aria-label="Delete CA Certificate"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-                          </svg>
-                        </button>
-                      {/if}
-                      <label class="btn btn-ghost btn-xs">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
-                        </svg>
-                        <span class="ml-1">Upload</span>
-                        <input
-                          type="file"
-                          onchange={handleCertificateUpload}
-                          accept=".pem,.crt,.cer,.der"
-                          class="hidden"
-                          data-type={CertificateType.MQTT_CA}
-                        />
-                      </label>
-                    </div>
-                  </div>
-                  {#if uploadProgress.ca > 0 && uploadProgress.ca < 100}
-                    <progress class="progress progress-primary w-full" value={uploadProgress.ca} max="100"></progress>
-                  {/if}
-                  {#if uploadErrors.ca}
-                    <p class="text-error text-xs mt-2">{uploadErrors.ca}</p>
-                  {/if}
-                </div>
-
-                <!-- Client Certificate -->
-                <div class="bg-base-100 rounded-lg p-4">
-                  <div class="flex items-center justify-between mb-3">
-                    <div>
-                      <p class="font-medium text-sm text-base-content">Client Certificate</p>
-                      <p class="text-xs text-base-content/70">
-                        {certificateStatus?.[CertificateType.MQTT_CLIENT] ? `${certificateStatus[CertificateType.MQTT_CLIENT].subject} (Expires: ${certificateStatus[CertificateType.MQTT_CLIENT].expiration.to})` : 'Not uploaded'}
-                      </p>
-                    </div>
-                    <div class="flex items-center gap-2">
-                      {#if certificateStatus?.[CertificateType.MQTT_CLIENT]}
-                        <button
-                          type="button"
-                          onclick={() => deleteCertificateHandler(CertificateType.MQTT_CLIENT)}
-                          class="btn btn-ghost btn-xs text-error"
-                          aria-label="Delete Client Certificate"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-                          </svg>
-                        </button>
-                      {/if}
-                      <label class="btn btn-ghost btn-xs">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
-                        </svg>
-                        <span class="ml-1">Upload</span>
-                        <input
-                          type="file"
-                          onchange={handleCertificateUpload}
-                          accept=".pem,.crt,.cer,.der"
-                          class="hidden"
-                          data-type={CertificateType.MQTT_CLIENT}
-                        />
-                      </label>
-                    </div>
-                  </div>
-                  {#if uploadProgress.client > 0 && uploadProgress.client < 100}
-                    <progress class="progress progress-primary w-full" value={uploadProgress.client} max="100"></progress>
-                  {/if}
-                  {#if uploadErrors.client}
-                    <p class="text-error text-xs mt-2">{uploadErrors.client}</p>
-                  {/if}
-                  {#if certificateStatus?.[CertificateType.MQTT_CLIENT] && certificateStatus?.[CertificateType.MQTT_PRIVATE_KEY]?.exists && !certificateStatus[CertificateType.MQTT_CLIENT].keyMatchesCert}
-                    <p class="text-error text-xs mt-2">Private Key doesn't match the certificate public key</p>
-                  {/if}
-                </div>
-
-                <!-- Private Key -->
-                <div class="bg-base-100 rounded-lg p-4">
-                  <div class="flex items-center justify-between mb-3">
-                    <div>
-                      <p class="font-medium text-sm text-base-content">Private Key</p>
-                      <p class="text-xs text-base-content/70">
-                        {certificateStatus?.[CertificateType.MQTT_PRIVATE_KEY]?.exists ? 'Uploaded' : 'Not uploaded'}
-                      </p>
-                    </div>
-                    <div class="flex items-center gap-2">
-                      {#if certificateStatus?.[CertificateType.MQTT_PRIVATE_KEY]?.exists}
-                        <button
-                          type="button"
-                          onclick={() => deleteCertificateHandler(CertificateType.MQTT_PRIVATE_KEY)}
-                          class="btn btn-ghost btn-xs text-error"
-                          aria-label="Delete Private Key"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-                          </svg>
-                        </button>
-                      {/if}
-                      <label class="btn btn-ghost btn-xs">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="size-4">
-                          <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
-                        </svg>
-                        <span class="ml-1">Upload</span>
-                        <input
-                          type="file"
-                          onchange={handleCertificateUpload}
-                          accept=".pem,.key,.der"
-                          class="hidden"
-                          data-type={CertificateType.MQTT_PRIVATE_KEY}
-                        />
-                      </label>
-                    </div>
-                  </div>
-                  {#if uploadProgress.privateKey > 0 && uploadProgress.privateKey < 100}
-                    <progress class="progress progress-primary w-full" value={uploadProgress.privateKey} max="100"></progress>
-                  {/if}
-                  {#if uploadErrors.privateKey}
-                    <p class="text-error text-xs mt-2">{uploadErrors.privateKey}</p>
-                  {/if}
-                </div>
+                <CertManager
+                  certType={CertificateType.MQTT_CLIENT}
+                  keyType={CertificateType.MQTT_PRIVATE_KEY}
+                  caType={CertificateType.MQTT_CA}
+                  title="Current Certificate"
+                />
               </div>
             {/if}
           </div>
