@@ -27,7 +27,7 @@
 	<div class="hidden lg:block w-64">
 		<div class="flex items-center px-4 mt-4 mb-2 w-full">
 			<div class="flex size-10 items-center justify-center rounded-lg bg-info/20 w-12 p-2">
-				<img src={logoSrc()} alt="HomeKey-ESP32 logo" class="w-6 h-6" />
+				<img src={logoSrc()} alt="HomeKey-ESP32 logo" class="size-7" />
 			</div>
 			<div class="flex items-start flex-col w-full">
 				<span class="pl-2 text-sm font-bold">HomeKey-ESP32</span>

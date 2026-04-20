@@ -368,19 +368,21 @@
 	<div class="card bg-base-200">
 		<div class="card-body">
 			<div class="flex items-center gap-2 mb-4">
-				<svg
-					viewBox="0 0 24 24"
-					xmlns="http://www.w3.org/2000/svg"
-					width="24"
-					height="24"
-					fill="currentColor"
-					class="size-5 text-primary"
-				>
-					<path
-						d="M6 18H18V6H6V18ZM14 20H10V22H8V20H5C4.44772 20 4 19.5523 4 19V16H2V14H4V10H2V8H4V5C4 4.44772 4.44772 4 5 4H8V2H10V4H14V2H16V4H19C19.5523 4 20 4.44772 20 5V8H22V10H20V14H22V16H20V19C20 19.5523 19.5523 20 19 20H16V22H14V20ZM8 8H16V16H8V8Z"
+				<div class="w-10 h-10 rounded-lg bg-info/20 flex items-center justify-center">
+					<svg
+						viewBox="0 0 24 24"
+						xmlns="http://www.w3.org/2000/svg"
+						width="24"
+						height="24"
+						fill="currentColor"
+						class="size-6 text-info"
 					>
-					</path>
-				</svg>
+						<path
+							d="M6 18H18V6H6V18ZM14 20H10V22H8V20H5C4.44772 20 4 19.5523 4 19V16H2V14H4V10H2V8H4V5C4 4.44772 4.44772 4 5 4H8V2H10V4H14V2H16V4H19C19.5523 4 20 4.44772 20 5V8H22V10H20V14H22V16H20V19C20 19.5523 19.5523 20 19 20H16V22H14V20ZM8 8H16V16H8V8Z"
+						>
+						</path>
+					</svg>
+				</div>
 				<div>
 					<h2 class="card-title text-base">Device Information</h2>
 					<p class="text-xs text-base-content/60">
@@ -433,18 +435,20 @@
 		<div class="card bg-base-200">
 			<div class="card-body">
 				<div class="flex items-center gap-2 mb-4">
-					<svg
-						viewBox="0 0 24 24"
-						xmlns="http://www.w3.org/2000/svg"
-						width="24"
-						height="24"
-						fill="currentColor"
-						class="size-5 text-primary"
-					>
-						<path
-							d="M3 19H21V21H3V19ZM13 13.1716L19.0711 7.1005L20.4853 8.51472L12 17L3.51472 8.51472L4.92893 7.1005L11 13.1716V2H13V13.1716Z"
-						></path>
-					</svg>
+					<div class="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
+						<svg
+							viewBox="0 0 24 24"
+							xmlns="http://www.w3.org/2000/svg"
+							width="24"
+							height="24"
+							fill="currentColor"
+							class="size-6 text-primary"
+						>
+							<path
+								d="M3 19H21V21H3V19ZM13 13.1716L19.0711 7.1005L20.4853 8.51472L12 17L3.51472 8.51472L4.92893 7.1005L11 13.1716V2H13V13.1716Z"
+							></path>
+						</svg>
+					</div>
 					<div>
 						<h2 class="card-title text-base">Firmware</h2>
 						<p class="text-xs text-base-content/60">
@@ -554,21 +558,23 @@
 		<div class="card bg-base-200">
 			<div class="card-body">
 				<div class="flex items-center gap-2 mb-4">
-					<svg
-						viewBox="0 0 24 24"
-						xmlns="http://www.w3.org/2000/svg"
-						width="24"
-						height="24"
-						fill="currentColor"
-						class="remixicon size-5 text-primary"
-					>
-						<path
-							d="M5 10.9381C8.61872 10.4869 11.4869 7.61872 11.9381 4H5V10.9381ZM5 12.9506V20H19V4H13.9506C13.4816 8.72442 9.72442 12.4816 5 12.9506ZM4 2H20C20.5523 2 21 2.44772 21 3V21C21 21.5523 20.5523 22 20 22H4C3.44772 22 3 21.5523 3 21V3C3 2.44772 3.44772 2 4 2ZM15 16H17V18H15V16Z"
+					<div class="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
+						<svg
+							viewBox="0 0 24 24"
+							xmlns="http://www.w3.org/2000/svg"
+							width="24"
+							height="24"
+							fill="currentColor"
+							class="size-6 text-primary"
 						>
-						</path>
-					</svg>
+							<path
+								d="M5 10.9381C8.61872 10.4869 11.4869 7.61872 11.9381 4H5V10.9381ZM5 12.9506V20H19V4H13.9506C13.4816 8.72442 9.72442 12.4816 5 12.9506ZM4 2H20C20.5523 2 21 2.44772 21 3V21C21 21.5523 20.5523 22 20 22H4C3.44772 22 3 21.5523 3 21V3C3 2.44772 3.44772 2 4 2ZM15 16H17V18H15V16Z"
+							>
+							</path>
+						</svg>
+					</div>
 					<div>
-						<h2 class="card-title text-base">LittleFS</h2>
+						<h2 class="card-title text-base">Filesystem</h2>
 						<p class="text-xs text-base-content/60">
 							Upload filesystem binary
 						</p>

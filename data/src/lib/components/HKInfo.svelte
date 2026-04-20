@@ -27,7 +27,7 @@
           <div class="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              class="h-5 w-5 text-primary"
+              class="size-6 text-primary"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -107,20 +107,18 @@
       <div class="card-body p-4">
         <div class="flex items-center gap-3 mb-4">
           <div class="w-10 h-10 rounded-lg bg-info/20 flex items-center justify-center">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-              <rect x="7" y="7" width="10" height="10" rx="1"/>
-              <line x1="12" y1="5" x2="12" y2="3"/>
-              <line x1="12" y1="21" x2="12" y2="19"/>
-              <line x1="3" y1="12" x2="5" y2="12"/>
-              <line x1="21" y1="12" x2="19" y2="12"/>
-              <line x1="9" y1="5" x2="9" y2="3"/>
-              <line x1="15" y1="5" x2="15" y2="3"/>
-              <line x1="9" y1="21" x2="9" y2="19"/>
-              <line x1="15" y1="21" x2="15" y2="19"/>
-              <line x1="3" y1="9" x2="5" y2="9"/>
-              <line x1="3" y1="15" x2="5" y2="15"/>
-              <line x1="21" y1="9" x2="19" y2="9"/>
-              <line x1="21" y1="15" x2="19" y2="15"/>
+            <svg
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              fill="currentColor"
+              class="size-6 text-info"
+            >
+              <path
+                d="M6 18H18V6H6V18ZM14 20H10V22H8V20H5C4.44772 20 4 19.5523 4 19V16H2V14H4V10H2V8H4V5C4 4.44772 4.44772 4 5 4H8V2H10V4H14V2H16V4H19C19.5523 4 20 4.44772 20 5V8H22V10H20V14H22V16H20V19C20 19.5523 19.5523 20 19 20H16V22H14V20ZM8 8H16V16H8V8Z"
+              >
+              </path>
             </svg>
           </div>
           <div>
