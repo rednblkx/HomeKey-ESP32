@@ -1337,7 +1337,7 @@ bool ConfigManager::validatePrivateKeyContent(const std::string& keyContent) {
     }
 
     mbedtls_pk_type_t key_type = mbedtls_pk_get_type(pk.get());
-    if (key_type != MBEDTLS_PK_RSA && key_type != MBEDTLS_PK_ECKEY && key_type != MBEDTLS_PK_ECKEY_DH && key_type != MBEDTLS_PK_ECDSA) {
+    if (key_type != MBEDTLS_PK_RSA && key_type != MBEDTLS_PK_ECKEY) {
         ESP_LOGE(TAG, "Unsupported private key type: %d", key_type);
         return false;
     }
@@ -1349,14 +1349,9 @@ bool ConfigManager::validatePrivateKeyContent(const std::string& keyContent) {
         }
     }
 
-    if (key_type == MBEDTLS_PK_ECKEY || key_type == MBEDTLS_PK_ECKEY_DH || key_type == MBEDTLS_PK_ECDSA) {
+    if (key_type == MBEDTLS_PK_ECKEY) {
         const mbedtls_ecp_keypair* ec_key = mbedtls_pk_ec(*pk.get());
-        if (ec_key) {
-            mbedtls_ecp_group_id curve_id = ec_key->MBEDTLS_PRIVATE(grp).id;
-            if (curve_id != MBEDTLS_ECP_DP_SECP256R1 && curve_id != MBEDTLS_ECP_DP_SECP384R1 && curve_id != MBEDTLS_ECP_DP_SECP521R1) {
-                ESP_LOGW(TAG, "EC key uses non-standard curve: %d", curve_id);
-            }
-        } else {
+        if(!ec_key) {
             ESP_LOGE(TAG, "Failed to access EC key context");
             return false;
         }
