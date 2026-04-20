@@ -27,6 +27,13 @@
 	// svelte-ignore state_referenced_locally
 	let nfcPresetsList = $state<NfcGpioPinsPreset>($state.snapshot(nfcPresets));
 
+	const colorOptions = [
+		{ value: 0, label: 'Tan', class: 'bg-[#ddd5cc] text-[#3E2723]' },
+		{ value: 1, label: 'Gold', class: 'bg-[#e6d1a8] text-[#3E2723]' },
+		{ value: 2, label: 'Silver', class: 'bg-[#cecece] text-[#212121]' },
+		{ value: 3, label: 'Black', class: 'bg-[#2a2a2a] text-white' },
+	];
+
 	const saveMiscConfig = async (e: any) => {
 		e.preventDefault();
 		try {
@@ -329,44 +336,24 @@
 									/>
 								</div>
 							</div>
-							<!-- Card Finish -->
-							<div class="p-2">
-								<p class="text-sm font-medium mb-2">HomeKey Card Finish</p>
-								<div class="grid grid-cols-4 gap-2">
-									<button
-										type="button"
-										class="btn btn-sm border-1 {miscConfig.hk_key_color === 0 ? 'border-primary ring-1 ring-primary' : 'border-transparent'}"
-										style="background-color: #ddd5cc; color: #3E2723;"
-										onclick={() => miscConfig.hk_key_color = 0}
-									>
-										Tan
-									</button>
-									<button
-										type="button"
-										class="btn btn-sm border-1 {miscConfig.hk_key_color === 1 ? 'border-primary ring-1 ring-primary' : 'border-transparent'}"
-										style="background-color: #e6d1a8; color: #3E2723;"
-										onclick={() => miscConfig.hk_key_color = 1}
-									>
-										Gold
-									</button>
-									<button
-										type="button"
-										class="btn btn-sm border-1 {miscConfig.hk_key_color === 2 ? 'border-primary ring-1 ring-primary' : 'border-transparent'}"
-										style="background-color: #cecece; color: #212121;"
-										onclick={() => miscConfig.hk_key_color = 2}
-									>
-										Silver
-									</button>
-									<button
-										type="button"
-										class="btn btn-sm border-1 {miscConfig.hk_key_color === 3 ? 'border-primary ring-1 ring-primary' : 'border-transparent'}"
-										style="background-color: #2a2a2a; color: #FFFFFF;"
-										onclick={() => miscConfig.hk_key_color = 3}
-									>
-										Black
-									</button>
-								</div>
-							</div>
+              <!-- HomeKey Color -->
+              <div class="form-control">
+                <label class="label" for="hkColor">
+                  <span class="label-text font-medium">HomeKey Finish Color</span>
+                </label>
+                <input type="hidden" id="hkColor" value={miscConfig.hk_key_color} />
+                <div class="grid grid-cols-2 gap-2">
+                  {#each colorOptions as color}
+                    <button
+                      type="button"
+                      class="btn btn-outline {miscConfig.hk_key_color === color.value ? 'border-transparent ring-3 ring-primary' : ''} {color.class}"
+                      onclick={() => miscConfig.hk_key_color = color.value}
+                    >
+                      {color.label}
+                    </button>
+                  {/each}
+                </div>
+              </div>
 						</div>
 					{/if}
 

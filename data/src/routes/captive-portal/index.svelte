@@ -5,10 +5,10 @@
     import HardwareConfig from '$lib/components/HardwareConfig.svelte';
 
 	const colorOptions = [
-		{ value: 0, label: 'Tan', class: 'bg-[#ddd5cc]' },
-		{ value: 1, label: 'Gold', class: 'bg-[#e6d1a8]' },
-		{ value: 2, label: 'Silver', class: 'bg-[#cecece]' },
-		{ value: 3, label: 'Black', class: 'bg-[#2a2a2a]' },
+		{ value: 0, label: 'Tan', class: 'bg-[#ddd5cc] text-[#3E2723]' },
+		{ value: 1, label: 'Gold', class: 'bg-[#e6d1a8] text-[#3E2723]' },
+		{ value: 2, label: 'Silver', class: 'bg-[#cecece] text-[#212121]' },
+		{ value: 3, label: 'Black', class: 'bg-[#2a2a2a] text-white' },
 	];
 
 	let config = $state<CaptivePortalConfig>({
@@ -353,18 +353,17 @@
 					<!-- HomeKey Color -->
 					<div class="form-control">
 						<label class="label" for="hkColor">
-							<span class="label-text font-medium">HomeKey Card Color</span>
+							<span class="label-text font-medium">HomeKey Finish Color</span>
 						</label>
 						<input type="hidden" id="hkColor" value={config.hk_key_color} />
 						<div class="grid grid-cols-2 gap-2">
 							{#each colorOptions as color}
 								<button
 									type="button"
-									class="btn btn-outline {config.hk_key_color === color.value ? 'btn-primary' : ''}"
+									class="btn {config.hk_key_color === color.value ? 'border-transparent ring-3 ring-primary' : ''} {color.class}"
 									onclick={() => config.hk_key_color = color.value}
 									disabled={loading}
 								>
-									<span class="w-4 h-4 rounded-full {color.class} inline-block mr-2 border border-base-300"></span>
 									{color.label}
 								</button>
 							{/each}
