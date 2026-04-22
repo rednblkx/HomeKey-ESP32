@@ -4,6 +4,7 @@
 
 #include "esp_https_server.h"
 #include "esp_ota_ops.h"
+#include "esp_system.h"
 #include "event_bus.hpp"
 #include "fmt/ranges.h"
 #include "WebServerManager.hpp"
@@ -871,7 +872,7 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
   }
 
   bool success = false, rebootNeeded = false;
-  std::string rebootMsg;
+  std::string rebootMsg, errorMsg;
 
   // Process configuration changes and publish events
   cJSON *it = obj->child;
@@ -886,6 +887,8 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
     return ESP_FAIL;
   }
+  char *data_str = cJSON_PrintUnformatted(obj);
+  std::string result;
   while (it) {
     cJSON *configSchemaItem = cJSON_GetObjectItem(configSchema, it->string);
     if (cJSON_Compare(it, configSchemaItem, true)) {
@@ -930,12 +933,18 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     } else if (keyStr == "neoPixelType") {
       rebootNeeded = true;
       rebootMsg = "Pixel Type changed, reboot needed! Rebooting...";
+    } else if (keyStr == "webHttpsEnabled") {
+      size_t freeHeap = esp_get_free_heap_size();
+      ESP_LOGI(TAG, "Free Heap: %d", freeHeap);
+      if(freeHeap < (50 * 1024)){
+        success = false;
+        errorMsg = "HTTPS not available, not enough free memory!";
+        goto cleanup;
+      }
     }
     it = it->next;
   }
 
-  char *data_str = cJSON_PrintUnformatted(obj);
-  std::string result;
   if (type == "mqtt") {
     result = instance->m_configManager.updateFromJson<espConfig::mqttConfig_t>(data_str);
     if (!result.empty()) {
@@ -959,6 +968,7 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     }
   }
 
+  cleanup:
   cJSON_free(data_str);
 
   cJSON_Delete(configSchema);
@@ -981,7 +991,7 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
   httpd_resp_set_type(req, "application/json");
   cJSON *res = cJSON_CreateObject();
   cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-  cJSON_AddItemToObject(res, "error", cJSON_CreateString("Unable to save config!"));
+  cJSON_AddItemToObject(res, "error", cJSON_CreateString(errorMsg.empty() ? "Unable to save config!" : errorMsg.c_str()));
   httpd_resp_set_status(req, HTTPD_500);
   std::string response = cjson_to_string_and_free(res);
   httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
