@@ -499,7 +499,7 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
   if (use_compressed)
     httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
 
-  uint8_t buffer[2048];
+  uint8_t buffer[4096];
   size_t bytes_read;
   while ((bytes_read = file.read(buffer, sizeof(buffer))) > 0) {
     esp_err_t err = httpd_resp_send_chunk(req, (const char *)buffer, bytes_read);
