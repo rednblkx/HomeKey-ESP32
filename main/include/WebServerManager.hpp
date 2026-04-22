@@ -5,6 +5,7 @@
 #include "esp_partition.h"
 #include "esp_timer.h"
 #include "event_bus.hpp"
+#include <deque>
 #include <memory>
 #include <atomic>
 #include <string>
@@ -28,10 +29,16 @@ struct WsFrame {
   httpd_ws_type_t type;
   size_t len;
   uint8_t *payload;
+  static constexpr size_t INLINE_SIZE = 128;
+  uint8_t inlinePayload[INLINE_SIZE];
 };
 
 struct WsFrameDeleter {
-  void operator()(WsFrame *frame) const { delete frame; }
+  void operator()(WsFrame *frame) const {
+    if (frame && frame->payload != frame->inlinePayload)
+      delete[] frame->payload;
+    delete frame;
+  }
 };
 
 using WsFramePtr = std::unique_ptr<WsFrame, WsFrameDeleter>;
@@ -180,7 +187,7 @@ private:
   std::vector<std::unique_ptr<WsClient>> m_wsClients;
   std::mutex m_wsClientsMutex;
   esp_timer_handle_t m_statusTimer;
-  std::vector<std::vector<uint8_t>> m_wsBroadcastBuffer;
+  std::deque<std::vector<uint8_t>> m_wsBroadcastBuffer;
 
   EventBus::SubscriberHandle m_nfc_status_subscriber;
   std::atomic<bool> m_nfc_connected{false};

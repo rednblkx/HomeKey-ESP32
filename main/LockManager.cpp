@@ -55,14 +55,16 @@ LockManager::LockManager(const espConfig::misc_config_t& miscConfig, const espCo
       m_currentState = s.currentState;
       s.targetState = m_targetState;
       s.source = LockManager::INTERNAL;
-      std::vector<uint8_t> d;
-      alpaca::serialize(s, d);
-      event_bus.publish({bus_topic, 0, d.data(), d.size()});
+      std::array<uint8_t, sizeof(EventLockState)> d{};
+      size_t d_len = alpaca::serialize(s, d);
+      event_bus.publish({bus_topic, 0, d.data(), d_len});
     });
   esp_timer_create_args_t momentaryStateTimer_arg = {
     .callback = handleTimer,
     .arg = this,
-    .name = "momentaryStateTimer"
+    .dispatch_method = ESP_TIMER_TASK,
+    .name = "momentaryStateTimer",
+    .skip_unhandled_events = false
   };
   esp_timer_create(&momentaryStateTimer_arg, &momentaryStateTimer);
 }
@@ -109,9 +111,9 @@ void LockManager::begin() {
     .targetState = static_cast<uint8_t>(m_targetState),
     .source = LockManager::INTERNAL
   };
-  std::vector<uint8_t> d;
-  alpaca::serialize(s, d);
-  event_bus.publish({event_bus.get_topic(HARDWARE_ACTION_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d.size()});
+  std::array<uint8_t, sizeof(EventLockState)> d{};
+  size_t d_len = alpaca::serialize(s, d);
+  event_bus.publish({event_bus.get_topic(HARDWARE_ACTION_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d_len});
 }
 
 /**
@@ -171,18 +173,17 @@ void LockManager::setTargetState(uint8_t state, Source source) {
       .targetState = m_targetState,
       .source = LockManager::INTERNAL
     };
-    std::vector<uint8_t> d;
-    alpaca::serialize(s, d);
+    std::array<uint8_t, sizeof(EventLockState)> d{};
+    size_t d_len = alpaca::serialize(s, d);
     if (m_actionsConfig.hkDumbSwitchMode) {
       ESP_LOGI(TAG, "Dummy Action is enabled!");
       m_currentState = m_targetState;
       s.currentState = m_targetState;
-      d.clear();
-      alpaca::serialize(s, d);
+      d_len = alpaca::serialize(s, d);
     } else if((source == NFC && m_actionsConfig.hkGpioControlledState) || source != NFC) {
-      event_bus.publish({event_bus.get_topic(HARDWARE_ACTION_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d.size()});
+      event_bus.publish({event_bus.get_topic(HARDWARE_ACTION_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d_len});
     }
-    event_bus.publish({bus_topic, 0, d.data(), d.size()});
+    event_bus.publish({bus_topic, 0, d.data(), d_len});
 
     uint8_t momentarySources = (((m_actionsConfig.gpioActionMomentaryEnabled |
                                   m_actionsConfig.gpioActionPin) == 255) &
@@ -221,8 +222,8 @@ void LockManager::overrideState(uint8_t c_state, uint8_t t_state) {
       .targetState = static_cast<uint8_t>(m_targetState),
       .source = LockManager::INTERNAL
     };
-    std::vector<uint8_t> d;
-    alpaca::serialize(s, d);
-    event_bus.publish({event_bus.get_topic(HARDWARE_ACTION_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d.size()});
-    event_bus.publish({bus_topic, 0, d.data(), d.size()});
+    std::array<uint8_t, sizeof(EventLockState)> d{};
+    size_t d_len = alpaca::serialize(s, d);
+    event_bus.publish({event_bus.get_topic(HARDWARE_ACTION_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d_len});
+    event_bus.publish({bus_topic, 0, d.data(), d_len});
 }

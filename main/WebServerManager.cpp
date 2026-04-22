@@ -147,10 +147,10 @@ void WebServerManager::begin() {
   httpd_ssl_config_t ssl_config = HTTPD_SSL_CONFIG_DEFAULT();
   ssl_config.httpd.max_uri_handlers = 22;
   ssl_config.httpd.max_open_sockets = 4;
-  ssl_config.httpd.stack_size = 16384;
+  ssl_config.httpd.stack_size = 8192;
   ssl_config.httpd.uri_match_fn = httpd_uri_match_wildcard;
   ssl_config.httpd.lru_purge_enable = true;
-  ssl_config.httpd.backlog_conn = 3;
+  ssl_config.httpd.backlog_conn = 6;
 
   if(isApMode || !isHttpsEnabled){
     ssl_config.transport_mode = HTTPD_SSL_TRANSPORT_INSECURE;
@@ -173,7 +173,7 @@ void WebServerManager::begin() {
   }
 
   if (httpd_ssl_start(&m_server, &ssl_config) == ESP_OK) {
-    ESP_LOGI(TAG, "HTTP server started");
+    ESP_LOGI(TAG, "HTTP server started, free heap: %zu", esp_get_free_heap_size());
   } else {
     ESP_LOGE(TAG, "Failed to start HTTP server");
     ssl_config.transport_mode = HTTPD_SSL_TRANSPORT_INSECURE;
@@ -451,11 +451,10 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
   // Check for gzip compressed version
   if (str_ends_with(filename, ".js") || str_ends_with(filename, ".css")) {
     size_t accept_len = httpd_req_get_hdr_value_len(req, "Accept-Encoding");
-    if (accept_len > 0 && accept_len <= 512) {
-      std::vector<char> hdr(accept_len + 1, 0);
-      if (httpd_req_get_hdr_value_str(req, "Accept-Encoding", hdr.data(),
-                                      hdr.size()) == ESP_OK) {
-        if (std::string(hdr.data()).find("gzip") != std::string::npos) {
+    if (accept_len > 0 && accept_len < 256) {
+      char hdr[256];
+      if (httpd_req_get_hdr_value_str(req, "Accept-Encoding", hdr, sizeof(hdr)) == ESP_OK) {
+        if (strstr(hdr, "gzip") != nullptr) {
           std::string compressed = filepath + ".gz";
           if (LittleFS.exists(compressed.c_str())) {
             use_compressed = true;
@@ -500,20 +499,18 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
   if (use_compressed)
     httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
 
-  uint8_t *buffer = new uint8_t[4096];
+  uint8_t buffer[2048];
   size_t bytes_read;
-  while ((bytes_read = file.read(buffer, 4096)) > 0) {
+  while ((bytes_read = file.read(buffer, sizeof(buffer))) > 0) {
     esp_err_t err = httpd_resp_send_chunk(req, (const char *)buffer, bytes_read);
     if (err != ESP_OK) {
       ESP_LOGE(TAG, "Failed to send chunk: %d", err);
-      delete[] buffer;
       file.close();
       httpd_resp_send_chunk(req, NULL, 0);
       return ESP_FAIL;
     }
     taskYIELD();
   }
-  delete[] buffer;
   file.close();
   httpd_resp_send_chunk(req, NULL, 0);
   return ESP_OK;
@@ -1606,9 +1603,14 @@ esp_err_t WebServerManager::handleWifiScan(httpd_req_t *req) {
 
   uint16_t ap_count = 0;
   esp_wifi_scan_get_ap_num(&ap_count);
+  constexpr uint16_t MAX_AP_COUNT = 20;
+  if (ap_count > MAX_AP_COUNT) {
+    ESP_LOGW(TAG, "Capping AP scan results from %d to %d", ap_count, MAX_AP_COUNT);
+    ap_count = MAX_AP_COUNT;
+  }
   ESP_LOGI(TAG, "Found %d access points", ap_count);
 
-  wifi_ap_record_t *ap_records = new wifi_ap_record_t[ap_count];
+  wifi_ap_record_t ap_records[MAX_AP_COUNT];
   esp_wifi_scan_get_ap_records(&ap_count, ap_records);
 
   if (need_restore_mode) {
@@ -1639,7 +1641,6 @@ esp_err_t WebServerManager::handleWifiScan(httpd_req_t *req) {
 
     cJSON_AddItemToArray(networks, network);
   }
-  delete[] ap_records;
 
   httpd_resp_set_type(req, "application/json");
   cJSON *res = cJSON_CreateObject();
@@ -1804,9 +1805,9 @@ void WebServerManager::broadcastWs(const uint8_t *payload, size_t len,
   static const size_t max_buffer = 64;
   if (fds.empty()) {
     if(m_wsBroadcastBuffer.size() >= max_buffer){
-       m_wsBroadcastBuffer.erase(m_wsBroadcastBuffer.begin());
+      m_wsBroadcastBuffer.pop_front();
     }
-    m_wsBroadcastBuffer.push_back(std::vector<uint8_t>(payload, payload + len));
+    m_wsBroadcastBuffer.emplace_back(payload, payload + len);
     return;
   }
   for (int fd : fds){
@@ -1823,10 +1824,17 @@ void WebServerManager::queue_ws_frame(int fd, const uint8_t *payload,
   frame->fd = fd;
   frame->type = type;
   frame->len = len;
-  frame->payload = new uint8_t[len];
-  memcpy(frame->payload, payload, len);
+  if (len <= WsFrame::INLINE_SIZE) {
+    memcpy(frame->inlinePayload, payload, len);
+    frame->payload = frame->inlinePayload;
+  } else {
+    frame->payload = new uint8_t[len];
+    memcpy(frame->payload, payload, len);
+  }
 
   if (xQueueSend(m_wsQueue, &frame, pdMS_TO_TICKS(100)) != pdTRUE) {
+    if (frame->payload != frame->inlinePayload)
+      delete[] frame->payload;
     delete frame;
   }
 }
@@ -1870,7 +1878,6 @@ void WebServerManager::ws_send_task(void *arg) {
           }
         }
       }
-      delete[] frame->payload;
     }
   }
 }

@@ -72,7 +72,7 @@ void NfcManager::initAuthPrecompute() {
     xQueueSend(m_authCtxFreeQueue, &item, 0);
   }
 
-  BaseType_t ok = xTaskCreateUniversal(authPrecomputeTaskEntry, "hk_auth_precompute", 8192, this, 3, &m_authPrecomputeTaskHandle, 0);
+  BaseType_t ok = xTaskCreateUniversal(authPrecomputeTaskEntry, "hk_auth_precompute", 4096, this, 3, &m_authPrecomputeTaskHandle, 0);
   if (ok != pdPASS || !m_authPrecomputeTaskHandle) {
     ESP_LOGE(TAG, "Failed to start auth precompute task.");
     m_authPrecomputeTaskHandle = nullptr;
@@ -304,9 +304,9 @@ bool NfcManager::initializeReader() {
     }
     ESP_LOGI(TAG, "Found chip PN532, Firmware ver. %d.%d", (versiondata >> 24) & 0xFF, (versiondata >> 16) & 0xFF);
     EventNfcStatus status{.connected = true, .firmwareVersionMajor = static_cast<uint8_t>((versiondata >> 24) & 0xFF), .firmwareVersionMinor = static_cast<uint8_t>((versiondata >> 16) & 0xFF)};
-    std::vector<uint8_t> d;
-    alpaca::serialize(status, d);
-    event_bus.publish({m_nfc_status_topic, 0, d.data(), d.size()});
+    std::array<uint8_t, sizeof(EventNfcStatus)> d{};
+    size_t d_len = alpaca::serialize(status, d);
+    event_bus.publish({m_nfc_status_topic, 0, d.data(), d_len});
     m_nfc->RFConfiguration(0x01, {0x03});
     m_nfc->setPassiveActivationRetries(0);
     m_nfc->RFConfiguration(0x02, {0x00, 0x0B, 0x10});
@@ -393,9 +393,9 @@ void NfcManager::pollingTask() {
         if (m_nfc->WriteRegister({0x63,0x3d,0x0}) != pn532::SUCCESS) {
             ESP_LOGE(TAG, "PN532 is unresponsive. Attempting to reconnect...");
             EventNfcStatus status{.connected = false, .firmwareVersionMajor = 0, .firmwareVersionMinor = 0};
-            std::vector<uint8_t> d;
-            alpaca::serialize(status, d);
-            event_bus.publish({m_nfc_status_topic, 0, d.data(), d.size()});
+            std::array<uint8_t, sizeof(EventNfcStatus)> d{};
+            size_t d_len = alpaca::serialize(status, d);
+            event_bus.publish({m_nfc_status_topic, 0, d.data(), d_len});
             startRetryTask();
             vTaskSuspend(NULL);
             continue;
