@@ -39,11 +39,27 @@ export default defineConfig(({ mode }) => {
       cssMinify: 'lightningcss',
       minify: 'esbuild',
       target: 'es2020',
-      rollupOptions: {
+      rolldownOptions: {
         output: {
-          manualChunks: undefined,
-        },
-      },
+          codeSplitting: {
+            minSize: 10000,
+            groups: [
+              {
+                name: 'vendor',
+                test: /node_modules/,
+                priority: 2,
+              },
+              {
+                name: 'components',
+                test: /src\/lib\/components/,
+                priority: 1,
+              }
+            ],
+          },
+          minify: true,
+          polyfillRequire: false,
+        }
+      }
     },
     esbuild: {
       drop: isDev ? [] : ['console', 'debugger'],
