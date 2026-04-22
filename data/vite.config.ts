@@ -37,7 +37,7 @@ export default defineConfig(({ mode }) => {
     },
     build: {
       cssMinify: 'lightningcss',
-      minify: 'esbuild',
+      minify: 'oxc',
       target: 'es2020',
       rolldownOptions: {
         output: {
