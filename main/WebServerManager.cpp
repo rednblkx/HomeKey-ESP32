@@ -496,6 +496,7 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
 
   httpd_resp_set_type(req, content_type);
   httpd_resp_set_hdr(req, "Connection", "close");
+  httpd_resp_set_hdr(req, "Cache-Control", "max-age=86400");
   if (use_compressed)
     httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
 
@@ -546,6 +547,7 @@ esp_err_t WebServerManager::handleRootOrHash(httpd_req_t *req) {
   }
   httpd_resp_set_type(req, "text/html");
   httpd_resp_set_hdr(req, "Connection", "close");
+  httpd_resp_set_hdr(req, "Cache-Control", "max-age=86400");
   httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
 
   char buffer[1024];
