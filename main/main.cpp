@@ -98,7 +98,7 @@ using namespace loggable;
  */
 void setup() {
   Serial.begin(115200);
-  loggable::espidf::LogHook::install(false);
+  loggable::espidf::LogHook::install(false, false);
   Sinker::instance().add_sinker(std::make_shared<loggable::ConsoleLogSinker>());
   EventBus::Bus::instance().init();
   readerDataManager = std::make_unique<ReaderDataManager>();
