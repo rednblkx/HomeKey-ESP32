@@ -163,9 +163,9 @@ void setup() {
                                 miscConfig.nfcPinsPreset == PIN_UNSET ? miscConfig.nfcGpioPins : nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins,
                                 miscConfig.hkAuthPrecomputeEnabled);
     nfcManager->begin();
-    webServerManager->setNfcManager(nfcManager.get());
-    webServerManager->setMqttManager(mqttManager.get());
   }
+  webServerManager->setNfcManager(nfcManager.get());
+  webServerManager->setMqttManager(mqttManager.get());
   hardwareManager->begin();
   homekitLock->begin();
   lockManager->begin();
