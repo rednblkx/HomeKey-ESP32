@@ -116,7 +116,7 @@
 #define GPIO_HK_ALT_ACTION_PIN 255 // GPIO Pin pulled HIGH or LOW (see GPIO_HK_ALT_ACTION_HL) on action
 #define GPIO_HK_ALT_ACTION_TIMEOUT 5000 // GPIO Delay time in ms - Action
 #define GPIO_HK_ALT_ACTION_GPIO_STATE 1 // GPIO Pin pulled HIGH or LOW (see GPIO_HK_ALT_ACTION_HL) on action
-#define GPIO_HK_CONTROLLED_STATE false // Defines if HomeKey can control the GPIO state
+#define GPIO_HK_CONTROLLED_STATE true // Defines if HomeKey can control the GPIO state
 #define HK_DUMB_SWITCH_MODE true // Bypass lock state external validation
 
 // WebUI
