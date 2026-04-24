@@ -9,7 +9,6 @@ const char* HardwareManager::TAG = "HardwareManager";
 
 const std::array<const char*, 6> pixelTypeMap = { "RGB", "RBG", "BRG", "BGR", "GBR", "GRB" };
 
-static EventBus::Bus& event_bus = EventBus::Bus::instance();
 
 /**
  * @brief Initialize HardwareManager state and register event topics and subscribers.
@@ -29,22 +28,20 @@ HardwareManager::HardwareManager(const espConfig::actions_config_t& miscConfig)
       m_feedbackTaskHandle(nullptr),
       m_feedbackQueue(nullptr),
       m_lockControlTaskHandle(nullptr),
-      m_lockControlQueue(nullptr),
-      m_hardware_action_topic(event_bus.register_topic(HARDWARE_ACTION_BUS_TOPIC)),
-      m_alt_action_topic(event_bus.register_topic(HARDWARE_ALT_ACTION_BUS_TOPIC))
+      m_lockControlQueue(nullptr)
 {
-  m_hardware_action_event = event_bus.subscribe(m_hardware_action_topic, [&](const EventBus::Event& event, void* context){
-    if(event.payload_size == 0 || event.payload == nullptr) return;
-    std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
+  m_hardware_action_event = AppEventLoop::subscribe(HW_EVENT, HW_ACTION, [&](const uint8_t* data, size_t size){
+    if(size == 0 || data == nullptr) return;
+    std::span<const uint8_t> payload(data, size);
     std::error_code ec;
     EventLockState s = alpaca::deserialize<EventLockState>(payload, ec);
     if(ec) { ESP_LOGE(TAG, "Failed to deserialize lock state event: %s", ec.message().c_str()); return; }
     ESP_LOGD(TAG, "Received action event: %d -> %d", s.currentState, s.targetState);
     setLockOutput(s.targetState);
   });
-  m_gpio_pin_event = event_bus.subscribe(event_bus.register_topic(HARDWARE_CONFIG_BUS_TOPIC), [&](const EventBus::Event& event, void* context){
-    if(event.payload_size == 0 || event.payload == nullptr) return;
-    std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
+  m_gpio_pin_event = AppEventLoop::subscribe(HW_EVENT, HW_CONFIG_CHANGED, [&](const uint8_t* data, size_t size){
+    if(size == 0 || data == nullptr) return;
+    std::span<const uint8_t> payload(data, size);
     std::error_code ec;
     EventValueChanged s = alpaca::deserialize<EventValueChanged>(payload, ec);
     if(!ec) {
@@ -78,9 +75,9 @@ HardwareManager::HardwareManager(const espConfig::actions_config_t& miscConfig)
  * This prepares the HardwareManager to receive events and perform timed feedback and lock control.
  */
 void HardwareManager::begin() {
-  m_nfc_event = event_bus.subscribe(event_bus.get_topic(NFC_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), [&](const EventBus::Event& event, void* context){
-    if(event.payload_size == 0 || event.payload == nullptr) return;
-    std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
+  m_nfc_event = AppEventLoop::subscribe(NFC_EVENT, NFC_TAP_EVENT, [&](const uint8_t* data, size_t size){
+    if(size == 0 || data == nullptr) return;
+    std::span<const uint8_t> payload(data, size);
     std::error_code ec;
     NfcEvent nfc_event = alpaca::deserialize<NfcEvent>(payload, ec);
     if(ec) { ESP_LOGE(TAG, "Failed to deserialize NFC event: %s", ec.message().c_str()); return; }
@@ -436,7 +433,7 @@ void HardwareManager::lockControlTask() {
           };
           std::vector<uint8_t> d;
           alpaca::serialize(s, d);
-          event_bus.publish({event_bus.get_topic(LOCK_UPDATE_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d.size()});
+          AppEventLoop::publish(LOCK_EVENT, LOCK_UPDATE_STATE, d.data(), d.size());
         }
     }
 }
@@ -451,7 +448,7 @@ void HardwareManager::lockControlTask() {
  */
 void HardwareManager::triggerAltAction() {
   if (m_altActionArmed) { 
-      event_bus.publish({m_alt_action_topic, 1});
+      AppEventLoop::publish(HW_EVENT, HW_ALT_ACTION, nullptr, 0);
       if (m_miscConfig.hkAltActionPin != 255) {
           ESP_LOGI(TAG, "Triggering alt action on pin %d for %dms", m_miscConfig.hkAltActionPin, m_miscConfig.hkAltActionTimeout);
           digitalWrite(m_miscConfig.hkAltActionPin, m_miscConfig.hkAltActionGpioState);

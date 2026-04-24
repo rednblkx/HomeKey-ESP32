@@ -1,6 +1,6 @@
 #pragma once
 #include "HomeSpan.h"
-#include "event_bus.hpp"
+#include "app_event_loop.hpp"
 
 namespace Service
 {
@@ -27,7 +27,7 @@ public:
  *
  * Ensures the instance's subscriptions for lock state changes and HomeKit events are removed from the global EventBus when the object is destroyed.
  */
-~HomeKitLock() {EventBus::Bus::instance().unsubscribe(m_lock_state_changed);EventBus::Bus::instance().unsubscribe(m_hk_event);}
+~HomeKitLock() = default;
     void begin();
     void updateLockState(int currentState, int targetState);
     void updateBatteryStatus(uint8_t batteryLevel, bool isLow);
@@ -55,9 +55,8 @@ private:
     void setupDebugCommands();
 
     static const char* TAG;
-    const EventBus::TopicHandle bus_topic;
-    EventBus::SubscriberHandle m_lock_state_changed;
-    EventBus::SubscriberHandle m_hk_event;
+    AppEventLoop::SubscriptionHandle m_lock_state_changed;
+    AppEventLoop::SubscriptionHandle m_hk_event;
 
     struct NFCAIS : Service::AccessoryInformation {
       NFCAIS(const espConfig::misc_config_t& config);

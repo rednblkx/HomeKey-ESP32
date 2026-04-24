@@ -5,12 +5,13 @@
 #include "esp_https_server.h"
 #include "esp_ota_ops.h"
 #include "esp_system.h"
-#include "event_bus.hpp"
+#include "app_event_loop.hpp"
 #include "fmt/ranges.h"
 #include "WebServerManager.hpp"
 #include "ConfigManager.hpp"
 #include "HomeSpan.h"
 #include "MqttManager.hpp"
+#include "NfcManager.hpp"
 #include "ReaderDataManager.hpp"
 #include "cJSON.h"
 #include "config.hpp"
@@ -45,7 +46,6 @@
 // ============================================================================
 
 const char *WebServerManager::TAG = "WebServerManager";
-static EventBus::Bus& event_bus = EventBus::Bus::instance();
 const size_t MAX_WS_PAYLOAD = 8192;
 
 // ============================================================================
@@ -84,7 +84,7 @@ static inline std::string cjson_to_string_and_free(cJSON *obj) {
 WebServerManager::WebServerManager(ConfigManager &configManager,
                                    ReaderDataManager &readerDataManager)
     : m_server(nullptr), m_configManager(configManager),
-      m_readerDataManager(readerDataManager), m_mqttManager(nullptr) {
+      m_readerDataManager(readerDataManager), m_mqttManager(nullptr), m_nfcManager(nullptr) {
 }
 
 /**
@@ -97,14 +97,6 @@ WebServerManager::WebServerManager(ConfigManager &configManager,
  */
 WebServerManager::~WebServerManager() {
   ESP_LOGI(TAG, "WebServerManager destructor called");
-
-  if (m_nfc_status_subscriber.is_valid()) {
-    event_bus.unsubscribe(m_nfc_status_subscriber);
-  }
-
-  if (m_mqtt_status_subscriber.is_valid()) {
-    event_bus.unsubscribe(m_mqtt_status_subscriber);
-  }
 
   if (m_server) {
     httpd_stop(m_server);
@@ -215,32 +207,6 @@ void WebServerManager::begin() {
   }
 
   ESP_LOGI(TAG, "Web server initialization complete");
-
-  m_nfc_status_subscriber = event_bus.subscribe(event_bus.get_topic(NFC_STATUS_TOPIC).value_or(EventBus::INVALID_TOPIC),
-    [](const EventBus::Event& event, void* context) {
-      if (event.payload_size == 0 || event.payload == nullptr) return;
-      auto* instance = static_cast<WebServerManager*>(context);
-      std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
-      std::error_code ec;
-      EventNfcStatus status = alpaca::deserialize<EventNfcStatus>(payload, ec);
-      if (!ec) {
-        instance->m_nfc_connected.store(status.connected, std::memory_order_relaxed);
-      }
-    }, this);
-
-  m_mqtt_status_subscriber = event_bus.subscribe(event_bus.get_topic(MQTT_STATUS_TOPIC).value_or(EventBus::INVALID_TOPIC),
-    [](const EventBus::Event& event, void* context) {
-      if (event.payload_size == 0 || event.payload == nullptr) return;
-      auto* instance = static_cast<WebServerManager*>(context);
-      std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
-      std::error_code ec;
-      EventMqttStatus status = alpaca::deserialize<EventMqttStatus>(payload, ec);
-      if (!ec) {
-        instance->m_mqtt_connected.store(status.connected, std::memory_order_relaxed);
-        instance->m_mqtt_error_code.store(static_cast<uint8_t>(status.errorCode), std::memory_order_relaxed);
-        instance->m_mqtt_error_message = status.errorMessage;
-      }
-    }, this);
 
   m_isInitialized = true;
 }
@@ -906,7 +872,7 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
                          .data = d};
       std::vector<uint8_t> event_data;
       alpaca::serialize(event, event_data);
-      event_bus.publish({event_bus.get_topic(HK_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, event_data.data(), event_data.size()});
+      AppEventLoop::publish(HK_EVENT, HK_INTERNAL_EVENT, event_data.data(), event_data.size());
     } else if (keyStr == "nfcNeopixelPin") {
       rebootNeeded = true;
       rebootMsg = "Pixel GPIO pin changed, reboot needed! Rebooting...";
@@ -917,7 +883,7 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
                           .newValue = (uint8_t)it->valueint};
       std::vector<uint8_t> d;
       alpaca::serialize(s, d);
-      event_bus.publish({event_bus.get_topic(HARDWARE_CONFIG_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d.size()});
+      AppEventLoop::publish(HW_EVENT, HW_CONFIG_CHANGED, d.data(), d.size());
       if (keyStr == "gpioActionPin" && it->valueint != 255 && cJSON_IsTrue(cJSON_GetObjectItem(configSchema, "hkDumbSwitchMode"))) {
         cJSON_AddBoolToObject(obj, "hkDumbSwitchMode",false);
       }
@@ -929,7 +895,7 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
       HomekitEvent event{.type = HomekitEventType::BTR_PROP_CHANGED, .data = d};
       std::vector<uint8_t> event_data;
       alpaca::serialize(event, event_data);
-      event_bus.publish({event_bus.get_topic(HK_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, event_data.data(), event_data.size()});
+      AppEventLoop::publish(HK_EVENT, HK_INTERNAL_EVENT, event_data.data(), event_data.size());
     } else if (keyStr == "neoPixelType") {
       rebootNeeded = true;
       rebootMsg = "Pixel Type changed, reboot needed! Rebooting...";
@@ -1962,11 +1928,11 @@ std::string WebServerManager::getDeviceMetrics() {
   cJSON_AddNumberToObject(status, "uptime", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::duration<int64_t, std::micro>(esp_timer_get_time())).count());
   cJSON_AddNumberToObject(status, "free_heap", esp_get_free_heap_size());
   cJSON_AddNumberToObject(status, "wifi_rssi", WiFi.RSSI());
-  cJSON_AddBoolToObject(status, "nfc_connected", m_nfc_connected.load(std::memory_order_relaxed));
-  cJSON_AddBoolToObject(status, "mqtt_connected", m_mqtt_connected.load(std::memory_order_relaxed));
-  cJSON_AddNumberToObject(status, "mqtt_error_code", m_mqtt_error_code.load(std::memory_order_relaxed));
-  if (!m_mqtt_error_message.empty()) {
-    cJSON_AddStringToObject(status, "mqtt_error_message", m_mqtt_error_message.c_str());
+  cJSON_AddBoolToObject(status, "nfc_connected", m_nfcManager ? m_nfcManager->isConnected() : false);
+  cJSON_AddBoolToObject(status, "mqtt_connected", m_mqttManager ? m_mqttManager->isConnected() : false);
+  cJSON_AddNumberToObject(status, "mqtt_error_code", m_mqttManager ? static_cast<uint8_t>(m_mqttManager->getLastErrorCode()) : 0);
+  if (m_mqttManager && !m_mqttManager->getLastErrorMessage().empty()) {
+    cJSON_AddStringToObject(status, "mqtt_error_message", m_mqttManager->getLastErrorMessage().c_str());
   }
   return cjson_to_string_and_free(status);
 }

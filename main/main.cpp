@@ -2,8 +2,9 @@
 #include <memory>
 #include "ConsoleLogSinker.h"
 #include "HomeSpan.h"
-#include "WiFi.h"
+#include "app_event_loop.hpp"
 #include "config.hpp"
+#include <esp_event.h>
 #include "eth_structs.hpp"
 #include "dns_server.h"
 #include "HomeKitLock.hpp"
@@ -87,7 +88,7 @@ using namespace loggable;
 /**
  * @brief Initialize runtime, configure logging/serial, and instantiate core subsystem managers.
  *
- * Initializes the global runtime infrastructure (EventBus, Sinker), sets logging levels and Serial,
+ * Initializes the global runtime infrastructure (Sinker), sets logging levels and Serial,
  * constructs and assigns global manager instances (ReaderDataManager, ConfigManager, WebServerManager,
  * HardwareManager, LockManager, MqttManager, HomeKitLock, NfcManager), reads NFC-related configuration,
  * and starts managers that require explicit startup.
@@ -100,7 +101,10 @@ void setup() {
   Serial.begin(115200);
   loggable::espidf::LogHook::install(false, false);
   Sinker::instance().add_sinker(std::make_shared<loggable::ConsoleLogSinker>());
-  EventBus::Bus::instance().init();
+  esp_err_t err = esp_event_loop_create_default();
+  if (err != ESP_OK) {
+    ESP_LOGE("Main", "Failed to create default event loop: %d", err);
+  }
   readerDataManager = std::make_unique<ReaderDataManager>();
   configManager = std::make_unique<ConfigManager>();
   configManager->begin();
@@ -160,6 +164,8 @@ void setup() {
                                 miscConfig.nfcPinsPreset == PIN_UNSET ? miscConfig.nfcGpioPins : nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins,
                                 miscConfig.hkAuthPrecomputeEnabled);
     nfcManager->begin();
+    webServerManager->setNfcManager(nfcManager.get());
+    webServerManager->setMqttManager(mqttManager.get());
   }
   hardwareManager->begin();
   homekitLock->begin();

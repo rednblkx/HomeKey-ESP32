@@ -6,7 +6,7 @@
 #include <array>
 #include <atomic>
 #include <functional>
-#include "event_bus.hpp"
+#include "app_event_loop.hpp"
 #include "pn532_cxx/pn532.hpp"
 #include "pn532_hal/spi.hpp"
 
@@ -25,7 +25,7 @@ public:
  *
  * Ensures the subscriber identified by m_hk_event is removed when the NfcManager is destroyed.
  */
-~NfcManager() {EventBus::Bus::instance().unsubscribe(m_hk_event);}
+~NfcManager() = default;
     bool begin();
     void updateEcpData();
 
@@ -84,7 +84,28 @@ private:
     KeyFlow authFlow = KeyFlow::kFlowFAST;
 
     static const char* TAG;
-    EventBus::SubscriberHandle m_hk_event;
-    EventBus::TopicHandle m_nfc_topic;
-    EventBus::TopicHandle m_nfc_status_topic;
+    AppEventLoop::SubscriptionHandle m_hk_event;
+    // Status tracking (replaces event-based status publishing)
+    std::atomic<bool> m_connected{false};
+    uint8_t m_fwMajor{0};
+    uint8_t m_fwMinor{0};
+
+public:
+    /**
+     * @brief Check if NFC reader is connected.
+     * @return true if connected, false otherwise.
+     */
+    bool isConnected() const { return m_connected.load(); }
+
+    /**
+     * @brief Get firmware version major.
+     * @return Major version number.
+     */
+    uint8_t getFirmwareVersionMajor() const { return m_fwMajor; }
+
+    /**
+     * @brief Get firmware version minor.
+     * @return Minor version number.
+     */
+    uint8_t getFirmwareVersionMinor() const { return m_fwMinor; }
 };

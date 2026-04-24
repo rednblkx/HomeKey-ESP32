@@ -1,7 +1,7 @@
 #pragma once
 #include "config.hpp"
 #include "esp_timer.h"
-#include "event_bus.hpp"
+#include "app_event_loop.hpp"
 class HardwareManager;
 class ConfigManager;
 class LockApplication;
@@ -48,14 +48,6 @@ public:
      * deleted.
      */
     ~LockManager() {
-      auto& bus = EventBus::Bus::instance();
-      // unsubscribe can be called regardless of whether the event is valid
-      // EventBus will check for nullptr inside the SubscriberHandle which 
-      // is default-constructed to nullptr
-      bus.unsubscribe(m_override_state_event);
-      bus.unsubscribe(m_target_state_event);
-      bus.unsubscribe(m_update_state_event);
-      bus.unsubscribe(m_nfc_event);
       if(momentaryStateTimer) {
         if(esp_timer_is_active(momentaryStateTimer)) {
           esp_timer_stop(momentaryStateTimer);
@@ -96,14 +88,13 @@ private:
 
     uint8_t m_currentState;
     uint8_t m_targetState;
-    EventBus::SubscriberHandle m_override_state_event;
-    EventBus::SubscriberHandle m_target_state_event;
-    EventBus::SubscriberHandle m_update_state_event;
-    EventBus::SubscriberHandle m_nfc_event;
+    AppEventLoop::SubscriptionHandle m_override_state_event;
+    AppEventLoop::SubscriptionHandle m_target_state_event;
+    AppEventLoop::SubscriptionHandle m_update_state_event;
+    AppEventLoop::SubscriptionHandle m_nfc_event;
 
     esp_timer_handle_t momentaryStateTimer = nullptr;
 
     static const char* TAG;
-    const EventBus::TopicHandle bus_topic;
     static void handleTimer(void* instance);
 };

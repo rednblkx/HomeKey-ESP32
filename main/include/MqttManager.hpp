@@ -1,5 +1,5 @@
 #pragma once
-#include "event_bus.hpp"
+#include "app_event_loop.hpp"
 #include "eventStructs.hpp"
 #include "mqtt_client.h"
 #include <string>
@@ -42,6 +42,18 @@ public:
      * @return True if connected, false otherwise.
      */
     bool isConnected() const;
+
+    /**
+     * @brief Gets the last MQTT error code.
+     * @return The last error code.
+     */
+    MqttErrorCode getLastErrorCode() const { return m_lastErrorCode; }
+
+    /**
+     * @brief Gets the last MQTT error message.
+     * @return The last error message.
+     */
+    const std::string& getLastErrorMessage() const { return m_lastErrorMessage; }
 
     /**
      * @brief Stops the MQTT client and unsubscribes from all EventBus listeners.
@@ -103,9 +115,12 @@ private:
     bool m_sslConfigured;
     
     static const char* TAG;
-    EventBus::SubscriberHandle m_lock_state_changed;
-    EventBus::SubscriberHandle m_alt_action;
-    EventBus::SubscriberHandle m_nfc_event;
-    EventBus::TopicHandle m_mqtt_status_topic;
+    AppEventLoop::SubscriptionHandle m_lock_state_changed;
+    AppEventLoop::SubscriptionHandle m_alt_action;
+    AppEventLoop::SubscriptionHandle m_nfc_event;
+
+    // Status tracking (replaces event-based status publishing)
+    MqttErrorCode m_lastErrorCode = MqttErrorCode::NONE;
+    std::string m_lastErrorMessage;
 };
 

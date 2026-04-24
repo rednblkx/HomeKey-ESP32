@@ -19,7 +19,6 @@
 const char* HomeKitLock::TAG = "HomeKitBridge";
 static HomeKitLock* s_instance = nullptr;
 
-static EventBus::Bus& event_bus = EventBus::Bus::instance();
 
 /**
  * @brief Construct the HomeKitLock singleton, register internal event publishers/subscribers, and store manager callbacks.
@@ -36,16 +35,16 @@ HomeKitLock::HomeKitLock(std::function<void(int)> &conn_cb, LockManager& lockMan
     : m_lockManager(lockManager),
       m_configManager(configManager),
       m_readerDataManager(readerDataManager),
-      conn_cb(conn_cb),
-      bus_topic(event_bus.register_topic(HK_BUS_TOPIC)) {
+      conn_cb(conn_cb)
+{
     if (s_instance != nullptr) {
         ESP_LOGE(TAG, "ERROR: More than one instance of HomeKitBridge created!");
         esp_restart();
     }
     s_instance = this;
-    m_hk_event = event_bus.subscribe(bus_topic, [&](const EventBus::Event& event, void* context){
-      if(event.payload_size == 0 || event.payload == nullptr) return;
-      std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
+    m_hk_event = AppEventLoop::subscribe(HK_EVENT, HK_INTERNAL_EVENT, [&](const uint8_t* data, size_t size){
+      if(size == 0 || data == nullptr) return;
+      std::span<const uint8_t> payload(data, size);
       std::error_code ec;
       HomekitEvent hk_event = alpaca::deserialize<HomekitEvent>(payload, ec);
       if(ec) { ESP_LOGE(TAG, "Failed to deserialize HomeKit event: %s", ec.message().c_str()); return; }
@@ -208,9 +207,9 @@ void HomeKitLock::initializeETH(){
  * Configures HomeSpan using settings from ConfigManager (pins, OTA password, port, host name suffix), initializes reader data handling, creates the lock accessory and its services/characteristics (including lock mechanism, management, NFC access, protocol/version, and optional physical battery service), installs developer debug commands, and registers controller and connection callbacks.
  */
 void HomeKitLock::begin() {
-    m_lock_state_changed = event_bus.subscribe(event_bus.get_topic(LOCK_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), [&](const EventBus::Event& event, void* context){
-        if(event.payload_size == 0 || event.payload == nullptr) return;
-        std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
+    m_lock_state_changed = AppEventLoop::subscribe(LOCK_EVENT, LOCK_STATE_CHANGED, [&](const uint8_t* data, size_t size){
+        if(size == 0 || data == nullptr) return;
+        std::span<const uint8_t> payload(data, size);
         std::error_code ec;
         EventLockState s = alpaca::deserialize<EventLockState>(payload, ec);
         if(ec) { ESP_LOGE(TAG, "Failed to deserialize EventLockState event: %s", ec.message().c_str()); return; }
@@ -351,7 +350,7 @@ void HomeKitLock::setupDebugCommands() {
       HomekitEvent event{.type=DEBUG_AUTH_FLOW, .data=d};
       std::vector<uint8_t> event_data;
       alpaca::serialize(event, event_data);
-      event_bus.publish({event_bus.get_topic(HK_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, event_data.data(), event_data.size()});
+      AppEventLoop::publish(HK_EVENT, HK_INTERNAL_EVENT, event_data.data(), event_data.size());
     });
     new SpanUserCommand('M', "Erase MQTT Config and restart", [](const char*){s_instance->m_configManager.deleteConfig<espConfig::mqttConfig_t>();});
     new SpanUserCommand('N', "Btr status low", [](const char* arg) {

@@ -7,7 +7,6 @@
 
 const char* LockManager::TAG = "LockManager";
 
-static EventBus::Bus& event_bus = EventBus::Bus::instance();
 
 /**
  * @brief Initialize a LockManager with configuration and wire its event handlers.
@@ -24,30 +23,29 @@ LockManager::LockManager(const espConfig::misc_config_t& miscConfig, const espCo
     : m_miscConfig(miscConfig),
       m_actionsConfig(actionsConfig),
       m_currentState(lockStates::LOCKED),
-      m_targetState(lockStates::LOCKED),
-      bus_topic(event_bus.register_topic(LOCK_BUS_TOPIC))
+      m_targetState(lockStates::LOCKED)
 {
-  m_override_state_event = event_bus.subscribe(event_bus.register_topic(LOCK_O_STATE_CHANGED), [&](const EventBus::Event& event, void* context){
-      if(event.payload_size == 0 || event.payload == nullptr) return;
-      std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
+  m_override_state_event = AppEventLoop::subscribe(LOCK_EVENT, LOCK_OVERRIDE_STATE, [&](const uint8_t* data, size_t size){
+      if(size == 0 || data == nullptr) return;
+      std::span<const uint8_t> payload(data, size);
       std::error_code ec;
       EventLockState s = alpaca::deserialize<EventLockState>(payload, ec);
       if(ec) { ESP_LOGE(TAG, "Failed to deserialize override state event: %s", ec.message().c_str()); return; }
       ESP_LOGD(TAG, "Received override state event: %d -> %d", s.currentState, s.targetState);
       overrideState(s.currentState, s.targetState);
     });
-  m_target_state_event = event_bus.subscribe(event_bus.register_topic(LOCK_T_STATE_CHANGED), [&](const EventBus::Event& event, void* context){
-      if(event.payload_size == 0 || event.payload == nullptr) return;
-      std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
+  m_target_state_event = AppEventLoop::subscribe(LOCK_EVENT, LOCK_TARGET_STATE_CHANGED, [&](const uint8_t* data, size_t size){
+      if(size == 0 || data == nullptr) return;
+      std::span<const uint8_t> payload(data, size);
       std::error_code ec;
       EventLockState s = alpaca::deserialize<EventLockState>(payload, ec);
       if(ec) { ESP_LOGE(TAG, "Failed to deserialize target state event: %s", ec.message().c_str()); return; }
       ESP_LOGD(TAG, "Received target state event: %d -> %d", s.currentState, s.targetState);
       setTargetState(s.targetState, Source(s.source));
     });
-  m_update_state_event = event_bus.subscribe(event_bus.register_topic(LOCK_UPDATE_BUS_TOPIC), [&](const EventBus::Event& event, void* context){
-      if(event.payload_size == 0 || event.payload == nullptr) return;
-      std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
+  m_update_state_event = AppEventLoop::subscribe(LOCK_EVENT, LOCK_UPDATE_STATE, [&](const uint8_t* data, size_t size){
+      if(size == 0 || data == nullptr) return;
+      std::span<const uint8_t> payload(data, size);
       std::error_code ec;
       EventLockState s = alpaca::deserialize<EventLockState>(payload, ec);
       if(ec) { ESP_LOGE(TAG, "Failed to deserialize update state event: %s", ec.message().c_str()); return; }
@@ -57,7 +55,7 @@ LockManager::LockManager(const espConfig::misc_config_t& miscConfig, const espCo
       s.source = LockManager::INTERNAL;
       std::array<uint8_t, sizeof(EventLockState)> d{};
       size_t d_len = alpaca::serialize(s, d);
-      event_bus.publish({bus_topic, 0, d.data(), d_len});
+      AppEventLoop::publish(LOCK_EVENT, LOCK_STATE_CHANGED, d.data(), d_len);
     });
   esp_timer_create_args_t momentaryStateTimer_arg = {
     .callback = handleTimer,
@@ -79,9 +77,9 @@ LockManager::LockManager(const espConfig::misc_config_t& miscConfig, const espCo
  * action topic.
  */
 void LockManager::begin() {
-  m_nfc_event = event_bus.subscribe(event_bus.get_topic(NFC_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), [&](const EventBus::Event& event, void* context){
-      if(event.payload_size == 0 || event.payload == nullptr) return;
-      std::span<const uint8_t> payload(static_cast<const uint8_t*>(event.payload), event.payload_size);
+  m_nfc_event = AppEventLoop::subscribe(NFC_EVENT, NFC_TAP_EVENT, [&](const uint8_t* data, size_t size){
+      if(size == 0 || data == nullptr) return;
+      std::span<const uint8_t> payload(data, size);
       std::error_code ec;
       NfcEvent nfc_event = alpaca::deserialize<NfcEvent>(payload, ec);
       if(ec) { ESP_LOGE(TAG, "Failed to deserialize NFC event: %s", ec.message().c_str()); return; }
@@ -113,7 +111,7 @@ void LockManager::begin() {
   };
   std::array<uint8_t, sizeof(EventLockState)> d{};
   size_t d_len = alpaca::serialize(s, d);
-  event_bus.publish({event_bus.get_topic(HARDWARE_ACTION_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d_len});
+  AppEventLoop::publish(HW_EVENT, HW_ACTION, d.data(), d_len);
 }
 
 /**
@@ -180,10 +178,11 @@ void LockManager::setTargetState(uint8_t state, Source source) {
       m_currentState = m_targetState;
       s.currentState = m_targetState;
       d_len = alpaca::serialize(s, d);
+      AppEventLoop::publish(HW_EVENT, HW_ACTION, d.data(), d_len);
     } else if((source == NFC && m_actionsConfig.hkGpioControlledState) || source != NFC) {
-      event_bus.publish({event_bus.get_topic(HARDWARE_ACTION_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d_len});
+      AppEventLoop::publish(HW_EVENT, HW_ACTION, d.data(), d_len);
     }
-    event_bus.publish({bus_topic, 0, d.data(), d_len});
+    AppEventLoop::publish(LOCK_EVENT, LOCK_STATE_CHANGED, d.data(), d_len);
 
     uint8_t momentarySources = (((m_actionsConfig.gpioActionMomentaryEnabled |
                                   m_actionsConfig.gpioActionPin) == 255) &
@@ -224,6 +223,6 @@ void LockManager::overrideState(uint8_t c_state, uint8_t t_state) {
     };
     std::array<uint8_t, sizeof(EventLockState)> d{};
     size_t d_len = alpaca::serialize(s, d);
-    event_bus.publish({event_bus.get_topic(HARDWARE_ACTION_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d_len});
-    event_bus.publish({bus_topic, 0, d.data(), d_len});
+    AppEventLoop::publish(HW_EVENT, HW_ACTION, d.data(), d_len);
+    AppEventLoop::publish(LOCK_EVENT, LOCK_STATE_CHANGED, d.data(), d_len);
 }

@@ -1,6 +1,6 @@
 #pragma once
 #include "esp_timer.h"
-#include "event_bus.hpp"
+#include "app_event_loop.hpp"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -31,7 +31,7 @@ public:
  * Ensures the HardwareManager's subscribers for hardware actions, NFC events,
  * and GPIO pin events are removed from the EventBus before destruction.
  */
-~HardwareManager() {EventBus::Bus::instance().unsubscribe(m_hardware_action_event);EventBus::Bus::instance().unsubscribe(m_nfc_event);EventBus::Bus::instance().unsubscribe(m_gpio_pin_event);}
+~HardwareManager() = default;
 
     /**
      * @brief Initializes all hardware pins and starts background tasks for feedback.
@@ -136,9 +136,7 @@ private:
 
     static const char* TAG;
 
-    EventBus::TopicHandle m_hardware_action_topic;
-    EventBus::TopicHandle m_alt_action_topic;
-    EventBus::SubscriberHandle m_hardware_action_event;
-    EventBus::SubscriberHandle m_nfc_event;
-    EventBus::SubscriberHandle m_gpio_pin_event;
+    AppEventLoop::SubscriptionHandle m_hardware_action_event;
+    AppEventLoop::SubscriptionHandle m_nfc_event;
+    AppEventLoop::SubscriptionHandle m_gpio_pin_event;
 };

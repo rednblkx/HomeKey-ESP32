@@ -6,7 +6,6 @@
 #include "esp_mac.h"
 #include "HK_HomeKit.h"
 
-static EventBus::Bus& event_bus = EventBus::Bus::instance();
 
 const std::array<std::array<uint8_t, 6>, 4> hk_color_vals = { {{0x01,0x04,0xce,0xd5,0xda,0x00}, {0x01,0x04,0xaa,0xd6,0xec,0x00}, {0x01,0x04,0xe3,0xe3,0xe3,0x00}, {0x01,0x04,0x00,0x00,0x00,0x00}} };
 
@@ -109,7 +108,7 @@ HomeKitLock::LockMechanismService::LockMechanismService(HomeKitLock& bridge, Loc
     };
     std::vector<uint8_t> d;
     alpaca::serialize(s, d);
-    event_bus.publish({event_bus.get_topic(LOCK_O_STATE_CHANGED).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d.size()});
+    AppEventLoop::publish(LOCK_EVENT, LOCK_OVERRIDE_STATE, d.data(), d.size());
 }
 /**
  * @brief Notifies the system when the HomeKit lock target state changes.
@@ -129,7 +128,7 @@ boolean HomeKitLock::LockMechanismService::update() {
       };
       std::vector<uint8_t> d;
       alpaca::serialize(s, d);
-      event_bus.publish({event_bus.get_topic(LOCK_T_STATE_CHANGED).value_or(EventBus::INVALID_TOPIC), 0, d.data(), d.size()});
+      AppEventLoop::publish(LOCK_EVENT, LOCK_TARGET_STATE_CHANGED, d.data(), d.size());
     }
     return true;
 }
@@ -176,7 +175,7 @@ boolean HomeKitLock::NFCAccessService::update() {
     HomekitEvent event{.type=ACCESSDATA_CHANGED, .data={}};
     std::vector<uint8_t> event_data;
     alpaca::serialize(event, event_data);
-    event_bus.publish({event_bus.get_topic(HK_BUS_TOPIC).value_or(EventBus::INVALID_TOPIC), 0, event_data.data(), event_data.size()});
+    AppEventLoop::publish(HK_EVENT, HK_INTERNAL_EVENT, event_data.data(), event_data.size());
     return true;
 }
 

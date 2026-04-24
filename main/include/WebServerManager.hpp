@@ -4,7 +4,7 @@
 #include "esp_ota_ops.h"
 #include "esp_partition.h"
 #include "esp_timer.h"
-#include "event_bus.hpp"
+#include "app_event_loop.hpp"
 #include <deque>
 #include <memory>
 #include <atomic>
@@ -16,6 +16,7 @@ class ConfigManager;
 class ReaderDataManager;
 class SystemManager;
 class MqttManager;
+class NfcManager;
 namespace loggable {
 class WebSocketLogSinker;
 }
@@ -67,6 +68,7 @@ public:
   void end();
   bool basicAuth(httpd_req_t* req);
   void setMqttManager(MqttManager *mqttManager) { m_mqttManager = mqttManager; }
+  void setNfcManager(NfcManager *nfcManager) { m_nfcManager = nfcManager; }
   void broadcastWs(const uint8_t *payload, size_t len, httpd_ws_type_t type);
 
 private:
@@ -180,6 +182,7 @@ private:
   ConfigManager &m_configManager;
   ReaderDataManager &m_readerDataManager;
   MqttManager *m_mqttManager;
+  NfcManager *m_nfcManager;
 
   // WebSocket infrastructure
   QueueHandle_t m_wsQueue;
@@ -189,13 +192,6 @@ private:
   esp_timer_handle_t m_statusTimer;
   std::deque<std::vector<uint8_t>> m_wsBroadcastBuffer;
 
-  EventBus::SubscriberHandle m_nfc_status_subscriber;
-  std::atomic<bool> m_nfc_connected{false};
-
-  EventBus::SubscriberHandle m_mqtt_status_subscriber;
-  std::atomic<bool> m_mqtt_connected{false};
-  std::atomic<uint8_t> m_mqtt_error_code{0};
-  std::string m_mqtt_error_message;
 
   std::atomic<bool> m_otaInProgress{false};
   bool m_isInitialized{false};
