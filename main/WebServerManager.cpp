@@ -902,7 +902,7 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     } else if (keyStr == "webHttpsEnabled") {
       size_t freeHeap = esp_get_free_heap_size();
       ESP_LOGI(TAG, "Free Heap: %d", freeHeap);
-      if(freeHeap < (50 * 1024)){
+      if(cJSON_IsTrue(it) && freeHeap < (55 * 1024)){
         success = false;
         errorMsg = "HTTPS not available, not enough free memory!";
         goto cleanup;
