@@ -140,7 +140,7 @@ void WebServerManager::begin() {
   httpd_ssl_config_t ssl_config = HTTPD_SSL_CONFIG_DEFAULT();
   ssl_config.httpd.max_uri_handlers = 22;
   ssl_config.httpd.max_open_sockets = 4;
-  ssl_config.httpd.stack_size = 8192;
+  ssl_config.httpd.stack_size = 6144;
   ssl_config.httpd.uri_match_fn = httpd_uri_match_wildcard;
   ssl_config.httpd.lru_purge_enable = true;
   ssl_config.httpd.backlog_conn = 6;
@@ -467,7 +467,7 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
   if (use_compressed)
     httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
 
-  uint8_t buffer[4096];
+  uint8_t buffer[1024];
   size_t bytes_read;
   while ((bytes_read = file.read(buffer, sizeof(buffer))) > 0) {
     esp_err_t err = httpd_resp_send_chunk(req, (const char *)buffer, bytes_read);
