@@ -2,7 +2,6 @@
 #include <memory>
 #include "ConsoleLogSinker.h"
 #include "HomeSpan.h"
-#include "app_event_loop.hpp"
 #include "config.hpp"
 #include <esp_event.h>
 #include "eth_structs.hpp"
@@ -99,7 +98,7 @@ using namespace loggable;
  */
 void setup() {
   Serial.begin(115200);
-  loggable::espidf::LogHook::install(false, false);
+  loggable::espidf::LogHook::install(false, true);
   Sinker::instance().add_sinker(std::make_shared<loggable::ConsoleLogSinker>());
   esp_err_t err = esp_event_loop_create_default();
   if (err != ESP_OK) {
