@@ -346,7 +346,7 @@
                   {#each colorOptions as color}
                     <button
                       type="button"
-                      class="btn btn-outline {miscConfig.hk_key_color === color.value ? 'border-transparent ring-3 ring-primary' : ''} {color.class}"
+                      class="btn btn-outline {miscConfig.hk_key_color === color.value ? 'border-transparent ring-3 ring-primary' : 'border-transparent'} {color.class}"
                       onclick={() => miscConfig.hk_key_color = color.value}
                     >
                       {color.label}
