@@ -92,7 +92,7 @@
 #define NEOPIXEL_FAIL_B 0 // Color value for Blue - Fail HK Auth
 #define NEOPIXEL_TAG_EVENT_R 0 // Color value for Red - Tag Event
 #define NEOPIXEL_TAG_EVENT_G 0 // Color value for Green - Tag Event
-#define NEOPIXEL_TAG_EVENT_B 0 // Color value for Blue - Tag Event
+#define NEOPIXEL_TAG_EVENT_B 255 // Color value for Blue - Tag Event
 #define NEOPIXEL_TAG_EVENT_TIME 1000 // GPIO Delay time in ms - Tag Event
 #define NEOPIXEL_SUCCESS_TIME 1000 // GPIO Delay time in ms - Success HK Auth
 #define NEOPIXEL_FAIL_TIME 1000 // GPIO Delay time in ms - Success HK Auth
