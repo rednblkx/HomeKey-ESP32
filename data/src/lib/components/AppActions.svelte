@@ -136,7 +136,7 @@
                     <div class="form-control">
                       <!-- svelte-ignore a11y_label_has_associated_control -->
                       <label class="label">
-                        <span class="label-text">GPIO Pin</span>
+                        <span class="label-text text-sm">GPIO Pin</span>
                       </label>
                       <input
                         type="number"
@@ -148,7 +148,7 @@
                     <div class="form-control">
                       <!-- svelte-ignore a11y_label_has_associated_control -->
                       <label class="label">
-                        <span class="label-text">Pixel Type</span>
+                        <span class="label-text text-sm">Pixel Type</span>
                       </label>
                       <select
                         bind:value={actionsConfig.neoPixelType}
@@ -177,7 +177,7 @@
                       <div class="form-control mb-4">
                         <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="label">
-                          <span class="label-text">Timeout (ms)</span>
+                          <span class="label-text text-sm">Timeout (ms)</span>
                         </label>
                         <input
                           type="number"
@@ -189,13 +189,13 @@
                       <div class="form-control">
                         <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="label">
-                          <span class="label-text">Color</span>
+                          <span class="label-text text-sm">Color</span>
                         </label>
                         <div class="flex gap-2">
                           <div class="form-control flex-1">
                             <!-- svelte-ignore a11y_label_has_associated_control -->
                             <label class="label">
-                              <span class="label-text flex items-center gap-1 text-xs">R <div class="w-2 h-2 rounded-sm" style="background-color: rgb({actionsConfig.neopixelSuccessColor[0][1] ?? 0}, 0, 0);"></div></span>
+                              <span class="label-text text-sm flex items-center gap-1 text-xs">R <div class="w-2 h-2 rounded-sm" style="background-color: rgb({actionsConfig.neopixelSuccessColor[0][1] ?? 0}, 0, 0);"></div></span>
                             </label>
                             <input
                               type="number"
@@ -209,7 +209,7 @@
                           <div class="form-control flex-1">
                             <!-- svelte-ignore a11y_label_has_associated_control -->
                             <label class="label">
-                              <span class="label-text flex items-center gap-1 text-xs">G <div class="w-2 h-2 rounded-sm" style="background-color: rgb(0, {actionsConfig.neopixelSuccessColor[1][1] ?? 0}, 0);"></div></span>
+                              <span class="label-text text-sm flex items-center gap-1 text-xs">G <div class="w-2 h-2 rounded-sm" style="background-color: rgb(0, {actionsConfig.neopixelSuccessColor[1][1] ?? 0}, 0);"></div></span>
                             </label>
                             <input
                               type="number"
@@ -223,7 +223,7 @@
                           <div class="form-control flex-1">
                             <!-- svelte-ignore a11y_label_has_associated_control -->
                             <label class="label">
-                              <span class="label-text flex items-center gap-1 text-xs">B <div class="w-2 h-2 rounded-sm" style="background-color: rgb(0, 0, {actionsConfig.neopixelSuccessColor[2][1] ?? 0});"></div></span>
+                              <span class="label-text text-sm flex items-center gap-1 text-xs">B <div class="w-2 h-2 rounded-sm" style="background-color: rgb(0, 0, {actionsConfig.neopixelSuccessColor[2][1] ?? 0});"></div></span>
                             </label>
                             <input
                               type="number"
@@ -250,7 +250,7 @@
                       <div class="form-control mb-4">
                         <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="label">
-                          <span class="label-text">Timeout (ms)</span>
+                          <span class="label-text text-sm">Timeout (ms)</span>
                         </label>
                         <input
                           type="number"
@@ -262,13 +262,13 @@
                       <div class="form-control">
                         <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="label">
-                          <span class="label-text">Color</span>
+                          <span class="label-text text-sm">Color</span>
                         </label>
                         <div class="flex gap-2">
                           <div class="form-control flex-1">
                             <!-- svelte-ignore a11y_label_has_associated_control -->
                             <label class="label">
-                              <span class="label-text flex items-center gap-1 text-xs">R <div class="w-2 h-2 rounded-sm" style="background-color: rgb({actionsConfig.neopixelFailureColor[0][1] ?? 0}, 0, 0);"></div></span>
+                              <span class="label-text text-sm flex items-center gap-1 text-xs">R <div class="w-2 h-2 rounded-sm" style="background-color: rgb({actionsConfig.neopixelFailureColor[0][1] ?? 0}, 0, 0);"></div></span>
                             </label>
                             <input
                               type="number"
@@ -282,7 +282,7 @@
                           <div class="form-control flex-1">
                             <!-- svelte-ignore a11y_label_has_associated_control -->
                             <label class="label">
-                              <span class="label-text flex items-center gap-1 text-xs">G <div class="w-2 h-2 rounded-sm" style="background-color: rgb(0, {actionsConfig.neopixelFailureColor[1][1] ?? 0}, 0);"></div></span>
+                              <span class="label-text text-sm flex items-center gap-1 text-xs">G <div class="w-2 h-2 rounded-sm" style="background-color: rgb(0, {actionsConfig.neopixelFailureColor[1][1] ?? 0}, 0);"></div></span>
                             </label>
                             <input
                               type="number"
@@ -296,7 +296,7 @@
                           <div class="form-control flex-1">
                             <!-- svelte-ignore a11y_label_has_associated_control -->
                             <label class="label">
-                              <span class="label-text flex items-center gap-1 text-xs">B <div class="w-2 h-2 rounded-sm" style="background-color: rgb(0, 0, {actionsConfig.neopixelFailureColor[2][1] ?? 0});"></div></span>
+                              <span class="label-text text-sm flex items-center gap-1 text-xs">B <div class="w-2 h-2 rounded-sm" style="background-color: rgb(0, 0, {actionsConfig.neopixelFailureColor[2][1] ?? 0});"></div></span>
                             </label>
                             <input
                               type="number"
@@ -323,7 +323,7 @@
                       <div class="form-control mb-4">
                         <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="label">
-                          <span class="label-text">Timeout (ms)</span>
+                          <span class="label-text text-sm">Timeout (ms)</span>
                         </label>
                         <input
                           type="number"
@@ -335,13 +335,13 @@
                       <div class="form-control">
                         <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="label">
-                          <span class="label-text">Color</span>
+                          <span class="label-text text-sm">Color</span>
                         </label>
                         <div class="flex gap-2">
                           <div class="form-control flex-1">
                             <!-- svelte-ignore a11y_label_has_associated_control -->
                             <label class="label">
-                              <span class="label-text flex items-center gap-1 text-xs">R <div class="w-2 h-2 rounded-sm" style="background-color: rgb({actionsConfig.neopixelTagEventColor[0][1] ?? 0}, 0, 0);"></div></span>
+                              <span class="label-text text-sm flex items-center gap-1 text-xs">R <div class="w-2 h-2 rounded-sm" style="background-color: rgb({actionsConfig.neopixelTagEventColor[0][1] ?? 0}, 0, 0);"></div></span>
                             </label>
                             <input
                               type="number"
@@ -355,7 +355,7 @@
                           <div class="form-control flex-1">
                             <!-- svelte-ignore a11y_label_has_associated_control -->
                             <label class="label">
-                              <span class="label-text flex items-center gap-1 text-xs">G <div class="w-2 h-2 rounded-sm" style="background-color: rgb(0, {actionsConfig.neopixelTagEventColor[1][1] ?? 0}, 0);"></div></span>
+                              <span class="label-text text-sm flex items-center gap-1 text-xs">G <div class="w-2 h-2 rounded-sm" style="background-color: rgb(0, {actionsConfig.neopixelTagEventColor[1][1] ?? 0}, 0);"></div></span>
                             </label>
                             <input
                               type="number"
@@ -369,7 +369,7 @@
                           <div class="form-control flex-1">
                             <!-- svelte-ignore a11y_label_has_associated_control -->
                             <label class="label">
-                              <span class="label-text flex items-center gap-1 text-xs">B <div class="w-2 h-2 rounded-sm" style="background-color: rgb(0, 0, {actionsConfig.neopixelTagEventColor[2][1] ?? 0});"></div></span>
+                              <span class="label-text text-sm flex items-center gap-1 text-xs">B <div class="w-2 h-2 rounded-sm" style="background-color: rgb(0, 0, {actionsConfig.neopixelTagEventColor[2][1] ?? 0});"></div></span>
                             </label>
                             <input
                               type="number"
@@ -408,7 +408,7 @@
                 <div class="collapse-content flex flex-col gap-2">
                   <div class="collapse collapse-plus bg-base-100">
                     <h3
-                      class="collapse-title text-base md:text-lg font-bold"
+                      class="collapse-title text-base"
                     >
                       HomeKey Authentication
                     </h3>
@@ -424,7 +424,7 @@
                           <div class="form-control mb-4">
                             <!-- svelte-ignore a11y_label_has_associated_control -->
                             <label class="label">
-                              <span class="label-text">GPIO Pin</span>
+                              <span class="label-text text-sm">GPIO Pin</span>
                             </label>
                             <input
                               type="number"
@@ -436,7 +436,7 @@
                           <div class="form-control mb-4">
                             <!-- svelte-ignore a11y_label_has_associated_control -->
                             <label class="label">
-                              <span class="label-text">Timeout (ms)</span>
+                              <span class="label-text text-sm">Timeout (ms)</span>
                             </label>
                             <input
                               type="number"
@@ -448,7 +448,7 @@
                           <div class="form-control mb-4">
                             <!-- svelte-ignore a11y_label_has_associated_control -->
                             <label class="label">
-                              <span class="label-text">GPIO State</span>
+                              <span class="label-text text-sm">GPIO State</span>
                             </label>
                             <select
                               bind:value={actionsConfig.nfcSuccessHL}
@@ -468,7 +468,7 @@
                           <div class="form-control mb-4">
                             <!-- svelte-ignore a11y_label_has_associated_control -->
                             <label class="label">
-                              <span class="label-text">GPIO Pin</span>
+                              <span class="label-text text-sm">GPIO Pin</span>
                             </label>
                             <input
                               type="number"
@@ -480,7 +480,7 @@
                           <div class="form-control mb-4">
                             <!-- svelte-ignore a11y_label_has_associated_control -->
                             <label class="label">
-                              <span class="label-text">Timeout (ms)</span>
+                              <span class="label-text text-sm">Timeout (ms)</span>
                             </label>
                             <input
                               type="number"
@@ -492,7 +492,7 @@
                           <div class="form-control mb-4">
                             <!-- svelte-ignore a11y_label_has_associated_control -->
                             <label class="label">
-                              <span class="label-text">GPIO State</span>
+                              <span class="label-text text-sm">GPIO State</span>
                             </label>
                             <select
                               bind:value={actionsConfig.nfcFailHL}
@@ -506,7 +506,7 @@
                       </div>
                       <div class="collapse collapse-plus bg-base-200">
                         <h3
-                          class="collapse-title text-base md:text-lg font-bold"
+                          class="collapse-title text-base"
                         >
                           Second action on success
                         </h3>
@@ -515,7 +515,7 @@
                           <div class="form-control">
                             <!-- svelte-ignore a11y_label_has_associated_control -->
                             <label class="label">
-                              <span class="label-text">Initiator Pin</span>
+                              <span class="label-text text-sm">Initiator Pin</span>
                             </label>
                             <input
                               type="number"
@@ -529,7 +529,7 @@
                           <div class="form-control">
                             <!-- svelte-ignore a11y_label_has_associated_control -->
                             <label class="label">
-                              <span class="label-text"
+                              <span class="label-text text-sm"
                                 >Initiator Timeout (ms)</span
                               >
                             </label>
@@ -547,7 +547,7 @@
                           <div class="form-control">
                             <!-- svelte-ignore a11y_label_has_associated_control -->
                             <label class="label">
-                              <span class="label-text"
+                              <span class="label-text text-sm"
                                 >Feedback LED Pin</span
                               >
                             </label>
@@ -565,7 +565,7 @@
                           <div class="form-control">
                             <!-- svelte-ignore a11y_label_has_associated_control -->
                             <label class="label">
-                              <span class="label-text">GPIO Pin</span>
+                              <span class="label-text text-sm">GPIO Pin</span>
                             </label>
                             <input
                               type="number"
@@ -577,7 +577,7 @@
                           <div class="form-control">
                             <!-- svelte-ignore a11y_label_has_associated_control -->
                             <label class="label">
-                              <span class="label-text">Timeout (ms)</span>
+                              <span class="label-text text-sm">Timeout (ms)</span>
                             </label>
                             <input
                               type="number"
@@ -589,7 +589,7 @@
                           <div class="form-control">
                             <!-- svelte-ignore a11y_label_has_associated_control -->
                             <label class="label">
-                              <span class="label-text">GPIO State</span>
+                              <span class="label-text text-sm">GPIO State</span>
                             </label>
                             <select
                               bind:value={
@@ -607,7 +607,7 @@
                   </div>
                   <div class="collapse collapse-plus bg-base-100">
                     <h3
-                      class="collapse-title text-base md:text-lg font-bold"
+                      class="collapse-title text-base"
                     >
                       NFC Tag Event
                     </h3>
@@ -616,7 +616,7 @@
                       <div class="form-control mb-4">
                         <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="label">
-                          <span class="label-text">GPIO Pin</span>
+                          <span class="label-text text-sm">GPIO Pin</span>
                         </label>
                         <input
                           type="number"
@@ -628,7 +628,7 @@
                       <div class="form-control mb-4">
                         <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="label">
-                          <span class="label-text">Timeout (ms)</span>
+                          <span class="label-text text-sm">Timeout (ms)</span>
                         </label>
                         <input
                           type="number"
@@ -640,7 +640,7 @@
                       <div class="form-control mb-4">
                         <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="label">
-                          <span class="label-text">GPIO State</span>
+                          <span class="label-text text-sm">GPIO State</span>
                         </label>
                         <select
                           bind:value={actionsConfig.tagEventHL}
@@ -685,7 +685,7 @@
                     <div class="form-control">
                       <!-- svelte-ignore a11y_label_has_associated_control -->
                       <label class="label">
-                        <span class="label-text">GPIO Pin</span>
+                        <span class="label-text text-sm">GPIO Pin</span>
                       </label>
                       <input
                         type="number"
@@ -697,7 +697,7 @@
                     <div class="form-control">
                       <!-- svelte-ignore a11y_label_has_associated_control -->
                       <label class="label">
-                        <span class="label-text">GPIO State - Locked</span>
+                        <span class="label-text text-sm">GPIO State - Locked</span>
                       </label>
                       <select
                         bind:value={actionsConfig.gpioActionLockState}
@@ -710,7 +710,7 @@
                     <div class="form-control">
                       <!-- svelte-ignore a11y_label_has_associated_control -->
                       <label class="label">
-                        <span class="label-text">GPIO State - Unlocked</span
+                        <span class="label-text text-sm">GPIO State - Unlocked</span
                         >
                       </label>
                       <select
@@ -724,7 +724,7 @@
                     <div class="form-control">
                       <!-- svelte-ignore a11y_label_has_associated_control -->
                       <label class="label">
-                        <span class="label-text">Actionable by HomeKey</span
+                        <span class="label-text text-sm">Actionable by HomeKey</span
                         >
                       </label>
                       <select
@@ -738,7 +738,7 @@
                     <div class="form-control">
                       <!-- svelte-ignore a11y_label_has_associated_control -->
                       <label class="label">
-                        <span class="label-text">Momentary state</span>
+                        <span class="label-text text-sm">Momentary state</span>
                       </label>
                       <select
                         bind:value={
@@ -755,7 +755,7 @@
                     <div class="form-control">
                       <!-- svelte-ignore a11y_label_has_associated_control -->
                       <label class="label">
-                        <span class="label-text"
+                        <span class="label-text text-sm"
                           >Momentary timeout (ms)</span
                         >
                       </label>
@@ -779,7 +779,7 @@
                     <div class="form-control">
                       <!-- svelte-ignore a11y_label_has_associated_control -->
                       <label class="label">
-                        <span class="label-text">Status</span>
+                        <span class="label-text text-sm">Status</span>
                       </label>
                       <select
                         bind:value={actionsConfig.hkDumbSwitchMode}
@@ -792,7 +792,7 @@
                     <div class="form-control">
                       <!-- svelte-ignore a11y_label_has_associated_control -->
                       <label class="label">
-                        <span class="label-text">Momentary state</span>
+                        <span class="label-text text-sm">Momentary state</span>
                       </label>
                       <select
                         bind:value={
@@ -809,7 +809,7 @@
                     <div class="form-control">
                       <!-- svelte-ignore a11y_label_has_associated_control -->
                       <label class="label">
-                        <span class="label-text"
+                        <span class="label-text text-sm"
                           >Momentary timeout (ms)</span
                         >
                       </label>
