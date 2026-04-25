@@ -9,6 +9,7 @@
 	import { websocketState } from "$lib/stores/websocket.svelte";
 	import { p } from "sv-router/generated";
 	import { isActiveLink } from 'sv-router';
+    import { systemInfo } from "$lib/stores/system.svelte";
 
 	let { onClose, id } = $props();
 
@@ -30,7 +31,13 @@
 				<img src={logoSrc()} alt="HomeKey-ESP32 logo" class="size-7" />
 			</div>
 			<div class="flex items-start flex-col w-full">
-				<span class="pl-2 text-sm font-bold">HomeKey-ESP32</span>
+				<span class="pl-2 text-sm font-bold">
+          {#if !systemInfo.deviceName}
+            <div class="skeleton h-5 w-32"></div>
+          {:else}
+            {systemInfo.deviceName}
+          {/if}
+        </span>
 				<div class="pl-2 flex items-center gap-1">
 					<div class="inline-grid *:[grid-area:1/1]">
 						<div

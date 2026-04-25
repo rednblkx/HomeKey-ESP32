@@ -1,7 +1,7 @@
 <script lang="ts">
 	import '@/app.css';
 	import { onMount, onDestroy } from 'svelte';
-	import { getLoadingState, updateSystemInfo } from '$lib/stores/system.svelte.js';
+	import { getLoadingState, systemInfo, updateSystemInfo } from '$lib/stores/system.svelte.js';
 	import { initTheme, logoSrc } from '$lib/stores/theme.svelte.js';
 	import ws, { type WebSocketEvent } from '$lib/services/ws.js';
 	import Logo from '$lib/assets/favicon.png';
@@ -80,7 +80,13 @@
           </svg>
         </label>
         <div class="flex justify-between w-full">
-          <span class="font-bold text-lg">HomeKey-ESP32</span>
+          <span class="font-bold text-lg">
+            {#if !systemInfo.deviceName}
+              <div class="skeleton h-8 w-32"></div>
+            {:else}
+              {systemInfo.deviceName}
+            {/if}
+          </span>
           <div class="gap-1 pr-2">
             <div class="inline-grid *:[grid-area:1/1]">
               <div class="status animate-ping" class:status-success={websocketState.connected} class:status-error={!websocketState.connected} class:status-warning={websocketState.state == "reconnecting"}></div>
