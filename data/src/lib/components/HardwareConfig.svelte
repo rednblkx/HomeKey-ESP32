@@ -91,6 +91,9 @@
 </script>
 
 <div class="space-y-4">
+  {#if ethernetEnabled && !currentEthChip()?.emac}
+    <SpiEthernetNote spiNumBuses={ethConfig?.numSpiBuses ?? 1} selectedBus={ethSpiBus} />
+  {/if}
 	<!-- PN532 NFC Reader -->
 	<div class="py-2 px-3 bg-base-100 rounded-lg">
 		<div class="flex items-center justify-between mb-2">
@@ -205,9 +208,6 @@
 		</div>
 
 		{#if ethernetEnabled}
-			{#if !currentEthChip()?.emac}
-				<SpiEthernetNote spiNumBuses={ethConfig?.numSpiBuses ?? 1} selectedBus={ethSpiBus} />
-			{/if}
 			<div class="form-control">
 				<label class="label" for="ethPreset">
 					<span class="label-text text-xs">Board Preset</span>
