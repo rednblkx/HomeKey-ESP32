@@ -494,28 +494,6 @@ export interface Notification {
 }
 
 // API Response Types
-/**
- * WebSocket metrics message format
- * @type {MetricsMessage}
- */
-export interface MetricsMessage {
-  /** Message type identifier */
-  type: 'metrics';
-  /** System uptime in milliseconds */
-  uptime: number;
-  /** Free heap memory in bytes */
-  free_heap: number;
-  /** WiFi signal strength in dBm */
-  wifi_rssi: number;
-  /** NFC module connection status */
-  nfc_connected?: boolean;
-  /** MQTT broker connection status */
-  mqtt_connected?: boolean;
-  /** MQTT error code (0=none, 1=connection_refused, 2=auth_failed, 3=network_error, etc.) */
-  mqtt_error_code?: number;
-  /** MQTT error message description */
-  mqtt_error_message?: string;
-}
 
 /**
  * API error response structure

@@ -8,7 +8,10 @@ export type SystemInfo = {
   eth_enabled: boolean,
   log_level: number,
   chip_model: number,
-  nfc_connected: boolean
+  nfc_connected: boolean,
+  mqtt_connected: boolean,
+  mqtt_error_code: number,
+  mqtt_error_message?: string
 };
 
 export const systemInfo : SystemInfo = $state({
@@ -21,7 +24,9 @@ export const systemInfo : SystemInfo = $state({
   eth_enabled: false,
   log_level: 2,
   chip_model: 0,
-  nfc_connected: false
+  nfc_connected: false,
+  mqtt_connected: false,
+  mqtt_error_code: 0
 });
 
 /**

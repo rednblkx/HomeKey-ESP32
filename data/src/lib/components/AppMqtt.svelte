@@ -1,10 +1,9 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
-  import { type MqttConfig, type MetricsMessage, CertificateType } from '$lib/types/api';
+  import { type MqttConfig, CertificateType } from '$lib/types/api';
   import { saveConfig } from '$lib/services/api';
   import { diff } from '$lib/utils/objDiff';
-  import ws from '$lib/services/ws';
   import CertManager from './CertManager.svelte';
+  import { systemInfo } from '$lib/stores/system.svelte';
 
   let { mqtt, error }: { mqtt: MqttConfig; error: string | null } = $props();
 
@@ -12,32 +11,9 @@
   let mqttConfig = $state<MqttConfig>($state.snapshot(mqtt));
   let activeTab = $state<'broker' | 'topics' | 'ssl'>('broker');
 
-  // MQTT connection status
-  let mqttConnected = $state<boolean | undefined>(undefined);
-  let mqttErrorCode = $state<number>(0);
-  let mqttErrorMessage = $state<string>('');
-
-  let unsubscribeWs: (() => void) | null = null;
-
-  onMount(() => {
-    // Subscribe to WebSocket metrics
-    unsubscribeWs = ws.on((event) => {
-      if (event.type === 'message' && typeof event.data === 'object' && event.data !== null && 'type' in event.data && event.data.type === 'metrics') {
-        const metrics = event.data as MetricsMessage;
-        if (metrics.mqtt_connected !== undefined) {
-          mqttConnected = metrics.mqtt_connected;
-          mqttErrorCode = metrics.mqtt_error_code ?? 0;
-          mqttErrorMessage = metrics.mqtt_error_message ?? '';
-        }
-      }
-    });
-  });
-
-  onDestroy(() => {
-    if (unsubscribeWs) {
-      unsubscribeWs();
-    }
-  });
+  let mqttConnected = $derived<boolean>(systemInfo.mqtt_connected);
+  let mqttErrorCode = $derived<number>(systemInfo.mqtt_error_code);
+  let mqttErrorMessage = $derived<string | undefined>(systemInfo.mqtt_error_message);
 
   const saveMqttConfig = async (e: Event) => {
     e.preventDefault();
