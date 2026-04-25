@@ -416,7 +416,7 @@
                     <div class="collapse-content">
                       <div class="flex flex-wrap justify-around gap-2 mb-4">
                         <fieldset
-                          class="fieldset border-base-300 rounded-box w-xs border p-4"
+                          class="fieldset border-neutral rounded-box w-xs border p-4"
                         >
                           <legend class="fieldset-legend"
                             >Auth Success</legend
@@ -460,7 +460,7 @@
                           </div>
                         </fieldset>
                         <fieldset
-                          class="fieldset border-base-300 rounded-box w-xs border p-4"
+                          class="fieldset border-neutral rounded-box w-xs border p-4"
                         >
                           <legend class="fieldset-legend"
                             >Auth Failure</legend
