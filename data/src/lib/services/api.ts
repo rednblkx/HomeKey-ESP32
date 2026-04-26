@@ -188,7 +188,7 @@ export async function getCaptivePortalConfig(): Promise<ApiResponse<CaptivePorta
   }
 }
 
-export async function saveCaptivePortalConfig(config: CaptivePortalConfig): Promise<ApiResponse<void>> {
+export async function saveCaptivePortalConfig(config: CaptivePortalConfig): Promise<ApiResponse<{"ip_addr": string}>> {
   try {
     const response = await fetch(`/captive_portal_config`, {
       method: 'POST',

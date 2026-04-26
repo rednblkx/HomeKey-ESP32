@@ -1529,6 +1529,9 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
   cJSON *res = cJSON_CreateObject();
   cJSON_AddItemToObject(res, "success", cJSON_CreateBool(true));
   cJSON_AddItemToObject(res, "message", cJSON_CreateString("Configuration saved successfully"));
+  cJSON *data = cJSON_CreateObject();
+  cJSON_AddStringToObject(data, "ip_addr", WiFi.localIP().toString().c_str());
+  cJSON_AddItemToObject(res, "data", data);
   std::string response = cjson_to_string_and_free(res);
   httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
   return ESP_OK;
