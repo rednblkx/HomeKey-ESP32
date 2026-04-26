@@ -73,7 +73,7 @@ std::function<void(int)> lambda = [](int status) {
     pollHS = false;
     mqttManager->end();
     webServerManager->end();
-    WiFi.mode(WIFI_AP);
+    WiFi.mode(WIFI_AP_STA);
     WiFi.softAP("HomeKey-ESP32", "homekey123", 11, false, 2, false, WIFI_AUTH_WPA2_WPA3_PSK, WIFI_CIPHER_TYPE_AES_CMAC128); 
     start_captive_portal();
     webServerManager->begin();
