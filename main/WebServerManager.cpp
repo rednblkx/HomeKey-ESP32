@@ -1453,7 +1453,6 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
       cJSON_AddStringToObject(setupCodeUpdate, "setupCode", setupCode);
       char *setupCodeJson = cJSON_PrintUnformatted(setupCodeUpdate);
       instance->m_configManager.updateFromJson<espConfig::misc_config_t>(setupCodeJson);
-      instance->m_configManager.saveConfig<espConfig::misc_config_t>();
       cJSON_free(setupCodeJson);
       cJSON_Delete(setupCodeUpdate);
     } else {
@@ -1476,7 +1475,6 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
       cJSON_AddNumberToObject(colorUpdate, "hk_key_color", color);
       char *colorJson = cJSON_PrintUnformatted(colorUpdate);
       instance->m_configManager.updateFromJson<espConfig::misc_config_t>(colorJson);
-      instance->m_configManager.saveConfig<espConfig::misc_config_t>();
       cJSON_free(colorJson);
       cJSON_Delete(colorUpdate);
     }
@@ -1490,7 +1488,6 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
     cJSON_AddItemToObject(nfcUpdate, "nfcGpioPins", cJSON_Duplicate(nfcGpioPinsItem, true));
     char *nfcJson = cJSON_PrintUnformatted(nfcUpdate);
     instance->m_configManager.updateFromJson<espConfig::misc_config_t>(nfcJson);
-    instance->m_configManager.saveConfig<espConfig::misc_config_t>();
     cJSON_free(nfcJson);
     cJSON_Delete(nfcUpdate);
   }
@@ -1521,11 +1518,11 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
     }
     char *ethJson = cJSON_PrintUnformatted(ethUpdate);
     instance->m_configManager.updateFromJson<espConfig::misc_config_t>(ethJson);
-    instance->m_configManager.saveConfig<espConfig::misc_config_t>();
     cJSON_free(ethJson);
     cJSON_Delete(ethUpdate);
   }
 
+  instance->m_configManager.saveConfig<espConfig::misc_config_t>();
   cJSON_Delete(obj);
 
   httpd_resp_set_type(req, "application/json");
