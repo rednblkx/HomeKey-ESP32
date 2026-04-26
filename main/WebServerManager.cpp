@@ -1311,24 +1311,24 @@ static bool connectWiFi(const char* ssid, const char* password, int timeoutMs = 
   WiFi.setAutoReconnect(true);
   
   int elapsed = 0;
-  const int checkInterval = 500;
+  const int checkInterval = 1000;
   bool connected = false;
   
   while (elapsed < timeoutMs) {
     vTaskDelay(pdMS_TO_TICKS(checkInterval));
     elapsed += checkInterval;
     
-    if (WiFi.status() == WL_CONNECTED) {
+    if (WiFi.isConnected()) {
       ESP_LOGI("WiFiTest", "Connected to %s, RSSI: %d", ssid, WiFi.RSSI());
       connected = true;
       break;
+    } else {
+      ESP_LOGW("WiFiTest", "Not yet connected!");
     }
   }
   
   if (!connected) {
     ESP_LOGE("WiFiTest", "Connection timeout after %d ms", timeoutMs);
-    WiFi.disconnect();
-  } else {
     WiFi.disconnect();
   }
   
