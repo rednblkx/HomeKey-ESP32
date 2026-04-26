@@ -39,6 +39,7 @@
 #include <esp_tls_crypto.h>
 #include <stdbool.h>
 #include <string>
+#include <thread>
 #include <vector>
 
 // ============================================================================
@@ -1237,8 +1238,10 @@ esp_err_t WebServerManager::handleStartConfigAP(httpd_req_t *req) {
   std::string response = cjson_to_string_and_free(res);
   httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
   vTaskDelay(pdMS_TO_TICKS(1000));
-  instance->end();
-  homeSpan.processSerialCommand("A");
+  std::jthread j([](){
+    homeSpan.processSerialCommand("A");
+  });
+  j.detach();
   return ESP_OK;
 }
 
