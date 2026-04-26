@@ -1201,7 +1201,7 @@ esp_err_t WebServerManager::handleHKReset(httpd_req_t *req) {
   httpd_resp_set_type(req, "application/json");
   cJSON *res = cJSON_CreateObject();
   cJSON_AddItemToObject(res, "success", cJSON_CreateBool(true));
-  cJSON_AddItemToObject(res, "error", cJSON_CreateString("Erasing HomeKit pairings, device will reboot"));
+  cJSON_AddItemToObject(res, "message", cJSON_CreateString("Erasing HomeKit pairings, device will reboot"));
   std::string response = cjson_to_string_and_free(res);
   httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
   instance->m_readerDataManager.deleteAllReaderData();
@@ -1217,7 +1217,7 @@ esp_err_t WebServerManager::handleWifiReset(httpd_req_t *req) {
   httpd_resp_set_type(req, "application/json");
   cJSON *res = cJSON_CreateObject();
   cJSON_AddItemToObject(res, "success", cJSON_CreateBool(true));
-  cJSON_AddItemToObject(res, "error", cJSON_CreateString("Erasing WiFi credentials, device will reboot"));
+  cJSON_AddItemToObject(res, "message", cJSON_CreateString("Erasing WiFi credentials, device will reboot"));
   std::string response = cjson_to_string_and_free(res);
   httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
   homeSpan.processSerialCommand("X");
@@ -1232,7 +1232,7 @@ esp_err_t WebServerManager::handleStartConfigAP(httpd_req_t *req) {
   httpd_resp_set_type(req, "application/json");
   cJSON *res = cJSON_CreateObject();
   cJSON_AddItemToObject(res, "success", cJSON_CreateBool(true));
-  cJSON_AddItemToObject(res, "error", cJSON_CreateString("Starting AP mode..."));
+  cJSON_AddItemToObject(res, "message", cJSON_CreateString("Starting AP mode..."));
   std::string response = cjson_to_string_and_free(res);
   httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
   vTaskDelay(pdMS_TO_TICKS(1000));
