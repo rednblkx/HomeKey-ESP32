@@ -223,7 +223,8 @@ void WebServerManager::end() {
   if(!m_isInitialized) return;
 
   if (m_server) {
-    httpd_stop(m_server);
+    httpd_ssl_stop(m_server);
+    ESP_LOGI(TAG, "HTTP Server stopped!");
     m_server = nullptr;
   }
 
