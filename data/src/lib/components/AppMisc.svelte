@@ -338,7 +338,7 @@
 							</div>
               <!-- HomeKey Color -->
               <div class="form-control">
-                <label class="label" for="hkColor">
+                <label class="label mb-2" for="hkColor">
                   <span class="label-text font-medium">HomeKey Finish Color</span>
                 </label>
                 <input type="hidden" id="hkColor" value={miscConfig.hk_key_color} />
