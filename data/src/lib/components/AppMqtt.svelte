@@ -339,10 +339,11 @@
 
             {#if mqttConfig.lockEnableCustomState}
               <div class="space-y-4 border-t border-base-200 p-4">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div class="form-control">
+                <!-- Custom State Topic + Actions Group -->
+                <div class="bg-base-100 rounded-lg p-3 border border-base-200">
+                  <div class="form-control mb-3">
                     <label class="label">
-                      <span class="label-text text-sm">Custom State Topic</span>
+                      <span class="label-text text-sm font-medium">Payload Topic (Pub)</span>
                     </label>
                     <input
                       type="text"
@@ -351,9 +352,38 @@
                       class="input input-sm input-bordered w-full"
                     />
                   </div>
-                  <div class="form-control">
+                  <fieldset class="border border-base-content/20 rounded-lg p-3">
+                    <legend class="text-sm font-medium text-base-content/80 px-2">Custom Lock Actions</legend>
+                    <div class="grid grid-cols-2 gap-3 pt-1">
+                      <div class="form-control">
+                        <label class="label py-1">
+                          <span class="label-text text-sm">Unlock</span>
+                        </label>
+                        <input
+                          type="number"
+                          bind:value={mqttConfig.customLockActions['UNLOCK']}
+                          class="input input-sm input-bordered w-full"
+                        />
+                      </div>
+                      <div class="form-control">
+                        <label class="label py-1">
+                          <span class="label-text text-sm">Lock</span>
+                        </label>
+                        <input
+                          type="number"
+                          bind:value={mqttConfig.customLockActions['LOCK']}
+                          class="input input-sm input-bordered w-full"
+                        />
+                      </div>
+                    </div>
+                  </fieldset>
+                </div>
+
+                <!-- Custom State Cmd Topic + States Group -->
+                <div class="bg-base-100 rounded-lg p-3 border border-base-200">
+                  <div class="form-control mb-3">
                     <label class="label">
-                      <span class="label-text text-sm">Custom State Cmd Topic</span>
+                      <span class="label-text text-sm font-medium">Command Topic (Sub)</span>
                     </label>
                     <input
                       type="text"
@@ -362,100 +392,71 @@
                       class="input input-sm input-bordered w-full"
                     />
                   </div>
-                </div>
-
-                <!-- Custom Lock Actions -->
-                <div class="bg-base-100 rounded-lg p-3">
-                  <p class="font-medium text-sm mb-2">Custom Lock Actions</p>
-                  <div class="grid grid-cols-2 gap-3">
-                    <div class="form-control">
-                      <label class="label py-1">
-                        <span class="label-text text-sm">Unlock</span>
-                      </label>
-                      <input
-                        type="number"
-                        bind:value={mqttConfig.customLockActions['UNLOCK']}
-                        class="input input-sm input-bordered w-full"
-                      />
+                  <fieldset class="border border-base-content/20 rounded-lg p-3">
+                    <legend class="text-sm font-medium text-base-content/80 px-2">Custom Lock States</legend>
+                    <div class="grid grid-cols-3 gap-3 pt-1">
+                      <div class="form-control">
+                        <label class="label py-1">
+                          <span class="label-text text-sm">Unlocking</span>
+                        </label>
+                        <input
+                          type="number"
+                          bind:value={mqttConfig.customLockStates['C_UNLOCKING']}
+                          class="input input-sm input-bordered w-full"
+                        />
+                      </div>
+                      <div class="form-control">
+                        <label class="label py-1">
+                          <span class="label-text text-sm">Locking</span>
+                        </label>
+                        <input
+                          type="number"
+                          bind:value={mqttConfig.customLockStates['C_LOCKING']}
+                          class="input input-sm input-bordered w-full"
+                        />
+                      </div>
+                      <div class="form-control">
+                        <label class="label py-1">
+                          <span class="label-text text-sm">Unlocked</span>
+                        </label>
+                        <input
+                          type="number"
+                          bind:value={mqttConfig.customLockStates['C_UNLOCKED']}
+                          class="input input-sm input-bordered w-full"
+                        />
+                      </div>
+                      <div class="form-control">
+                        <label class="label py-1">
+                          <span class="label-text text-sm">Locked</span>
+                        </label>
+                        <input
+                          type="number"
+                          bind:value={mqttConfig.customLockStates['C_LOCKED']}
+                          class="input input-sm input-bordered w-full"
+                        />
+                      </div>
+                      <div class="form-control">
+                        <label class="label py-1">
+                          <span class="label-text text-sm">Jammed</span>
+                        </label>
+                        <input
+                          type="number"
+                          bind:value={mqttConfig.customLockStates['C_JAMMED']}
+                          class="input input-sm input-bordered w-full"
+                        />
+                      </div>
+                      <div class="form-control">
+                        <label class="label py-1">
+                          <span class="label-text text-sm">Unknown</span>
+                        </label>
+                        <input
+                          type="number"
+                          bind:value={mqttConfig.customLockStates['C_UNKNOWN']}
+                          class="input input-sm input-bordered w-full"
+                        />
+                      </div>
                     </div>
-                    <div class="form-control">
-                      <label class="label py-1">
-                        <span class="label-text text-sm">Lock</span>
-                      </label>
-                      <input
-                        type="number"
-                        bind:value={mqttConfig.customLockActions['LOCK']}
-                        class="input input-sm input-bordered w-full"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Custom Lock States -->
-                <div class="bg-base-100 rounded-lg p-3">
-                  <p class="font-medium text-sm mb-2">Custom Lock States</p>
-                  <div class="grid grid-cols-3 gap-3">
-                    <div class="form-control">
-                      <label class="label py-1">
-                        <span class="label-text text-sm">Unlocking</span>
-                      </label>
-                      <input
-                        type="number"
-                        bind:value={mqttConfig.customLockStates['C_UNLOCKING']}
-                        class="input input-sm input-bordered w-full"
-                      />
-                    </div>
-                    <div class="form-control">
-                      <label class="label py-1">
-                        <span class="label-text text-sm">Locking</span>
-                      </label>
-                      <input
-                        type="number"
-                        bind:value={mqttConfig.customLockStates['C_LOCKING']}
-                        class="input input-sm input-bordered w-full"
-                      />
-                    </div>
-                    <div class="form-control">
-                      <label class="label py-1">
-                        <span class="label-text text-sm">Unlocked</span>
-                      </label>
-                      <input
-                        type="number"
-                        bind:value={mqttConfig.customLockStates['C_UNLOCKED']}
-                        class="input input-sm input-bordered w-full"
-                      />
-                    </div>
-                    <div class="form-control">
-                      <label class="label py-1">
-                        <span class="label-text text-sm">Locked</span>
-                      </label>
-                      <input
-                        type="number"
-                        bind:value={mqttConfig.customLockStates['C_LOCKED']}
-                        class="input input-sm input-bordered w-full"
-                      />
-                    </div>
-                    <div class="form-control">
-                      <label class="label py-1">
-                        <span class="label-text text-sm">Jammed</span>
-                      </label>
-                      <input
-                        type="number"
-                        bind:value={mqttConfig.customLockStates['C_JAMMED']}
-                        class="input input-sm input-bordered w-full"
-                      />
-                    </div>
-                    <div class="form-control">
-                      <label class="label py-1">
-                        <span class="label-text text-sm">Unknown</span>
-                      </label>
-                      <input
-                        type="number"
-                        bind:value={mqttConfig.customLockStates['C_UNKNOWN']}
-                        class="input input-sm input-bordered w-full"
-                      />
-                    </div>
-                  </div>
+                  </fieldset>
                 </div>
               </div>
             {/if}
