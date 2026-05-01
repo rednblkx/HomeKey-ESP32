@@ -19,7 +19,10 @@ namespace espConfig { struct misc_config_t; }
 
 class NfcManager {
 public:
-    NfcManager(ReaderDataManager& readerDataManager, const std::array<uint8_t, 4> &nfcGpioPins, bool hkAuthPrecomputeEnabled);
+    NfcManager(ReaderDataManager& readerDataManager,
+               const std::array<uint8_t, 4> &nfcGpioPins,
+               bool hkAuthPrecomputeEnabled,
+               bool nfcFastPollingEnabled);
     /**
  * @brief Unsubscribes the manager's HomeKey event subscription from the global EventBus.
  *
@@ -69,6 +72,7 @@ private:
 
     ReaderDataManager& m_readerDataManager;
     const bool m_hkAuthPrecomputeEnabled;
+    const bool m_nfcFastPollingEnabled;
 
     TaskHandle_t m_pollingTaskHandle;
     TaskHandle_t m_retryTaskHandle;

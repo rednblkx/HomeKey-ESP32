@@ -335,6 +335,17 @@
 										class="toggle toggle-primary toggle-sm"
 									/>
 								</div>
+								<div class="flex items-center justify-between py-2 px-3 bg-base-100 rounded-lg">
+									<div>
+										<p class="text-sm font-medium">Fast NFC Polling</p>
+										<p class="text-xs text-base-content/60">Reduces the delay after each PN532 poll cycle for quicker follow-up detection.</p>
+									</div>
+									<input
+										type="checkbox"
+										bind:checked={miscConfig.nfcFastPollingEnabled}
+										class="toggle toggle-primary toggle-sm"
+									/>
+								</div>
 							</div>
               <!-- HomeKey Color -->
               <div class="form-control">

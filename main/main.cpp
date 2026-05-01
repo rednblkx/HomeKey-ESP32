@@ -161,7 +161,8 @@ void setup() {
   nfc_init:
     nfcManager = std::make_unique<NfcManager>(*readerDataManager,
                                 miscConfig.nfcPinsPreset == PIN_UNSET ? miscConfig.nfcGpioPins : nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins,
-                                miscConfig.hkAuthPrecomputeEnabled);
+                                miscConfig.hkAuthPrecomputeEnabled,
+                                miscConfig.nfcFastPollingEnabled);
     nfcManager->begin();
   }
   webServerManager->setNfcManager(nfcManager.get());

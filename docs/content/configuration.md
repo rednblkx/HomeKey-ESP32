@@ -195,6 +195,7 @@ This section is organized into several subsections: **HomeKit**, **HomeKey**, **
 
 *   **Performance:** Authentication optimizations.
     *   **Auth Precompute Cache:** Enable or disable precomputation of authentication context.
+    *   **Fast NFC Polling:** Reduces the delay after each PN532 polling cycle for faster follow-up detection.
 
 ### 5.3. PN532
 
