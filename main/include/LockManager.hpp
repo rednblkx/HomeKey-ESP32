@@ -30,7 +30,7 @@ public:
         MQTT,
     };
 
-    enum lockStates { UNLOCKED, LOCKED, JAMMED, UNKNOWN, UNLOCKING, LOCKING };
+    enum lockStates { UNLOCKED, LOCKED, JAMMED, UNKNOWN, UNLOCKING, LOCKING, MAX };
 
     /**
      * @brief Constructs the LockManager.

@@ -212,8 +212,8 @@ void LockManager::overrideState(uint8_t c_state, uint8_t t_state) {
 
     ESP_LOGI(TAG, "External source reported new c_state: %d t_state: %d. Overriding internal state.", c_state, t_state);
 
-    m_currentState = c_state != 255 ? c_state : m_currentState;
-    m_targetState = t_state != 255 ? t_state : m_targetState;
+    m_currentState = c_state != lockStates::MAX ? c_state : m_currentState;
+    m_targetState = t_state != lockStates::MAX ? t_state : m_targetState;
 
     if(momentaryStateTimer && esp_timer_is_active(momentaryStateTimer)) esp_timer_stop(momentaryStateTimer);
     EventLockState s{

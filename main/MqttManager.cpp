@@ -393,12 +393,12 @@ void MqttManager::onData(const std::string& topic, const std::string& data) {
                topic == m_mqttConfig.lockCustomStateCmd) {
       uint8_t v; if (!to_u8(data, v)) { ESP_LOGW(TAG, "Invalid lockCStateCmd payload: %s", data.c_str()); return; }
       if (m_mqttConfig.customLockStates.at("C_UNLOCKING") == v) {
-        s.currentState = LockManager::UNKNOWN;
+        s.currentState = LockManager::MAX;
         s.targetState = LockManager::UNLOCKED;
         size_t d_len = alpaca::serialize(s, d);
         AppEventLoop::publish(LOCK_EVENT, LOCK_TARGET_STATE_CHANGED, d.data(), d_len);
       } else if (m_mqttConfig.customLockStates.at("C_LOCKING") == v) {
-        s.currentState = LockManager::UNKNOWN;
+        s.currentState = LockManager::MAX;
         s.targetState = LockManager::LOCKED;
         size_t d_len = alpaca::serialize(s, d);
         AppEventLoop::publish(LOCK_EVENT, LOCK_TARGET_STATE_CHANGED, d.data(), d_len);
@@ -414,12 +414,12 @@ void MqttManager::onData(const std::string& topic, const std::string& data) {
         AppEventLoop::publish(LOCK_EVENT, LOCK_OVERRIDE_STATE, d.data(), d_len);
       } else if (m_mqttConfig.customLockStates.at("C_JAMMED") == v) {
         s.currentState = LockManager::JAMMED;
-        s.targetState = LockManager::JAMMED;
+        s.targetState = LockManager::MAX;
         size_t d_len = alpaca::serialize(s, d);
         AppEventLoop::publish(LOCK_EVENT, LOCK_OVERRIDE_STATE, d.data(), d_len);
       } else if (m_mqttConfig.customLockStates.at("C_UNKNOWN") == v) {
         s.currentState = LockManager::UNKNOWN;
-        s.targetState = LockManager::UNKNOWN;
+        s.targetState = LockManager::MAX;
         size_t d_len = alpaca::serialize(s, d);
         AppEventLoop::publish(LOCK_EVENT, LOCK_OVERRIDE_STATE, d.data(), d_len);
       }
