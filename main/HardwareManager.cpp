@@ -247,7 +247,7 @@ void HardwareManager::begin() {
     create_timer(altActionInit_timer_args, m_altActionInitTimer, "altActionInitTimer");
 
     m_feedbackQueue = xQueueCreate(5, sizeof(FeedbackType));
-    xTaskCreateUniversal(feedbackTaskEntry, "feedback_task", 2048, this, 3, &m_feedbackTaskHandle, 1);
+    xTaskCreateUniversal(feedbackTaskEntry, "feedback_task", 3580, this, 3, &m_feedbackTaskHandle, 1);
 
     m_lockControlQueue = xQueueCreate(5, sizeof(int));
     xTaskCreateUniversal(lockControlTaskEntry, "lock_control_task", 4096, this, 3, &m_lockControlTaskHandle, 1);
