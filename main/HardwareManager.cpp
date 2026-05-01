@@ -137,7 +137,7 @@ void HardwareManager::begin() {
         pinMode(m_miscConfig.hkAltActionInitLedPin, OUTPUT);
       }
       m_initiatorQueue = xQueueCreate(1, sizeof(uint8_t));
-      xTaskCreateUniversal(initiator_task_entry, "initiator_task", 2048, this, 3, &m_initiatorTaskHandle, 1);
+      xTaskCreateUniversal(initiator_task_entry, "initiator_task", 3580, this, 3, &m_initiatorTaskHandle, 1);
       gpio_install_isr_service(0);
       gpio_set_intr_type((gpio_num_t)m_miscConfig.hkAltActionInitPin, GPIO_INTR_NEGEDGE);
       gpio_isr_handler_add((gpio_num_t)m_miscConfig.hkAltActionInitPin, initiator_isr_handler, (void*) this);
