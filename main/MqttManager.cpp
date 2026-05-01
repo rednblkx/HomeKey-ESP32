@@ -459,6 +459,9 @@ void MqttManager::publishLockState(const int currentState, const int targetState
         stateStr = std::to_string(currentState);
     }
     publish(m_mqttConfig.lockStateTopic, stateStr, 0, true);
+    if(m_mqttConfig.lockEnableCustomState){
+      publish(m_mqttConfig.lockCustomStateTopic, (targetState == LockManager::UNLOCKED) ? std::to_string(m_mqttConfig.customLockActions.at("UNLOCK")) : std::to_string(m_mqttConfig.customLockActions.at("LOCK")));
+    }
 }
 
 /**
