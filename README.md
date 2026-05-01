@@ -8,6 +8,8 @@
   
   **Apple HomeKey functionality for the rest of us**
 
+  [Documentation](https://rednblkx.github.io/HomeKey-ESP32/)
+
 </div>
 
 ## What is HomeKey-ESP32?
@@ -25,11 +27,10 @@ The project aims to be the easy DIY solution for using Apple's HomeKey feature w
 > encrypted first thing, however, honestly don't know when that will be public, you can join the Discord server
 > if you want to know as soon as it is available.
 
-## Documentation
-
-This page provides an overview of the project. Full documentation can be found at https://rednblkx.github.io/HomeKey-ESP32/
-
 ## Getting Started
+
+> [!TIP]
+> A wiki documenting the project can be found at https://rednblkx.github.io/HomeKey-ESP32/
 
 ### Prerequisites
 
