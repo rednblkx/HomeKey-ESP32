@@ -17,6 +17,7 @@
 		ethConfig: EthConfig | null;
 		nfcConnected?: boolean;
 		loading?: boolean;
+    nfcFastPollingEnabled: boolean;
 		onNfcPresetChange: (preset: number) => void;
 		onEthPresetChange: (preset: number) => void;
 		onNfcPinsChange: (pins: [number, number, number, number]) => void;
@@ -38,6 +39,7 @@
 		ethRmiiConfig,
 		ethSpiConfig,
 		ethConfig,
+    nfcFastPollingEnabled,
 		nfcConnected = false,
 		loading = false,
 		onNfcPresetChange,
@@ -133,7 +135,7 @@
 				<option value={255}>Custom</option>
 			</select>
 		</div>
-		<div class="grid grid-cols-4 gap-2">
+		<div class="grid grid-cols-4 gap-2 mb-2">
 			<div class="form-control">
 				<label class="label" for="nfcSsPin">
 					<span class="label-text text-xs">SS Pin</span>
@@ -187,6 +189,17 @@
 				/>
 			</div>
 		</div>
+    <div class="flex items-center justify-between py-2 px-3 bg-base-200 rounded-lg">
+      <div>
+        <p class="text-sm font-medium">Fast NFC Polling</p>
+        <p class="text-xs text-base-content/60">{"Reduces the delay (100ms -> 5ms) after each PN532 poll cycle for quicker follow-up detection."}</p>
+      </div>
+      <input
+        type="checkbox"
+        bind:checked={nfcFastPollingEnabled}
+        class="toggle toggle-primary toggle-sm"
+      />
+    </div>
 	</div>
 
 	<!-- Ethernet Configuration -->

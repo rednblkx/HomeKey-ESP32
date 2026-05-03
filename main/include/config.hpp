@@ -145,6 +145,7 @@ namespace espConfig
     bool lockAlwaysUnlock = HOMEKEY_ALWAYS_UNLOCK;
     bool lockAlwaysLock = HOMEKEY_ALWAYS_LOCK;
     bool hkAuthPrecomputeEnabled = HK_AUTH_PRECOMPUTE_ENABLED;
+    bool nfcFastPollingEnabled = NFC_FAST_POLLING_ENABLED;
     uint8_t controlPin = HS_PIN;
     uint8_t hsStatusPin = HS_STATUS_LED;
     bool webAuthEnabled = WEB_AUTH_ENABLED;

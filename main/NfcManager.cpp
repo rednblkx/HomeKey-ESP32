@@ -207,11 +207,16 @@ void NfcManager::authPrecomputeTask() {
  * @param readerDataManager Reference to the ReaderDataManager used to read and persist reader data.
  * @param nfcGpioPins Four GPIO pin numbers used to construct the PN532 SPI interface.
  * @param hkAuthPrecomputeEnabled If true, enables HomeKit authentication precompute behavior.
+ * @param nfcFastPollingEnabled If true, shortens the delay between polling iterations.
  */
-NfcManager::NfcManager(ReaderDataManager& readerDataManager, const std::array<uint8_t, 4> &nfcGpioPins, bool hkAuthPrecomputeEnabled)
+NfcManager::NfcManager(ReaderDataManager& readerDataManager,
+                       const std::array<uint8_t, 4> &nfcGpioPins,
+                       bool hkAuthPrecomputeEnabled,
+                       bool nfcFastPollingEnabled)
     : nfcGpioPins(nfcGpioPins),
       m_readerDataManager(readerDataManager),
       m_hkAuthPrecomputeEnabled(hkAuthPrecomputeEnabled),
+      m_nfcFastPollingEnabled(nfcFastPollingEnabled),
       m_pollingTaskHandle(nullptr),
       m_retryTaskHandle(nullptr),
       m_ecpData({ 0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0 })
@@ -259,6 +264,7 @@ bool NfcManager::begin() {
     } else {
         ESP_LOGI(TAG, "Auth precompute disabled.");
     }
+    ESP_LOGI(TAG, "NFC fast polling: %s", m_nfcFastPollingEnabled ? "enabled" : "disabled");
     ESP_LOGI(TAG, "Starting NFC polling task...");
     xTaskCreateUniversal(pollingTaskEntry, "nfc_poll_task", 8192, this, 2, &m_pollingTaskHandle, 1);
     return true;
@@ -385,6 +391,17 @@ void NfcManager::pollingTask() {
       vTaskSuspend(NULL);
     }
 
+    const uint16_t inCommunicateThruTimeoutMs = 50;
+    const uint16_t passiveTargetTimeoutMs = 500;
+    const TickType_t pollDelayTicks =
+        pdMS_TO_TICKS(m_nfcFastPollingEnabled ? 5 : 100);
+
+    ESP_LOGI(TAG,
+             "NFC poll tuning active: delay=%lu ms, thruTimeout=%u ms, passiveTimeout=%u ms",
+             static_cast<unsigned long>(pollDelayTicks * portTICK_PERIOD_MS),
+             static_cast<unsigned int>(inCommunicateThruTimeoutMs),
+             static_cast<unsigned int>(passiveTargetTimeoutMs));
+
     while (true) {
         if (m_nfc->WriteRegister({0x63,0x3d,0x0}) != pn532::SUCCESS) {
             ESP_LOGE(TAG, "PN532 is unresponsive. Attempting to reconnect...");
@@ -397,12 +414,12 @@ void NfcManager::pollingTask() {
         }
 
         std::vector<uint8_t> res;
-        m_nfc->InCommunicateThru(std::vector<uint8_t>(m_ecpData.begin(), m_ecpData.end()), res, 50);
+        m_nfc->InCommunicateThru(std::vector<uint8_t>(m_ecpData.begin(), m_ecpData.end()), res, inCommunicateThruTimeoutMs);
 
         std::vector<uint8_t> uid;
         std::array<uint8_t,2> sens_res;
         uint8_t sel_res;
-        pn532::Status passiveTargetFound = m_nfc->InListPassiveTarget(PN532_MIFARE_ISO14443A, uid, sens_res, sel_res, 500);
+        pn532::Status passiveTargetFound = m_nfc->InListPassiveTarget(PN532_MIFARE_ISO14443A, uid, sens_res, sel_res, passiveTargetTimeoutMs);
         
         if (passiveTargetFound == pn532::SUCCESS) {
             ESP_LOGI(TAG, "NFC tag detected!");
@@ -416,7 +433,7 @@ void NfcManager::pollingTask() {
             m_nfc->setPassiveActivationRetries(0);
         }
 
-        vTaskDelay(pdMS_TO_TICKS(100));
+        vTaskDelay(pollDelayTicks);
         taskYIELD();
     }
 }

@@ -133,6 +133,8 @@ export interface MiscConfig {
   lockAlwaysLock: boolean;
   /** Enable HomeKey auth precompute cache (faster taps, higher CPU/RAM) */
   hkAuthPrecomputeEnabled: boolean;
+  /** Poll the PN532 more aggressively for faster tag detection */
+  nfcFastPollingEnabled: boolean;
   /** GPIO pin for lock control */
   controlPin: number;
   /** GPIO pin for HomeSpan status indicator */

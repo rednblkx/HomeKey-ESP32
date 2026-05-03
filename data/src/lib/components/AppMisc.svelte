@@ -376,6 +376,7 @@
 								ethSpiConfig={miscConfig.ethSpiConfig}
 								ethConfig={ethConfig}
 								nfcConnected={nfcConnected}
+                nfcFastPollingEnabled={miscConfig.nfcFastPollingEnabled}
 								onNfcPresetChange={handleNfcPresetChange}
 								onEthPresetChange={handleEthPresetChange}
 								onNfcPinsChange={(pins) => miscConfig.nfcGpioPins = pins}
