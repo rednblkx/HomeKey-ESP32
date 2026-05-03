@@ -7,17 +7,6 @@
 
 const char* LockManager::TAG = "LockManager";
 
-static uint8_t sourceToMomentaryMask(LockManager::Source source) {
-    switch (source) {
-        case LockManager::HOMEKIT:
-            return static_cast<uint8_t>(gpioMomentaryStateStatus::M_HOME);
-        case LockManager::NFC:
-            return static_cast<uint8_t>(gpioMomentaryStateStatus::M_HK);
-        default:
-            return 0;
-    }
-}
-
 /**
  * @brief Initialize a LockManager with configuration and wire its event handlers.
  *
@@ -145,7 +134,18 @@ void LockManager::startMomentaryTimerIfNeeded(Source source) {
                                 !m_actionsConfig.hkDumbSwitchMode)
                                    ? 0
                                    : m_actionsConfig.gpioActionMomentaryEnabled;
-    bool isMomentarySource = ((sourceToMomentaryMask(source) & momentarySources) != 0);
+    uint8_t sourceMask = 0;                                   
+    switch (source) {
+      case LockManager::HOMEKIT:
+          sourceMask = static_cast<uint8_t>(gpioMomentaryStateStatus::M_HOME);
+          break;
+      case LockManager::NFC:
+          sourceMask = static_cast<uint8_t>(gpioMomentaryStateStatus::M_HK);
+          break;
+      default:
+          break;
+    }
+    bool isMomentarySource = ((sourceMask & momentarySources) != 0);
 
     if (m_targetState == lockStates::UNLOCKED && isMomentarySource) {
         if (!momentaryStateTimer) {
