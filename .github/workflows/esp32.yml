@@ -27,6 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    if: ${{ github.ref == 'refs/heads/main' }}
     steps:
       - name: Delete dev release
         run: gh release --repo ${{ github.repository }} delete dev --cleanup-tag -y
