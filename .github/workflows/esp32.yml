@@ -18,6 +18,10 @@ on:
       - '*.md'
       - 'docs/**'
 
+concurrency:
+  group: "build"
+  cancel-in-progress: true
+
 jobs:
   cleanup-dev-release:
     runs-on: ubuntu-latest
