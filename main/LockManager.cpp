@@ -7,6 +7,16 @@
 
 const char* LockManager::TAG = "LockManager";
 
+static uint8_t sourceToMomentaryMask(LockManager::Source source) {
+    switch (source) {
+        case LockManager::HOMEKIT:
+            return static_cast<uint8_t>(gpioMomentaryStateStatus::M_HOME);
+        case LockManager::NFC:
+            return static_cast<uint8_t>(gpioMomentaryStateStatus::M_HK);
+        default:
+            return 0;
+    }
+}
 
 /**
  * @brief Initialize a LockManager with configuration and wire its event handlers.
@@ -31,8 +41,8 @@ LockManager::LockManager(const espConfig::misc_config_t& miscConfig, const espCo
       std::error_code ec;
       EventLockState s = alpaca::deserialize<EventLockState>(payload, ec);
       if(ec) { ESP_LOGE(TAG, "Failed to deserialize override state event: %s", ec.message().c_str()); return; }
-      ESP_LOGD(TAG, "Received override state event: %d -> %d", s.currentState, s.targetState);
-      overrideState(s.currentState, s.targetState);
+      ESP_LOGD(TAG, "Received override state event: %d -> %d from source %d", s.currentState, s.targetState, s.source);
+      overrideState(s.currentState, s.targetState, Source(s.source));
     });
   m_target_state_event = AppEventLoop::subscribe(LOCK_EVENT, LOCK_TARGET_STATE_CHANGED, [&](const uint8_t* data, size_t size){
       if(size == 0 || data == nullptr) return;
@@ -123,6 +133,39 @@ void LockManager::handleTimer(void* instance){
   static_cast<LockManager*>(instance)->setTargetState(LOCKED, INTERNAL);
 }
 
+void LockManager::stopMomentaryTimer() {
+    if (momentaryStateTimer && esp_timer_is_active(momentaryStateTimer)) {
+        esp_timer_stop(momentaryStateTimer);
+    }
+}
+
+void LockManager::startMomentaryTimerIfNeeded(Source source) {
+    uint8_t momentarySources = (((m_actionsConfig.gpioActionMomentaryEnabled |
+                                  m_actionsConfig.gpioActionPin) == 255) &
+                                !m_actionsConfig.hkDumbSwitchMode)
+                                   ? 0
+                                   : m_actionsConfig.gpioActionMomentaryEnabled;
+    bool isMomentarySource = ((sourceToMomentaryMask(source) & momentarySources) != 0);
+
+    if (m_targetState == lockStates::UNLOCKED && isMomentarySource) {
+        if (!momentaryStateTimer) {
+            ESP_LOGE(TAG, "Cannot start momentary unlock timer: timer was not created.");
+            return;
+        }
+        if (esp_timer_is_active(momentaryStateTimer)) {
+            return;
+        }
+        ESP_LOGI(TAG,
+                 "Starting momentary unlock timer for %d ms from source %d.",
+                 m_actionsConfig.gpioActionMomentaryTimeout,
+                 static_cast<int>(source));
+        esp_err_t err = esp_timer_start_once(momentaryStateTimer, m_actionsConfig.gpioActionMomentaryTimeout * 1000);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to start momentary unlock timer: %s", esp_err_to_name(err));
+        }
+    }
+}
+
 /**
  * @brief Gets the current lock state.
  *
@@ -162,7 +205,7 @@ void LockManager::setTargetState(uint8_t state, Source source) {
 
     ESP_LOGI(TAG, "Setting target state to %d (c:%d,t:%d), from source %d", state, m_currentState, m_targetState, static_cast<int>(source));
 
-    if(esp_timer_is_active(momentaryStateTimer)) esp_timer_stop(momentaryStateTimer);
+    stopMomentaryTimer();
 
     m_targetState = state;
 
@@ -184,38 +227,34 @@ void LockManager::setTargetState(uint8_t state, Source source) {
     }
     AppEventLoop::publish(LOCK_EVENT, LOCK_STATE_CHANGED, d.data(), d_len);
 
-    uint8_t momentarySources = (((m_actionsConfig.gpioActionMomentaryEnabled |
-                                  m_actionsConfig.gpioActionPin) == 255) &
-                                !m_actionsConfig.hkDumbSwitchMode)
-                                   ? 0
-                                   : m_actionsConfig.gpioActionMomentaryEnabled;
-    bool isMomentarySource = ((static_cast<uint8_t>(source) & momentarySources) != 0);
-
-    if (m_targetState == lockStates::UNLOCKED && isMomentarySource) {
-        ESP_LOGI(TAG, "Starting momentary unlock timer for %d ms.", m_actionsConfig.gpioActionMomentaryTimeout);
-        esp_timer_start_once(momentaryStateTimer, m_actionsConfig.gpioActionMomentaryTimeout * 1000);
-    }
+    startMomentaryTimerIfNeeded(source);
 }
 
 /**
  * @brief Apply an external override to the lock's current and/or target state and notify observers.
  *
  * If a provided state equals 255, that state is left unchanged. Stops any active momentary-state timer,
- * updates the internal current and target states, and publishes the resulting state to "lock/action"
- * and "lock/stateChanged".
+ * updates the internal current and target states, publishes the resulting state to "lock/action"
+ * and "lock/stateChanged", and restarts momentary timing when the override requests an unlocked
+ * state from a configured momentary source.
  *
  * @param c_state External current state to apply, or 255 to leave the current state unchanged.
  * @param t_state External target state to apply, or 255 to leave the target state unchanged.
+ * @param source Origin of the override, used for momentary timer decisions.
  */
-void LockManager::overrideState(uint8_t c_state, uint8_t t_state) {
-    if (c_state == m_currentState && t_state == m_targetState) return;
+void LockManager::overrideState(uint8_t c_state, uint8_t t_state, Source source) {
+    if (c_state == m_currentState && t_state == m_targetState) {
+        stopMomentaryTimer();
+        startMomentaryTimerIfNeeded(source);
+        return;
+    }
 
-    ESP_LOGI(TAG, "External source reported new c_state: %d t_state: %d. Overriding internal state.", c_state, t_state);
+    ESP_LOGI(TAG, "External source %d reported new c_state: %d t_state: %d. Overriding internal state.", static_cast<int>(source), c_state, t_state);
 
     m_currentState = c_state != lockStates::MAX ? c_state : m_currentState;
     m_targetState = t_state != lockStates::MAX ? t_state : m_targetState;
 
-    if(momentaryStateTimer && esp_timer_is_active(momentaryStateTimer)) esp_timer_stop(momentaryStateTimer);
+    stopMomentaryTimer();
     EventLockState s{
       .currentState = static_cast<uint8_t>(m_currentState),
       .targetState = static_cast<uint8_t>(m_targetState),
@@ -225,4 +264,5 @@ void LockManager::overrideState(uint8_t c_state, uint8_t t_state) {
     size_t d_len = alpaca::serialize(s, d);
     AppEventLoop::publish(HW_EVENT, HW_ACTION, d.data(), d_len);
     AppEventLoop::publish(LOCK_EVENT, LOCK_STATE_CHANGED, d.data(), d_len);
+    startMomentaryTimerIfNeeded(source);
 }
