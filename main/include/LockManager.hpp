@@ -76,12 +76,12 @@ public:
 
     /**
      * @brief Forces the manager's internal state to match an external report.
-     * This method updates the state WITHOUT triggering a physical action.
-     * Useful for syncing with external state changes reported via MQTT.
+     * Useful for syncing with external state changes reported via MQTT or HomeKit.
      * @param state The new current state
      * @param tstate The new target state
+     * @param source The origin of the override.
      */
-    void overrideState(uint8_t cstate, uint8_t tstate);
+    void overrideState(uint8_t cstate, uint8_t tstate, Source source);
 private:
     const espConfig::misc_config_t& m_miscConfig;
     const espConfig::actions_config_t& m_actionsConfig;
@@ -97,4 +97,6 @@ private:
 
     static const char* TAG;
     static void handleTimer(void* instance);
+    void stopMomentaryTimer();
+    void startMomentaryTimerIfNeeded(Source source);
 };
