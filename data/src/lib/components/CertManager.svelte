@@ -316,7 +316,7 @@
 
 				{#if certInfo.fingerprint}
 					<div class="flex flex-col">
-						<span class="text-base-content/60">SHA256 Fingerprint</span>
+						<span class="text-base-content/60">SHA1 Fingerprint</span>
 						<span class="font-mono break-words" title={certInfo.fingerprint}>{certInfo.fingerprint}</span>
 					</div>
 				{/if}

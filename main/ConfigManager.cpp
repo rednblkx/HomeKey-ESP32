@@ -1491,8 +1491,8 @@ std::vector<CertificateStatus> ConfigManager::getCertificatesStatus(){
         ESP_LOGE(TAG, "Unable to retrieve serial number for '%s' certificate: %d", typeStr, ret);
         continue;
       }
-      unsigned char sha256_hash[32];
-      mbedtls_sha256(cert.get()->raw.p, cert.get()->raw.len, sha256_hash, 0);
+      unsigned char sha1_hash[20];
+      mbedtls_sha1(cert.get()->raw.p, cert.get()->raw.len, sha1_hash);
       mbedtls_x509_time valid_from = cert.get()->valid_from;
       mbedtls_x509_time valid_to = cert.get()->valid_to;
 
@@ -1508,7 +1508,7 @@ std::vector<CertificateStatus> ConfigManager::getCertificatesStatus(){
           issuer,
           subject,
           serial,
-          fmt::format("{:02X}", fmt::join(sha256_hash, ":")),
+          fmt::format("{:02X}", fmt::join(sha1_hash, ":")),
           {.from = fmt::format("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", valid_from.year, valid_from.mon,
                                valid_from.day, valid_from.hour, valid_from.min, valid_from.sec),
            .to = fmt::format("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", valid_to.year, valid_to.mon,
