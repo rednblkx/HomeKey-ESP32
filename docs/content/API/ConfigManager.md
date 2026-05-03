@@ -15,6 +15,7 @@ The manager organizes configuration into logical groups (e.g., `mqtt`, `misc`, `
 *   **Serialization:** Supports binary serialization to MessagePack for efficient storage and text-based serialization to JSON for APIs.
 *   **Certificate Management:** Provides functions to save, load, delete, and validate PEM-formatted SSL/TLS certificates and private keys.
 *   **Type-Safe Access:** Uses C++ templates to provide type-safe access and manipulation of different configuration sections.
+*   **Memory Management:** Migrated to `std::unique_ptr` for manager instances in `main.cpp` to ensure proper cleanup and RAII-based lifecycle management.
 
 ### Dependencies:
 
@@ -207,9 +208,14 @@ bool saveCertificate(const std::string& certType, const std::string& certContent
 
 **Parameters:**
 *   `certType`: The type of certificate to save. Must be one of:
-    *   `"ca"`: CA Certificate
-    *   `"client"`: Client Certificate
-    *   `"privateKey"`: Client Private Key
+    *   **MQTT SSL/TLS types:**
+        *   `"ca"`: CA Certificate for MQTT broker verification
+        *   `"client"`: Client Certificate for mutual TLS authentication
+        *   `"privateKey"`: Client Private Key
+    *   **HTTPS types:**
+        *   `"serverCert"`: Server Certificate for HTTPS web interface
+        *   `"serverKey"`: Server Private Key for HTTPS
+        *   `"serverCa"`: (Optional) CA Certificate for client certificate validation
 *   `certContent`: A `std::string` containing the full PEM-formatted content.
 
 **Returns:**
@@ -225,7 +231,7 @@ std::string loadCertificate(const std::string& certType);
 ```
 
 **Parameters:**
-*   `certType`: The type of certificate to load (`"ca"`, `"client"`, or `"privateKey"`).
+*   `certType`: The type of certificate to load. MQTT types: `"ca"`, `"client"`, `"privateKey"`. HTTPS types: `"serverCert"`, `"serverKey"`, `"serverCa"`.
 
 **Returns:**
 *   `std::string`: The PEM-formatted certificate content, or an empty string if not found or if the manager is uninitialized.
@@ -240,7 +246,7 @@ bool deleteCertificate(const std::string& certType);
 ```
 
 **Parameters:**
-*   `certType`: The type of certificate to delete (`"ca"`, `"client"`, or `"privateKey"`).
+*   `certType`: The type of certificate to delete. MQTT types: `"ca"`, `"client"`, `"privateKey"`. HTTPS types: `"serverCert"`, `"serverKey"`, `"serverCa"`.
 
 **Returns:**
 *   `bool`: `true` on successful deletion, `false` otherwise.
@@ -270,8 +276,10 @@ std::vector<CertificateStatus> getCertificatesStatus();
 
 **Returns:**
 *   `std::vector<CertificateStatus>`: A vector of `CertificateStatus` structs. Each struct contains:
-    *   `type` (string): "ca", "client", or "privateKey".
+    *   `type` (string): "ca", "client", "privateKey", "serverCert", "serverKey", or "serverCa".
     *   `issuer` (string): The certificate issuer's distinguished name (DN).
     *   `subject` (string): The certificate subject's DN.
+    *   `fingerprint` (string): SHA256 fingerprint of the certificate.
+    *   `serial` (string): Certificate serial number.
     *   `validity` (struct): Contains `from` and `to` date strings.
-    *   `keyMatch` (bool): For the client certificate, indicates if it matches the private key.
+    *   `keyMatch` (bool): For client/server certificates, indicates if it matches the corresponding private key.

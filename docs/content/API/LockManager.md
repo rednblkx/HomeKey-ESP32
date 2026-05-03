@@ -11,13 +11,13 @@ The `LockManager` class is the central authority for managing the logical state 
 *   **State Management:** Maintains the official current and target states of the lock.
 *   **Business Logic:** Implements rules such as "always unlock on NFC tap," "dumb switch" mode, and timed momentary unlocks.
 *   **Event Aggregation:** Listens for events from multiple sources that intend to change the lock's state.
-*   **State Publication:** Notifies other system components (like `HardwareManager` and `HomeKitLock`) about state changes by publishing events.
+*   **State Publication:** Notifies other system components (like `HardwareManager` and `HomeKitLock`) about state changes by publishing events via `AppEventLoop`.
 
 ## Public API
 
 ### LockManager()
 
-Constructs a new `LockManager` instance. The constructor initializes the lock's state and registers all necessary event publishers and subscribers with the `espp::EventManager`. This setup allows it to listen for requests and broadcast state changes.
+Constructs a new `LockManager` instance. The constructor initializes the lock's state and registers all necessary event publishers and subscribers with the `AppEventLoop`. This setup allows it to listen for requests and broadcast state changes.
 
 **Signature:**
 ```cpp
@@ -67,8 +67,8 @@ This is the primary method for requesting a change in the lock's state. It updat
 
 The method's logic includes:
 *   Updating the internal target state.
-*   Publishing a `lock/action` event to signal the `HardwareManager` to perform a physical action.
-*   Publishing a `lock/stateChanged` event to notify all listeners (like `HomeKitLock`) of the new state.
+*   Publishing a `HW_ACTION` event via `AppEventLoop` to signal the `HardwareManager` to perform a physical action.
+*   Publishing a `LOCK_STATE_CHANGED` event via `AppEventLoop` to notify all listeners (like `HomeKitLock` and `MqttManager`) of the new state.
 *   If the request is to `UNLOCK` and the source is configured for momentary action, it starts a one-shot timer to automatically re-lock after a configured timeout.
 
 **Signature:**

@@ -56,11 +56,33 @@ To see your lock's current state in real-time:
 mosquitto_sub -h your_mqtt_broker_address -p 1883 -t homekit/state
 ```
 
+### 2.1. MQTT Connection Status
+
+The MQTT connection status is available internally and displayed in the WebUI. It is **not** published to an MQTT topic. The status includes:
+
+*   `connected`: Whether the MQTT client is currently connected to the broker
+*   `errorCode`: The last error code that occurred
+*   `errorMessage`: Human-readable error message
+
+**Error Codes:**
+
+| Code | Name | Description |
+|------|------|-------------|
+| `0` | `NONE` | No error, connection successful or active |
+| `1` | `CONNECTION_REFUSED` | Broker refused the connection |
+| `2` | `AUTH_FAILED` | Authentication failed (bad username/password) |
+| `3` | `NETWORK_ERROR` | Network connectivity issue |
+| `4` | `SSL_ERROR` | TLS/SSL handshake or certificate error |
+| `5` | `TIMEOUT` | Connection or operation timed out |
+| `255` | `UNKNOWN` | Unknown error occurred |
+
+To monitor MQTT connection health programmatically, check the WebSocket interface or use the `MqttManager::getLastErrorCode()` and `MqttManager::getLastErrorMessage()` methods if building custom firmware.
+
 ## 3. Custom States: Speaking Your Lock's Dialect
 
 The project supports custom states, allowing you to map the lock's internal states to values that might be more familiar to your specific MQTT-based lock or system. This is super handy for seamless integration!
 
-*   **`<CLIENT_ID>/homekit/custom_state`**: **Publishes** the custom lock state.
+*   **`<CLIENT_ID>/homekit/custom_state`**: **Publishes** the custom lock state. When custom states are enabled, this topic automatically receives updates whenever the lock state changes (e.g., via HomeKey tap, Home app control, or MQTT command).
 *   **`<CLIENT_ID>/homekit/set_custom_state`**: **Subscribes** to this topic to set the custom lock state.
 
 You can enable and configure custom states, including defining your own custom lock actions and states, in the [Web Interface Configuration](../configuration/#322-custom-topics) under the "Custom Topics" section.

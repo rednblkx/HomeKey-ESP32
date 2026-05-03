@@ -11,25 +11,21 @@ Before you embark on your HomeKey-ESP32 journey, let's make sure you have the ne
 
 ### 1.1. `esptool`
 
-You have two options of `esptool` for flashing the firmware onto your ESP32:
+You have two options for `esptool` to flash the firmware onto your ESP32:
 
 {{< tabs items="esptool.py,esptool-js" >}}
   {{< tab >}}
-    *   **What it is:** A small command-line utility from Espressif that allows you to flash firmware onto your ESP32. It's the only tool you'll need from the ESP-IDF ecosystem for this project!
-    *   **Why you need it:** This magical tool is essential for getting our awesome HomeKey-ESP32 firmware onto your device.
-    *   **How to get it:** The easiest way to get `esptool.py` is to download it directly from its GitHub releases page. Look for the latest stable release.
-        *   [esptool.py GitHub Releases](https://github.com/espressif/esptool/releases)
-        * Or, if you got python installed, it can also be installed through pip
-          ```bash
-            pip install esptool
-          ```
+    *   **What it is:** A command-line utility from Espressif for flashing firmware.
+    *   **Why you need it:** To get the HomeKey-ESP32 firmware onto your device.
+    *   **How to get it:**
+        *   Download from [esptool.py GitHub Releases](https://github.com/espressif/esptool/releases)
+        *   Or install via pip: `pip install esptool`
   {{< /tab >}}
   {{< tab >}}
-    *   **What it is:** A JavaScript version of `esptool` that runs directly in your web browser, making the flashing process incredibly simple.
-    *   **Why you need it:** If you prefer a graphical interface and want to avoid command-line tools, this is the way to go!
-    *   **How to use it:** You'll access a web page that uses `esptool-js` to flash your ESP32.
-        *   **Important:** This option requires a Chromium-based browser (like Google Chrome, Microsoft Edge, or Brave) as it utilizes the WebSerial API.
-        *   Espressif has put out a demopage where it can be used here: [esptool-js](https://espressif.github.io/esptool-js/)
+    *   **What it is:** A browser-based version of `esptool`.
+    *   **Why you need it:** For a simple graphical interface without command-line tools.
+    *   **How to use it:** Access the [esptool-js demo page](https://espressif.github.io/esptool-js/).
+        *   **Important:** Requires a Chromium-based browser (Chrome, Edge, Brave).
   {{< /tab >}}
 {{< /tabs >}}
 

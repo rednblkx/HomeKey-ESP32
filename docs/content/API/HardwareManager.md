@@ -8,6 +8,13 @@ The `HardwareManager` class serves as the primary interface between the applicat
 
 The class operates on an event-driven, asynchronous model. It subscribes to high-level application events (e.g., "lock the door," "NFC tag tapped") and translates them into low-level hardware actions (e.g., setting a GPIO pin high, flashing an LED). It utilizes FreeRTOS tasks and queues to handle these actions without blocking the main application flow.
 
+#### Core Refactoring & Improvements
+
+*   **Migration to DigitalDoorKey (DDK):** The core authentication and data handling has been refactored to use the new `DigitalDoorKey` library, replacing the older `HK-HomeKit-Lib` dependency.
+*   **Memory Safety Improvements:** Core managers (`LockManager`, `ConfigManager`, `HardwareManager`, etc.) are now managed using `std::unique_ptr` in `main.cpp`, ensuring better memory management and safer object lifecycles.
+*   **JsonGuard Implementation:** Introduced `JsonGuard` and `JsonBuilder` (RAII wrappers for cJSON) to eliminate potential memory leaks and provide a safer, cleaner API for JSON construction and parsing.
+*   **Timer Reliability:** Hardware timers in `HardwareManager` have been refactored to use non-static member contexts and proper initialization checks, ensuring reliability across device re-initialization.
+
 ### Key Responsibilities:
 
 *   **Lock Control:** Manages the GPIO pin(s) that physically control a lock mechanism.
@@ -17,7 +24,7 @@ The class operates on an event-driven, asynchronous model. It subscribes to high
 
 ### Architecture:
 
-*   **Event-Driven:** Uses `espp::EventManager` to subscribe to commands and publish state changes.
+*   **Event-Driven:** Uses `AppEventLoop` system to subscribe to commands and publish state changes.
 *   **Asynchronous Tasks:** Offloads hardware operations to dedicated FreeRTOS tasks to prevent blocking:
     *   A **lock control task** processes requests to change the lock's state.
     *   A **feedback task** manages timed visual indicators (LEDs, NeoPixels).
@@ -32,13 +39,13 @@ The class operates on an event-driven, asynchronous model. It subscribes to high
 
 Constructs a new `HardwareManager` instance. The constructor initializes its internal configuration and sets up all necessary event subscribers and publishers.
 
-*   **Subscribes to:**
-    *   `lock/action`: To receive commands to change the lock state.
-    *   `nfc/event`: To trigger success/failure feedback or the alternate action based on NFC events.
-    *   `hardware/gpioPinChanged`: To dynamically update GPIO configurations.
-*   **Publishes:**
-    *   `lock/updateState`: To notify the system of a change in the physical lock state.
-    *   `lock/altAction`: To signal that the alternate action has been triggered.
+*   **Subscribes to (via AppEventLoop):**
+    *   `HW_EVENT` (`HW_ACTION`): To receive commands to change the lock state.
+    *   `NFC_EVENT` (`NFC_TAP_EVENT`): To trigger success/failure feedback or the alternate action based on NFC events.
+    *   `HW_EVENT` (`HW_CONFIG_CHANGED`): To dynamically update GPIO configurations.
+*   **Publishes (via AppEventLoop):**
+    *   `LOCK_EVENT` (`LOCK_UPDATE_STATE`): To notify the system of a change in the physical lock state.
+    *   `HW_EVENT` (`HW_ALT_ACTION`): To signal that the alternate action has been triggered.
 
 **Signature:**
 ```cpp
@@ -107,7 +114,7 @@ The following components describe the internal, asynchronous behavior of the `Ha
 This task runs in an infinite loop, waiting for state change commands on its queue (sent via `setLockOutput`).
 
 *   When a state (e.g., `LOCKED`) is received, it drives the `gpioActionPin` to the corresponding configured level (`gpioActionLockState` or `gpioActionUnlockState`).
-*   After changing the pin state, it publishes a `lock/updateState` event to inform the rest of the system that the physical state has been updated.
+*   After changing the pin state, it publishes a `LOCK_UPDATE_STATE` event via `AppEventLoop` to inform the rest of the system that the physical state has been updated.
 
 #### Feedback Task (`feedbackTask`)
 
@@ -136,7 +143,7 @@ This feature allows a secondary action to be triggered under specific conditions
 *   **`triggerAltAction()` (Internal Method):**
     *   This method is called internally, for example, when a successful HomeKey tap event is received.
     *   It checks if the alternate action is currently armed.
-    *   If armed, it publishes the `lock/altAction` event and triggers the physical output on `hkAltActionPin` for the duration specified by `hkAltActionTimeout`.
+    *   If armed, it publishes the `HW_ALT_ACTION` event via `AppEventLoop` and triggers the physical output on `hkAltActionPin` for the duration specified by `hkAltActionTimeout`.
 
 #### Timer Callback (`handleTimer`)
 

@@ -10,28 +10,33 @@ Its primary function is to continuously poll for NFC tags. When a tag is detecte
 
 ## Key Responsibilities
 
+*   **Migration to DigitalDoorKey (DDK):** The core authentication and data handling has been refactored to use the new `DigitalDoorKey` library, replacing the older `HK-HomeKit-Lib` dependency. This includes using `DDKAuthenticationContext` for HomeKey operations.
+*   **Memory Safety Improvements:** Core managers (`LockManager`, `ConfigManager`, `HardwareManager`, etc.) are now managed using `std::unique_ptr` in `main.cpp`, ensuring better memory management and safer object lifecycles.
+*   **JsonGuard Implementation:** Introduced `JsonGuard` and `JsonBuilder` (RAII wrappers for cJSON) to eliminate potential memory leaks and provide a safer, cleaner API for JSON construction and parsing.
+*   **Timer Reliability:** Hardware timers in `HardwareManager` have been refactored to use non-static member contexts and proper initialization checks, ensuring reliability across device re-initialization.
 *   **NFC Reader Management:** Initializes, configures, and maintains the connection to the PN532 NFC reader.
 *   **Polling and Detection:** Runs a continuous background task to poll for nearby NFC tags.
 *   **Tag Type Differentiation:** Identifies whether a detected tag is a HomeKey device or a generic tag.
-*   **HomeKey Authentication:** Manages the entire HomeKey authentication flow by coordinating with the `HKAuthenticationContext`.
+*   **HomeKey Authentication:** Manages the entire HomeKey authentication flow by coordinating with the `DDKAuthenticationContext`.
 *   **Generic Tag Identification:** Reads the UID, ATQA, and SAK of non-HomeKey tags.
-*   **Event Publishing:** Publishes detailed events about NFC interactions (`HOMEKEY_TAP` or `TAG_TAP`) to the application's event bus.
+*   **Event Publishing:** Publishes detailed events about NFC interactions (`NFC_TAP_EVENT`) via `AppEventLoop` to the application's event system.
 *   **Resilience:** Automatically detects if the PN532 reader becomes unresponsive and starts a background task to re-establish the connection.
 
 ## Public API
 
 ### NfcManager()
 
-Constructs a new `NfcManager` instance. The constructor initializes internal state, including the ECP (Express Card Profile) data used for HomeKey discovery, and registers subscribers for internal events that can modify its behavior, such as changing the authentication flow for debugging purposes.
+Constructs a new `NfcManager` instance. The constructor initializes internal state, including the ECP (Express Card Profile) data used for HomeKey discovery, and registers subscribers for internal events that can modify its behavior.
 
 **Signature:**
 ```cpp
-NfcManager(ReaderDataManager& readerDataManager, const std::array<uint8_t, 4>& nfcGpioPins);
+NfcManager(ReaderDataManager& readerDataManager, const std::array<uint8_t, 4>& nfcGpioPins, bool authPrecomputeEnabled);
 ```
 
 **Parameters:**
 *   `readerDataManager`: A reference to the `ReaderDataManager`, which provides the necessary reader data (like the Reader GID) for HomeKey operations.
 *   `nfcGpioPins`: An array of four GPIO pin numbers required for the SPI communication with the PN532 chip.
+*   `authPrecomputeEnabled`: Whether to enable authentication precomputation for faster response times.
 
 ### begin()
 
@@ -68,8 +73,8 @@ This task is created when the `pollingTask` detects that the PN532 is unresponsi
     *   If successful, it proceeds to `handleHomeKeyAuth()`.
     *   If it fails, it treats the tag as a generic one and calls `handleGenericTag()`.
 
-*   **`handleHomeKeyAuth`**: This method orchestrates the complex HomeKey authentication process using the `HKAuthenticationContext`. It provides a lambda function for the context to use for sending and receiving data (APDUs) with the tag. Upon completion, it publishes a `HOMEKEY_TAP` event with the outcome (success or failure) and relevant identifiers.
+*   **`handleHomeKeyAuth`**: This method orchestrates the complex HomeKey authentication process using the `DDKAuthenticationContext` (part of the `DigitalDoorKey` component). It provides a lambda function for the context to use for sending and receiving data (APDUs) with the tag. Upon completion, it publishes a `NFC_TAP_EVENT` via `AppEventLoop` with the outcome (success or failure) and relevant identifiers in an `EventHomeKeyTap` structure.
 
-*   **`handleGenericTag`**: This method is called for non-HomeKey tags. It reads the tag's unique identifiers (UID, ATQA, SAK) and publishes them in a `TAG_TAP` event.
+*   **`handleGenericTag`**: This method is called for non-HomeKey tags. It reads the tag's unique identifiers (UID, ATQA, SAK) and publishes them in a `NFC_TAP_EVENT` via `AppEventLoop` with an `EventUidTap` structure.
 
 *   **`waitForTagRemoval`**: After a tag is handled, this method ensures that the tag is no longer in the reader's field before the manager resumes polling. This prevents the same tag from being processed multiple times. If the tag is not removed within a timeout, it will reset the reader's RF field to clear its state.

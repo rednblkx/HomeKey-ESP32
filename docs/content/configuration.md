@@ -7,11 +7,16 @@ weight: 3
 
 Welcome to the control center of your HomeKey-ESP32! This guide will walk you through all the settings you can tweak to make your device work exactly how you want it to. All these configurations are easily managed through the device's intuitive web interface.
 
+> [!WARNING]
+> Flash memory on the device is currently **not encrypted**. This project started as a personal pet project and has grown significantly; however, implementing flash encryption now would require a painful migration process and force everyone to reconfigure their devices.
+>
+> If you require full flash encryption, a new project implementing the **Aliro** standard is in development which will include encryption by default. Join the Discord server for updates on when that becomes available.
+
 ## 1. Accessing the Web Interface
 
 After you've successfully flashed the firmware and completed the initial setup (connecting to the `HomeSpan-Setup` Wi-Fi and configuring your home network), you can access the web interface by navigating to your device's IP address in your web browser. If you're unsure of the IP address, check your router's connected devices list, or try accessing using the following hostname format `<Serial Number>.local` (replace `<Serial Number>` with the Serial Number seen in the Home App, e.g. `HK-A1B2C3D4.local`)
 
-The web interface is organized into several sections, accessible via the main navigation buttons: **HK Info**, **MQTT**, **Actions**, and **Misc**.
+The web interface is organized into several sections, accessible via the main navigation buttons: **Info**, **MQTT**, **Actions**, **System**, **OTA Update**, and **Logs**.
 
 ---
 
@@ -36,6 +41,7 @@ This section provides read-only information about your HomeKey-ESP32 device, inc
 *   **Free Heap:** The amount of free memory available on your device.
 *   **Wi-Fi Signal:** The Wi-Fi signal strength as RSSI (Received Signal Strength Indicator) in dBm.
 *   **Ethernet enabled:** Whether Ethernet is enabled or disabled.
+*   **NFC Status:** Shows whether the PN532 NFC module is connected and responsive.
 
 ---
 
@@ -60,8 +66,16 @@ These settings define how your device connects to your MQTT broker.
     *   **Note:** The current password is not shown as it is obscured from the backend.
 *   **HASS MQTT Discovery:** Enable or disable Home Assistant MQTT Discovery. 
     * If enabled, Home Assistant can automatically discover and configure your device's MQTT entities (the lock and NFC tags entities).
-*   Enable SSL/TLS: Enable or disable SSL/TLS for MQTT communication.
+*   **Enable SSL/TLS:** Enable or disable SSL/TLS for MQTT communication.
     * When enabled, a new section called "SSL/TLS Settings" will appear below it to configure the certificates.
+
+#### Connection Status
+
+The MQTT section displays a **Status** label that shows the current state of the MQTT connection:
+*   **Connected** (green): The device is successfully connected to the MQTT broker.
+*   **Error** (red): The device encountered an error while connecting. The error message or code is displayed next to the status (e.g., authentication failed, connection refused, timeout).
+*   **Disconnected** (yellow/amber): The device is not connected to the MQTT broker but no specific error has occurred.
+*   **Unknown** (gray): The connection status has not been determined yet.
 
 > [!WARNING]
 > TLS communication is currently not available on the ESP32 chip model due to memory constraints (and some poor decisions).
@@ -85,13 +99,13 @@ These are the essential MQTT topics used by the HomeKey-ESP32.
 
 #### 3.2.2. Custom
 
-These settings allow for more advanced customization of MQTT topics and states.
+These settings allow for more advanced customization of MQTT topics and states. The custom state fields are grouped by function for clarity.
 
 *   **Status (for Custom States):** Toggle to enable or disable the use of custom lock states via MQTT.
-*   **Custom State Topic:** The MQTT topic where the device will publish its custom lock state.
-*   **Custom State Cmd Topic:** The MQTT topic where you can send commands to change the device's custom lock state.
-*   **Custom Lock Actions:** Define custom MQTT actions for "Unlock" and "Lock" commands published by HomeKey-ESP32 on the Custom State Topic.
-*   **Custom Lock States:** Define custom MQTT states for various lock conditions (e.g., "Unlocking", "Locking", "Unlocked", "Locked", "Jammed", "Unknown") received on the Custom State Command topic.
+*   **Payload Topic (Pub):** The MQTT topic where the device will publish its custom lock state.
+    *   **Custom Lock Actions:** Define custom MQTT action values (numbers) for "Unlock" and "Lock" commands that will be published by HomeKey-ESP32 on the Payload Topic.
+*   **Command Topic (Sub):** The MQTT topic where you can send commands to change the device's custom lock state.
+    *   **Custom Lock States:** Define custom MQTT state values (numbers) for various lock conditions (e.g., "Unlocking", "Locking", "Unlocked", "Locked", "Jammed", "Unknown") that will be received on the Command Topic.
 
 ---
 
@@ -171,9 +185,9 @@ This option follows the "Always Lock/Unlock on HomeKey" option. Momentary state 
 
 ## 5. System
 
-This section covers general device behavior, HomeKit parameters, and web interface authentication. Changes in this section will reboot the device.
+This section covers general device behavior, HomeKit parameters, hardware configuration, and web interface security. Changes in this section will reboot the device.
 
-This section is organized into several subsections: **HomeKit**, **HomeKey**, **PN532**, **HomeSpan**, and **Ethernet**.
+This page is organized into tabs: **HomeKit**, **Hardware**, and **Security**.
 
 ### 5.1. HomeKit
 
@@ -239,9 +253,9 @@ Rest of the fields are shown depending on the selected PHY chip as there are two
     *   **Power Pin:** Power Pin for RMII Ethernet.
     *   **RMII Clock Mode:** RMII Clock Mode for Ethernet.
 
-### 5.6. WebUI
+### 5.6. Security
 
-Protect your device's configuration by setting up authentication for the web interface. This section is organized into one tab: **Authentication**.
+Protect your device's configuration by setting up authentication and HTTPS encryption for the web interface.
 
 #### 5.6.1. Authentication
 
@@ -251,7 +265,38 @@ Protect your device's configuration by setting up authentication for the web int
     *   **Note:** The password is stored in plain-text and is not encrypted.
     *   **Note:** The current password is not shown as it is obscured from the backend.
 
-### 5.7. OTA Update
+#### 5.6.2. HTTPS/TLS
+
+*   **HTTPS Enabled:** Toggle to enable or disable HTTPS for the web interface.
+    *   When enabled, all communication with the web interface is encrypted.
+    *   Requires a server certificate and private key to be configured in the **Certificate Management** section.
+    *   The device will redirect HTTP requests to HTTPS when enabled.
+
+#### 5.6.3. Certificate Management
+
+This section allows you to manage SSL/TLS certificates for both MQTT and HTTPS web interface encryption. Certificates are stored securely on the device.
+
+**HTTPS Certificates**
+
+Used when HTTPS is enabled in the Security settings.
+
+*   **Server Certificate:** The PEM-encoded server certificate for HTTPS.
+*   **Private Key:** The PEM-encoded private key corresponding to the server certificate.
+*   **CA Certificate:** (Optional) The PEM-encoded CA certificate for client certificate validation.
+
+**MQTT SSL Certificates**
+
+Used when SSL/TLS is enabled in the MQTT settings.
+
+*   **CA Certificate:** The PEM-encoded CA certificate for verifying the MQTT broker's identity.
+*   **Client Certificate:** The PEM-encoded client certificate for mutual TLS authentication.
+*   **Private Key:** The PEM-encoded private key corresponding to the client certificate.
+
+> [!NOTE]
+> Certificates should be in PEM format (base64-encoded with BEGIN/END headers).
+> The device will validate certificate format before saving.
+
+## 6. OTA Update
 
 This section is pretty much straightforward. 
 
@@ -263,9 +308,9 @@ On `Firmware File` you select the `firmware.bin` file that you want to flash to 
 
 On `LittleFS File` you select the `littlefs.bin` file that you want to flash to your device.
 
-### 5.8. Logs
+## 7. Logs
 
-This sections allows to view the logs of the device. 
+This section allows you to view the logs of the device. 
 
 - **Log Level:** The log level of the device. 
     -   `ERROR`: Only errors are logged.
@@ -279,9 +324,12 @@ This sections allows to view the logs of the device.
     -   `DEBUG`: Errors, warnings, informational messages, and debug messages are shown.
     -   `VERBOSE`: Errors, warnings, informational messages, debug messages, and verbose messages are logged.
 
-Export the logs to a file by clicking on the `Export` button.
+Export the logs to a file by clicking on the `Export` button. The exported file will be named with the current date and time (e.g., `logs-2025-05-02-12-30-45.json`).
 
 Click on the `Clear Logs` button to clear the logs.
+
+> [!TIP]
+> On mobile devices, the log toolbar is collapsible to save screen space. Only the search box and log level selector are shown by default. Tap to expand the full toolbar with filter levels and action buttons.
 
 ---
 

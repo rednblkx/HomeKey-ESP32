@@ -157,12 +157,28 @@ After successfully flashing the firmware, your HomeKey-ESP32 is ready for its fi
 
 1. **Monitor Serial Output (Optional but Recommended):** You can use the console function from `esptool-js`, just press "Connect" under the "Console" section and you should starting getting output in the box underneath it.
 2. **Connect to Wi-Fi Access Point:** On its first boot, the device will start a Wi-Fi access point (AP) with the following details:
-    * **SSID:** `HomeSpan-Setup`
-    * **Password:** `homespan`
+    * **SSID:** `HomeKey-ESP32`
+    * **Password:** `homekey123`
     Connect your phone or computer to this Wi-Fi network.
-3. **Access the Captive Portal:** A captive portal should open automatically. If it doesn't, you can open it manually by navigating to `http://192.168.4.1/hotspot-detect.html` in your web browser.
-4. **Configure Wi-Fi and HomeKit Setup Code:** On the captive portal page, you can configure the device to connect to your home Wi-Fi network. You can also set the HomeKit setup code on this page otherwise it is the one seen below.
-5. **Access the Web Interface:** After the device is connected to your Wi-Fi network, you can access the full web interface by navigating to the device's IP address in your web browser. The web interface allows you to configure all aspects of the device, including MQTT, actions, and other miscellaneous settings.
+3. **Access the Captive Portal:** A captive portal should open automatically. If it doesn't, you can open it manually by navigating to `http://192.168.4.1/captive-portal` in your web browser.
+4. **Configure Your Device:** The captive portal provides an easy-to-use interface organized into two tabs:
+
+    **WiFi & HomeKit Tab:**
+    *   **WiFi SSID:** Enter your home Wi-Fi network name, or click "Scan" to see available networks.
+    *   **WiFi Password:** Enter your Wi-Fi password.
+    *   *Note: WiFi can be skipped if you enable Ethernet (see Hardware tab).*
+    *   **HomeKit Setup Code:** Set your 8-digit HomeKit pairing code (default: `46637726`).
+    *   **HomeKey Color:** Choose the color of your HomeKey pass in Apple Wallet (Tan, Gold, Silver, or Black).
+
+    **Hardware Tab:**
+    *   **NFC Pins Preset:** Select from predefined configurations for common boards (Default, @lollokara's board, CASmo-NFC, CASmo-NFC-MB-ETH).
+    *   **Custom NFC Pins:** Manually configure SS, SCK, MISO, and MOSI pins if not using a preset.
+    *   **Ethernet:** Enable and configure Ethernet connectivity (optional).
+
+5. **Save and Reboot:** After configuring your settings, click "Save & Reboot". The device will connect to your network.
+    *   Upon successful connection, the captive portal will display the IP address assigned to the device by your network.
+    *   The captive portal will automatically close after a few seconds.
+6. **Access the Web Interface:** Once connected, access the full web interface by navigating to the displayed IP address or `<SerialNumber>.local` (e.g., `HK-A1B2C3D4.local`). The web interface provides complete control over MQTT, actions, and advanced settings.
 
 ## 5. HomeKit Pairing
 
