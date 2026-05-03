@@ -162,6 +162,14 @@
             <span class="text-sm text-base-content/70">Ethernet enabled</span>
             <span class="text-sm font-medium">{systemInfo?.eth_enabled ? "Yes" : "No"}</span>
           </div>
+          <div class="flex items-center justify-between py-2 px-3 bg-base-100 rounded-lg">
+            <span class="text-sm text-base-content/70">NFC Module</span>
+            <span class="text-sm font-medium">{systemInfo?.nfc_connected ? "Connected" : "Disconnected"}</span>
+          </div>
+          <div class="flex items-center justify-between py-2 px-3 bg-base-100 rounded-lg">
+            <span class="text-sm text-base-content/70">MQTT broker</span>
+            <span class="text-sm font-medium">{systemInfo?.mqtt_connected ? "Connected" : "Disconnected"}</span>
+          </div>
         </div>
       </div>
     </div>
