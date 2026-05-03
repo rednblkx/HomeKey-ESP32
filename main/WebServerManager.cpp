@@ -1780,6 +1780,7 @@ void WebServerManager::broadcastWs(const uint8_t *payload, size_t len,
                                    httpd_ws_type_t type) {
   std::vector<int> fds;
   {
+    std::scoped_lock lock(m_wsClientsMutex); 
     fds.reserve(m_wsClients.size());
     for (const auto &c : m_wsClients)
       fds.push_back(c->fd);
