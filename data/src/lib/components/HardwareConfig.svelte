@@ -21,6 +21,7 @@
 		onNfcPresetChange: (preset: number) => void;
 		onEthPresetChange: (preset: number) => void;
 		onNfcPinsChange: (pins: [number, number, number, number]) => void;
+		onNfcFastPollingToggle: (enabled: boolean) => void;
 		onEthernetToggle: (enabled: boolean) => void;
 		onEthPhyTypeChange: (phyType: number) => void;
 		onEthSpiBusChange: (bus: number) => void;
@@ -45,6 +46,7 @@
 		onNfcPresetChange,
 		onEthPresetChange,
 		onNfcPinsChange,
+		onNfcFastPollingToggle,
 		onEthernetToggle,
 		onEthPhyTypeChange,
 		onEthSpiBusChange,
@@ -196,7 +198,8 @@
       </div>
       <input
         type="checkbox"
-        bind:checked={nfcFastPollingEnabled}
+        checked={nfcFastPollingEnabled}
+        onchange={(e) => onNfcFastPollingToggle((e.target as HTMLInputElement).checked)}
         class="toggle toggle-primary toggle-sm"
       />
     </div>

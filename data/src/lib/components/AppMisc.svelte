@@ -380,6 +380,7 @@
 								onNfcPresetChange={handleNfcPresetChange}
 								onEthPresetChange={handleEthPresetChange}
 								onNfcPinsChange={(pins) => miscConfig.nfcGpioPins = pins}
+								onNfcFastPollingToggle={(enabled) => miscConfig.nfcFastPollingEnabled = enabled}
 								onEthernetToggle={(enabled) => miscConfig.ethernetEnabled = enabled}
 								onEthPhyTypeChange={(phyType) => miscConfig.ethPhyType = phyType}
 								onEthSpiBusChange={(bus) => miscConfig.ethSpiBus = bus}
