@@ -201,6 +201,7 @@
         checked={nfcFastPollingEnabled}
         onchange={(e) => onNfcFastPollingToggle((e.target as HTMLInputElement).checked)}
         class="toggle toggle-primary toggle-sm"
+        disabled={loading}
       />
     </div>
 	</div>
