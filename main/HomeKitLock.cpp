@@ -190,7 +190,11 @@ void HomeKitLock::initializeETH() {
   if (is_spi_ethernet) {
     static std::vector<GPIOAllocator::GPIOLease> eth_leases;
     eth_leases.clear();
-
+    if (eth_sck == 255 || eth_miso == 255 || eth_mosi == 255 || eth_cs == 255) {
+      ESP_LOGE(TAG, "One or more required GPIO Pins for SPI Ethernet are not "
+                    "defined, cannot setup Ethernet.");
+      return;
+    }
     auto owner_sck = GPIOAllocator::instance().owner_of(eth_sck);
     auto owner_miso = GPIOAllocator::instance().owner_of(eth_miso);
     auto owner_mosi = GPIOAllocator::instance().owner_of(eth_mosi);
