@@ -2,8 +2,11 @@
 #include "LockManager.hpp"
 #include "Pixel.h"
 #include "config.hpp"
+#include "driver/gpio.h"
 #include "esp_timer.h"
 #include "eventStructs.hpp"
+#include "hal/gpio_types.h"
+#include "soc/gpio_num.h"
 
 const char* HardwareManager::TAG = "HardwareManager";
 
@@ -30,6 +33,27 @@ HardwareManager::HardwareManager(const espConfig::actions_config_t& miscConfig)
       m_lockControlTaskHandle(nullptr),
       m_lockControlQueue(nullptr)
 {
+  pinAllocations.emplace(PinFunctions::ACTION,
+      GPIOAllocator::instance().acquire(gpio_num_t(miscConfig.gpioActionPin), GPIO_MODE_OUTPUT, "ACTION_PIN"));
+  pinAllocations.emplace(PinFunctions::SUCCESS,
+      GPIOAllocator::instance().acquire(gpio_num_t(miscConfig.nfcSuccessPin), GPIO_MODE_OUTPUT, "SUCCESS_AUTH"));
+  pinAllocations.emplace(PinFunctions::FAIL,
+      GPIOAllocator::instance().acquire(gpio_num_t(miscConfig.nfcFailPin), GPIO_MODE_OUTPUT, "FAIL_AUTH"));
+  pinAllocations.emplace(PinFunctions::PIXEL,
+      GPIOAllocator::instance().acquire(gpio_num_t(miscConfig.nfcNeopixelPin), GPIO_MODE_OUTPUT, "NEOPIXEL_PIN"));
+  pinAllocations.emplace(PinFunctions::ALT_ACTION,
+      GPIOAllocator::instance().acquire(gpio_num_t(miscConfig.hkAltActionPin), GPIO_MODE_OUTPUT, "ALT_ACTION"));
+  pinAllocations.emplace(PinFunctions::ALT_ACTION_LED,
+      GPIOAllocator::instance().acquire(gpio_num_t(miscConfig.hkAltActionInitLedPin), GPIO_MODE_OUTPUT, "ALT_ACTION_LED"));
+  pinAllocations.emplace(PinFunctions::ALT_ACTION_INIT,
+      GPIOAllocator::instance().acquire(gpio_num_t(miscConfig.hkAltActionInitPin), GPIO_MODE_INPUT, "INIT_ALT_ACTION"));
+  pinAllocations.emplace(PinFunctions::TAG_EVENT,
+      GPIOAllocator::instance().acquire(gpio_num_t(miscConfig.tagEventPin), GPIO_MODE_OUTPUT, "TAG_EVENT_PIN"));
+  for(auto &p : pinAllocations){
+    if(!p.second.has_value()){
+      ESP_LOGW(TAG, "Could not acquire GPIO Pin for '%d' with error '%d'", p.first, p.second.error());
+    }
+  }
   m_hardware_action_event = AppEventLoop::subscribe(HW_EVENT, HW_ACTION, [&](const uint8_t* data, size_t size){
     if(size == 0 || data == nullptr) return;
     std::span<const uint8_t> payload(data, size);
@@ -39,27 +63,95 @@ HardwareManager::HardwareManager(const espConfig::actions_config_t& miscConfig)
     ESP_LOGD(TAG, "Received action event: %d -> %d", s.currentState, s.targetState);
     setLockOutput(s.targetState);
   });
-  m_gpio_pin_event = AppEventLoop::subscribe(HW_EVENT, HW_CONFIG_CHANGED, [&](const uint8_t* data, size_t size){
-    if(size == 0 || data == nullptr) return;
+  m_gpio_pin_event = AppEventLoop::subscribe(HW_EVENT, HW_CONFIG_CHANGED, [&](const uint8_t* data, size_t size) {
+    if (size == 0 || data == nullptr) return;
     std::span<const uint8_t> payload(data, size);
     std::error_code ec;
     EventValueChanged s = alpaca::deserialize<EventValueChanged>(payload, ec);
-    if(!ec) {
-      ESP_LOGD(TAG, "Received hardware config event: %s -> %d (old=%d)", s.name.c_str(), s.newValue, s.oldValue);
-      uint8_t state = 0;
-      if(s.oldValue != 255 && GPIO_IS_VALID_OUTPUT_GPIO(s.oldValue)){
-        state = gpio_get_level(gpio_num_t(s.oldValue));
-        gpio_reset_pin(gpio_num_t(s.oldValue));
-        gpio_pullup_dis(gpio_num_t(s.oldValue));
-      } else ESP_LOGW(TAG, "Old GPIO %d is invalid", s.oldValue);
-      if(s.newValue != 255 && GPIO_IS_VALID_OUTPUT_GPIO(s.newValue)){
-        pinMode(s.newValue, OUTPUT);
-        if(s.name == "gpioActionPin")
-          digitalWrite(s.newValue, state);
-      } else ESP_LOGW(TAG, "New GPIO %d is invalid", s.newValue);
-    } else {
-      ESP_LOGE(TAG, "Failed to deserialize hardware config event: %s", ec.message().c_str());
+    if (ec) { 
+      ESP_LOGE(TAG, "Failed to deserialize hardware config event: %s", ec.message().c_str()); 
+      return; 
+    }
+
+    ESP_LOGD(TAG, "Received hardware config event: %s -> %d (old=%d)", s.name.c_str(), s.newValue, s.oldValue);
+
+    if (s.newValue == s.oldValue) return;
+
+    struct PinMeta {
+      PinFunctions func;
+      const char* config_name;
+      const char* tag;
+      gpio_mode_t default_mode;
+    };
+
+    static const PinMeta pin_meta_table[] = {
+      { ACTION,          "gpioActionPin",         "ACTION_PIN",      GPIO_MODE_OUTPUT },
+      { SUCCESS,         "nfcSuccessPin",         "SUCCESS_AUTH",    GPIO_MODE_OUTPUT },
+      { FAIL,            "nfcFailPin",            "FAIL_AUTH",       GPIO_MODE_OUTPUT },
+      { PIXEL,           "nfcNeopixelPin",        "NEOPIXEL_PIN",    GPIO_MODE_OUTPUT },
+      { ALT_ACTION,      "hkAltActionPin",        "ALT_ACTION",      GPIO_MODE_OUTPUT },
+      { ALT_ACTION_LED,  "hkAltActionInitLedPin", "ALT_ACTION_LED",  GPIO_MODE_OUTPUT },
+      { ALT_ACTION_INIT, "hkAltActionInitPin",    "INIT_ALT_ACTION", GPIO_MODE_INPUT  },
+      { TAG_EVENT,       "tagEventPin",           "TAG_EVENT_PIN",   GPIO_MODE_OUTPUT }
+    };
+
+    const PinMeta* meta = nullptr;
+    for (const auto& item : pin_meta_table) {
+      if (s.name == item.config_name) {
+        meta = &item;
+        break;
+      }
+    }
+
+    if (!meta) {
+      ESP_LOGW(TAG, "Unknown hardware config parameter: %s", s.name.c_str());
       return;
+    }
+
+    auto& alloc_entry = pinAllocations.at(meta->func);
+    gpio_mode_t mode = meta->default_mode;
+    bool level = false;
+
+    if (alloc_entry.has_value()) {
+      auto& lease = alloc_entry.value();
+      mode = lease.get_mode();
+      level = lease.get_level();
+
+      if (meta->func == PinFunctions::ALT_ACTION_INIT) {
+        gpio_isr_handler_remove(lease.get_pin());
+      }
+
+      alloc_entry = std::unexpected<GPIOAllocator::GPIOAllocatorError>(GPIOAllocator::INVALID_GPIO_NUM);
+      gpio_pulldown_en(gpio_num_t(s.oldValue));
+      ESP_LOGI(TAG, "Released pin for %s", meta->tag);
+    }
+
+    if (s.newValue == 255) {
+      ESP_LOGI(TAG, "%s set to undefined (255), stopping here.", meta->tag);
+      return;
+    }
+
+    if (GPIOAllocator::instance().owner_of(s.newValue).has_value()) {
+      ESP_LOGE(TAG, "Target pin %d already owned.", s.newValue);
+      return;
+    }
+
+    auto new_lease = GPIOAllocator::instance().acquire(gpio_num_t(s.newValue), mode, meta->tag);
+    if (new_lease.has_value()) {
+      if (mode != GPIO_MODE_INPUT) {
+        new_lease.value().set_level(level);
+      }
+
+      if (meta->func == PinFunctions::ALT_ACTION_INIT) {
+        new_lease.value().set_pullup(true);
+        gpio_set_intr_type(gpio_num_t(s.newValue), GPIO_INTR_NEGEDGE);
+        gpio_isr_handler_add(gpio_num_t(s.newValue), initiator_isr_handler, (void*)this);
+      }
+
+      alloc_entry = std::move(new_lease);
+      ESP_LOGI(TAG, "Acquired pin %d for %s", s.newValue, meta->tag);
+    } else {
+      ESP_LOGE(TAG, "Failed to acquire pin %d, error: %d", s.newValue, new_lease.error());
     }
   });
 }
@@ -113,29 +205,17 @@ void HardwareManager::begin() {
     ESP_LOGI(TAG, "Initializing hardware pins...");
 
     // --- Initialize GPIO Pins ---
-    if (m_miscConfig.nfcSuccessPin != 255) {
-        pinMode(m_miscConfig.nfcSuccessPin, OUTPUT);
-        digitalWrite(m_miscConfig.nfcSuccessPin, !m_miscConfig.nfcSuccessHL);
+    if(pinAllocations.at(SUCCESS).has_value()){
+      pinAllocations.at(SUCCESS).value().set_level(!m_miscConfig.nfcSuccessHL);
     }
-    if (m_miscConfig.nfcFailPin != 255) {
-        pinMode(m_miscConfig.nfcFailPin, OUTPUT);
-        digitalWrite(m_miscConfig.nfcFailPin, !m_miscConfig.nfcFailHL);
+    if(pinAllocations.at(FAIL).has_value()){
+      pinAllocations.at(FAIL).value().set_level(!m_miscConfig.nfcFailHL);
     }
-    if (m_miscConfig.tagEventPin != 255) {
-      pinMode(m_miscConfig.tagEventPin, OUTPUT);
-      digitalWrite(m_miscConfig.tagEventPin, !m_miscConfig.tagEventHL);
+    if(pinAllocations.at(TAG_EVENT).has_value()){
+      pinAllocations.at(TAG_EVENT).value().set_level(!m_miscConfig.tagEventHL);
     }
-    if (m_miscConfig.gpioActionPin != 255) {
-        pinMode(m_miscConfig.gpioActionPin, OUTPUT);
-    }
-    if (m_miscConfig.hkAltActionInitPin != 255) {
-      pinMode(m_miscConfig.hkAltActionInitPin, INPUT_PULLUP);
-      if (m_miscConfig.hkAltActionPin != 255) {
-        pinMode(m_miscConfig.hkAltActionPin, OUTPUT);
-      }
-      if (m_miscConfig.hkAltActionInitLedPin != 255) {
-        pinMode(m_miscConfig.hkAltActionInitLedPin, OUTPUT);
-      }
+    if(pinAllocations.at(ALT_ACTION_INIT).has_value()){
+      pinAllocations.at(ALT_ACTION_INIT).value().set_pullup(true);
       m_initiatorQueue = xQueueCreate(1, sizeof(uint8_t));
       xTaskCreateUniversal(initiator_task_entry, "initiator_task", 3580, this, 3, &m_initiatorTaskHandle, 1);
       gpio_install_isr_service(0);
@@ -144,7 +224,7 @@ void HardwareManager::begin() {
     }
 
     // --- Initialize NeoPixel ---
-    if (m_miscConfig.nfcNeopixelPin != 255) {
+    if (pinAllocations.at(PIXEL).has_value()) {
         size_t pixelTypeIndex = m_miscConfig.neoPixelType;
         if (pixelTypeIndex >= pixelTypeMap.size()) {
             ESP_LOGW(TAG, "Invalid NeoPixel type index (%d), defaulting to GRB.", pixelTypeIndex);
@@ -310,15 +390,15 @@ void HardwareManager::handleTimer(void* arg){
 
   switch (t) {
     case TimerSources::GPIO_S:
-      digitalWrite(i->m_miscConfig.nfcSuccessPin, !i->m_miscConfig.nfcSuccessHL);
+      if(i->pinAllocations.at(SUCCESS).has_value()) i->pinAllocations.at(SUCCESS).value().set_level(!i->m_miscConfig.nfcSuccessHL);
       ESP_LOGD(TAG, "GPIO_S");
       break;
     case TimerSources::GPIO_F:
-      digitalWrite(i->m_miscConfig.nfcFailPin, !i->m_miscConfig.nfcFailHL);
+      if(i->pinAllocations.at(FAIL).has_value()) i->pinAllocations.at(FAIL).value().set_level(!i->m_miscConfig.nfcFailHL);
       ESP_LOGD(TAG, "GPIO_F");
       break;
     case TimerSources::TAG_EVENT:
-      digitalWrite(i->m_miscConfig.tagEventPin, !i->m_miscConfig.tagEventHL);
+      if(i->pinAllocations.at(TAG_EVENT).has_value()) i->pinAllocations.at(TAG_EVENT).value().set_level(!i->m_miscConfig.tagEventHL);
       ESP_LOGD(TAG, "TAG_EVENT");
       break;
     case TimerSources::PIXEL_S:
@@ -328,14 +408,12 @@ void HardwareManager::handleTimer(void* arg){
       ESP_LOGD(TAG, "PIXEL");
       break;
     case TimerSources::ALT_GPIO:
-      digitalWrite(i->m_miscConfig.hkAltActionPin, !i->m_miscConfig.hkAltActionGpioState);
+      if(i->pinAllocations.at(ALT_ACTION).has_value()) i->pinAllocations.at(ALT_ACTION).value().set_level(!i->m_miscConfig.hkAltActionGpioState);
       ESP_LOGD(TAG, "ALT_GPIO");
       break;
     case TimerSources::ALT_GPIO_INIT:
       i->m_altActionArmed = false;
-      if (i->m_miscConfig.hkAltActionInitLedPin != 255) {
-        digitalWrite(i->m_miscConfig.hkAltActionInitLedPin, LOW);
-      }
+      if(i->pinAllocations.at(ALT_ACTION_LED).has_value()) i->pinAllocations.at(ALT_ACTION_LED).value().set_level(0);
       ESP_LOGD(TAG, "ALT_GPIO_INIT");
       break;
   }
@@ -385,9 +463,7 @@ void HardwareManager::initiator_task() {
             if (!m_altActionArmed) {
                 ESP_LOGI(TAG, "Alt action armed for %dms", m_miscConfig.hkAltActionInitTimeout);
                 m_altActionArmed = true;
-                if (m_miscConfig.hkAltActionInitLedPin != 255) {
-                    digitalWrite(m_miscConfig.hkAltActionInitLedPin, HIGH);
-                }
+                if(pinAllocations.at(ALT_ACTION_LED).has_value()) pinAllocations.at(ALT_ACTION_LED).value().set_level(1);
 
                 if (m_altActionInitTimer) esp_timer_start_once(m_altActionInitTimer, m_miscConfig.hkAltActionInitTimeout * 1000);
             }
@@ -419,13 +495,15 @@ void HardwareManager::lockControlTask() {
           }
           
           ESP_LOGI(TAG, "Setting lock output for state: %d", receivedState);
-          gpio_hold_dis((gpio_num_t)m_miscConfig.gpioActionPin);
+          gpio_hold_dis(pinAllocations.at(ACTION)->get_pin());
           if (receivedState == LockManager::LOCKED) {
-              digitalWrite(m_miscConfig.gpioActionPin, m_miscConfig.gpioActionLockState);
+            if(pinAllocations.at(ACTION).has_value())
+              pinAllocations.at(ACTION)->set_level(m_miscConfig.gpioActionLockState);
           } else if (receivedState == LockManager::UNLOCKED) {
-              digitalWrite(m_miscConfig.gpioActionPin, m_miscConfig.gpioActionUnlockState);
+            if(pinAllocations.at(ACTION).has_value())
+              pinAllocations.at(ACTION)->set_level(m_miscConfig.gpioActionUnlockState);
           }
-          gpio_hold_en((gpio_num_t)m_miscConfig.gpioActionPin);
+          gpio_hold_en(pinAllocations.at(ACTION)->get_pin());
           EventLockState s{
             .currentState = static_cast<uint8_t>(receivedState),
             .targetState = LockManager::UNKNOWN,
@@ -449,9 +527,9 @@ void HardwareManager::lockControlTask() {
 void HardwareManager::triggerAltAction() {
   if (m_altActionArmed) { 
       AppEventLoop::publish(HW_EVENT, HW_ALT_ACTION, nullptr, 0);
-      if (m_miscConfig.hkAltActionPin != 255) {
+      if (pinAllocations.at(ALT_ACTION).has_value()) {
           ESP_LOGI(TAG, "Triggering alt action on pin %d for %dms", m_miscConfig.hkAltActionPin, m_miscConfig.hkAltActionTimeout);
-          digitalWrite(m_miscConfig.hkAltActionPin, m_miscConfig.hkAltActionGpioState);
+          pinAllocations.at(ALT_ACTION)->set_level(m_miscConfig.hkAltActionGpioState);
           if (m_altActionTimer) esp_timer_start_once(m_altActionTimer, m_miscConfig.hkAltActionTimeout * 1000);
       }
   }
@@ -499,8 +577,8 @@ void HardwareManager::feedbackTask() {
 
                         if (m_pixelSuccessTimer) esp_timer_start_once(m_pixelSuccessTimer, m_miscConfig.neopixelSuccessTime * 1000);
                     }
-                    if (m_miscConfig.nfcSuccessPin != 255) {
-                        digitalWrite(m_miscConfig.nfcSuccessPin, m_miscConfig.nfcSuccessHL);
+                    if (pinAllocations.at(SUCCESS).has_value()) {
+                        pinAllocations.at(SUCCESS)->set_level(m_miscConfig.nfcSuccessHL);
 
                         if (m_gpioSuccessTimer) esp_timer_start_once(m_gpioSuccessTimer, m_miscConfig.nfcSuccessTime * 1000);
                     }
@@ -516,8 +594,8 @@ void HardwareManager::feedbackTask() {
 
                         if (m_pixelFailTimer) esp_timer_start_once(m_pixelFailTimer, m_miscConfig.neopixelFailTime * 1000);
                     }
-                    if (m_miscConfig.nfcFailPin != 255) {
-                        digitalWrite(m_miscConfig.nfcFailPin, m_miscConfig.nfcFailHL);
+                    if (pinAllocations.at(FAIL).has_value()) {
+                        pinAllocations.at(FAIL)->set_level(m_miscConfig.nfcFailHL);
 
                         if (m_gpioFailTimer) esp_timer_start_once(m_gpioFailTimer, m_miscConfig.nfcFailTime * 1000);
                     }
@@ -532,8 +610,8 @@ void HardwareManager::feedbackTask() {
 
                         if (m_pixelTagEventTimer) esp_timer_start_once(m_pixelTagEventTimer, m_miscConfig.neopixelTagEventTime * 1000);
                     }
-                    if (m_miscConfig.tagEventPin != 255) {
-                        digitalWrite(m_miscConfig.tagEventPin, m_miscConfig.tagEventHL);
+                    if (pinAllocations.at(TAG_EVENT).has_value()) {
+                        pinAllocations.at(TAG_EVENT)->set_level(m_miscConfig.tagEventHL);
 
                         if (m_tagEventTimer) esp_timer_start_once(m_tagEventTimer, m_miscConfig.tagEventTimeout * 1000);
                     }

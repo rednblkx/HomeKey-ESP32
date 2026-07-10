@@ -1,9 +1,11 @@
+#include "HardwareManager.hpp"
 #include "fmt/ranges.h"
 #include "config.hpp"
 #include "esp_log.h"
 #include "eth_structs.hpp"
 #include "eventStructs.hpp"
 #include "HomeKitLock.hpp"
+#include <cstdint>
 #include <functional>
 #include <sodium/crypto_sign.h>
 #include <sodium/crypto_box.h>
@@ -125,81 +127,179 @@ void HomeKitLock::ethEventHandler(arduino_event_id_t event, arduino_event_info_t
  * - If a configuration requires a built-in EMAC but the build does not include
  *   CONFIG_ETH_USE_ESP32_EMAC, logs an error and does not initialize Ethernet.
  */
-void HomeKitLock::initializeETH(){
+void HomeKitLock::initializeETH() {
   const auto& miscConfig = m_configManager.getConfig<espConfig::misc_config_t>();
 
-    if (!miscConfig.ethernetEnabled) {
-        ESP_LOGI(TAG, "Ethernet is disabled. HomeSpan will manage Wi-Fi.");
-        return; // Do nothing and let HomeSpan handle Wi-Fi
+  if (!miscConfig.ethernetEnabled) {
+    ESP_LOGI(TAG, "Ethernet is disabled. HomeSpan will manage Wi-Fi.");
+    return;
+  }
+
+  ESP_LOGI(TAG, "Ethernet is enabled. Initializing...");
+
+  spi_host_device_t spiHost = SPI2_HOST;
+  if (miscConfig.ethSpiBus < static_cast<unsigned char>(SPI_HOST_MAX)) {
+    spiHost = static_cast<spi_host_device_t>(miscConfig.ethSpiBus);
+  } else {
+    ESP_LOGW(TAG, "ethSpiBus out of range (%u). Defaulting to SPI2_HOST.", static_cast<unsigned>(miscConfig.ethSpiBus));
+  }
+
+  uint8_t eth_sck = 255;
+  uint8_t eth_miso = 255;
+  uint8_t eth_mosi = 255;
+  uint8_t eth_cs = 255;
+  uint8_t eth_irq = 255;
+  uint8_t eth_rst = 255;
+  bool is_spi_ethernet = false;
+  eth_phy_type_t phy_type;
+
+  if (miscConfig.ethActivePreset != 255) {
+    if (miscConfig.ethActivePreset >= eth_config_ns::boardPresets.size()) {
+      ESP_LOGE(TAG, "Invalid ethActivePreset index (%d). Not initializing Ethernet.", miscConfig.ethActivePreset);
+      return;
     }
+    const eth_board_presets_t& ethPreset = eth_config_ns::boardPresets[miscConfig.ethActivePreset];
+    is_spi_ethernet = !ethPreset.ethChip.emac;
+    phy_type = ethPreset.ethChip.phy_type;
+    if (is_spi_ethernet) {
+      eth_sck = ethPreset.spi_conf.pin_sck;
+      eth_miso = ethPreset.spi_conf.pin_miso;
+      eth_mosi = ethPreset.spi_conf.pin_mosi;
+      eth_cs = ethPreset.spi_conf.pin_cs;
+      eth_irq = ethPreset.spi_conf.pin_irq;
+      eth_rst = ethPreset.spi_conf.pin_rst;
+    }
+  } else {
+    phy_type = static_cast<eth_phy_type_t>(miscConfig.ethPhyType);
+    if (eth_config_ns::supportedChips.count(phy_type) == 0) {
+      ESP_LOGE(TAG, "Custom phy_type (%d) is not supported.", miscConfig.ethPhyType);
+      return;
+    }
+    const eth_chip_desc_t& chipType = eth_config_ns::supportedChips.at(phy_type);
+    is_spi_ethernet = !chipType.emac;
+    if (is_spi_ethernet) {
+      eth_sck = miscConfig.ethSpiConfig[4];
+      eth_miso = miscConfig.ethSpiConfig[5];
+      eth_mosi = miscConfig.ethSpiConfig[6];
+      eth_cs = miscConfig.ethSpiConfig[1];
+      eth_irq = miscConfig.ethSpiConfig[2];
+      eth_rst = miscConfig.ethSpiConfig[3];
+    }
+  }
 
-    ESP_LOGI(TAG,"Ethernet is enabled. Initializing...");
-    Network.onEvent(ethEventHandler);
+  if (is_spi_ethernet) {
+    static std::vector<GPIOAllocator::GPIOLease> eth_leases;
+    eth_leases.clear();
 
-    const auto& spiBus = miscConfig.ethSpiBus;
-        // Convert and validate config uint8_t -> spi_host_device_t
-    spi_host_device_t spiHost = SPI2_HOST; // safe default
-    if (spiBus < static_cast<unsigned char>(SPI_HOST_MAX)) {
-        spiHost = static_cast<spi_host_device_t>(spiBus);
+    auto owner_sck = GPIOAllocator::instance().owner_of(eth_sck);
+    auto owner_miso = GPIOAllocator::instance().owner_of(eth_miso);
+    auto owner_mosi = GPIOAllocator::instance().owner_of(eth_mosi);
+
+    bool sck_shared_with_nfc = (owner_sck == "SPI2_SCK");
+    bool miso_shared_with_nfc = (owner_miso == "SPI2_MISO");
+    bool mosi_shared_with_nfc = (owner_mosi == "SPI2_MOSI");
+
+    if (spiHost == SPI2_HOST) {
+      if (!sck_shared_with_nfc || !miso_shared_with_nfc || !mosi_shared_with_nfc) {
+        ESP_LOGE(TAG, "Ethernet conflict: When using SPI2, Ethernet must share the exact same SCK/MISO/MOSI pins as NFC.");
+        ESP_LOGE(TAG, "Current owners - SCK (%d): %s, MISO (%d): %s, MOSI (%d): %s",
+                 eth_sck, owner_sck.value_or("free").data(),
+                 eth_miso, owner_miso.value_or("free").data(),
+                 eth_mosi, owner_mosi.value_or("free").data());
+        return; 
+      }
+      ESP_LOGI(TAG, "Ethernet is verified to share the SPI2 bus pins with the NFC module.");
     } else {
-        ESP_LOGW(TAG, "ethSpiBus out of range (%u). Defaulting to SPI2_HOST.", static_cast<unsigned>(spiBus));
+      if (owner_sck.has_value() || owner_miso.has_value() || owner_mosi.has_value()) {
+        ESP_LOGE(TAG, "Ethernet conflict: One or more SPI pins for Ethernet are already allocated.");
+        ESP_LOGE(TAG, "Current owners - SCK (%d): %s, MISO (%d): %s, MOSI (%d): %s",
+                 eth_sck, owner_sck.value_or("free").data(),
+                 eth_miso, owner_miso.value_or("free").data(),
+                 eth_mosi, owner_mosi.value_or("free").data());
+        return; 
+      }
+
+      auto lease_sck = GPIOAllocator::instance().acquire(gpio_num_t(eth_sck), GPIO_MODE_DISABLE, "ETH_SPI_SCK");
+      auto lease_miso = GPIOAllocator::instance().acquire(gpio_num_t(eth_miso), GPIO_MODE_DISABLE, "ETH_SPI_MISO");
+      auto lease_mosi = GPIOAllocator::instance().acquire(gpio_num_t(eth_mosi), GPIO_MODE_DISABLE, "ETH_SPI_MOSI");
+
+      if (lease_sck.has_value() && lease_miso.has_value() && lease_mosi.has_value()) {
+        eth_leases.push_back(std::move(lease_sck.value()));
+        eth_leases.push_back(std::move(lease_miso.value()));
+        eth_leases.push_back(std::move(lease_mosi.value()));
+        ESP_LOGI(TAG, "Allocated Ethernet SPI Host pins (SCK: %d, MISO: %d, MOSI: %d)", eth_sck, eth_miso, eth_mosi);
+      } else {
+        ESP_LOGE(TAG, "Failed to allocate Ethernet SPI Host pins.");
+        eth_leases.clear();
+        return;
+      }
     }
 
-    // --- Preset-based Configuration ---
-    if (miscConfig.ethActivePreset != 255) {
-        if (miscConfig.ethActivePreset >= eth_config_ns::boardPresets.size()) {
-            ESP_LOGE(TAG,"Invalid ethActivePreset index (%d). Not initializing Ethernet.", miscConfig.ethActivePreset);
-            return;
-        }
+    auto check_and_allocate = [&](uint8_t pin, const std::string& tag_name, gpio_mode_t mode) -> bool {
+      if (pin == 255) return true;
+      auto owner = GPIOAllocator::instance().owner_of(pin);
+      if (owner.has_value()) {
+        ESP_LOGE(TAG, "Pin %d for %s is already allocated to '%s'.", pin, tag_name.c_str(), owner.value().data());
+        return false;
+      }
+      auto lease = GPIOAllocator::instance().acquire(gpio_num_t(pin), mode, tag_name);
+      if (lease.has_value()) {
+        eth_leases.push_back(std::move(lease.value()));
+        return true;
+      } else {
+        ESP_LOGE(TAG, "Failed to allocate Pin %d for %s.", pin, tag_name.c_str());
+        return false;
+      }
+    };
 
-        const eth_board_presets_t& ethPreset = eth_config_ns::boardPresets[miscConfig.ethActivePreset];
-        ESP_LOGI(TAG,"Initializing with preset: %s", ethPreset.name.c_str());
-
-        if (!ethPreset.ethChip.emac) {
-            // SPI-based Ethernet Module
-            const auto& spiConf = ethPreset.spi_conf;
-            ETH.begin(ethPreset.ethChip.phy_type, 1, spiConf.pin_cs, spiConf.pin_irq, spiConf.pin_rst,
-                      spiHost, spiConf.pin_sck, spiConf.pin_miso, spiConf.pin_mosi, spiConf.spi_freq_mhz);
-        } else {
-            // Internal MAC (RMII) Ethernet Module
-            #if CONFIG_ETH_USE_ESP32_EMAC
-            const auto& rmiiConf = ethPreset.rmii_conf;
-            ETH.begin(ethPreset.ethChip.phy_type, rmiiConf.phy_addr, rmiiConf.pin_mcd, rmiiConf.pin_mdio,
-                      rmiiConf.pin_power, rmiiConf.pin_rmii_clock);
-            #else
-            ESP_LOGE(TAG,"Preset requires EMAC, but this board does not have a built-in Ethernet MAC.");
-            #endif
-        }
+    if (!check_and_allocate(eth_cs, "ETH_SPI_CS", GPIO_MODE_DISABLE) ||
+        !check_and_allocate(eth_irq, "ETH_SPI_IRQ", GPIO_MODE_INPUT) ||
+        !check_and_allocate(eth_rst, "ETH_SPI_RST", GPIO_MODE_OUTPUT)) {
+      eth_leases.clear();
+      return;
     }
-    // --- Custom Configuration ---
-    else {
-        ESP_LOGI(TAG,"Initializing with custom pin configuration.");
-        auto phy_type = static_cast<eth_phy_type_t>(miscConfig.ethPhyType);
-        
-        if (eth_config_ns::supportedChips.count(phy_type) == 0) {
-            ESP_LOGE(TAG,"Custom phy_type (%d) is not supported.", miscConfig.ethPhyType);
-            return;
-        }
+  }
 
-        const eth_chip_desc_t& chipType = eth_config_ns::supportedChips.at(phy_type);
-        
-        if (!chipType.emac) {
-            // Custom SPI pins
-            const auto& spiConf = miscConfig.ethSpiConfig;
+  Network.onEvent(ethEventHandler);
 
-            ETH.begin(chipType.phy_type, 1, spiConf[1], spiConf[2], spiConf[3],
-                      spiHost, spiConf[4], spiConf[5], spiConf[6], spiConf[0]);
-        } else {
-            // Custom RMII pins
-            #if CONFIG_ETH_USE_ESP32_EMAC
-            const auto& rmiiConf = miscConfig.ethRmiiConfig;
-            ETH.begin(chipType.phy_type, rmiiConf[0], rmiiConf[1], rmiiConf[2], rmiiConf[3],
-                      static_cast<eth_clock_mode_t>(rmiiConf[4]));
-            #else
-            ESP_LOGE(TAG,"Custom config requires EMAC, but this board does not have a built-in Ethernet MAC.");
-            #endif
-        }
+  // --- Preset-based Configuration ---
+  if (miscConfig.ethActivePreset != 255) {
+    const eth_board_presets_t& ethPreset = eth_config_ns::boardPresets[miscConfig.ethActivePreset];
+    ESP_LOGI(TAG, "Initializing with preset: %s", ethPreset.name.c_str());
+
+    if (!ethPreset.ethChip.emac) {
+      const auto& spiConf = ethPreset.spi_conf;
+      ETH.begin(ethPreset.ethChip.phy_type, 1, spiConf.pin_cs, spiConf.pin_irq, spiConf.pin_rst,
+                spiHost, spiConf.pin_sck, spiConf.pin_miso, spiConf.pin_mosi, spiConf.spi_freq_mhz);
+    } else {
+#if CONFIG_ETH_USE_ESP32_EMAC
+      const auto& rmiiConf = ethPreset.rmii_conf;
+      ETH.begin(ethPreset.ethChip.phy_type, rmiiConf.phy_addr, rmiiConf.pin_mcd, rmiiConf.pin_mdio,
+                rmiiConf.pin_power, rmiiConf.pin_rmii_clock);
+#else
+      ESP_LOGE(TAG, "Preset requires EMAC, but this board does not have a built-in Ethernet MAC.");
+#endif
     }
+  }
+  // --- Custom Configuration ---
+  else {
+    ESP_LOGI(TAG, "Initializing with custom pin configuration.");
+    const eth_chip_desc_t& chipType = eth_config_ns::supportedChips.at(phy_type);
+
+    if (!chipType.emac) {
+      const auto& spiConf = miscConfig.ethSpiConfig;
+      ETH.begin(chipType.phy_type, 1, spiConf[1], spiConf[2], spiConf[3],
+                spiHost, spiConf[4], spiConf[5], spiConf[6], spiConf[0]);
+    } else {
+#if CONFIG_ETH_USE_ESP32_EMAC
+      const auto& rmiiConf = miscConfig.ethRmiiConfig;
+      ETH.begin(chipType.phy_type, rmiiConf[0], rmiiConf[1], rmiiConf[2], rmiiConf[3],
+                static_cast<eth_clock_mode_t>(rmiiConf[4]));
+#else
+      ESP_LOGE(TAG, "Custom config requires EMAC, but this board does not have a built-in Ethernet MAC.");
+#endif
+    }
+  }
 }
 /**
  * @brief Initialize HomeSpan, expose lock-related accessories/services, and register runtime callbacks.
@@ -389,6 +489,13 @@ void HomeKitLock::setupDebugCommands() {
                  fmt::format("{:02X}", fmt::join(issuer.issuer_pk, "")).c_str());
         }
         ESP_LOGI(TAG, "------------------------------------");
+    });
+    new SpanUserCommand('G', "Who owns this GPIO Pin?", [](const char* c) {
+      uint8_t i = atoi(c+1);
+      auto s = GPIOAllocator::instance().owner_of(i);
+      if(s.has_value()){
+          ESP_LOGI(TAG, "Owner: %s", s.value_or("Not allocated").c_str());
+      }
     });
 }
 
