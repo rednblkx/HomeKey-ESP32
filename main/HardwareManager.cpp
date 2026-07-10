@@ -495,15 +495,19 @@ void HardwareManager::lockControlTask() {
           }
           
           ESP_LOGI(TAG, "Setting lock output for state: %d", receivedState);
-          gpio_hold_dis(pinAllocations.at(ACTION)->get_pin());
-          if (receivedState == LockManager::LOCKED) {
-            if(pinAllocations.at(ACTION).has_value())
-              pinAllocations.at(ACTION)->set_level(m_miscConfig.gpioActionLockState);
-          } else if (receivedState == LockManager::UNLOCKED) {
-            if(pinAllocations.at(ACTION).has_value())
-              pinAllocations.at(ACTION)->set_level(m_miscConfig.gpioActionUnlockState);
+          auto &action = pinAllocations.at(ACTION);
+          if(action.has_value()){
+            gpio_hold_dis(action->get_pin());
+          } else {
+            ESP_LOGW(TAG, "GPIOLease not held for action pin; skipping lock output");
+            continue;
           }
-          gpio_hold_en(pinAllocations.at(ACTION)->get_pin());
+          if (receivedState == LockManager::LOCKED) {
+              action->set_level(m_miscConfig.gpioActionLockState);
+          } else if (receivedState == LockManager::UNLOCKED) {
+              action->set_level(m_miscConfig.gpioActionUnlockState);
+          }
+          gpio_hold_en(action->get_pin());
           EventLockState s{
             .currentState = static_cast<uint8_t>(receivedState),
             .targetState = LockManager::UNKNOWN,
