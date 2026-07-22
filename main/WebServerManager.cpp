@@ -1118,6 +1118,24 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         std::string response = cjson_to_string_and_free(res);
         httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
         return false;
+    } else if ((str_ends_with(keyStr.c_str(), "Pins") || str_ends_with(keyStr.c_str(), "SpiConfig")) && cJSON_IsArray(incomingValue)){
+      cJSON *el = NULL;
+      cJSON_ArrayForEach(el, incomingValue) {
+        if(cJSON_IsNumber(el)){
+          if(auto owner = GPIOAllocator::instance().owner_of(el->valueint); owner.has_value() && !owner->contains("SPI")) {
+            std::string msg = std::to_string(el->valueint) +
+                              " for \"" + keyStr + "\" already owned by \"" + owner.value() + "\".";
+            httpd_resp_set_type(req, "application/json");
+            httpd_resp_set_status(req, "400 Bad Request");
+            cJSON *res = cJSON_CreateObject();
+            cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+            cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
+            std::string response = cjson_to_string_and_free(res);
+            httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+            return false;
+          }
+        }
+      };
     }
 
     // Boolean coercion
