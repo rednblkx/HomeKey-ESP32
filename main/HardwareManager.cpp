@@ -118,6 +118,8 @@ HardwareManager::HardwareManager(const espConfig::actions_config_t& miscConfig)
       level = lease.get_level();
 
       if (meta->func == PinFunctions::ALT_ACTION_INIT) {
+        // We don't uninstall the ISR as it might be used by the Ethernet driver
+        // and HardwareManager doesn't have access to misc_config_t to check
         gpio_isr_handler_remove(lease.get_pin());
       }
 
@@ -144,6 +146,10 @@ HardwareManager::HardwareManager(const espConfig::actions_config_t& miscConfig)
 
       if (meta->func == PinFunctions::ALT_ACTION_INIT) {
         new_lease.value().set_pullup(true);
+        if(!isr_service_installed){
+          esp_err_t err = gpio_install_isr_service(0);
+          if(err == ESP_OK || err == ESP_ERR_INVALID_STATE) isr_service_installed = true;
+        }
         gpio_set_intr_type(gpio_num_t(s.newValue), GPIO_INTR_NEGEDGE);
         gpio_isr_handler_add(gpio_num_t(s.newValue), initiator_isr_handler, (void*)this);
       }
@@ -218,7 +224,9 @@ void HardwareManager::begin() {
       pinAllocations.at(ALT_ACTION_INIT).value().set_pullup(true);
       m_initiatorQueue = xQueueCreate(1, sizeof(uint8_t));
       xTaskCreateUniversal(initiator_task_entry, "initiator_task", 3580, this, 3, &m_initiatorTaskHandle, 1);
-      gpio_install_isr_service(0);
+      if(esp_err_t err = gpio_install_isr_service(0); err == ESP_OK || err == ESP_ERR_INVALID_STATE){
+        isr_service_installed = true;
+      }
       gpio_set_intr_type((gpio_num_t)m_miscConfig.hkAltActionInitPin, GPIO_INTR_NEGEDGE);
       gpio_isr_handler_add((gpio_num_t)m_miscConfig.hkAltActionInitPin, initiator_isr_handler, (void*) this);
     }

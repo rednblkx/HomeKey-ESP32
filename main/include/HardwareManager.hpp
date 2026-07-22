@@ -155,4 +155,5 @@ private:
     };
 
     std::map<PinFunctions, std::expected<GPIOAllocator::GPIOLease, GPIOAllocator::GPIOAllocatorError>> pinAllocations;
+    bool isr_service_installed;
 };
