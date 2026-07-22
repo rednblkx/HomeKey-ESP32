@@ -497,9 +497,7 @@ void HomeKitLock::setupDebugCommands() {
     new SpanUserCommand('G', "Who owns this GPIO Pin?", [](const char* c) {
       uint8_t i = atoi(c+1);
       auto s = GPIOAllocator::instance().owner_of(i);
-      if(s.has_value()){
-          ESP_LOGI(TAG, "Owner: %s", s.value_or("Not allocated").c_str());
-      }
+      ESP_LOGI(TAG, "Owner: %s", s.has_value() ? s->c_str() : "Not allocated");
     });
 }
 
