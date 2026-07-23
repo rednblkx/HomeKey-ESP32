@@ -2,6 +2,7 @@
 // WebServerManager.cpp - ESP32 Web Server Implementation
 // ============================================================================
 
+#include "GPIOAllocator.hpp"
 #include "esp_https_server.h"
 #include "esp_ota_ops.h"
 #include "esp_system.h"
@@ -881,8 +882,7 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     } else if (keyStr == "nfcNeopixelPin") {
       rebootNeeded = true;
       rebootMsg = "Pixel GPIO pin changed, reboot needed! Rebooting...";
-    } else if (keyStr == "nfcSuccessPin" || keyStr == "nfcFailPin" ||
-               keyStr == "gpioActionPin") {
+    } else if (str_ends_with(keyStr.c_str(), "Pin")) {
       EventValueChanged s{.name = keyStr,
                           .oldValue = (uint8_t)configSchemaItem->valueint,
                           .newValue = (uint8_t)it->valueint};
@@ -1095,6 +1095,18 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
         return false;
       }
+      if(auto owner = GPIOAllocator::instance().owner_of(incomingValue->valueint); owner.has_value()){
+        std::string msg = std::to_string(incomingValue->valueint) +
+                          " for \"" + keyStr + "\" already owned by \"" + owner.value() + "\".";
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_set_status(req, "400 Bad Request");
+        cJSON *res = cJSON_CreateObject();
+        cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+        cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
+        std::string response = cjson_to_string_and_free(res);
+        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+        return false;
+      }
     } else if (keyStr == "ethSpiBus" && cJSON_IsNumber(incomingValue) && (incomingValue->valueint < SPI2_HOST || incomingValue->valueint >= SPI_HOST_MAX)){
         std::string msg = std::to_string(incomingValue->valueint) +
                       " is not a valid SPI Bus value";
@@ -1106,6 +1118,24 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         std::string response = cjson_to_string_and_free(res);
         httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
         return false;
+    } else if ((str_ends_with(keyStr.c_str(), "Pins") || str_ends_with(keyStr.c_str(), "SpiConfig")) && cJSON_IsArray(incomingValue)){
+      cJSON *el = NULL;
+      cJSON_ArrayForEach(el, incomingValue) {
+        if(cJSON_IsNumber(el)){
+          if(auto owner = GPIOAllocator::instance().owner_of(el->valueint); owner.has_value() && !owner->contains("SPI")) {
+            std::string msg = std::to_string(el->valueint) +
+                              " for \"" + keyStr + "\" already owned by \"" + owner.value() + "\".";
+            httpd_resp_set_type(req, "application/json");
+            httpd_resp_set_status(req, "400 Bad Request");
+            cJSON *res = cJSON_CreateObject();
+            cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+            cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
+            std::string response = cjson_to_string_and_free(res);
+            httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+            return false;
+          }
+        }
+      };
     }
 
     // Boolean coercion

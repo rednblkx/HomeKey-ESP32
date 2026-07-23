@@ -5,10 +5,13 @@
 #include "freertos/task.h"
 #include <array>
 #include <atomic>
+#include <expected>
 #include <functional>
+#include <map>
 #include <memory>
 #include "app_event_loop.hpp"
 #include "NfcReader.hpp"
+#include "GPIOAllocator.hpp"
 
 class LockManager;
 class HardwareManager;
@@ -92,6 +95,16 @@ private:
 
     static const char* TAG;
     AppEventLoop::SubscriptionHandle m_hk_event;
+    enum PinFunctions {
+      SCK,
+      MISO,
+      MOSI,
+      SS,
+      IRQ,
+      VEN
+    };
+
+    std::map<PinFunctions, std::expected<GPIOAllocator::GPIOLease, GPIOAllocator::GPIOAllocatorError>> pinAllocations;
 
 public:
     /**

@@ -5,6 +5,9 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include <cstdint>
+#include <expected>
+#include <map>
+#include "GPIOAllocator.hpp"
 
 class ConfigManager;
 class Pixel;
@@ -139,4 +142,18 @@ private:
     AppEventLoop::SubscriptionHandle m_hardware_action_event;
     AppEventLoop::SubscriptionHandle m_nfc_event;
     AppEventLoop::SubscriptionHandle m_gpio_pin_event;
+
+    enum PinFunctions {
+      ACTION,
+      SUCCESS,
+      FAIL,
+      PIXEL,
+      ALT_ACTION,
+      ALT_ACTION_INIT,
+      ALT_ACTION_LED,
+      TAG_EVENT
+    };
+
+    std::map<PinFunctions, std::expected<GPIOAllocator::GPIOLease, GPIOAllocator::GPIOAllocatorError>> pinAllocations;
+    bool isr_service_installed;
 };

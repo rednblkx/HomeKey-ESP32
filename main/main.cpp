@@ -130,49 +130,16 @@ void setup() {
     ESP_LOGI(TAG, "NFC IRQ pin: %d, VEN pin: %d", miscConfig.nfcIrqPin, miscConfig.nfcVenPin);
   }
   readerDataManager->begin();
-  if(miscConfig.ethernetEnabled){
-    std::vector<uint8_t> ethPins;
-    if(miscConfig.ethActivePreset == PIN_UNSET){
-      ethPins = {miscConfig.ethSpiConfig[4], miscConfig.ethSpiConfig[5], miscConfig.ethSpiConfig[6]};
-    } else { 
-        const eth_board_presets_t& ethPreset = eth_config_ns::boardPresets[miscConfig.ethActivePreset];
-        ethPins = {ethPreset.spi_conf.pin_sck, ethPreset.spi_conf.pin_miso, ethPreset.spi_conf.pin_mosi};
-    }
-    std::vector<uint8_t> nfcPins;
-    if(miscConfig.nfcPinsPreset == PIN_UNSET){
-      nfcPins = {miscConfig.nfcGpioPins[1], miscConfig.nfcGpioPins[2], miscConfig.nfcGpioPins[3]};
-    } else {
-      nfcPins = {nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins[1], nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins[2], nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins[3]};
-    }
-    std::vector<uint8_t> pins_intersection;
-    std::ranges::set_intersection(ethPins.begin(), ethPins.end(), nfcPins.begin(), nfcPins.end(), std::back_inserter(pins_intersection));
-    if((!pins_intersection.empty() && miscConfig.ethSpiBus == SPI2_HOST)){
-      goto nfc_init;
-    }
-    #if SOC_SPI_PERIPH_NUM > 2
-    else if (pins_intersection.empty() && miscConfig.ethSpiBus == SPI3_HOST) goto nfc_init;
-    #endif
-    else {
-      if(miscConfig.ethSpiBus == SPI2_HOST){
-        ESP_LOGE(TAG, "Ethernet enabled on SPI2 Bus, NFC reader has to use the same GPIO pins as Ethernet");
-      } else {
-        ESP_LOGE(TAG, "Ethernet enabled on SPI3 Bus, NFC reader cannot use the same GPIO pins as Ethernet");
-        for(auto& pin : pins_intersection){
-          ESP_LOGE(TAG, "GPIO Intersection: %d", pin);
-        }
-      }
-    }
-  } else {
-  nfc_init:
-    nfcManager = std::make_unique<NfcManager>(*readerDataManager,
-                                miscConfig.nfcPinsPreset == PIN_UNSET ? miscConfig.nfcGpioPins : nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins,
-                                miscConfig.nfcReaderType,
-                                miscConfig.nfcIrqPin,
-                                miscConfig.nfcVenPin,
-                                miscConfig.hkAuthPrecomputeEnabled,
-                                miscConfig.nfcFastPollingEnabled);
-    nfcManager->begin();
-  }
+
+  nfcManager = std::make_unique<NfcManager>(*readerDataManager,
+                              miscConfig.nfcPinsPreset == PIN_UNSET ? miscConfig.nfcGpioPins : nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins,
+                              miscConfig.nfcReaderType,
+                              miscConfig.nfcIrqPin,
+                              miscConfig.nfcVenPin,
+                              miscConfig.hkAuthPrecomputeEnabled,
+                              miscConfig.nfcFastPollingEnabled);
+  nfcManager->begin();
+
   webServerManager->setNfcManager(nfcManager.get());
   webServerManager->setMqttManager(mqttManager.get());
   hardwareManager->begin();
@@ -189,7 +156,6 @@ void setup() {
   }, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
   pollHS = true;
 }
-
 /**
  * @brief Run the main application loop: service HomeSpan events and yield to the RTOS.
 *
