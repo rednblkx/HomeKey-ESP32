@@ -482,12 +482,12 @@ void NfcManager::waitForTagRemoval() {
  */
 void NfcManager::handleHomeKeyAuth() {
     auto publishAuthResult = [](
-        const std::tuple<std::vector<uint8_t>, std::vector<uint8_t>, KeyFlow>& authResult,
+        const AuthContextResult& authResult,
         const std::vector<uint8_t>& readerId
     ) {
-        if (std::get<2>(authResult) != kFlowFailed) {
+        if (authResult.flow != kFlowFailed) {
             ESP_LOGI(TAG, "HomeKey authentication successful!");
-            EventHKTap s{.status = true, .issuerId = std::get<0>(authResult), .endpointId = std::get<1>(authResult), .readerId = readerId };
+            EventHKTap s{.status = true, .issuerId = authResult.issuer_id, .endpointId = authResult.endpoint_id, .readerId = readerId };
             std::vector<uint8_t> d;
             alpaca::serialize(s, d);
             NfcEvent event{.type=HOMEKEY_TAP, .data=d};
