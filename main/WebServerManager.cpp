@@ -470,21 +470,23 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
   if (use_compressed)
     httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
 
-  uint8_t buffer[1024];
-  size_t bytes_read;
-  while ((bytes_read = file.read(buffer, sizeof(buffer))) > 0) {
-    esp_err_t err = httpd_resp_send_chunk(req, (const char *)buffer, bytes_read);
-    if (err != ESP_OK) {
-      ESP_LOGE(TAG, "Failed to send chunk: %d", err);
+  char *buffer = (char*)malloc(4096); 
+  if (!buffer) {
       file.close();
-      httpd_resp_send_chunk(req, NULL, 0);
-      return ESP_FAIL;
-    }
-    taskYIELD();
+      return ESP_ERR_NO_MEM;
   }
+
+  size_t bytes_read;
+  esp_err_t err = ESP_OK;
+  while ((bytes_read = file.read((uint8_t*)buffer, 4096)) > 0) {
+      err = httpd_resp_send_chunk(req, buffer, bytes_read);
+      if (err != ESP_OK) break;
+  }
+
+  free(buffer);
   file.close();
-  httpd_resp_send_chunk(req, NULL, 0);
-  return ESP_OK;
+  httpd_resp_send_chunk(req, NULL, 0); // End stream
+  return err;
 }
 
 /**
