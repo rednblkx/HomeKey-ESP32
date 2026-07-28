@@ -190,7 +190,14 @@
 
 		loading = true;
 		try {
-			const result = await saveCaptivePortalConfig(config);
+			const { nfcIrqPin, nfcVenPin, ...rest } = config;
+
+			const payload = {
+				...rest,
+				...(config.nfcReaderType === 1 ? { nfcIrqPin, nfcVenPin } : {})
+			};
+
+			const result = await saveCaptivePortalConfig(payload as any);
 			if (result.success) {
 				acquiredIP = result.data.ip_addr;
 				saved = true;
