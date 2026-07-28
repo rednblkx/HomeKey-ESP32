@@ -1,11 +1,9 @@
-#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include "ConsoleLogSinker.h"
 #include "HomeSpan.h"
 #include "config.hpp"
 #include <esp_event.h>
-#include "eth_structs.hpp"
 #include "dns_server.h"
 #include "HomeKitLock.hpp"
 #include "LockManager.hpp"
@@ -98,6 +96,9 @@ using namespace loggable;
  *       GPIO pin configuration based on persisted settings.
  */
 void setup() {
+  #ifdef CONFIG_IDF_TARGET_ESP32
+  gpio_set_pull_mode(GPIO_NUM_3, GPIO_PULLUP_ONLY); // U0RXD idle-HIGH in case UART-bridge not present
+  #endif
   #ifdef CONFIG_INIT_ARDU_SERIAL_LOGGING
   Serial.begin(115200);
   #endif
