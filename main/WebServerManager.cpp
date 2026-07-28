@@ -1418,28 +1418,27 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
     return ESP_FAIL;
   }
 
-  cJSON *ssidItem = cJSON_GetObjectItem(obj, "wifiSsid");
-  cJSON *passwordItem = cJSON_GetObjectItem(obj, "wifiPassword");
-  cJSON *setupCodeItem = cJSON_GetObjectItem(obj, "setupCode");
-  cJSON *colorItem = cJSON_GetObjectItem(obj, "hk_key_color");
-  cJSON *ethEnabledItem = cJSON_GetObjectItem(obj, "ethernetEnabled");
-
-  bool ethernetEnabled = (ethEnabledItem && cJSON_IsBool(ethEnabledItem) && cJSON_IsTrue(ethEnabledItem));
-
-  const char *ssid = "";
-  const char *password = "";
+  std::string ssid;
+  std::string password;
   bool wifiProvided = false;
 
+  cJSON *ssidItem = cJSON_GetObjectItem(obj, "wifiSsid");
+  cJSON *passwordItem = cJSON_GetObjectItem(obj, "wifiPassword");
   if (ssidItem && cJSON_IsString(ssidItem)) {
     ssid = ssidItem->valuestring;
+    if (!ssid.empty()) {
+      wifiProvided = true;
+    }
   }
   if (passwordItem && cJSON_IsString(passwordItem)) {
     password = passwordItem->valuestring;
   }
 
-  if (strlen(ssid) > 0) {
-    wifiProvided = true;
-  }
+  cJSON_DeleteItemFromObject(obj, "wifiSsid");
+  cJSON_DeleteItemFromObject(obj, "wifiPassword");
+
+  cJSON *ethEnabledItem = cJSON_GetObjectItem(obj, "ethernetEnabled");
+  bool ethernetEnabled = (ethEnabledItem && cJSON_IsBool(ethEnabledItem) && cJSON_IsTrue(ethEnabledItem));
 
   if (!ethernetEnabled && !wifiProvided) {
     cJSON_Delete(obj);
@@ -1454,7 +1453,7 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
   }
 
   if (wifiProvided) {
-    if (strlen(ssid) > 32 || strlen(password) < 8 || strlen(password) > 64) {
+    if (ssid.length() > 32 || password.length() < 8 || password.length() > 64) {
       cJSON_Delete(obj);
       httpd_resp_set_status(req, "400 Bad Request");
       httpd_resp_set_type(req, "application/json");
@@ -1465,35 +1464,32 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
       httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
       return ESP_FAIL;
     }
-
-    if (!connectWiFi(ssid, password, 15000)) {
-      cJSON_Delete(obj);
-      httpd_resp_set_status(req, "400 Bad Request");
-      httpd_resp_set_type(req, "application/json");
-      cJSON *errorRes = cJSON_CreateObject();
-      cJSON_AddItemToObject(errorRes, "success", cJSON_CreateBool(false));
-      cJSON_AddItemToObject(errorRes, "error", cJSON_CreateString("Failed to connect to WiFi network. Please check your credentials and try again."));
-      std::string response = cjson_to_string_and_free(errorRes);
-      httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-      return ESP_FAIL;
-    }
-
-    homeSpan.setWifiCredentials(ssid, password);
   }
 
+  cJSON *colorItem = cJSON_GetObjectItem(obj, "hk_key_color");
+  if (colorItem && cJSON_IsNumber(colorItem) && colorItem->valueint > 3) {
+    cJSON_Delete(obj);
+    httpd_resp_set_status(req, "400 Bad Request");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"success\":false,\"error\":\"Invalid hk_key_color (must be <= 3)\"}");
+    return ESP_FAIL;
+  }
+
+  cJSON *nfcReaderTypeItem = cJSON_GetObjectItem(obj, "nfcReaderType");
+  if (nfcReaderTypeItem && cJSON_IsNumber(nfcReaderTypeItem) && (nfcReaderTypeItem->valueint < 0 || nfcReaderTypeItem->valueint > 1)) {
+    cJSON_Delete(obj);
+    httpd_resp_set_status(req, "400 Bad Request");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"success\":false,\"error\":\"Invalid nfcReaderType\"}");
+    return ESP_FAIL;
+  }
+
+  cJSON *setupCodeItem = cJSON_GetObjectItem(obj, "setupCode");
   if (setupCodeItem && cJSON_IsString(setupCodeItem)) {
     const char *setupCode = setupCodeItem->valuestring;
-    if (strlen(setupCode) == 8 && (strcmp(setupCode,"00000000") && strcmp(setupCode,"11111111") && strcmp(setupCode,"22222222") && strcmp(setupCode,"33333333") && 
-    strcmp(setupCode,"44444444") && strcmp(setupCode,"55555555") && strcmp(setupCode,"66666666") && strcmp(setupCode,"77777777") &&
-    strcmp(setupCode,"88888888") && strcmp(setupCode,"99999999") && strcmp(setupCode,"12345678") && strcmp(setupCode,"87654321"))) {
-      homeSpan.setPairingCode(setupCode, false);
-      cJSON *setupCodeUpdate = cJSON_CreateObject();
-      cJSON_AddStringToObject(setupCodeUpdate, "setupCode", setupCode);
-      char *setupCodeJson = cJSON_PrintUnformatted(setupCodeUpdate);
-      instance->m_configManager.updateFromJson<espConfig::misc_config_t>(setupCodeJson);
-      cJSON_free(setupCodeJson);
-      cJSON_Delete(setupCodeUpdate);
-    } else {
+    if (!(strcmp(setupCode, "00000000") && strcmp(setupCode, "11111111") && strcmp(setupCode, "22222222") && strcmp(setupCode, "33333333") && 
+          strcmp(setupCode, "44444444") && strcmp(setupCode, "55555555") && strcmp(setupCode, "66666666") && strcmp(setupCode, "77777777") &&
+          strcmp(setupCode, "88888888") && strcmp(setupCode, "99999999") && strcmp(setupCode, "12345678") && strcmp(setupCode, "87654321"))) {
       cJSON_Delete(obj);
       httpd_resp_set_status(req, "400 Bad Request");
       httpd_resp_set_type(req, "application/json");
@@ -1506,97 +1502,48 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
     }
   }
 
-  if (colorItem && cJSON_IsNumber(colorItem)) {
-    uint8_t color = (uint8_t)colorItem->valueint;
-    if (color <= 3) {
-      cJSON *colorUpdate = cJSON_CreateObject();
-      cJSON_AddNumberToObject(colorUpdate, "hk_key_color", color);
-      char *colorJson = cJSON_PrintUnformatted(colorUpdate);
-      instance->m_configManager.updateFromJson<espConfig::misc_config_t>(colorJson);
-      cJSON_free(colorJson);
-      cJSON_Delete(colorUpdate);
-    }
+  std::string currentConfigJson = instance->m_configManager.serializeToJson<espConfig::misc_config_t>();
+  cJSON *currentConfigData = cJSON_Parse(currentConfigJson.c_str());
+  if (!currentConfigData) {
+    cJSON_Delete(obj);
+    httpd_resp_send_500(req);
+    return ESP_FAIL;
   }
 
-  cJSON *nfcPresetItem = cJSON_GetObjectItem(obj, "nfcPinsPreset");
-  cJSON *nfcGpioPinsItem = cJSON_GetObjectItem(obj, "nfcGpioPins");
-  cJSON *nfcReaderTypeItem = cJSON_GetObjectItem(obj, "nfcReaderType");
-  cJSON *nfcIrqPinItem = cJSON_GetObjectItem(obj, "nfcIrqPin");
-  cJSON *nfcVenPinItem = cJSON_GetObjectItem(obj, "nfcVenPin");
-  if (nfcPresetItem && cJSON_IsNumber(nfcPresetItem) && nfcGpioPinsItem && cJSON_IsArray(nfcGpioPinsItem)) {
-    cJSON *nfcUpdate = cJSON_CreateObject();
-    cJSON_AddNumberToObject(nfcUpdate, "nfcPinsPreset", nfcPresetItem->valueint);
-    cJSON_AddItemToObject(nfcUpdate, "nfcGpioPins", cJSON_Duplicate(nfcGpioPinsItem, true));
-    if (nfcReaderTypeItem && cJSON_IsNumber(nfcReaderTypeItem)) {
-      if (nfcReaderTypeItem->valueint < 0 || nfcReaderTypeItem->valueint > 1) {
-        cJSON_Delete(nfcUpdate);
-        cJSON_Delete(obj);
-        httpd_resp_set_status(req, "400 Bad Request");
-        httpd_resp_set_type(req, "application/json");
-        httpd_resp_sendstr(req, "{\"success\":false,\"error\":\"Invalid nfcReaderType\"}");
-        return ESP_FAIL;
-      }
-      cJSON_AddNumberToObject(nfcUpdate, "nfcReaderType", nfcReaderTypeItem->valueint);
-    }
-    if (nfcIrqPinItem && cJSON_IsNumber(nfcIrqPinItem)) {
-      if (!GPIO_IS_VALID_GPIO(nfcIrqPinItem->valueint)) {
-        cJSON_Delete(nfcUpdate);
-        cJSON_Delete(obj);
-        httpd_resp_set_status(req, "400 Bad Request");
-        httpd_resp_set_type(req, "application/json");
-        httpd_resp_sendstr(req, "{\"success\":false,\"error\":\"Invalid GPIO for 'nfcIrqPin'\"}");
-        return ESP_FAIL;
-      }
-      cJSON_AddNumberToObject(nfcUpdate, "nfcIrqPin", nfcIrqPinItem->valueint);
-    }
-    if (nfcVenPinItem && cJSON_IsNumber(nfcVenPinItem)) {
-      if (!GPIO_IS_VALID_OUTPUT_GPIO(nfcVenPinItem->valueint)) {
-        cJSON_Delete(nfcUpdate);
-        cJSON_Delete(obj);
-        httpd_resp_set_status(req, "400 Bad Request");
-        httpd_resp_set_type(req, "application/json");
-        httpd_resp_sendstr(req, "{\"success\":false,\"error\":\"Invalid GPIO for 'nfcVenPin'\"}");
-        return ESP_FAIL;
-      }
-      cJSON_AddNumberToObject(nfcUpdate, "nfcVenPin", nfcVenPinItem->valueint);
-    }
-    char *nfcJson = cJSON_PrintUnformatted(nfcUpdate);
-    instance->m_configManager.updateFromJson<espConfig::misc_config_t>(nfcJson);
-    cJSON_free(nfcJson);
-    cJSON_Delete(nfcUpdate);
+  char *cleaned_body_str = cJSON_PrintUnformatted(obj);
+  bool isValid = instance->validateRequest(req, currentConfigData, cleaned_body_str);
+  cJSON_Delete(currentConfigData);
+
+  if (!isValid) {
+    cJSON_free(cleaned_body_str);
+    cJSON_Delete(obj);
+    return ESP_FAIL; // validateRequest has already sent the HTTP error response
   }
 
-  cJSON *ethPresetItem = cJSON_GetObjectItem(obj, "ethActivePreset");
-  cJSON *ethPhyItem = cJSON_GetObjectItem(obj, "ethPhyType");
-  cJSON *ethSpiBusItem = cJSON_GetObjectItem(obj, "ethSpiBus");
-  cJSON *ethRmiiItem = cJSON_GetObjectItem(obj, "ethRmiiConfig");
-  cJSON *ethSpiItem = cJSON_GetObjectItem(obj, "ethSpiConfig");
-
-  if (ethEnabledItem && cJSON_IsBool(ethEnabledItem)) {
-    cJSON *ethUpdate = cJSON_CreateObject();
-    cJSON_AddBoolToObject(ethUpdate, "ethernetEnabled", cJSON_IsTrue(ethEnabledItem));
-    if (ethPresetItem && cJSON_IsNumber(ethPresetItem)) {
-      cJSON_AddNumberToObject(ethUpdate, "ethActivePreset", ethPresetItem->valueint);
+  if (wifiProvided) {
+    if (!connectWiFi(ssid.c_str(), password.c_str(), 15000)) {
+      cJSON_free(cleaned_body_str);
+      cJSON_Delete(obj);
+      httpd_resp_set_status(req, "400 Bad Request");
+      httpd_resp_set_type(req, "application/json");
+      cJSON *errorRes = cJSON_CreateObject();
+      cJSON_AddItemToObject(errorRes, "success", cJSON_CreateBool(false));
+      cJSON_AddItemToObject(errorRes, "error", cJSON_CreateString("Failed to connect to WiFi network. Please check your credentials and try again."));
+      std::string response = cjson_to_string_and_free(errorRes);
+      httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+      return ESP_FAIL;
     }
-    if (ethPhyItem && cJSON_IsNumber(ethPhyItem)) {
-      cJSON_AddNumberToObject(ethUpdate, "ethPhyType", ethPhyItem->valueint);
-    }
-    if (ethSpiBusItem && cJSON_IsNumber(ethSpiBusItem)) {
-      cJSON_AddNumberToObject(ethUpdate, "ethSpiBus", ethSpiBusItem->valueint);
-    }
-    if (ethRmiiItem && cJSON_IsArray(ethRmiiItem)) {
-      cJSON_AddItemToObject(ethUpdate, "ethRmiiConfig", cJSON_Duplicate(ethRmiiItem, true));
-    }
-    if (ethSpiItem && cJSON_IsArray(ethSpiItem)) {
-      cJSON_AddItemToObject(ethUpdate, "ethSpiConfig", cJSON_Duplicate(ethSpiItem, true));
-    }
-    char *ethJson = cJSON_PrintUnformatted(ethUpdate);
-    instance->m_configManager.updateFromJson<espConfig::misc_config_t>(ethJson);
-    cJSON_free(ethJson);
-    cJSON_Delete(ethUpdate);
+    homeSpan.setWifiCredentials(ssid.c_str(), password.c_str());
   }
 
+  if (setupCodeItem && cJSON_IsString(setupCodeItem)) {
+    homeSpan.setPairingCode(setupCodeItem->valuestring, false);
+  }
+
+  instance->m_configManager.updateFromJson<espConfig::misc_config_t>(cleaned_body_str);
   instance->m_configManager.saveConfig<espConfig::misc_config_t>();
+
+  cJSON_free(cleaned_body_str);
   cJSON_Delete(obj);
 
   httpd_resp_set_type(req, "application/json");
