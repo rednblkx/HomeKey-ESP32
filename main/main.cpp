@@ -98,7 +98,9 @@ using namespace loggable;
  *       GPIO pin configuration based on persisted settings.
  */
 void setup() {
+  #ifdef CONFIG_INIT_ARDU_SERIAL_LOGGING
   Serial.begin(115200);
+  #endif
   loggable::espidf::LogHook::install(false, true);
   Sinker::instance().add_sinker(std::make_shared<loggable::ConsoleLogSinker>());
   esp_err_t err = esp_event_loop_create_default();

@@ -326,8 +326,13 @@ void HomeKitLock::begin() {
 
     if (miscConfig.controlPin != 255) homeSpan.setControlPin(miscConfig.controlPin);
     if (miscConfig.hsStatusPin != 255) homeSpan.setStatusPin(miscConfig.hsStatusPin);
-    homeSpan.setStatusAutoOff(15);
+    #ifdef CONFIG_INIT_ARDU_SERIAL_LOGGING
     homeSpan.setLogLevel(0);
+    #else
+    homeSpan.setLogLevel(-1);
+    homeSpan.setSerialInputDisable(true);
+    #endif
+    homeSpan.setStatusAutoOff(15);
     homeSpan.setSketchVersion(app_version);
     homeSpan.enableAutoStartAP();
     homeSpan.enableOTA(miscConfig.otaPasswd.c_str());

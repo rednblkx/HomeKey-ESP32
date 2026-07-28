@@ -1,6 +1,9 @@
-menu "Arduino Console USB-JTAG"
+menu "Arduino subsystem serial logging"
   config ARDUINO_USE_USB_JTAG
     depends on !IDF_TARGET_ESP32
     bool "Output serial log via the USB/JTAG controller"
     default n
+  config INIT_ARDU_SERIAL_LOGGING
+    bool "Initialize serial logging for the Arduino subsystem and by extent for HomeSpan"
+    default y
 endmenu
