@@ -368,7 +368,7 @@ void HomeKitLock::begin() {
     
     homeSpan.setControllerCallback(staticControllerCallback);
     homeSpan.setConnectionCallback(connectionEstablished);
-    homeSpan.setConnectionTimes(3, 30, 3);
+    homeSpan.setConnectionTimes(8, 30, 8);
     homeSpan.setApFunction(apStarted);
     ESP_LOGI(TAG, "HomeSpan setup complete.");
 }
