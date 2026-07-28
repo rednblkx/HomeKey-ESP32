@@ -2,7 +2,7 @@
 	import { route } from 'sv-router/generated';
 	import { saveCaptivePortalConfig, rebootDevice, scanWiFi } from '$lib/services/api';
 	import type { CaptivePortalConfig, WiFiNetwork, EthConfig, NfcGpioPinsPreset } from '$lib/types/api';
-    import HardwareConfig from '$lib/components/HardwareConfig.svelte';
+	import HardwareConfig from '$lib/components/HardwareConfig.svelte';
 
 	const colorOptions = [
 		{ value: 0, label: 'Tan', class: 'bg-[#ddd5cc] text-[#3E2723]' },
@@ -35,7 +35,7 @@
 	let scanning = $state(false);
 	let showNetworkList = $state(false);
 	let activeTab = $state<'wifi' | 'hardware' | 'network'>('wifi');
-  let acquiredIP = $state("");
+	let acquiredIP = $state("");
 
 	// Derived values for NFC/Ethernet presets
 	let nfcPresets : NfcGpioPinsPreset = $derived(route.meta.captivePortalData?.nfcPresets ?? { presets: [] });
@@ -192,7 +192,7 @@
 		try {
 			const result = await saveCaptivePortalConfig(config);
 			if (result.success) {
-        acquiredIP = result.data.ip_addr;
+				acquiredIP = result.data.ip_addr;
 				saved = true;
 				// Trigger reboot after short delay
 				setTimeout(async () => {
