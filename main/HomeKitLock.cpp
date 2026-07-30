@@ -324,8 +324,20 @@ void HomeKitLock::begin() {
     const auto& app_version = esp_app_get_description()->version;
     ESP_LOGI(TAG, "Starting HomeSpan setup...");
 
-    if (miscConfig.controlPin != 255) homeSpan.setControlPin(miscConfig.controlPin);
-    if (miscConfig.hsStatusPin != 255) homeSpan.setStatusPin(miscConfig.hsStatusPin);
+    if (miscConfig.controlPin != 255){
+      static auto hsControlPin = GPIOAllocator::instance().acquire(gpio_num_t(miscConfig.controlPin), GPIO_MODE_DISABLE, "HS_CONTROL_PIN");
+      if(hsControlPin.has_value())
+        homeSpan.setControlPin(miscConfig.controlPin);
+      else 
+        ESP_LOGW(TAG, "Could not acquire pin for the HomeSpan Control pin, error: %d", hsControlPin.error());
+    }
+    if (miscConfig.hsStatusPin != 255){
+      static auto hsStatusPin = GPIOAllocator::instance().acquire(gpio_num_t(miscConfig.hsStatusPin), GPIO_MODE_DISABLE, "HS_STATUS_PIN");
+      if(hsStatusPin.has_value())
+        homeSpan.setStatusPin(miscConfig.hsStatusPin);
+      else 
+        ESP_LOGW(TAG, "Could not acquire pin for the HomeSpan Status pin, error: %d", hsStatusPin.error());
+    } 
     #ifdef CONFIG_INIT_ARDU_SERIAL_LOGGING
     ESP_LOGI(TAG, "Press any key within 1 second for console access.");
     vTaskDelay(pdMS_TO_TICKS(1000));
