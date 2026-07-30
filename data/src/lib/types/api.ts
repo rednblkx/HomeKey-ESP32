@@ -447,6 +447,15 @@ export enum CertificateType {
     MAX
   };
 
+export const CertTypeString : { [key in CertificateType]?: string } = {
+  [CertificateType.MQTT_CA] : "MQTT_CA",
+  [CertificateType.MQTT_CLIENT]: "MQTT_CLIENT",
+  [CertificateType.MQTT_PRIVATE_KEY]: "MQTT_PRIVATE_KEY",
+  [CertificateType.HTTPS_SERVER_CERT]: "HTTPS_SERVER_CERT",
+  [CertificateType.HTTPS_PRIVATE_KEY]: "HTTPS_PRIVATE_KEY",
+  [CertificateType.HTTPS_CA_CERT]: "HTTPS_CA_CERT"
+}
+
 // Log Viewer Types
 
 /**

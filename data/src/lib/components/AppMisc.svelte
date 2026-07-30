@@ -122,7 +122,7 @@
 
 	// Watch user-driven ethActivePreset changes and apply preset
 	$effect(() => {
-		const preset = miscConfig.ethActivePreset;
+		const preset = miscConfig?.ethActivePreset;
 		if (preset !== undefined) {
 			handleEthPresetChange(preset);
 		}
@@ -130,7 +130,7 @@
 
 	// Watch nfcPinsPreset and apply/restore pins
 	$effect(() => {
-		const preset = miscConfig.nfcPinsPreset;
+		const preset = miscConfig?.nfcPinsPreset;
 		if (preset !== undefined) {
 			handleNfcPresetChange(preset);
 		}
@@ -138,9 +138,9 @@
 
 	// Watch nfcReaderType and reset preset to custom (255)
 	// svelte-ignore state_referenced_locally
-	let prevNfcReaderType = $state(miscConfig.nfcReaderType);
+	let prevNfcReaderType = $state(miscConfig?.nfcReaderType);
 	$effect(() => {
-		const current = miscConfig.nfcReaderType;
+		const current = miscConfig?.nfcReaderType;
 		if (current !== prevNfcReaderType) {
 			prevNfcReaderType = current;
 			miscConfig.nfcPinsPreset = 255;

@@ -158,11 +158,6 @@
 				notifications.addError('Please select a client certificate file to match the private key');
 				return;
 			}
-		} else {
-			if (!selectedCertFile || !selectedKeyFile) {
-				notifications.addError('Please select both certificate and private key files');
-				return;
-			}
 		}
 
 		isUploading = true;
@@ -197,8 +192,8 @@
 			}
 
 			if (certResult.success && keyResult.success && caResult.success) {
-				uploadProgress.cert = 100;
-				uploadProgress.key = 100;
+				uploadProgress.cert = selectedCertFile ? 100 : 0;
+				uploadProgress.key = selectedKeyFile ? 100 : 0;
 				uploadProgress.ca = selectedCaFile && caType !== undefined ? 100 : 0;
 
 				selectedCertFile = null;
@@ -222,28 +217,37 @@
 		}
 	}
 
-	async function handleDelete() {
-		if (!confirm('This will delete your custom certificate, private key, and CA certificate (if present). Continue?')) {
+	async function handleDelete(type: string) {
+    if(type !== "cert" && type !== "ca") console.error(`invalid handleDelete call with type "${type}"`);
+		if (!confirm(`This will delete the ${type == "cert" ? "certificate, private key" : "CA certificate"}. Continue?`)) {
 			return;
 		}
 
 		isDeleting = true;
 		try {
-			const certResult = await deleteCertificate(certType);
-			if (!certResult.success) {
-				return;
-			}
+      if(type === "cert"){
+        const certResult = await deleteCertificate(certType);
+        if (!certResult.success) {
+          notifications.addError(certResult.error);
+          return;
+        }
 
-			const keyResult = await deleteCertificate(keyType);
-			if (!keyResult.success) {
-				return;
-			}
+        const keyResult = await deleteCertificate(keyType);
+        if (!keyResult.success) {
+          notifications.addError(keyResult.error);
+          return;
+        }
+      } else if(type === "ca"){
+        if (caType !== undefined) {
+          const caResult = await deleteCertificate(caType);
+          if(!caResult.success){
+            notifications.addError(caResult.error);
+            return;
+          }
+        }
+      }
 
-			if (caType !== undefined) {
-				await deleteCertificate(caType);
-			}
-
-			notifications.addSuccess('Custom certificate deleted.');
+			notifications.addSuccess(`Certificate ${type == "cert" ? "and keys" : ""} deleted.`);
 
 			await fetchCertificateStatus();
 		} catch (error) {
@@ -266,107 +270,105 @@
 <div class="space-y-4">
 	<!-- Certificate Status Display -->
 	<div class="py-3 px-3 bg-base-100 rounded-lg">
-		<div class="flex items-center justify-between mb-3">
-			<h4 class="text-sm font-medium">Certificates</h4>
-			{#if hasCustomCert}
-			<button
-				type="button"
-				class="btn btn-sm btn-outline btn-error"
-				disabled={isDeleting}
-				onclick={handleDelete}
-			>
-				{#if isDeleting}
-					<span class="loading loading-spinner loading-xs"></span>
-				{/if}
-				<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-				</svg>
-			</button>
-			{/if}
-		</div>
-
 		{#if certInfo}
-			<div class="space-y-2 text-xs">
-				<div class="flex items-center gap-2">
-					<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-					</svg>
-					<span class="font-medium text-info">{mode === "https" ? "Server" : "Client"} Certificate Present</span>
-				</div>
-				{#if certInfo.issuer}
-					<div class="flex flex-col">
-						<span class="text-base-content/60">Issuer</span>
-						<span class="font-mono truncate" title={certInfo.issuer}>{certInfo.issuer}</span>
-					</div>
-				{/if}
+      <div class="flex flex-col justify-between">
+        <div class="flex justify-between">
+          <div class="flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+            <span class="font-medium text-info">{mode === "https" ? "Server" : "Client"} Certificate Present</span>
+          </div>
+          <button
+            type="button"
+            class="btn btn-sm btn-outline btn-error"
+            disabled={isDeleting}
+            onclick={async () => handleDelete("cert")}
+          >
+            {#if isDeleting}
+              <span class="loading loading-spinner loading-xs"></span>
+            {/if}
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
+        </div>
+        <div class="space-y-2 text-xs">
+          {#if certInfo.issuer}
+            <div class="flex flex-col">
+              <span class="text-base-content/60">Issuer</span>
+              <span class="font-mono truncate" title={certInfo.issuer}>{certInfo.issuer}</span>
+            </div>
+          {/if}
 
-				{#if certInfo.subject}
-					<div class="flex flex-col">
-						<span class="text-base-content/60">Subject</span>
-						<span class="font-mono truncate" title={certInfo.subject}>{certInfo.subject}</span>
-					</div>
-				{/if}
+          {#if certInfo.subject}
+            <div class="flex flex-col">
+              <span class="text-base-content/60">Subject</span>
+              <span class="font-mono wrap-anywhere" title={certInfo.subject}>{certInfo.subject}</span>
+            </div>
+          {/if}
 
-				{#if certInfo.serial}
-					<div class="flex flex-col">
-						<span class="text-base-content/60">Serial number</span>
-						<span class="font-mono break-words" title={certInfo.serial}>{certInfo.serial}</span>
-					</div>
-				{/if}
+          {#if certInfo.serial}
+            <div class="flex flex-col">
+              <span class="text-base-content/60">Serial number</span>
+              <span class="font-mono wrap-anywhere" title={certInfo.serial}>{certInfo.serial}</span>
+            </div>
+          {/if}
 
-				{#if certInfo.fingerprint}
-					<div class="flex flex-col">
-						<span class="text-base-content/60">SHA1 Fingerprint</span>
-						<span class="font-mono break-words" title={certInfo.fingerprint}>{certInfo.fingerprint}</span>
-					</div>
-				{/if}
+          {#if certInfo.fingerprint}
+            <div class="flex flex-col">
+              <span class="text-base-content/60">SHA1 Fingerprint</span>
+              <span class="font-mono wrap-anywhere" title={certInfo.fingerprint}>{certInfo.fingerprint}</span>
+            </div>
+          {/if}
 
-				{#if certInfo.expiration?.from && certInfo.expiration?.to}
-					<div class="flex flex-col">
-						<span class="text-base-content/60">Valid Period</span>
-						<span class="font-mono">
-							{formatDate(certInfo.expiration.from)} - {formatDate(certInfo.expiration.to)}
-						</span>
-					</div>
-				{/if}
+          {#if certInfo.expiration?.from && certInfo.expiration?.to}
+            <div class="flex flex-col">
+              <span class="text-base-content/60">Valid Period</span>
+              <span class="font-mono">
+                {formatDate(certInfo.expiration.from)} - {formatDate(certInfo.expiration.to)}
+              </span>
+            </div>
+          {/if}
 
-				{#if keyInfo?.keyType}
-					<div class="flex flex-col">
-						<span class="text-base-content/60">Key Type</span>
-						<span class="font-mono truncate">
-							{keyInfo.keyType}
-						</span>
-						{#if keyInfo.keyType === "RSA"}
-							<div class="flex items-center justify-between py-2 px-3 bg-warning/10 rounded-lg">
-								<div class="flex items-start gap-2">
-									<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-warning mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-									</svg>
-									<div>
-										<p class="text-sm font-medium text-warning">Switch to EC if possible</p>
-										<p class="text-xs text-base-content/60">RSA is computationally intensive and significantly slows down requests processing times</p>
-									</div>
-								</div>
-							</div>
-						{/if}
-					</div>
-				{/if}
+          {#if keyInfo?.keyType}
+            <div class="flex flex-col">
+              <span class="text-base-content/60">Key Type</span>
+              <span class="font-mono truncate">
+                {keyInfo.keyType}
+              </span>
+              {#if keyInfo.keyType === "RSA"}
+                <div class="flex items-center justify-between py-2 px-3 bg-warning/10 rounded-lg">
+                  <div class="flex items-start gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-warning mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <div>
+                      <p class="text-sm font-medium text-warning">Switch to EC if possible</p>
+                      <p class="text-xs text-base-content/60">RSA is computationally intensive and significantly slows down requests processing times</p>
+                    </div>
+                  </div>
+                </div>
+              {/if}
+            </div>
+          {/if}
 
-				<!-- Key Match Status -->
-				<div class="flex items-center gap-2 mt-2">
-					{#if isKeyMatch}
-						<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-						</svg>
-						<span class="text-success">Private key matches certificate</span>
-					{:else if hasCustomCert}
-						<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-						</svg>
-						<span class="text-error">Private key does not match certificate</span>
-					{/if}
-				</div>
-			</div>
+          <!-- Key Match Status -->
+          <div class="flex items-center gap-2 mt-2">
+            {#if isKeyMatch}
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span class="text-success">Private key matches certificate</span>
+            {:else if hasCustomCert}
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-error" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span class="text-error">Private key does not match certificate</span>
+            {/if}
+          </div>
+        </div>
+      </div>
 
 		{:else}
 			<p class="text-xs text-base-content/60 italic">No certificate information available</p>
@@ -374,46 +376,63 @@
     <!-- CA Certificate Section -->
     {#if caCertInfo}
       <div class="divider my-2"></div>
-      <div class="space-y-2 text-xs">
-        <div class="flex items-center gap-2">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-          </svg>
-          <span class="font-medium text-info">CA Certificate Present</span>
+      <div class="flex flex-col justify-between">
+        <div class="flex justify-between">
+          <div class="flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+            <span class="font-medium text-info">CA Certificate Present</span>
+          </div>
+          <button
+            type="button"
+            class="btn btn-sm btn-outline btn-error"
+            disabled={isDeleting}
+            onclick={async () => handleDelete("ca")}
+          >
+            {#if isDeleting}
+              <span class="loading loading-spinner loading-xs"></span>
+            {/if}
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
         </div>
-        {#if caCertInfo.issuer}
-          <div class="flex flex-col">
-            <span class="text-base-content/60">Issuer</span>
-            <span class="font-mono truncate" title={caCertInfo.issuer}>{caCertInfo.issuer}</span>
-          </div>
-        {/if}
-        {#if caCertInfo.subject}
-          <div class="flex flex-col">
-            <span class="text-base-content/60">Subject</span>
-            <span class="font-mono truncate" title={caCertInfo.subject}>{caCertInfo.subject}</span>
-          </div>
-        {/if}
-        {#if caCertInfo.serial}
-          <div class="flex flex-col">
-            <span class="text-base-content/60">Serial number</span>
-            <span class="font-mono break-words" title={caCertInfo.serial}>{caCertInfo.serial}</span>
-          </div>
-        {/if}
+        <div class="space-y-1 text-xs">
+          {#if caCertInfo.issuer}
+            <div class="flex flex-col">
+              <span class="text-base-content/60">Issuer</span>
+              <span class="font-mono wrap-anywhere" title={caCertInfo.issuer}>{caCertInfo.issuer}</span>
+            </div>
+          {/if}
+          {#if caCertInfo.subject}
+            <div class="flex flex-col">
+              <span class="text-base-content/60">Subject</span>
+              <span class="font-mono wrap-anywhere" title={caCertInfo.subject}>{caCertInfo.subject}</span>
+            </div>
+          {/if}
+          {#if caCertInfo.serial}
+            <div class="flex flex-col">
+              <span class="text-base-content/60">Serial number</span>
+              <span class="font-mono wrap-anywhere" title={caCertInfo.serial}>{caCertInfo.serial}</span>
+            </div>
+          {/if}
 
-        {#if caCertInfo.fingerprint}
-          <div class="flex flex-col">
-            <span class="text-base-content/60">SHA256 Fingerprint</span>
-            <span class="font-mono break-words" title={caCertInfo.fingerprint}>{caCertInfo.fingerprint}</span>
-          </div>
-        {/if}
-        {#if caCertInfo.expiration?.from && caCertInfo.expiration?.to}
-          <div class="flex flex-col">
-            <span class="text-base-content/60">Valid Period</span>
-            <span class="font-mono">
-              {formatDate(caCertInfo.expiration.from)} - {formatDate(caCertInfo.expiration.to)}
-            </span>
-          </div>
-        {/if}
+          {#if caCertInfo.fingerprint}
+            <div class="flex flex-col">
+              <span class="text-base-content/60">SHA256 Fingerprint</span>
+              <span class="font-mono wrap-anywhere" title={caCertInfo.fingerprint}>{caCertInfo.fingerprint}</span>
+            </div>
+          {/if}
+          {#if caCertInfo.expiration?.from && caCertInfo.expiration?.to}
+            <div class="flex flex-col">
+              <span class="text-base-content/60">Valid Period</span>
+              <span class="font-mono">
+                {formatDate(caCertInfo.expiration.from)} - {formatDate(caCertInfo.expiration.to)}
+              </span>
+            </div>
+          {/if}
+        </div>
       </div>
     {/if}
 	</div>
@@ -479,67 +498,73 @@
 		</div>
 		<div class="grid grid-cols-1 md:grid-cols-2 gap-3">
 			<!-- Certificate File Input -->
-			<div class="form-control">
+			<div class="form-control flex flex-col justify-around">
 				<label class="label" for="cert-file-input">
 					<span class="label-text text-xs">{certLabel} (.pem, .crt, .cer){mode === 'mqtt' ? ' - Optional' : ''}</span>
 				</label>
-				<input
-					id="cert-file-input"
-					type="file"
-					accept={VALID_CERT_EXTENSIONS.join(",")}
-					onchange={handleCertFileChange}
-					bind:this={certInputRef}
-					class="file-input file-input-sm file-input-bordered w-full text-xs"
-					disabled={isUploading}
-				/>
-				{#if selectedCertFile}
-					<p class="text-xs text-success mt-1">Selected: {selectedCertFile.name}</p>
-				{/if}
+        <div class="join">
+          <input
+            id="cert-file-input"
+            type="file"
+            accept={VALID_CERT_EXTENSIONS.join(",")}
+            onchange={handleCertFileChange}
+            bind:this={certInputRef}
+            class="file-input file-input-sm file-input-bordered w-full text-xs join-item"
+            disabled={isUploading}
+          />
+          {#if selectedCertFile}
+            <button class="btn btn-sm btn-neutral join-item" onclick={(ev) => { selectedCertFile = null;certInputRef!.value = ''; } }>Remove</button>
+          {/if}
+        </div>
 				{#if uploadProgress.cert > 0}
 					<progress class="progress progress-primary w-full mt-2" value={uploadProgress.cert} max="100"></progress>
 				{/if}
 			</div>
 
 			<!-- Private Key File Input -->
-			<div class="form-control">
-				<label class="label" for="key-file-input">
-					<span class="label-text text-xs">{keyLabel} (.pem, .key){mode === 'mqtt' ? ' - Optional' : ''}</span>
-				</label>
-				<input
-					id="key-file-input"
-					type="file"
-					accept={VALID_KEY_EXTENSIONS.join(",")}
-					onchange={handleKeyFileChange}
-					bind:this={keyInputRef}
-					class="file-input file-input-sm file-input-bordered w-full text-xs"
-					disabled={isUploading}
-				/>
-				{#if selectedKeyFile}
-					<p class="text-xs text-success mt-1">Selected: {selectedKeyFile.name}</p>
-				{/if}
+			<div class="form-control flex flex-col justify-around">
+        <label class="label" for="key-file-input">
+          <span class="label-text text-xs">{keyLabel} (.pem, .key){mode === 'mqtt' ? ' - Optional' : ''}</span>
+        </label>
+        <div class="join">
+          <input
+            id="key-file-input"
+            type="file"
+            accept={VALID_KEY_EXTENSIONS.join(",")}
+            onchange={handleKeyFileChange}
+            bind:this={keyInputRef}
+            class="file-input file-input-sm file-input-bordered w-full text-xs join-item"
+            disabled={isUploading}
+          />
+          {#if selectedKeyFile}
+            <button class="btn btn-sm btn-neutral join-item" onclick={(ev) => { selectedKeyFile = null;keyInputRef!.value = ''; } }>Remove</button>
+          {/if}
+        </div>
 				{#if uploadProgress.key > 0}
-					<progress class="progress progress-primary w-full mt-2" value={uploadProgress.key} max="100"></progress>
+					<progress class="progress progress-primary w-full" value={uploadProgress.key} max="100"></progress>
 				{/if}
 			</div>
 		</div>
 
 		<!-- CA Certificate File Input - Full width for both modes -->
-		<div class="form-control mt-3">
+		<div class="form-control mt-3 flex flex-col justify-around">
 			<label class="label" for="ca-file-input">
 				<span class="label-text text-xs">{caLabel} (.pem, .crt, .cer)</span>
 			</label>
-			<input
-				id="ca-file-input"
-				type="file"
-				accept={VALID_CERT_EXTENSIONS.join(",")}
-				onchange={handleCaFileChange}
-				bind:this={caInputRef}
-				class="file-input file-input-sm file-input-bordered w-full text-xs"
-				disabled={isUploading}
-			/>
-			{#if selectedCaFile}
-				<p class="text-xs text-success mt-1">Selected: {selectedCaFile.name}</p>
-			{/if}
+      <div class="join">
+        <input
+          id="ca-file-input"
+          type="file"
+          accept={VALID_CERT_EXTENSIONS.join(",")}
+          onchange={handleCaFileChange}
+          bind:this={caInputRef}
+          class="file-input file-input-sm file-input-bordered w-full text-xs join-item"
+          disabled={isUploading}
+        />
+        {#if selectedCaFile}
+          <button class="btn btn-sm btn-neutral join-item" onclick={(ev) => { selectedCaFile = null;caInputRef!.value = ''; } }>Remove</button>
+        {/if}
+      </div>
 			{#if uploadProgress.ca > 0}
 				<progress class="progress progress-primary w-full mt-2" value={uploadProgress.ca} max="100"></progress>
 			{/if}
@@ -549,7 +574,7 @@
 		<button
 			type="button"
 			class="btn btn-sm btn-primary"
-			disabled={isUploading || (mode === 'mqtt' ? !selectedCaFile : (!selectedCertFile || !selectedKeyFile))}
+			disabled={isUploading || (mode === 'mqtt' ? !selectedCaFile : !(selectedCertFile || selectedKeyFile || selectedCaFile))}
 			onclick={handleUpload}
 		>
 			{#if isUploading}

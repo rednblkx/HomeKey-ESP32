@@ -146,7 +146,7 @@
 
 	// Watch nfcReaderType and reset preset to custom (255)
 	// svelte-ignore state_referenced_locally
-	let prevNfcReaderType = $state(config.nfcReaderType);
+	let prevNfcReaderType = $state(config?.nfcReaderType);
 	$effect(() => {
 		const current = config.nfcReaderType;
 		if (current !== prevNfcReaderType) {

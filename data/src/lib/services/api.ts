@@ -1,4 +1,4 @@
-import type { CertificatesStatus, CertificateType, MqttConfig, MiscConfig, ApiResponse, ActionsConfig, ApiError, ApiSuccess, CaptivePortalConfig, WiFiNetwork } from '../types/api';
+import { type CertificatesStatus, type CertificateType, type MqttConfig, type MiscConfig, type ApiResponse, type ActionsConfig, type ApiError, type ApiSuccess, type CaptivePortalConfig, type WiFiNetwork, CertTypeString } from '../types/api';
 import { notifications } from '../stores/notifications.svelte.js';
 
 export async function rebootDevice() {
@@ -110,7 +110,7 @@ export async function uploadCertificate(type: CertificateType, content: string |
 
     if (!response.ok) {
       const errorData : ApiError = await response.json();
-      notifications.addError(`Failed to upload certificate: ${errorData.error}`);
+      notifications.addError(`Failed to upload certificate ${CertTypeString[type]}: ${errorData.error}`);
       return errorData;
     }
 
@@ -123,7 +123,7 @@ export async function uploadCertificate(type: CertificateType, content: string |
     return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error occurred';
-    notifications.addError(`Failed to upload certificate: ${message}`);
+    notifications.addError(`Failed to upload certificate ${CertTypeString[type]}: ${message}`);
     return { success: false, error: message };
   }
 }
@@ -153,7 +153,7 @@ export async function deleteCertificate(type: CertificateType): Promise<ApiRespo
 
     if (!response.ok) {
       const errorData : ApiError = await response.json();
-      notifications.addError(`Failed to delete ${type} certificate: ${errorData.error}`);
+      notifications.addError(`Failed to delete certificate type '${CertTypeString[type]}': ${errorData.error}`);
       return errorData;
     }
 
@@ -161,12 +161,12 @@ export async function deleteCertificate(type: CertificateType): Promise<ApiRespo
     if (result.success) {
       notifications.addSuccess(result.message);
     } else {
-      notifications.addError(`Failed to delete '${type}' certificate: ${result.error || 'Unknown error'}`);
+      notifications.addError(`Failed to delete certificate type '${CertTypeString[type]}': ${result.error || 'Unknown error'}`);
     }
     return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error occurred';
-    notifications.addError(`Failed to delete ${type} certificate: ${message}`);
+    notifications.addError(`Failed to delete certificate type '${CertTypeString[type]}': ${message}`);
     return { success: false, error: message };
   }
 }
