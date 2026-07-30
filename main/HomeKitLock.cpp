@@ -327,7 +327,7 @@ void HomeKitLock::begin() {
     if (miscConfig.controlPin != 255) homeSpan.setControlPin(miscConfig.controlPin);
     if (miscConfig.hsStatusPin != 255) homeSpan.setStatusPin(miscConfig.hsStatusPin);
     #ifdef CONFIG_INIT_ARDU_SERIAL_LOGGING
-    ESP_LOGI(TAG, "Press any key in the within 1 second for console access.");
+    ESP_LOGI(TAG, "Press any key within 1 second for console access.");
     vTaskDelay(pdMS_TO_TICKS(1000));
     if(Serial.available()){
       homeSpan.setLogLevel(0);
