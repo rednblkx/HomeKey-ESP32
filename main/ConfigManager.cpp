@@ -1439,7 +1439,7 @@ bool ConfigManager::validateKeyCertPair(const std::string& privateKey, const std
         }
     }
 
-    ESP_LOGI("ConfigManager", "%s private key and certificate are cryptographically compatible", context);
+    ESP_LOGD("ConfigManager", "%s private key and certificate are cryptographically compatible", context);
     return true;
 }
 
