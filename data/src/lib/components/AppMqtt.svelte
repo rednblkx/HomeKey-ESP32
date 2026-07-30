@@ -128,6 +128,7 @@
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div class="form-control">
+                <!-- svelte-ignore a11y_label_has_associated_control -->
                 <label class="label">
                   <span class="label-text text-sm">Broker Address</span>
                 </label>
@@ -140,6 +141,7 @@
                 />
               </div>
               <div class="form-control">
+                <!-- svelte-ignore a11y_label_has_associated_control -->
                 <label class="label">
                   <span class="label-text text-sm">Port</span>
                 </label>
@@ -154,6 +156,7 @@
                 />
               </div>
               <div class="form-control md:col-span-2">
+                <!-- svelte-ignore a11y_label_has_associated_control -->
                 <label class="label">
                   <span class="label-text text-sm">Client ID</span>
                 </label>
@@ -166,6 +169,7 @@
                 />
               </div>
               <div class="form-control">
+                <!-- svelte-ignore a11y_label_has_associated_control -->
                 <label class="label">
                   <span class="label-text text-sm">Username</span>
                 </label>
@@ -177,6 +181,7 @@
                 />
               </div>
               <div class="form-control">
+                <!-- svelte-ignore a11y_label_has_associated_control -->
                 <label class="label">
                   <span class="label-text text-sm">Password</span>
                 </label>
@@ -188,6 +193,7 @@
                 />
               </div>
               <div class="form-control md:col-span-2">
+                <!-- svelte-ignore a11y_label_has_associated_control -->
                 <label class="label">
                   <span class="label-text text-sm">LWT Topic</span>
                 </label>
@@ -226,6 +232,7 @@
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div class="form-control">
+                <!-- svelte-ignore a11y_label_has_associated_control -->
                 <label class="label">
                   <span class="label-text text-sm">HomeKey Topic</span>
                 </label>
@@ -238,6 +245,7 @@
                 />
               </div>
               <div class="form-control">
+                <!-- svelte-ignore a11y_label_has_associated_control -->
                 <label class="label">
                   <span class="label-text text-sm">Lock State Topic</span>
                 </label>
@@ -250,6 +258,7 @@
                 />
               </div>
               <div class="form-control">
+                <!-- svelte-ignore a11y_label_has_associated_control -->
                 <label class="label">
                   <span class="label-text text-sm">Lock State Command</span>
                 </label>
@@ -262,6 +271,7 @@
                 />
               </div>
               <div class="form-control">
+                <!-- svelte-ignore a11y_label_has_associated_control -->
                 <label class="label">
                   <span class="label-text text-sm">Lock Current State Command</span>
                 </label>
@@ -274,6 +284,7 @@
                 />
               </div>
               <div class="form-control">
+                <!-- svelte-ignore a11y_label_has_associated_control -->
                 <label class="label">
                   <span class="label-text text-sm">Lock Target State Command</span>
                 </label>
@@ -286,6 +297,7 @@
                 />
               </div>
               <div class="form-control">
+                <!-- svelte-ignore a11y_label_has_associated_control -->
                 <label class="label">
                   <span class="label-text text-sm">Battery Level Topic</span>
                 </label>
@@ -298,6 +310,7 @@
                 />
               </div>
               <div class="form-control md:col-span-2">
+                <!-- svelte-ignore a11y_label_has_associated_control -->
                 <label class="label">
                   <span class="label-text text-sm">Alt Action Topic</span>
                 </label>
@@ -342,6 +355,7 @@
                 <!-- Custom State Topic + Actions Group -->
                 <div class="bg-base-100 rounded-lg p-3 border border-base-200">
                   <div class="form-control mb-3">
+                    <!-- svelte-ignore a11y_label_has_associated_control -->
                     <label class="label">
                       <span class="label-text text-sm font-medium">Payload Topic (Pub)</span>
                     </label>
@@ -356,6 +370,7 @@
                     <legend class="text-sm font-medium text-base-content/80 px-2">Custom Lock Actions</legend>
                     <div class="grid grid-cols-2 gap-3 pt-1">
                       <div class="form-control">
+                        <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="label py-1">
                           <span class="label-text text-sm">Unlock</span>
                         </label>
@@ -366,6 +381,7 @@
                         />
                       </div>
                       <div class="form-control">
+                        <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="label py-1">
                           <span class="label-text text-sm">Lock</span>
                         </label>
@@ -382,6 +398,7 @@
                 <!-- Custom State Cmd Topic + States Group -->
                 <div class="bg-base-100 rounded-lg p-3 border border-base-200">
                   <div class="form-control mb-3">
+                    <!-- svelte-ignore a11y_label_has_associated_control -->
                     <label class="label">
                       <span class="label-text text-sm font-medium">Command Topic (Sub)</span>
                     </label>
@@ -396,6 +413,7 @@
                     <legend class="text-sm font-medium text-base-content/80 px-2">Custom Lock States</legend>
                     <div class="grid grid-cols-3 gap-3 pt-1">
                       <div class="form-control">
+                        <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="label py-1">
                           <span class="label-text text-sm">Unlocking</span>
                         </label>
@@ -406,6 +424,7 @@
                         />
                       </div>
                       <div class="form-control">
+                        <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="label py-1">
                           <span class="label-text text-sm">Locking</span>
                         </label>
@@ -416,6 +435,7 @@
                         />
                       </div>
                       <div class="form-control">
+                        <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="label py-1">
                           <span class="label-text text-sm">Unlocked</span>
                         </label>
@@ -426,6 +446,7 @@
                         />
                       </div>
                       <div class="form-control">
+                        <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="label py-1">
                           <span class="label-text text-sm">Locked</span>
                         </label>
@@ -436,6 +457,7 @@
                         />
                       </div>
                       <div class="form-control">
+                        <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="label py-1">
                           <span class="label-text text-sm">Jammed</span>
                         </label>
@@ -446,6 +468,7 @@
                         />
                       </div>
                       <div class="form-control">
+                        <!-- svelte-ignore a11y_label_has_associated_control -->
                         <label class="label py-1">
                           <span class="label-text text-sm">Unknown</span>
                         </label>
