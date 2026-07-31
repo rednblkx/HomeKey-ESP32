@@ -175,7 +175,7 @@ namespace espConfig
     std::string webUsername = WEB_AUTH_USERNAME;
     std::string webPassword = WEB_AUTH_PASSWORD;
     bool webHttpsEnabled = false;
-    uint8_t nfcPinsPreset = 255;
+    uint8_t nfcPinsPreset = NFC_ACTIVE_PRESET;
     std::array<uint8_t, 4> nfcGpioPins{SS_PIN, SCK_PIN, MISO_PIN, MOSI_PIN};
     uint8_t btrLowStatusThreshold = BTR_PROX_BAT_LOW_THRESHOLD;
     bool proxBatEnabled = BTR_PROX_BAT_ENABLED;

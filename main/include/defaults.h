@@ -127,3 +127,4 @@
 #define WEB_AUTH_ENABLED false
 #define WEB_AUTH_USERNAME "admin"
 #define WEB_AUTH_PASSWORD "password"
+#define NFC_ACTIVE_PRESET 255 // NFC preset index (255 for custom pins)
