@@ -80,7 +80,7 @@ public:
       return std::unexpected<GPIOAllocatorError>(INVALID_GPIO_DIRECTION);
     }
     if(!owners_[pin].empty()){
-      ESP_LOGE("GPIOAllocator", "GPIO already owned!");
+      ESP_LOGE("GPIOAllocator", "GPIO %d already owned by '%s'!", pin, owners_[pin].c_str());
       return std::unexpected<GPIOAllocatorError>(ALREADY_OWNED);
     }
     owners_[pin] = tag;

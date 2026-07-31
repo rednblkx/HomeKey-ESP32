@@ -133,11 +133,6 @@ HardwareManager::HardwareManager(const espConfig::actions_config_t& miscConfig)
       return;
     }
 
-    if (GPIOAllocator::instance().owner_of(s.newValue).has_value()) {
-      ESP_LOGE(TAG, "Target pin %d already owned.", s.newValue);
-      return;
-    }
-
     auto new_lease = GPIOAllocator::instance().acquire(gpio_num_t(s.newValue), mode, meta->tag);
     if (new_lease.has_value()) {
       if (mode != GPIO_MODE_INPUT) {
