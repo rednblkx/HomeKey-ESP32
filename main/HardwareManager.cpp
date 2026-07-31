@@ -125,7 +125,6 @@ HardwareManager::HardwareManager(const espConfig::actions_config_t& miscConfig)
 
       alloc_entry = std::unexpected<GPIOAllocator::GPIOAllocatorError>(GPIOAllocator::INVALID_GPIO_NUM);
       gpio_pulldown_en(gpio_num_t(s.oldValue));
-      ESP_LOGI(TAG, "Released pin for %s", meta->tag);
     }
 
     if (s.newValue == 255) {

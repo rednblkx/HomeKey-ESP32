@@ -109,7 +109,8 @@ ConfigManager::ConfigManager() : m_isInitialized(false) {
       {"ethSpiBus", &m_miscConfig.ethSpiBus},
       {"ethRmiiConfig", &m_miscConfig.ethRmiiConfig},
       {"ethSpiConfig", &m_miscConfig.ethSpiConfig},
-      {"logLevel", &m_miscConfig.logLevel}
+      {"logLevel", &m_miscConfig.logLevel},
+      {"overrideStrappingRestriction", &m_miscConfig.overrideStrappingRestriction}
     }
     },
     {

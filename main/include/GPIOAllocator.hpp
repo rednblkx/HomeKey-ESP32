@@ -3,12 +3,48 @@
 #include "esp_log.h"
 #include "hal/gpio_types.h"
 #include "soc/gpio_num.h"
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <expected>
+#include <iterator>
 #include <mutex>
 #include <optional>
 #include <string>
+
+
+#ifdef CONFIG_IDF_TARGET_ESP32C6
+inline constexpr uint8_t RESTRICTED_PINS[] = {
+  12, 13, 24, 25, 26, 28, 29, 30
+};
+inline constexpr uint8_t STRAPPING_PINS[] = {
+  8, 9, 15,16, 17, 27
+};
+#elifdef CONFIG_IDF_TARGET_ESP32
+inline constexpr uint8_t RESTRICTED_PINS[] = {
+  1, 3, 6, 7, 8, 9, 10, 11, 16, 17
+};
+inline constexpr uint8_t STRAPPING_PINS[] = {
+  0, 2, 4, 5, 12, 15
+};
+#elifdef CONFIG_IDF_TARGET_ESP32C3
+inline constexpr uint8_t RESTRICTED_PINS[] = {
+  12, 13, 14, 15, 16, 17, 18, 19
+};
+inline constexpr uint8_t STRAPPING_PINS[] = {
+  2, 4, 5, 6, 7, 8, 9, 20, 21
+};
+#elifdef CONFIG_IDF_TARGET_ESP32S3
+inline constexpr uint8_t RESTRICTED_PINS[] = {
+  9, 10, 11, 12, 13, 14, 19, 20, 33, 34, 35, 36, 37, 38, 39
+};
+inline constexpr uint8_t STRAPPING_PINS[] = {
+  0, 3, 43, 44, 45, 46, 47, 48
+};
+#else
+inline constexpr uint8_t RESTRICTED_PINS[] = {};
+inline constexpr uint8_t STRAPPING_PINS[] = {};
+#endif
 
 class GPIOAllocator {
 public:
@@ -20,6 +56,7 @@ public:
     INVALID_GPIO_NUM = 0,
     INVALID_GPIO_DIRECTION = 1,
     ALREADY_OWNED = 2,
+    RESTRICTED = 3
   };
 
   class GPIOLease {
@@ -40,7 +77,7 @@ public:
       }
       return *this;
     }
-    ~GPIOLease() { if(pin_ != GPIO_NUM_NC) { reset(); } };
+    ~GPIOLease() { if(pin_ != GPIO_NUM_NC) { ESP_LOGD("GPIOLease", "GPIO pin %d released", pin_); reset(); } };
     void set_level(bool level) { gpio_set_level(pin_, level); };
     bool get_level() const { return gpio_get_level(pin_); };
     gpio_mode_t get_mode() const { return mode_; };
@@ -58,7 +95,6 @@ public:
         std::lock_guard lock(GPIOAllocator::mutex_);
         GPIOAllocator::owners_[pin_].clear();
       }
-      pin_ = GPIO_NUM_NC;
     }
     gpio_num_t pin_ = GPIO_NUM_NC;
     gpio_mode_t mode_ = GPIO_MODE_INPUT_OUTPUT_OD;
@@ -66,10 +102,17 @@ public:
 
   std::expected<GPIOLease, GPIOAllocatorError> acquire(gpio_num_t pin, gpio_mode_t mode, const std::string &tag) {
     std::lock_guard lock(mutex_);
-    ESP_LOGI("GPIOAllocator", "Allocating GPIO Pin for '%s'", tag.c_str());
+    ESP_LOGD("GPIOAllocator", "Allocating GPIO Pin %d for '%s'", pin, tag.c_str());
     if(pin >= GPIO_NUM_MAX || pin == GPIO_NUM_NC){
       ESP_LOGE("GPIOAllocator", "'%d' Outside gpio number range or undefined pin", pin);
       return std::unexpected<GPIOAllocatorError>(INVALID_GPIO_NUM);
+    }
+    if(std::find_if(std::begin(RESTRICTED_PINS), std::end(RESTRICTED_PINS), [&](auto e){ return e == pin;}) != std::end(RESTRICTED_PINS)){
+      ESP_LOGE("GPIOAllocator", "GPIO Pin %d restricted, reserved by internal function!", pin);
+      return std::unexpected<GPIOAllocatorError>(RESTRICTED);
+    }
+    if(std::find_if(std::begin(STRAPPING_PINS), std::end(STRAPPING_PINS), [&](auto e){ return e == pin;}) != std::end(STRAPPING_PINS)){
+      ESP_LOGW("GPIOAllocator", "GPIO Pin %d is a strapping pin, using it may have unexpected consequences!", pin);
     }
     if(!GPIO_IS_VALID_GPIO(pin)){
       ESP_LOGE("GPIOAllocator", "INVALID GPIO NUMBER!");
@@ -90,6 +133,14 @@ public:
   [[nodiscard]] std::optional<std::string> owner_of(uint8_t pin) const {
     std::lock_guard lock(mutex_);
     if (pin >= owners_.size() || owners_[pin].empty()) {
+        if(std::find_if(std::begin(RESTRICTED_PINS), std::end(RESTRICTED_PINS), [&](auto e){ return e == pin;}) != std::end(RESTRICTED_PINS)){
+          ESP_LOGE("GPIOAllocator", "GPIO Pin %d restricted, reserved by internal function!", pin);
+          return "INTERNAL";
+        }
+        if(std::find_if(std::begin(STRAPPING_PINS), std::end(STRAPPING_PINS), [&](auto e){ return e == pin;}) != std::end(STRAPPING_PINS)){
+          ESP_LOGW("GPIOAllocator", "GPIO Pin %d is a strapping pin, using it may have unexpected consequences!", pin);
+          return "STRAPPING";
+        }
         return std::nullopt;
     }
     ESP_LOGD("GPIOAllocator", "Owners Size: %d Pin: %d Owner: %s", owners_.size(), pin, owners_[pin].c_str());

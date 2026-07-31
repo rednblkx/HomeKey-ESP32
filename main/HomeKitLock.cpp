@@ -241,8 +241,7 @@ void HomeKitLock::initializeETH() {
 
     auto check_and_allocate = [&](uint8_t pin, const std::string& tag_name, gpio_mode_t mode) -> bool {
       if (pin == 255) return true;
-      auto owner = GPIOAllocator::instance().owner_of(pin);
-      if (owner.has_value()) {
+      if (auto owner = GPIOAllocator::instance().owner_of(pin); owner && owner != "STRAPPING") {
         ESP_LOGE(TAG, "Pin %d for %s is already allocated to '%s'.", pin, tag_name.c_str(), owner.value().data());
         return false;
       }

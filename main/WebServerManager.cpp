@@ -39,6 +39,7 @@
 #include <mutex>
 #include <esp_tls_crypto.h>
 #include <stdbool.h>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
@@ -1073,6 +1074,11 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
     }
     // Pin validation
     else if (str_ends_with(keyStr.c_str(), "Pin")) {
+      std::string misc = getInstance(req)->m_configManager.serializeToJson<espConfig::misc_config_t>();
+      cJSON *miscData = cJSON_Parse(misc.c_str());
+      cJSON *ovrStrItem = cJSON_GetObjectItem(miscData, "overrideStrappingRestriction");
+      bool overrideStrapping = cJSON_IsBool(ovrStrItem) && ovrStrItem->valueint;
+      cJSON_Delete(miscData);
       if (!cJSON_IsNumber(incomingValue)) {
         std::string msg = "Value for \"" + keyStr + "\" must be a number.";
         httpd_resp_set_type(req, "application/json");
@@ -1097,7 +1103,7 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
         return false;
       }
-      if(auto owner = GPIOAllocator::instance().owner_of(incomingValue->valueint); owner.has_value()){
+      if(auto owner = GPIOAllocator::instance().owner_of(incomingValue->valueint); (owner && (owner == "STRAPPING" && !overrideStrapping)) || (owner && owner != "STRAPPING")){
         std::string msg = std::to_string(incomingValue->valueint) +
                           " for \"" + keyStr + "\" already owned by \"" + owner.value() + "\".";
         httpd_resp_set_type(req, "application/json");
@@ -1124,7 +1130,12 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
       cJSON *el = NULL;
       cJSON_ArrayForEach(el, incomingValue) {
         if(cJSON_IsNumber(el)){
-          if(auto owner = GPIOAllocator::instance().owner_of(el->valueint); owner.has_value() && !owner->contains("SPI")) {
+          std::string misc = getInstance(req)->m_configManager.serializeToJson<espConfig::misc_config_t>();
+          cJSON *miscData = cJSON_Parse(misc.c_str());
+          cJSON *ovrStrItem = cJSON_GetObjectItem(miscData, "overrideStrappingRestriction");
+          bool overrideStrapping = cJSON_IsBool(ovrStrItem) && cJSON_IsTrue(ovrStrItem);
+          cJSON_Delete(miscData);
+          if(auto owner = GPIOAllocator::instance().owner_of(el->valueint); (owner && !owner->contains("SPI")) || (owner && (owner == "STRAPPING" && !overrideStrapping))) {
             std::string msg = std::to_string(el->valueint) +
                               " for \"" + keyStr + "\" already owned by \"" + owner.value() + "\".";
             httpd_resp_set_type(req, "application/json");

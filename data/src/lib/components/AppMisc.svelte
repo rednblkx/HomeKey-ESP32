@@ -414,6 +414,7 @@
 								ethConfig={ethConfig}
 								nfcConnected={nfcConnected}
 								bind:nfcFastPollingEnabled={miscConfig.nfcFastPollingEnabled}
+                bind:overrideStrappingRestriction={miscConfig.overrideStrappingRestriction}
 							/>
 
 							<!-- HomeSpan -->
