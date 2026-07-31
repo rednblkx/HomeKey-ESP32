@@ -102,9 +102,12 @@ public:
 
   std::expected<GPIOLease, GPIOAllocatorError> acquire(gpio_num_t pin, gpio_mode_t mode, const std::string &tag) {
     std::lock_guard lock(mutex_);
+    if((uint8_t)pin == (uint8_t)GPIO_NUM_NC){
+      return std::unexpected<GPIOAllocatorError>(INVALID_GPIO_NUM);
+    }
     ESP_LOGD("GPIOAllocator", "Allocating GPIO Pin %d for '%s'", pin, tag.c_str());
-    if(pin >= GPIO_NUM_MAX || pin == GPIO_NUM_NC){
-      ESP_LOGE("GPIOAllocator", "'%d' Outside gpio number range or undefined pin", pin);
+    if(pin >= GPIO_NUM_MAX){
+      ESP_LOGE("GPIOAllocator", "'%d' Outside gpio number pin", pin);
       return std::unexpected<GPIOAllocatorError>(INVALID_GPIO_NUM);
     }
     if(std::find_if(std::begin(RESTRICTED_PINS), std::end(RESTRICTED_PINS), [&](auto e){ return e == pin;}) != std::end(RESTRICTED_PINS)){
