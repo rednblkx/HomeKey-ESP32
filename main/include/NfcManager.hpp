@@ -95,6 +95,10 @@ private:
 
     static const char* TAG;
     AppEventLoop::SubscriptionHandle m_hk_event;
+    // Stack for the hk_auth_precompute task. mbedTLS P-256 key generation was
+    // measured using 4056-4288 bytes, so 4096 was not survivable.
+    static constexpr uint32_t kAuthPrecomputeStackBytes = 8192;
+
     enum PinFunctions {
       SCK,
       MISO,

@@ -68,7 +68,12 @@ void NfcManager::initAuthPrecompute() {
     xQueueSend(m_authCtxFreeQueue, &item, 0);
   }
 
-  BaseType_t ok = xTaskCreateUniversal(authPrecomputeTaskEntry, "hk_auth_precompute", 4096, this, 3, &m_authPrecomputeTaskHandle, 0);
+  // 8192, not 4096: constructing a DDKAuthenticationContext runs mbedTLS P-256
+  // key generation. Measured usage is 4056-4288 bytes and varies with the
+  // random key material, so a 4096-byte stack left as little as 40 bytes of
+  // headroom and intermittently overflowed -- panicking mid-transaction, which
+  // the phone reported as a protocol error.
+  BaseType_t ok = xTaskCreateUniversal(authPrecomputeTaskEntry, "hk_auth_precompute", kAuthPrecomputeStackBytes, this, 3, &m_authPrecomputeTaskHandle, 0);
   if (ok != pdPASS || !m_authPrecomputeTaskHandle) {
     ESP_LOGE(TAG, "Failed to start auth precompute task.");
     m_authPrecomputeTaskHandle = nullptr;
@@ -170,10 +175,10 @@ void NfcManager::authPrecomputeTask() {
       const unsigned freeBytes = (unsigned)(freeWords * sizeof(StackType_t));
       if (freeBytes < 768) {
         ESP_LOGE(TAG, "precompute task stack CRITICALLY LOW: %u bytes free of %u",
-                 freeBytes, 4096u);
+                 freeBytes, (unsigned)kAuthPrecomputeStackBytes);
       } else {
         ESP_LOGD(TAG, "precompute task stack headroom: %u bytes free of %u", freeBytes,
-                 4096u);
+                 (unsigned)kAuthPrecomputeStackBytes);
       }
     }
 
