@@ -15,6 +15,7 @@
 	import { diff } from "$lib/utils/objDiff";
 	import HardwareConfig from "$lib/components/HardwareConfig.svelte";
 	import CertManager from "$lib/components/CertManager.svelte";
+	import PairingQR from "$lib/components/PairingQR.svelte";
 
 	interface Props {
 		misc: MiscConfig;
@@ -361,6 +362,11 @@
 										inputmode="numeric"
 									/>
 								</div>
+							</div>
+
+							<!-- Live pairing QR, derived from the setup code above. -->
+							<div class="mt-2">
+								<PairingQR setupCode={miscConfig.setupCode} />
 							</div>
 
 							<!-- Toggles -->
