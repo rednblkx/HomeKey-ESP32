@@ -73,7 +73,11 @@ std::function<void(int)> lambda = [](int status) {
     mqttManager->end();
     webServerManager->end();
     WiFi.mode(WIFI_AP_STA);
-    WiFi.softAP("HomeKey-ESP32", "homekey123", 11, false, 2, false, WIFI_AUTH_WPA2_WPA3_PSK, WIFI_CIPHER_TYPE_AES_CMAC128); 
+    uint8_t mac[6];
+    esp_read_mac(mac, ESP_MAC_BT);
+    const std::string macStr = fmt::format("HK_{:02X}{:02X}{:02X}{:02X}", mac[2], mac[3], mac[4], mac[5]);
+    auto misc = configManager->getConfig<espConfig::misc_config_t>();
+    WiFi.softAP(macStr.c_str(), misc.accessPointPassword.c_str(), 11, false, 2, false, WIFI_AUTH_WPA2_WPA3_PSK, WIFI_CIPHER_TYPE_AES_CMAC128); 
     start_captive_portal();
     webServerManager->begin();
     while(true){

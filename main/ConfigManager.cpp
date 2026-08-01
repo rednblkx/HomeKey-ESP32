@@ -110,7 +110,8 @@ ConfigManager::ConfigManager() : m_isInitialized(false) {
       {"ethRmiiConfig", &m_miscConfig.ethRmiiConfig},
       {"ethSpiConfig", &m_miscConfig.ethSpiConfig},
       {"logLevel", &m_miscConfig.logLevel},
-      {"overrideStrappingRestriction", &m_miscConfig.overrideStrappingRestriction}
+      {"overrideStrappingRestriction", &m_miscConfig.overrideStrappingRestriction},
+      {"accessPointPassword", &m_miscConfig.accessPointPassword}
     }
     },
     {

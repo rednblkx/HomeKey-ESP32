@@ -187,6 +187,7 @@ namespace espConfig
     std::array<uint8_t, 7> ethSpiConfig = {ETH_SPI_CONF_SPI_FREQ_MHZ, ETH_SPI_CONF_PIN_CS, ETH_SPI_CONF_PIN_IRQ, ETH_SPI_CONF_PIN_RST, ETH_SPI_CONF_PIN_SCK, ETH_SPI_CONF_PIN_MISO, ETH_SPI_CONF_PIN_MOSI};
     uint8_t logLevel = ESP_LOG_ERROR;
     bool overrideStrappingRestriction = false;
+    std::string accessPointPassword = AP_PASSWORD;
   };
   struct actions_config_t {
     enum colorMap

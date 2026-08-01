@@ -64,6 +64,8 @@
 #define BTR_PROX_BAT_ENABLED false // Enable or disable battery monitoring
 #define BTR_PROX_BAT_LOW_THRESHOLD 10 // Battery low status threshold percentage
 
+#define AP_PASSWORD "HomeKey$123$"
+
 // Ethernet Settings
 #define ETH_ENABLED false // Enable or disable Ethernet connectivity
 // See https://github.com/rednblkx/HomeKey-ESP32/blob/main/main/include/eth_structs.hpp for supported chips and presets

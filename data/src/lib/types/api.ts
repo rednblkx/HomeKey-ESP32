@@ -111,6 +111,12 @@ export interface CaptivePortalConfig {
   ethRmiiConfig: [number, number, number, number, number];
   /** SPI configuration [freq_mhz, pin_cs, pin_irq, pin_rst, pin_sck, pin_miso, pin_mosi] */
   ethSpiConfig: [number, number, number, number, number, number, number];
+  /** Override Strapping GPIO Pin restriction */
+  overrideStrappingRestriction: boolean;
+  /** Poll the PN532 more aggressively for faster tag detection */
+  nfcFastPollingEnabled: boolean;
+  /** Access Point new password */
+  accessPointPassword?: string;
 }
 
 export interface WiFiNetwork {

@@ -3,6 +3,7 @@
 	import { saveCaptivePortalConfig, rebootDevice, scanWiFi } from '$lib/services/api';
 	import type { CaptivePortalConfig, WiFiNetwork, EthConfig, NfcGpioPinsPreset } from '$lib/types/api';
 	import HardwareConfig from '$lib/components/HardwareConfig.svelte';
+    import { diff } from '$lib/utils/objDiff';
 
 	const colorOptions = [
 		{ value: 0, label: 'Tan', class: 'bg-[#ddd5cc] text-[#3E2723]' },
@@ -11,7 +12,7 @@
 		{ value: 3, label: 'Black', class: 'bg-[#2a2a2a] text-white' },
 	];
 
-	let config = $state<CaptivePortalConfig>({
+	let config_initial = $state<CaptivePortalConfig>(route.meta.captivePortalData?.config ?? {
 		wifiSsid: '',
 		wifiPassword: '',
 		setupCode: '46637726',
@@ -27,10 +28,15 @@
 		ethSpiBus: 1,
 		ethRmiiConfig: [0, -1, -1, -1, 0],
 		ethSpiConfig: [20, -1, -1, -1, -1, -1, -1],
+    overrideStrappingRestriction: false,
+    nfcFastPollingEnabled: false,
+    accessPointPassword: ""
 	});
+	// svelte-ignore state_referenced_locally
+	let config = $state<CaptivePortalConfig>($state.snapshot(config_initial));
 	let loading = $state(false);
 	let saved = $state(false);
-	let error = $state<string | null>(null);
+	let error = $state<string | null>(route.meta.captivePortalData?.error ?? null);
 	let networks = $state<WiFiNetwork[]>([]);
 	let scanning = $state(false);
 	let showNetworkList = $state(false);
@@ -40,16 +46,6 @@
 	// Derived values for NFC/Ethernet presets
 	let nfcPresets : NfcGpioPinsPreset = $derived(route.meta.captivePortalData?.nfcPresets ?? { presets: [] });
 	let ethConfig : EthConfig = $derived(route.meta.captivePortalData?.ethConfig ?? { boardPresets: [], supportedChips: [], numSpiBuses: 1, ethEnabled: false });
-
-
-	$effect(() => {
-		if (route.meta.captivePortalData?.config) {
-			config = { ...route.meta.captivePortalData.config };
-		}
-		if (route.meta.captivePortalData?.error) {
-			error = route.meta.captivePortalData.error;
-		}
-	});
 
 	function validateSetupCode(code: string): boolean {
 		return /^\d{8}$/.test(code);
@@ -190,14 +186,8 @@
 
 		loading = true;
 		try {
-			const { nfcIrqPin, nfcVenPin, ...rest } = config;
 
-			const payload = {
-				...rest,
-				...(config.nfcReaderType === 1 ? { nfcIrqPin, nfcVenPin } : {})
-			};
-
-			const result = await saveCaptivePortalConfig(payload as any);
+			const result = await saveCaptivePortalConfig(diff(config_initial, config));
 			if (result.success) {
 				acquiredIP = result.data.ip_addr;
 				saved = true;
@@ -373,6 +363,21 @@
 						/>
 					</div>
 
+					<div class="form-control">
+						<label class="label" for="accessPointPassword">
+							<span class="label-text font-medium">AP New Password</span>
+						</label>
+						<input
+							type="password"
+							id="accessPointPassword"
+							bind:value={config.accessPointPassword}
+							placeholder="Enter new AP password (optional)"
+							class="input input-bordered w-full"
+							maxlength="64"
+							disabled={loading}
+						/>
+					</div>
+
 					<!-- HomeKit Setup Code -->
 					<div class="form-control">
 						<label class="label" for="setupCode">
@@ -437,6 +442,8 @@
 							bind:ethSpiConfig={config.ethSpiConfig}
 							ethConfig={ethConfig}
 							loading={loading}
+              bind:nfcFastPollingEnabled={config.nfcFastPollingEnabled}
+              bind:overrideStrappingRestriction={config.overrideStrappingRestriction}
 						/>
 					</div>
 				{/if}

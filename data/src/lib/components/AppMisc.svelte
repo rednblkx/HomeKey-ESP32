@@ -16,7 +16,21 @@
 	import HardwareConfig from "$lib/components/HardwareConfig.svelte";
 	import CertManager from "$lib/components/CertManager.svelte";
 
-	let { misc, eth, nfcPresets, nfcConnected = $bindable(false), error } = $props();
+	interface Props {
+		misc: MiscConfig;
+		eth: EthConfig;
+		nfcPresets: NfcGpioPinsPreset;
+		nfcConnected?: boolean;
+		error?: string | null;
+	}
+
+	let { 
+		misc = $bindable(), 
+		eth, 
+		nfcPresets, 
+		nfcConnected = $bindable(false), 
+		error = $bindable() 
+	}: Props = $props();
 
 	let activeTab = $state<'homekit' | 'hardware' | 'network' | 'security'>('homekit');
 
@@ -34,84 +48,110 @@
 		{ value: 3, label: 'Black', class: 'bg-[#2a2a2a] text-white' },
 	];
 
-	const saveMiscConfig = async (e: any) => {
-		e.preventDefault();
-		try {
-			if (!miscConfig || !misc) return;
-			const result = await saveConfig("misc", diff(misc, miscConfig));
-			if (result.success) {
-				miscConfig = result.data;
-				misc = result.data;
-			}
-		} catch (e) {
-			const message = e instanceof Error ? e.message : String(e);
-			error = message;
-			alert(`Error saving config: ${message}`);
-		}
-	};
+  const saveMiscConfig = async (e: any) => {
+      e.preventDefault();
+      try {
+          if (!miscConfig || !misc) return;
+          
+          // Take snapshots of both objects to strip Svelte proxies and break reference links
+          const baseline = $state.snapshot(misc);
+          const current = $state.snapshot(miscConfig);
 
-	const handleNfcPresetChange = (preset: number) => {
-		miscConfig.nfcPinsPreset = preset;
-		if (preset !== 255 && nfcPresets) {
-			const presetData = nfcPresets.presets[preset];
-			if (presetData) {
-				miscConfig.nfcGpioPins = [
-					presetData.gpioPins[0],
-					presetData.gpioPins[1],
-					presetData.gpioPins[2],
-					presetData.gpioPins[3],
-				];
-				miscConfig.nfcIrqPin = presetData.irqPin;
-				miscConfig.nfcVenPin = presetData.venPin;
-			}
-		} else if (preset === 255 && misc) {
-			miscConfig.nfcGpioPins = misc.nfcGpioPins;
-			miscConfig.nfcIrqPin = misc.nfcIrqPin;
-			miscConfig.nfcVenPin = misc.nfcVenPin;
-		}
-	};
+          const result = await saveConfig("misc", diff(baseline, current));
+          if (result.success) {
+              // Update both states with decoupled snapshots from the server response
+              misc = result.data;
+              miscConfig = $state.snapshot(result.data);
+          }
+      } catch (e) {
+          const message = e instanceof Error ? e.message : String(e);
+          error = message;
+          alert(`Error saving config: {message}`);
+      }
+  };
 
-	const handleEthPresetChange = (preset: number) => {
-		miscConfig.ethActivePreset = preset;
-		if (preset !== 255 && ethConfig!.boardPresets) {
-			const presetData = ethConfig!.boardPresets[preset];
-			if (presetData) {
-				miscConfig.ethPhyType = presetData.ethChip.phy_type;
-				if (presetData.spi_conf) {
-					miscConfig.ethSpiConfig = [
-						presetData.spi_conf.spi_freq_mhz,
-						presetData.spi_conf.pin_cs,
-						presetData.spi_conf.pin_irq,
-						presetData.spi_conf.pin_rst,
-						presetData.spi_conf.pin_sck,
-						presetData.spi_conf.pin_miso,
-						presetData.spi_conf.pin_mosi,
-					];
-					miscConfig.ethRmiiConfig = misc?.ethRmiiConfig || [
-						0, -1, -1, -1, 0,
-					];
-				}
-				if (presetData.rmii_conf) {
-					miscConfig.ethRmiiConfig = [
-						presetData.rmii_conf.phy_addr,
-						presetData.rmii_conf.pin_mcd,
-						presetData.rmii_conf.pin_mdio,
-						presetData.rmii_conf.pin_power,
-						presetData.rmii_conf.pin_rmii_clock,
-					];
-					miscConfig.ethSpiConfig = misc?.ethSpiConfig || [
-						20, -1, -1, -1, -1, -1, -1,
-					];
-				}
-			}
-		}
-	};
+  const handleNfcPresetChange = (preset: number) => {
+    miscConfig.nfcPinsPreset = preset;
+    if (preset !== 255 && nfcPresets) {
+      const presetData = nfcPresets.presets[preset];
+      if (presetData) {
+        miscConfig.nfcGpioPins = [
+          presetData.gpioPins[0],
+          presetData.gpioPins[1],
+          presetData.gpioPins[2],
+          presetData.gpioPins[3],
+        ];
+        miscConfig.nfcIrqPin = presetData.irqPin;
+        miscConfig.nfcVenPin = presetData.venPin;
+      }
+    } else if (preset === 255 && misc) {
+      // Clone element-by-element to preserve the 4-element tuple structure
+      miscConfig.nfcGpioPins = [
+        misc.nfcGpioPins[0],
+        misc.nfcGpioPins[1],
+        misc.nfcGpioPins[2],
+        misc.nfcGpioPins[3]
+      ];
+      miscConfig.nfcIrqPin = misc.nfcIrqPin;
+      miscConfig.nfcVenPin = misc.nfcVenPin;
+    }
+  };
 
-	const resetForm = () => {
-		if (misc) {
-			miscConfig = misc;
-		}
-	};
+  const handleEthPresetChange = (preset: number) => {
+    miscConfig.ethActivePreset = preset;
+    if (preset !== 255 && ethConfig!.boardPresets) {
+      const presetData = ethConfig!.boardPresets[preset];
+      if (presetData) {
+        miscConfig.ethPhyType = presetData.ethChip.phy_type;
+        if (presetData.spi_conf) {
+          miscConfig.ethSpiConfig = [
+            presetData.spi_conf.spi_freq_mhz,
+            presetData.spi_conf.pin_cs,
+            presetData.spi_conf.pin_irq,
+            presetData.spi_conf.pin_rst,
+            presetData.spi_conf.pin_sck,
+            presetData.spi_conf.pin_miso,
+            presetData.spi_conf.pin_mosi,
+          ];
+          miscConfig.ethRmiiConfig = misc?.ethRmiiConfig 
+            ? [
+              misc.ethRmiiConfig[0],
+              misc.ethRmiiConfig[1],
+              misc.ethRmiiConfig[2],
+              misc.ethRmiiConfig[3],
+              misc.ethRmiiConfig[4]
+              ]
+            : [0, -1, -1, -1, 0];
+        }
+        if (presetData.rmii_conf) {
+          miscConfig.ethRmiiConfig = [
+            presetData.rmii_conf.phy_addr,
+            presetData.rmii_conf.pin_mcd,
+            presetData.rmii_conf.pin_mdio,
+            presetData.rmii_conf.pin_power,
+            presetData.rmii_conf.pin_rmii_clock,
+          ];
+          miscConfig.ethSpiConfig = misc?.ethSpiConfig 
+            ? [
+              misc.ethSpiConfig[0],
+              misc.ethSpiConfig[1],
+              misc.ethSpiConfig[2],
+              misc.ethSpiConfig[3],
+              misc.ethSpiConfig[4],
+              misc.ethSpiConfig[5],
+              misc.ethSpiConfig[6]
+              ]
+            : [20, -1, -1, -1, -1, -1, -1];
+        }
+      }
+    }
+  };
+  const resetForm = () => {
+      if (misc) {
+          // Use snapshot to avoid sharing references
+          miscConfig = $state.snapshot(misc);
+      }
+  };
 
 	// Watch ethActivePreset from the original config and apply preset on load
 	$effect(() => {

@@ -986,6 +986,27 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
     return false;
   }
 
+  bool overrideStrapping = false;
+  
+  cJSON *ovrStrItem = cJSON_GetObjectItem(obj, "overrideStrappingRestriction");
+  if (ovrStrItem) {
+    overrideStrapping = cJSON_IsBool(ovrStrItem) && cJSON_IsTrue(ovrStrItem);
+  } else {
+    ovrStrItem = cJSON_GetObjectItem(currentData, "overrideStrappingRestriction");
+    if (ovrStrItem) {
+      overrideStrapping = cJSON_IsBool(ovrStrItem) && cJSON_IsTrue(ovrStrItem);
+    } else {
+      std::string misc = getInstance(req)->m_configManager.serializeToJson<espConfig::misc_config_t>();
+      cJSON *miscData = cJSON_Parse(misc.c_str());
+      if (miscData) {
+        cJSON *savedOvr = cJSON_GetObjectItem(miscData, "overrideStrappingRestriction");
+        overrideStrapping = savedOvr && (cJSON_IsTrue(savedOvr) || (cJSON_IsNumber(savedOvr) && savedOvr->valueint));
+        cJSON_Delete(miscData);
+      }
+    }
+  }
+
+  bool isValid = true;
   cJSON *it = obj->child;
   while (it) {
     std::string keyStr = it->string;
@@ -1000,7 +1021,8 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
       cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
       std::string response = cjson_to_string_and_free(res);
       httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-      return false;
+      isValid = false;
+      break;
     }
 
     // Type validation
@@ -1031,7 +1053,8 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
       cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
       std::string response = cjson_to_string_and_free(res);
       httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-      return false;
+      isValid = false;
+      break;
     }
 
     // Setup code validation
@@ -1041,8 +1064,8 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         httpd_resp_set_type(req, "application/json");
         httpd_resp_set_status(req, "400 Bad Request");
         httpd_resp_send(req, msg.c_str(), msg.length());
-        cJSON_Delete(obj);
-        return false;
+        isValid = false;
+        break;
       }
       std::string code = incomingValue->valuestring;
       if (code.length() != 8 ||
@@ -1058,7 +1081,8 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
         std::string response = cjson_to_string_and_free(res);
         httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-        return false;
+        isValid = false;
+        break;
       }
       if (homeSpan.controllerListBegin() != homeSpan.controllerListEnd() &&
           code.compare(cJSON_GetStringValue(existingValue)) != 0) {
@@ -1069,16 +1093,12 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         cJSON_AddItemToObject(res, "error", cJSON_CreateString("Setup Code can only be set if no devices are paired"));
         std::string response = cjson_to_string_and_free(res);
         httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-        return false;
+        isValid = false;
+        break;
       }
     }
     // Pin validation
     else if (str_ends_with(keyStr.c_str(), "Pin")) {
-      std::string misc = getInstance(req)->m_configManager.serializeToJson<espConfig::misc_config_t>();
-      cJSON *miscData = cJSON_Parse(misc.c_str());
-      cJSON *ovrStrItem = cJSON_GetObjectItem(miscData, "overrideStrappingRestriction");
-      bool overrideStrapping = cJSON_IsBool(ovrStrItem) && ovrStrItem->valueint;
-      cJSON_Delete(miscData);
       if (!cJSON_IsNumber(incomingValue)) {
         std::string msg = "Value for \"" + keyStr + "\" must be a number.";
         httpd_resp_set_type(req, "application/json");
@@ -1088,10 +1108,11 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
         std::string response = cjson_to_string_and_free(res);
         httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-        return false;
+        isValid = false;
+        break;
       }
       if (uint8_t pin = incomingValue->valueint; pin != 255 && !GPIO_IS_VALID_GPIO(pin) &&
-                                                 !GPIO_IS_VALID_OUTPUT_GPIO(pin)) {
+                                                !GPIO_IS_VALID_OUTPUT_GPIO(pin)) {
         std::string msg = std::to_string(pin) +
                           " is not a valid GPIO Pin for \"" + keyStr + "\".";
         httpd_resp_set_type(req, "application/json");
@@ -1101,19 +1122,26 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
         std::string response = cjson_to_string_and_free(res);
         httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-        return false;
+        isValid = false;
+        break;
       }
-      if(auto owner = GPIOAllocator::instance().owner_of(incomingValue->valueint); (owner && (owner == "STRAPPING" && !overrideStrapping)) || (owner && owner != "STRAPPING")){
-        std::string msg = std::to_string(incomingValue->valueint) +
-                          " for \"" + keyStr + "\" already owned by \"" + owner.value() + "\".";
-        httpd_resp_set_type(req, "application/json");
-        httpd_resp_set_status(req, "400 Bad Request");
-        cJSON *res = cJSON_CreateObject();
-        cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-        cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
-        std::string response = cjson_to_string_and_free(res);
-        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-        return false;
+
+      if (auto owner = GPIOAllocator::instance().owner_of(incomingValue->valueint)) {
+        bool isAllowedStrapping = (owner == "STRAPPING" && overrideStrapping);
+
+        if (!isAllowedStrapping) {
+          std::string msg = std::to_string(incomingValue->valueint) +
+                            " for \"" + keyStr + "\" already owned by \"" + owner.value() + "\".";
+          httpd_resp_set_type(req, "application/json");
+          httpd_resp_set_status(req, "400 Bad Request");
+          cJSON *res = cJSON_CreateObject();
+          cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+          cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
+          std::string response = cjson_to_string_and_free(res);
+          httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+          isValid = false;
+          break;
+        }
       }
     } else if (keyStr == "ethSpiBus" && cJSON_IsNumber(incomingValue) && (incomingValue->valueint < SPI2_HOST || incomingValue->valueint >= SPI_HOST_MAX)){
         std::string msg = std::to_string(incomingValue->valueint) +
@@ -1125,30 +1153,37 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
         std::string response = cjson_to_string_and_free(res);
         httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-        return false;
+        isValid = false;
+        break;
     } else if ((str_ends_with(keyStr.c_str(), "Pins") || str_ends_with(keyStr.c_str(), "SpiConfig")) && cJSON_IsArray(incomingValue)){
       cJSON *el = NULL;
+      bool arrayValid = true;
       cJSON_ArrayForEach(el, incomingValue) {
         if(cJSON_IsNumber(el)){
-          std::string misc = getInstance(req)->m_configManager.serializeToJson<espConfig::misc_config_t>();
-          cJSON *miscData = cJSON_Parse(misc.c_str());
-          cJSON *ovrStrItem = cJSON_GetObjectItem(miscData, "overrideStrappingRestriction");
-          bool overrideStrapping = cJSON_IsBool(ovrStrItem) && cJSON_IsTrue(ovrStrItem);
-          cJSON_Delete(miscData);
-          if(auto owner = GPIOAllocator::instance().owner_of(el->valueint); (owner && !owner->contains("SPI")) || (owner && (owner == "STRAPPING" && !overrideStrapping))) {
-            std::string msg = std::to_string(el->valueint) +
-                              " for \"" + keyStr + "\" already owned by \"" + owner.value() + "\".";
-            httpd_resp_set_type(req, "application/json");
-            httpd_resp_set_status(req, "400 Bad Request");
-            cJSON *res = cJSON_CreateObject();
-            cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-            cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
-            std::string response = cjson_to_string_and_free(res);
-            httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-            return false;
+          if (auto owner = GPIOAllocator::instance().owner_of(el->valueint)) {
+            bool isAllowedSPI = owner->contains("SPI");
+            bool isAllowedStrapping = (owner == "STRAPPING" && overrideStrapping);
+            
+            if (!isAllowedSPI && !isAllowedStrapping) {
+              std::string msg = std::to_string(el->valueint) +
+                                " for \"" + keyStr + "\" already owned by \"" + owner.value() + "\".";
+              httpd_resp_set_type(req, "application/json");
+              httpd_resp_set_status(req, "400 Bad Request");
+              cJSON *res = cJSON_CreateObject();
+              cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+              cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
+              std::string response = cjson_to_string_and_free(res);
+              httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+              arrayValid = false;
+              break;
+            }
           }
         }
-      };
+      }
+      if (!arrayValid) {
+        isValid = false;
+        break;
+      }
     }
 
     // Boolean coercion
@@ -1173,13 +1208,15 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
         std::string response = cjson_to_string_and_free(res);
         httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-        return false;
+        isValid = false;
+        break;
       }
     }
     it = it->next;
   }
+  
   cJSON_Delete(obj);
-  return true;
+  return isValid;
 }
 
 esp_err_t WebServerManager::handleClearConfig(httpd_req_t *req) {
@@ -1344,6 +1381,8 @@ esp_err_t WebServerManager::handleGetCaptivePortalConfig(httpd_req_t *req) {
   }
   cJSON_AddItemToObject(config, "ethSpiConfig", ethSpiConfig);
 
+  cJSON_AddBoolToObject(config, "overrideStrappingRestriction", miscConfig.overrideStrappingRestriction);
+  cJSON_AddBoolToObject(config, "nfcFastPollingEnabled", miscConfig.nfcFastPollingEnabled);
   httpd_resp_set_type(req, "application/json");
   cJSON *res = cJSON_CreateObject();
   cJSON_AddItemToObject(res, "success", cJSON_CreateBool(true));
@@ -1521,19 +1560,34 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
     return ESP_FAIL;
   }
 
-  char *cleaned_body_str = cJSON_PrintUnformatted(obj);
-  bool isValid = instance->validateRequest(req, currentConfigData, cleaned_body_str);
+  // cJSON *overrideSR_item = cJSON_GetObjectItem(obj, "overrideStrappingRestriction");
+  // if (overrideSR_item) {
+  //   cJSON *dup_override = cJSON_Duplicate(overrideSR_item, true);
+  //   if (dup_override) {
+  //     ESP_LOGW(TAG, "REPLACED!");
+  //     cJSON_ReplaceItemInObject(currentConfigData, "overrideStrappingRestriction", dup_override);
+  //   }
+  // }
+  //
+  // cJSON *fastPolling_item = cJSON_GetObjectItem(obj, "nfcFastPollingEnabled");
+  // if (fastPolling_item) {
+  //   cJSON *dup_fast_polling = cJSON_Duplicate(fastPolling_item, true);
+  //   if (dup_fast_polling) {
+  //     cJSON_ReplaceItemInObject(currentConfigData, "nfcFastPollingEnabled", dup_fast_polling);
+  //   }
+  // }
+
+  auto cleaned_body_str = cjson_to_string_and_free(obj);
+  bool isValid = instance->validateRequest(req, currentConfigData, cleaned_body_str.c_str());
   cJSON_Delete(currentConfigData);
 
   if (!isValid) {
-    cJSON_free(cleaned_body_str);
     cJSON_Delete(obj);
     return ESP_FAIL; // validateRequest has already sent the HTTP error response
   }
 
   if (wifiProvided) {
     if (!connectWiFi(ssid.c_str(), password.c_str(), 15000)) {
-      cJSON_free(cleaned_body_str);
       cJSON_Delete(obj);
       httpd_resp_set_status(req, "400 Bad Request");
       httpd_resp_set_type(req, "application/json");
@@ -1554,7 +1608,6 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
   instance->m_configManager.updateFromJson<espConfig::misc_config_t>(cleaned_body_str);
   instance->m_configManager.saveConfig<espConfig::misc_config_t>();
 
-  cJSON_free(cleaned_body_str);
   cJSON_Delete(obj);
 
   httpd_resp_set_type(req, "application/json");

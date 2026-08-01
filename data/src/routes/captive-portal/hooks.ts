@@ -27,7 +27,7 @@ export default {
 
       if (!configRes.success) throw new Error(configRes.error);
 
-      const data = configRes.data;
+      const data : CaptivePortalConfig = configRes.data;
 
       meta.captivePortalData = {
         config: {
@@ -46,6 +46,8 @@ export default {
           ethSpiBus: data.ethSpiBus ?? 1,
           ethRmiiConfig: data.ethRmiiConfig ?? [0, -1, -1, -1, 0],
           ethSpiConfig: data.ethSpiConfig ?? [20, -1, -1, -1, -1, -1, -1],
+          overrideStrappingRestriction: data.overrideStrappingRestriction ?? false,
+          nfcFastPollingEnabled: data.nfcFastPollingEnabled ?? false
         },
         nfcPresets: nfcRes.success ? nfcRes.data : null,
         ethConfig: ethRes.success ? ethRes.data : null,
@@ -70,6 +72,8 @@ export default {
           ethSpiBus: 1,
           ethRmiiConfig: [0, -1, -1, -1, 0],
           ethSpiConfig: [20, -1, -1, -1, -1, -1, -1],
+          overrideStrappingRestriction: false,
+          nfcFastPollingEnabled: false
         },
         nfcPresets: null,
         ethConfig: null,
