@@ -160,6 +160,23 @@ void NfcManager::authPrecomputeTask() {
     const auto durationMs =
         std::chrono::duration_cast<std::chrono::milliseconds>(stopTime - startTime).count();
 
+
+    // Constructing the context runs mbedTLS P-256 key generation. Report the
+    // headroom straight after: an overflow here reboots the device mid-
+    // transaction, which is indistinguishable from a hang in the logs unless
+    // the reset reason is checked at boot.
+    {
+      const UBaseType_t freeWords = uxTaskGetStackHighWaterMark(nullptr);
+      const unsigned freeBytes = (unsigned)(freeWords * sizeof(StackType_t));
+      if (freeBytes < 768) {
+        ESP_LOGE(TAG, "precompute task stack CRITICALLY LOW: %u bytes free of %u",
+                 freeBytes, 4096u);
+      } else {
+        ESP_LOGD(TAG, "precompute task stack headroom: %u bytes free of %u", freeBytes,
+                 4096u);
+      }
+    }
+
     if (!item->ctx) {
       ESP_LOGE(TAG, "Auth precompute: allocation failed.");
       xQueueSend(m_authCtxFreeQueue, &item, 0);
@@ -445,6 +462,21 @@ void NfcManager::handleTagPresence(const std::vector<uint8_t>& uid, const std::a
 
     auto stopTime = std::chrono::high_resolution_clock::now();
     ESP_LOGI(TAG, "Total processing time: %lli ms", std::chrono::duration_cast<std::chrono::milliseconds>(stopTime - startTime).count());
+    // Headroom check. This task runs mbedTLS P-256 operations (ECDH, ECDSA) on
+    // top of the reader's frame buffers, and an overflow here would look
+    // exactly like the observed symptom: a reboot part-way through a
+    // transaction. Reported every time so a downward trend is visible.
+    const UBaseType_t stackFreeWords = uxTaskGetStackHighWaterMark(nullptr);
+    if (stackFreeWords < 512) {
+      ESP_LOGW(TAG, "nfc task stack headroom LOW: %u bytes free",
+               (unsigned)(stackFreeWords * sizeof(StackType_t)));
+    } else {
+      ESP_LOGD(TAG, "nfc task stack headroom: %u bytes free",
+               (unsigned)(stackFreeWords * sizeof(StackType_t)));
+    }
+    ESP_LOGD(TAG, "heap: %u free, %u min-ever", (unsigned)esp_get_free_heap_size(),
+             (unsigned)esp_get_minimum_free_heap_size());
+
 }
 
 /**

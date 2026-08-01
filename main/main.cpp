@@ -112,6 +112,36 @@ void setup() {
   if (err != ESP_OK) {
     ESP_LOGE("Main", "Failed to create default event loop: %d", err);
   }
+  // Why did we just boot? Without this a crash-reboot is indistinguishable in
+  // the logs from a hang: the log simply stops and later resumes. The reset
+  // reason separates a software panic from a watchdog timeout from a brownout,
+  // which need entirely different fixes.
+  {
+    const esp_reset_reason_t why = esp_reset_reason();
+    const char *name = "unknown";
+    switch (why) {
+      case ESP_RST_POWERON:  name = "power-on"; break;
+      case ESP_RST_EXT:      name = "external pin"; break;
+      case ESP_RST_SW:       name = "software restart"; break;
+      case ESP_RST_PANIC:    name = "PANIC (exception / assert)"; break;
+      case ESP_RST_INT_WDT:  name = "INTERRUPT WATCHDOG"; break;
+      case ESP_RST_TASK_WDT: name = "TASK WATCHDOG"; break;
+      case ESP_RST_WDT:      name = "other watchdog"; break;
+      case ESP_RST_DEEPSLEEP:name = "deep sleep wake"; break;
+      case ESP_RST_BROWNOUT: name = "BROWNOUT (supply dipped)"; break;
+      case ESP_RST_SDIO:     name = "SDIO"; break;
+      default: break;
+    }
+    const bool unexpected = (why == ESP_RST_PANIC || why == ESP_RST_INT_WDT ||
+                             why == ESP_RST_TASK_WDT || why == ESP_RST_WDT ||
+                             why == ESP_RST_BROWNOUT);
+    if (unexpected) {
+      ESP_LOGE("Boot", "*** UNEXPECTED RESET: %s (reason %d) ***", name, (int)why);
+    } else {
+      ESP_LOGI("Boot", "Reset reason: %s (%d)", name, (int)why);
+    }
+  }
+
   readerDataManager = std::make_unique<ReaderDataManager>();
   configManager = std::make_unique<ConfigManager>();
   configManager->begin();
