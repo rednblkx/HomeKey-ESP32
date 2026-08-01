@@ -105,7 +105,10 @@ private:
       MOSI,
       SS,
       IRQ,
-      VEN
+      VEN,
+      // I2C readers (ST25R3916) use only two of the four nfcGpioPins entries.
+      SDA,
+      SCL
     };
 
     std::map<PinFunctions, std::expected<GPIOAllocator::GPIOLease, GPIOAllocator::GPIOAllocatorError>> pinAllocations;

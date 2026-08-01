@@ -8,6 +8,7 @@
 #include "DDKAuthContext.h"
 #include "Pn532Reader.hpp"
 #include "Pn7160Reader.hpp"
+#include "St25r3916Reader.hpp"
 #include "hal/gpio_types.h"
 #include "utils.hpp"
 
@@ -225,7 +226,7 @@ void NfcManager::authPrecomputeTask() {
  *
  * @param readerDataManager Reference to the ReaderDataManager used to read and persist reader data.
  * @param nfcGpioPins Four GPIO pin numbers used for SPI communication (SS/CS, SCK, MISO, MOSI).
- * @param nfcReaderType 0 = PN532, 1 = PN7160.
+ * @param nfcReaderType 0 = PN532 (SPI), 1 = PN7160, 2 = ST25R3916 (I2C).
  * @param nfcIrqPin IRQ pin for PN7160 (255 = unset).
  * @param nfcVenPin VEN pin for PN7160 (255 = unset).
  * @param hkAuthPrecomputeEnabled If true, enables HomeKit authentication precompute behavior.
@@ -249,10 +250,19 @@ NfcManager::NfcManager(ReaderDataManager& readerDataManager,
       m_retryTaskHandle(nullptr),
       m_ecpData({ 0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0 })
 {
-  pinAllocations.emplace(PinFunctions::SS, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[0]), GPIO_MODE_DISABLE, "SPI2_SS"));
-  pinAllocations.emplace(PinFunctions::SCK, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[1]), GPIO_MODE_DISABLE, "SPI2_SCK"));
-  pinAllocations.emplace(PinFunctions::MISO, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[2]), GPIO_MODE_DISABLE, "SPI2_MISO"));
-  pinAllocations.emplace(PinFunctions::MOSI, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[3]), GPIO_MODE_DISABLE, "SPI2_MOSI"));
+  // An I2C reader uses only two of the four pins. Claiming all four as SPI
+  // would reserve two arbitrary GPIOs under misleading names -- on a board like
+  // the AtomS3 Lite, which exposes only a handful, that can collide with
+  // something real.
+  if (nfcReaderType == 2) {
+    pinAllocations.emplace(PinFunctions::SDA, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[0]), GPIO_MODE_DISABLE, "I2C_SDA"));
+    pinAllocations.emplace(PinFunctions::SCL, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[1]), GPIO_MODE_DISABLE, "I2C_SCL"));
+  } else {
+    pinAllocations.emplace(PinFunctions::SS, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[0]), GPIO_MODE_DISABLE, "SPI2_SS"));
+    pinAllocations.emplace(PinFunctions::SCK, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[1]), GPIO_MODE_DISABLE, "SPI2_SCK"));
+    pinAllocations.emplace(PinFunctions::MISO, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[2]), GPIO_MODE_DISABLE, "SPI2_MISO"));
+    pinAllocations.emplace(PinFunctions::MOSI, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[3]), GPIO_MODE_DISABLE, "SPI2_MOSI"));
+  }
   if(nfcIrqPin != 255)
     pinAllocations.emplace(PinFunctions::IRQ, GPIOAllocator::instance().acquire(gpio_num_t(nfcIrqPin), GPIO_MODE_DISABLE, "NFC_IRQ"));
   if(nfcVenPin != 255)
@@ -304,6 +314,10 @@ bool NfcManager::begin() {
 			 }
 			m_reader = std::make_unique<Pn7160Reader>(nfcGpioPins, m_nfcIrqPin, m_nfcVenPin, m_ecpData);
 			ESP_LOGI(TAG, "Using PN7160 reader");
+    } else if (m_nfcReaderType == 2) {
+        // I2C: nfcGpioPins[0] = SDA, [1] = SCL. Entries [2]/[3] are unused.
+        m_reader = std::make_unique<St25r3916Reader>(nfcGpioPins, m_ecpData);
+        ESP_LOGI(TAG, "Using ST25R3916 reader (I2C)");
     } else {
     	ESP_LOGE(TAG, "Unsupported NFC reader type: %u", m_nfcReaderType);
     	return false;
