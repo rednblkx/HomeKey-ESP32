@@ -37,6 +37,7 @@
   },
   "type": "module",
   "dependencies": {
-    "@tanstack/svelte-virtual": "^3.13.24"
+    "@tanstack/svelte-virtual": "^3.13.24",
+    "qrcode-generator": "^2.0.4"
   }
 }
