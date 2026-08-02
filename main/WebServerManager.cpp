@@ -417,6 +417,9 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
   if (strlen(filename) == 0){
     filename = "/index.html.gz";
     use_compressed = true;
+    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+  } else {
+    httpd_resp_set_hdr(req, "Cache-Control", "public, max-age=31536000, immutable");
   }
 
   // Check for gzip compressed version
@@ -466,8 +469,7 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
     content_type = "image/webp";
 
   httpd_resp_set_type(req, content_type);
-  httpd_resp_set_hdr(req, "Connection", "close");
-  httpd_resp_set_hdr(req, "Cache-Control", "max-age=86400");
+  httpd_resp_set_hdr(req, "Connection", "keep-alive");
   if (use_compressed)
     httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
 
@@ -481,13 +483,17 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
   esp_err_t err = ESP_OK;
   while ((bytes_read = file.read((uint8_t*)buffer, 4096)) > 0) {
       err = httpd_resp_send_chunk(req, buffer, bytes_read);
+      vTaskDelay(pdMS_TO_TICKS(5));
       if (err != ESP_OK) break;
   }
 
   free(buffer);
   file.close();
-  httpd_resp_send_chunk(req, NULL, 0); // End stream
-  return err;
+  if (err != ESP_OK) {
+      httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "TLS send error");
+      return err;
+  }
+  return httpd_resp_send_chunk(req, NULL, 0); // End chunked stream cleanly
 }
 
 /**
