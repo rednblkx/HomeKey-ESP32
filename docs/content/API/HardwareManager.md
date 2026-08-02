@@ -8,12 +8,14 @@ The `HardwareManager` class serves as the primary interface between the applicat
 
 The class operates on an event-driven, asynchronous model. It subscribes to high-level application events (e.g., "lock the door," "NFC tag tapped") and translates them into low-level hardware actions (e.g., setting a GPIO pin high, flashing an LED). It utilizes FreeRTOS tasks and queues to handle these actions without blocking the main application flow.
 
-#### Core Refactoring & Improvements
+#### Key System Features & Improvements
 
-*   **Migration to DigitalDoorKey (DDK):** The core authentication and data handling has been refactored to use the new `DigitalDoorKey` library, replacing the older `HK-HomeKit-Lib` dependency.
-*   **Memory Safety Improvements:** Core managers (`LockManager`, `ConfigManager`, `HardwareManager`, etc.) are now managed using `std::unique_ptr` in `main.cpp`, ensuring better memory management and safer object lifecycles.
-*   **JsonGuard Implementation:** Introduced `JsonGuard` and `JsonBuilder` (RAII wrappers for cJSON) to eliminate potential memory leaks and provide a safer, cleaner API for JSON construction and parsing.
-*   **Timer Reliability:** Hardware timers in `HardwareManager` have been refactored to use non-static member contexts and proper initialization checks, ensuring reliability across device re-initialization.
+*   **GPIO Allocator & Pin Safety (`GpioAllocator`):** Centralized, thread-safe GPIO allocation tracking system. Pin allocations across all hardware modules (NFC readers, Ethernet PHYs, Relays, Status LEDs, Buzzers, and HomeSpan pins) are leased via RAII `GpioLease` instances.
+    *   **Target-Specific Strapping Pin Protection:** Validates requested GPIO pins against chip-specific boot strapping pin lists (ESP32, ESP32-S3, ESP32-C3, ESP32-C6).
+    *   **SPI Bus Intersection Checks:** Validates SPI bus sharing between NFC controllers and SPI Ethernet modules, preventing pin ownership conflicts.
+    *   **Strapping Override Option:** Supports `overrideStrappingRestriction` for custom hardware designs.
+*   **Memory Safety Improvements:** `HardwareManager` instances are managed using `std::unique_ptr` in `main.cpp`, ensuring clean object lifecycles.
+*   **Timer Reliability:** Hardware timers in `HardwareManager` use non-static member contexts and initialization checks, ensuring reliability across device re-initialization.
 
 ### Key Responsibilities:
 
@@ -31,7 +33,25 @@ The class operates on an event-driven, asynchronous model. It subscribes to high
     *   An **initiator task** handles the arming mechanism for the alternate action.
 *   **ESP-Timers:** Uses one-shot timers to control the duration of feedback signals and timeouts.
 
-## 2. Public API
+---
+
+## 2. Public API & GpioAllocator
+
+### `GpioAllocator` Subsystem
+
+The `GpioAllocator` namespace provides thread-safe GPIO allocation tracking:
+
+```cpp
+// Example: Acquire a lease for a relay output pin
+auto lease = GpioAllocator::acquire(gpio_num, Owner::LOCK_ACTION);
+if (!lease.isValid()) {
+    // Pin conflict or invalid pin assignment
+}
+```
+
+*   `acquire(int gpio_num, Owner owner)`: Acquires a GPIO pin lease. Validates against target strapping pins and active leases. Returns a `GpioLease`.
+*   `release(int gpio_num, Owner owner)`: Explicitly releases an acquired pin lease.
+*   `checkStrappingPins(int gpio_num)`: Returns `true` if the requested pin is a boot strapping pin for the target ESP32 chip family.
 
 ### Constructor
 
@@ -59,13 +79,13 @@ HardwareManager(const espConfig::actions_config_t& miscConfig);
 
 #### `begin()`
 
-Initializes all hardware resources and starts the background tasks. This method must be called after the constructor and before any other methods.
+Initializes all hardware resources via `GpioAllocator` and starts background tasks. This method must be called after the constructor and before any other methods.
 
 **It performs the following actions:**
 *   Configures GPIO pins for feedback (success/fail LEDs), the lock action, and the alternate action mechanism.
 *   Initializes the NeoPixel driver if a valid pin is configured.
 *   Sets up ESP-IDF timers for all timed hardware events.
-*   Creates the FreeRTOS queues and tasks for lock control, feedback, and the alternate action initiator.
+*   Creates FreeRTOS queues and tasks for lock control, feedback, and the alternate action initiator.
 *   Installs an ISR (Interrupt Service Routine) if the alternate action initiator pin is configured.
 
 **Signature:**
@@ -85,11 +105,11 @@ void setLockOutput(int state);
 ```
 
 **Parameters:**
-*   `state`: The desired lock state. This should correspond to values defined in `LockManager`, such as `LockManager::LOCKED` or `LockManager::UNLOCKED`.
+*   `state`: The desired lock state (`LockManager::LOCKED` or `LockManager::UNLOCKED`).
 
 #### `showSuccessFeedback()`
 
-Triggers the predefined hardware feedback sequence for a successful operation. This is an asynchronous call that queues the request for the `feedbackTask`.
+Triggers the predefined hardware feedback sequence for a successful operation. Queues the request for `feedbackTask`.
 
 **Signature:**
 ```cpp
@@ -98,16 +118,16 @@ void showSuccessFeedback();
 
 #### `showFailureFeedback()`
 
-Triggers the predefined hardware feedback sequence for a failed operation. This is an asynchronous call that queues the request for the `feedbackTask`.
+Triggers the predefined hardware feedback sequence for a failed operation. Queues the request for `feedbackTask`.
 
 **Signature:**
 ```cpp
 void showFailureFeedback();
 ```
 
-## 3. Internal Workings & Task Descriptions
+---
 
-The following components describe the internal, asynchronous behavior of the `HardwareManager`. They are not called directly but are essential to understanding its operation.
+## 3. Internal Workings & Task Descriptions
 
 #### Lock Control Task (`lockControlTask`)
 
@@ -121,33 +141,21 @@ This task runs in an infinite loop, waiting for state change commands on its que
 This task waits for feedback requests on its queue (sent by `showSuccessFeedback` or `showFailureFeedback`).
 
 *   **On `SUCCESS`:**
-    *   It illuminates the NeoPixel with the configured `neopixelSuccessColor`.
-    *   It activates the `nfcSuccessPin`.
-    *   It starts one-shot timers to automatically turn off the NeoPixel and deactivate the success pin after the configured durations (`neopixelSuccessTime`, `nfcSuccessTime`).
+    *   Illuminates the NeoPixel with the configured `neopixelSuccessColor`.
+    *   Activates the `nfcSuccessPin`.
+    *   Starts one-shot timers to automatically turn off the NeoPixel and deactivate the success pin after configured durations (`neopixelSuccessTime`, `nfcSuccessTime`).
 *   **On `FAILURE`:**
-    *   It performs the same sequence using the failure-specific colors, pins, and durations.
+    *   Performs the same sequence using failure-specific colors, pins, and durations.
 
 #### Alternate Action Mechanism
 
 This feature allows a secondary action to be triggered under specific conditions, typically "arming" via a button press and "triggering" via an NFC HomeKey tap.
 
-*   **`initiator_isr_handler` (ISR):**
-    *   Attached to the `hkAltActionInitPin`. When this pin is triggered (e.g., by a button press), this lightweight ISR immediately sends a message to the `initiator_task`'s queue and returns.
-
-*   **`initiator_task`:**
-    *   This task waits for a message from the ISR.
-    *   Upon receiving a message, it "arms" the alternate action by setting a flag (`m_altActionArmed = true`).
-    *   It may light up an indicator LED (`hkAltActionInitLedPin`).
-    *   It starts a timer (`m_altActionInitTimer`). When this timer expires, the armed state is automatically cleared.
-
-*   **`triggerAltAction()` (Internal Method):**
-    *   This method is called internally, for example, when a successful HomeKey tap event is received.
-    *   It checks if the alternate action is currently armed.
-    *   If armed, it publishes the `HW_ALT_ACTION` event via `AppEventLoop` and triggers the physical output on `hkAltActionPin` for the duration specified by `hkAltActionTimeout`.
+*   **`initiator_isr_handler` (ISR):** Attached to `hkAltActionInitPin`. Sends a message to `initiator_task`'s queue upon button press.
+*   **`initiator_task`:** Arms the alternate action (`m_altActionArmed = true`), illuminates indicator LED (`hkAltActionInitLedPin`), and starts expiration timer `m_altActionInitTimer`.
+*   **`triggerAltAction()` (Internal Method):** If armed when a HomeKey tap occurs, publishes `HW_ALT_ACTION` event and triggers physical output on `hkAltActionPin` for `hkAltActionTimeout`.
 
 #### Timer Callback (`handleTimer`)
 
-This is a single, static callback function used by all ESP-timers created by the manager.
+A single callback used by all ESP-timers created by the manager to deactivate GPIO pins or turn off NeoPixels upon timer expiration.
 
-*   It receives a context argument that identifies which timer fired (e.g., `GPIO_S` for the success GPIO timer, `PIXEL_F` for the failure pixel timer).
-*   Based on the source, it performs the corresponding "off" action, such as deactivating a GPIO pin or turning off the NeoPixel.

@@ -10,10 +10,6 @@ Its primary function is to continuously poll for NFC tags. When a tag is detecte
 
 ## Key Responsibilities
 
-*   **Migration to DigitalDoorKey (DDK):** The core authentication and data handling has been refactored to use the new `DigitalDoorKey` library, replacing the older `HK-HomeKit-Lib` dependency. This includes using `DDKAuthenticationContext` for HomeKey operations.
-*   **Memory Safety Improvements:** Core managers (`LockManager`, `ConfigManager`, `HardwareManager`, etc.) are now managed using `std::unique_ptr` in `main.cpp`, ensuring better memory management and safer object lifecycles.
-*   **JsonGuard Implementation:** Introduced `JsonGuard` and `JsonBuilder` (RAII wrappers for cJSON) to eliminate potential memory leaks and provide a safer, cleaner API for JSON construction and parsing.
-*   **Timer Reliability:** Hardware timers in `HardwareManager` have been refactored to use non-static member contexts and proper initialization checks, ensuring reliability across device re-initialization.
 *   **NFC Reader Management:** Initializes, configures, and maintains the connection to the PN532 NFC reader.
 *   **Polling and Detection:** Runs a continuous background task to poll for nearby NFC tags.
 *   **Tag Type Differentiation:** Identifies whether a detected tag is a HomeKey device or a generic tag.
@@ -26,7 +22,7 @@ Its primary function is to continuously poll for NFC tags. When a tag is detecte
 
 ### NfcManager()
 
-Constructs a new `NfcManager` instance. The constructor initializes internal state, including the ECP (Express Card Profile) data used for HomeKey discovery, and registers subscribers for internal events that can modify its behavior.
+Constructs a new `NfcManager` instance. The constructor initializes internal state, including the ECP (Enhanced Contactless Polling) data used for HomeKey discovery, and registers subscribers for internal events that can modify its behavior.
 
 **Signature:**
 ```cpp

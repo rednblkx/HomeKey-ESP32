@@ -29,7 +29,6 @@ You have two options for `esptool` to flash the firmware onto your ESP32:
   {{< /tab >}}
 {{< /tabs >}}
 
-
 ### 1.2. Python 3.x (Only if using esptool.py)
 
 *   **What it is:** A versatile programming language.
@@ -40,7 +39,7 @@ You have two options for `esptool` to flash the firmware onto your ESP32:
 ## 2. Hardware You'll Need
 
 > [!TIP]
-> Avoid powering from a MacBook as they can sometimes not supply enough current to this kind of devices and can result in unexpected behavior of the ESP32 and/or PN532.
+> Avoid powering from a MacBook as they can sometimes not supply enough current to this kind of devices and can result in unexpected behavior of the ESP32 and/or NFC module.
 
 The required hardware can be obtained either by sourcing all the parts yourself or by using an integrated PCB that has it all on a single board.
 
@@ -53,60 +52,59 @@ The required hardware can be obtained either by sourcing all the parts yourself 
 
 *   **What it is:** The brain of your HomeKey-ESP32 device! A microcontroller board with Wi-Fi and Bluetooth capabilities.
 *   **Why you need it:** This is where our HomeKey magic lives.
-*   **Recommendation:** Any standard ESP32 development board should work, such as the ESP32-DevKitC or NodeMCU-32S.
+*   **Recommendation:** Look for a board with an ESP32-C6, however, other ESP32 development boards should also work fine, precompiled firmware is being released for ESP32, ESP32-S3, ESP32-C3, or ESP32-C6.
 
 ##### ESP32 Buyer's Guide
 
 > [!NOTE]
-> For the best performance, search for one of the newer variants e.g. ESP32-C6 or ESP32-S3
+> For the best performance, search for one of the newer variants e.g. ESP32-C6 or ESP32-S3.
 
 Generally, any board should be fine. However, some may have non-genuine modules or just cheap flash chips with low endurance. There is no real way of telling which is the better clone. Genuine modules typically have "ESPRESSIF" etched on the metal casing.
 
 > [!TIP]
->  Genuine development boards can be ordered from major distributors like Mouser or Digikey, though it's pricey compared to something like AliExpress.
+> Genuine development boards can be ordered from major distributors like Mouser or Digikey, though it's pricey compared to something like AliExpress.
 
-#### 2.1.2. PN532 NFC Module
+#### 2.1.2. NFC Reader Modules (PN532 & PN7160 / PN7161)
 
-*   **What it is:** An NFC (Near Field Communication) reader/writer module.
-*   **Why you need it:** This module is responsible for reading the HomeKey data from your Apple devices.
-*   **Recommendation:** Ensure you have a PN532 module that supports SPI communication, as this is what is used by the project.
+HomeKey-ESP32 supports both **PN532** and **NXP PN7160 / PN7161** NFC controllers.
 
-    *   For the red board from Elechouse (or clones), there should be a DIP Switch on it. For SPI, the switches should be set to 0 and 1 (left switch down towards 1, right switch up away from 2).
-    *   Avoid using really long wires between the PN532 and ESP32 for the best connectivity, if any issues, try short wires and see if that fixes it.
+*   **PN532 NFC Module:**
+    *   **Interface:** SPI protocol.
+    *   **Recommendation:** Ensure you have a PN532 module that supports SPI communication (for red Elechouse boards/clones, DIP switches must be set to `0` and `1`).
+    *   Avoid long jumper wires between the module and ESP32 to maintain signal integrity.
 
-##### Choosing Your PN532 Module: A Mini Buyer's Guide
+*   **PN7160 / PN7161 NFC Controllers:**
+    *   **Interface:** SPI protocol with dedicated **IRQ** (Interrupt Request) and **VEN** (Enable/Reset) control pins.
+    *   **Features:** Enhanced Contactless Polling (ECP) support, fast tag discovery, integrated presence checks for non ISO-DEP cards, and reliable hardware performance.
+        *   PN7161 has native ECP support and that is how ECP is implemented on this firmware for it, however, currently there's no fallback implemented for PN7160 which doesn't has native ECP support.
+
+##### Choosing Your NFC Module: A Mini Buyer's Guide
 
 > [!NOTE]
->  The information given here won’t guarantee that what you buy will be 100% without issues but aims to guide you toward a better part.
+> The information given here won’t guarantee that what you buy will be 100% without issues but aims to guide you toward a better part.
 
 > [!TIP]
 > Boards costing around 4-5€ or less are likely using non-genuine ICs.
-> These boards will still work but expect worse performance
+> These boards will still work but expect worse performance.
 
-You’ll mostly find boards with two black components parallel to each other near the edge, those are SMD Multilayer RF Inductors. Those are used for the antenna impedance matching which ensure the maximum power is being transferred to the antenna and those are not exactly the best for this, resulting in a less efficient power transfer to the antenna but they are being used as they are typically cheaper.
-
-When shopping for a PN532, check boards with blueish components instead, those are Wire-wound RF inductors that are much superior and assure the antenna gets the power it needs.
+When shopping for a PN532, check boards with blueish components instead of black ones. Those blueish components are Wire-wound RF inductors that provide superior antenna impedance matching, ensuring efficient power transfer to the antenna.
 
 {{< cards cols="2" >}}
   {{< card title="SMD Multilayer RF Inductors" subtitle="You’ll mostly find boards with these two black components. They do the job, just not as much as you'd want them to, but they are cheap." image="/images/black_components.jpeg" tag="Meh" tagColor="red" tagIcon="exclamation" >}}
   {{< card title="Wire-wound RF inductors" subtitle="Check for those two blueish components, this is what should be used for impedance matching, which is essential for efficient power transfer to the antenna." image="/images/blue_components.jpeg" tag="Best" tagColor="green" tagIcon="check" >}}
 {{< /cards >}}
 
-**Note:** These boards might still not be at peak performance but should have a range of about 3-4cm and be more reliable.
-
-You can also buy from Elechouse for best quality but they are typically more expensive. They are the original designer of those red boards. You can find their PN532 NFC RFID MODULE V4 on their [official website here](https://www.elechouse.com/product/pn532-nfc-rfid-module-v4/).
+You can also buy from Elechouse for best quality (original red board designer) on their [official website](https://www.elechouse.com/product/pn532-nfc-rfid-module-v4/).
 
 ### 2.2. Option B - Integrated PCB Boards
 
-*   **What they are:** Custom-designed Printed Circuit Boards. These boards integrate the ESP32 and PN532, along with other necessary components, into a single, compact solution.
-*   **Why you need them:** Using an integrated PCB can significantly simplify wiring, reduce clutter, and result in a more robust and professional-looking final product. They often come with clearly labeled pinouts and dedicated connectors.
-* **Where you can find one** : 
-    *   **@lollokara's PCB:** This board features an external NFC antenna, RGB LED, and 48V input (alongside USB-C).
-        *   **PCB Files:** Available on Github [here](https://github.com/lollokara/HomeKey-ESP32-PCB) and you can manufacture it where you want, or it can be ordered from PCBWay [here](https://www.pcbway.com/project/shareproject/ESP32_Homekey_77a119d7.html).
+*   **What they are:** Custom-designed Printed Circuit Boards. These boards integrate the ESP32 and NFC module, along with other necessary components, into a single, compact solution.
+*   **Why you need them:** Using an integrated PCB can significantly simplify wiring, reduce clutter, and result in a more robust and professional-looking final product.
+*   **Where you can find one:**
+    *   **@lollokara's PCB:** Features external NFC antenna, RGB LED, and 48V input (alongside USB-C). Available on [GitHub](https://github.com/lollokara/HomeKey-ESP32-PCB) or [PCBWay](https://www.pcbway.com/project/shareproject/ESP32_Homekey_77a119d7.html).
         *   There's two disconnected pads on the top left to the right of the USB-C that need to be soldered(pad bottom-left SEL1 and pad top-right SEL0) to select SPI mode but a manufacturer like PCBWay can handle this, however, they can sometimes misinterpret, so be prepared to put some solder.
-    *   **@darkside9009's PCB:** This board comes with an integrated NFC antenna. It's not open-source, but they claim the PCBs are manufactured in Germany through their own company and can be ordered on Amazon [here](https://www.amazon.de/CASmo-NFC-HomeKey-Funktionalit%C3%A4t-PN532-NFC-Modul-erm%C3%B6glichen/dp/B0DJT89BYK).
-        * They also have a version with Ethernet and PoE and an external NFC antenna. It can ordered on Amazon [here](https://www.amazon.de/-/en/CASmo-NFC-MB-ETH-HomeKey-authorization-Homekey-functionality/dp/B0FB44T9PS/258-2739647-8545128)
-        * Since there is low demand, they are not keeping a lot of stock so it might not be in stock at the time but you can reach out to them on their [official website](https://casgermany.com) or on the Discord server and ask if you can order one.
+    *   **CASmo-NFC:** Features an integrated NFC Antenna. Manufacturer is located in Germany. Can be ordered from their [website](https://casmo.info/en/shop/casmo-nfc-3).
+    *   **CASmo-NFC-MB-ETH:** Features an external NFC antenna, Ethernet port and can powered through USB-C, PoE or 5–24V AC/DC, additionally includes a 5A potential-free relay. Can be ordered from the manufacturer's [website](https://casmo.info/en/shop/casmo-nfc-mb-eth-15).
 
-**Note:** The project and its owner are not affiliated with the aforementioned products or their creators, just providing solutions and praising community efforts.
-
+> [!NOTE]
+> The project and its owner are not affiliated with the aforementioned products nor with their designer/manufacturer or any relevant party, this section is only meant to list solutions and to praise community efforts.

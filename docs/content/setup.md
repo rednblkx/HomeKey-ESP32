@@ -22,61 +22,27 @@ First things first, let's get the brains of your HomeKey-ESP32 onto your compute
 
 ## 2. Connect Your Hardware
 
-Before flashing, you need to connect your PN532 NFC module to your ESP32 development board.
+Before flashing, you need to connect your NFC module (PN532 or PN7160 / PN7161) to your ESP32 development board.
 
-* **Using Jumper Wires:** If you're connecting the modules manually, refer to the [NFC Module Wiring](#21-nfc-module-wiring) section below. Ensure you connect the correct SPI pins (SCK, MISO, MOSI, SS) and power (VCC/3V3, GND). Remember the tip about soldering for the best connectivity!
-* **Using an Integrated PCB Board:** If you have one of the awesome [Integrated PCB Boards](../prerequisites#23-integrated-pcb-boards-optional-but-simpler) then everything should ready but make sure to check for any additional instructions for the board you've chosen.
+* **Using Jumper Wires:** If you're connecting the modules manually, refer to the [NFC Module Wiring](#21-nfc-module-wiring) section below. Ensure you connect the correct interface pins (SPI for PN532 or SPI + IRQ/VEN for PN7160/PN7161) and power (VCC/3V3, GND).
+* **Using an Integrated PCB Board:** If you have an [Integrated PCB Board](../prerequisites#22-option-b---integrated-pcb-boards), connections are pre-wired. Simply select the corresponding hardware preset in the WebUI or Captive Portal.
 
 ### 2.1. NFC Module Wiring
 
-> [!NOTE]
-> Both the ESP32 and the PN532 must use the same power supply to communicate.
-
 > [!IMPORTANT]
-> The PN532 has to be set to SPI mode, not I2C mode.
-> The common red board has a DIP switch on a cornerside of the board that switches between I2C and SPI mode. See the image below for reference.
+> Both the ESP32 and the NFC module must share a common power supply and ground.
+
+> [!NOTE]
+> The default GPIO Pinout scheme can be seen in the WebUI [System section](../configuration#52-hardware-tab) where you can also assign other pins to be used instead.
+
+#### 2.1.1. PN532 Module Wiring (SPI Mode)
+
+> [!CAUTION]
+> The PN532 must be configured for SPI mode.
+> On standard red boards, ensure the DIP switch is set to `0` and `1` (left switch down towards 1, right switch up away from 2).
 > ![PN532 SPI Mode](/images/IMG_4025.jpeg)
 
-#### 2.1.1. Integrated PCB BOARDS
-
-When using an Integrated PCB, all the physical connections between the PN532 and the ESP32 have already been made, however, you might still have to update the pins used within the firmware from the [WebUI](../configuration#pn532).
-
-The web interface contains presets for the following boards:
-
-1. **@lollokara's board (ESP32-C3)**
-    * SS: GPIO6
-    * SCK: GPIO5
-    * MISO: GPIO4
-    * MOSI: GPIO7
-
-2. **CASmo-NFC**
-    * SS: GPIO5
-    * SCK: GPIO18
-    * MISO: GPIO19
-    * MOSI: GPIO23
-
-3. **CASmo-NFC-MB-ETH**
-    * SS: GPIO5
-    * SCK: GPIO14
-    * MISO: GPIO12
-    * MOSI: GPIO13
-
-#### 2.1.2. Default GPIO Pinouts
-
-The default pinout differs depending on the chip variant and they are defined inside [Arduino-ESP32](https://github.com/espressif/arduino-esp32), see the links below.
-
-> [!NOTE]
-> Custom GPIO Pins can assigned from the [WebUI](../configuration#pn532)
-
-**Default pinout for ESP32:** [pins_arduino.h](https://github.com/espressif/arduino-esp32/blob/master/variants/esp32/pins_arduino.h)
-
-**Default pinout for ESP32-C3:** [pins_arduino.h](https://github.com/espressif/arduino-esp32/blob/master/variants/esp32c3/pins_arduino.h)
-
-**Default pinout for ESP32-C6:** [pins_arduino.h](https://github.com/espressif/arduino-esp32/blob/master/variants/esp32c6/pins_arduino.h)
-
-**Default pinout for ESP32-S3:** [pins_arduino.h](https://github.com/espressif/arduino-esp32/blob/master/variants/esp32s3/pins_arduino.h)
-
-Table below is a wiring example using the ESP32:
+Default pinout table for ESP32 with PN532 over SPI:
 
 | ESP32 Pin | PN532 Pin |
 | :-------- | :-------- |
@@ -87,121 +53,83 @@ Table below is a wiring example using the ESP32:
 | GPIO23    | MOSI      |
 | GPIO5     | SS        |
 
+#### 2.1.2. PN7160 / PN7161 Module Wiring (SPI Mode)
+
+PN7160 and PN7161 NFC controllers communicate over SPI and require two additional control pins: **IRQ** (Interrupt Request) and **VEN** (Enable/Reset).
+
+| ESP32 Pin | PN7160/PN7161 Pin |
+| :-------- | :---------------- |
+| VCC/3V3   | VCC               |
+| GND       | GND               |
+| GPIO18    | SCK               |
+| GPIO19    | MISO              |
+| GPIO23    | MOSI              |
+| GPIO5     | SS                |
+| Configurable (e.g. GPIO4) | IRQ |
+| Configurable (e.g. GPIO16)| VEN |
+
+#### 2.1.3. Integrated PCB Board Presets
+
+When using an Integrated PCB or predefined layout, select the hardware preset in the Captive Portal or WebUI:
+
+1. **@lollokara's board (ESP32-C3)** (SPI)
+2. **CASmo-NFC** (SPI)
+3. **CASmo-NFC-MB-ETH** (SPI)
+
 ## 3. Flash the Firmware
 
-Now for the magic moment! You have two main options for flashing the firmware: command-line with `esptool.py` or browser-based with `esptool-js`. Choose the method you're most comfortable with.
+You can flash the firmware using command-line `esptool.py` or browser-based `esptool-js`.
 
 {{< tabs items="esptool.py,esptool-js" >}}
 {{< tab >}}
 
 1. **Install esptool.py:**
 
-    * Install `esptool.py` using pip:
-
-      ```bash
-      pip install esptool
-      ```
-
-    Or
-    * Download from the Github releases page [here](https://github.com/espressif/esptool/releases/latest)
-2. **Connect ESP32:** Connect your ESP32 development board to your computer using a USB cable.
-3. **Identify Serial Port:** You'll need to find the serial port your ESP32 is connected to.
-    * **Linux:** Typically `/dev/ttyUSB0` or `/dev/ttyACM0`. You can check with `ls /dev/tty*`.
-    * **macOS:** Typically `/dev/cu.usbserial-XXXX` or `/dev/cu.SLAB_USBtoUART`. You can check with `ls /dev/cu.*`.
-    * **Windows:** Check Device Manager for "USB Serial Device" or "CP210x USB to UART Bridge" under "Ports (COM & LPT)". Note the COM port number (e.g., `COM3`).
-4. **Open Terminal/Command Prompt:** Navigate to the directory where you downloaded the `esptool.py` script (if you downloaded it manually) and the `*.firmware.factory.bin` file.
-5. **Run the Flash Command:** Execute the following command, replacing `YOUR_PORT` with your serial port and `FACTORY_FIRMWARE_FILE.bin` with the name of your downloaded `esp32XX.firmware.factory.bin` file:
-
     ```bash
-    esptool.py --port YOUR_PORT write_flash 0x0 FACTORY_FIRMWARE_FILE.bin
+    pip install esptool
     ```
 
-    * **`--port YOUR_PORT`**: Your ESP32's serial port.
-    * **`write_flash 0x0`**: The command to write the flash, starting at address `0x0`. **Crucially, use `0x0` for the merged firmware files and only for those.**
-    * **`FACTORY_FIRMWARE_FILE.bin`**: The path to your downloaded `esp32XX.firmware.factory.bin` binary.
-
-6. (If any issues) **Erase Flash :** If you encounter any issues, such as a reset loop, you can try erasing the flash before flashing the firmware:
+2. **Connect ESP32:** Connect your ESP32 board to your computer via USB.
+3. **Identify Serial Port:** Locate `/dev/ttyUSB0` or `/dev/ttyACM0` (Linux), `/dev/cu.usbserial-XXXX` (macOS), or `COMx` (Windows).
+4. **Run Flash Command:**
 
     ```bash
-    esptool.py --port YOUR_PORT erase-flash
+    esptool.py --port YOUR_PORT write_flash 0x0 *.firmware.factory.bin
     ```
 
-    Then, re-run the flash command from step 4.
-
-7. **Initiate Flash Mode:** If the flashing doesn't start automatically, you might need to manually put your ESP32 into flash mode. This usually involves:
-    * Holding down the "BOOT" or "GPIO0" button on your ESP32 board.
-    * Pressing and releasing the "EN" or "RST" button.
-    * Releasing the "BOOT" button.
-    * Try the flash command from step 4 again.
-
-8. **Wait for Completion:** The flashing process will take a few moments. Once complete, you'll see a "Hash of data verified" message followed by "Hard resetting via RTS pin".
 {{< /tab >}}
 {{< tab >}}
-This is the easiest way to flash if you're using a Chromium-based browser!
 
-1. **Connect ESP32:** Connect your ESP32 development board to your computer using a USB cable.
-2. **Open esptool-js Page:** Navigate to the page below in your Chromium-based browser (Chrome, Edge, Brave, etc.):
-    [https://espressif.github.io/esptool-js/](https://espressif.github.io/esptool-js/)
-3. **Select Firmware File:** On the web page, you'll find an option to select your firmware file. Click "Choose File" and select the appropriate `*.firmware.factory.bin` file you downloaded earlier.
-4. **Select Serial Port:** Click the "Connect" button. A pop-up will appear asking you to select the serial port for your ESP32. Choose the correct port and click "Connect".
-5. **Change Flash Address:** Ensure the Flash Address is set to `0x0`.
-6. **Flash Device:** Once connected, click the "Program" button.
-7. **Initiate Flash Mode (if needed):** Similar to the command-line method, you might need to manually put your ESP32 into flash mode if the process doesn't start. Follow the steps in Option A, step 7.
-8. **Wait for Completion:** The browser interface will show the progress. Once complete, you'll get a success message.
+1. Connect your ESP32 to your computer using USB.
+2. Open [https://espressif.github.io/esptool-js/](https://espressif.github.io/esptool-js/) in any Chromium-based browser (e.g. Chrome/Brave/Edge).
+3. Select your `*.firmware.factory.bin` file, set Flash Address to `0x0`, click **Connect**, then click **Program**.
+
+> [!NOTE]
+> If any issues, you can use the console section to retrieve the logs and reach out to help debug the issue and fix it.
+
 {{< /tab >}}
 {{< /tabs >}}
 
 ## 4. Wi-Fi Configuration & Initial Setup
 
-After successfully flashing the firmware, your HomeKey-ESP32 is ready for its first boot!
+After flashing, your HomeKey-ESP32 is ready for initial configuration.
 
-1. **Monitor Serial Output (Optional but Recommended):** You can use the console function from `esptool-js`, just press "Connect" under the "Console" section and you should starting getting output in the box underneath it.
-2. **Connect to Wi-Fi Access Point:** On its first boot, the device will start a Wi-Fi access point (AP) with the following details:
-    * **SSID:** `HomeKey-ESP32`
-    * **Password:** `homekey123`
-    Connect your phone or computer to this Wi-Fi network.
-3. **Access the Captive Portal:** A captive portal should open automatically. If it doesn't, you can open it manually by navigating to `http://192.168.4.1/captive-portal` in your web browser.
-4. **Configure Your Device:** The captive portal provides an easy-to-use interface organized into two tabs:
-
-    **WiFi & HomeKit Tab:**
-    *   **WiFi SSID:** Enter your home Wi-Fi network name, or click "Scan" to see available networks.
-    *   **WiFi Password:** Enter your Wi-Fi password.
-    *   *Note: WiFi can be skipped if you enable Ethernet (see Hardware tab).*
-    *   **HomeKit Setup Code:** Set your 8-digit HomeKit pairing code (default: `46637726`).
-    *   **HomeKey Color:** Choose the color of your HomeKey pass in Apple Wallet (Tan, Gold, Silver, or Black).
-
-    **Hardware Tab:**
-    *   **NFC Pins Preset:** Select from predefined configurations for common boards (Default, @lollokara's board, CASmo-NFC, CASmo-NFC-MB-ETH).
-    *   **Custom NFC Pins:** Manually configure SS, SCK, MISO, and MOSI pins if not using a preset.
-    *   **Ethernet:** Enable and configure Ethernet connectivity (optional).
-
-5. **Save and Reboot:** After configuring your settings, click "Save & Reboot". The device will connect to your network.
-    *   Upon successful connection, the captive portal will display the IP address assigned to the device by your network.
-    *   The captive portal will automatically close after a few seconds.
-6. **Access the Web Interface:** Once connected, access the full web interface by navigating to the displayed IP address or `<SerialNumber>.local` (e.g., `HK-A1B2C3D4.local`). The web interface provides complete control over MQTT, actions, and advanced settings.
+1. **Connect to Wi-Fi Access Point:** On first boot (or when no Wi-Fi credentials are saved), the device hosts an access point:
+    * **SSID:** `HK_{XXXXXX}`
+    * **Password:** `HomeKey$123$` (or your custom configured AP password)
+2. **Access the Captive Portal:** If the operating system doesn't automatically open the captive portal, navigate to `http://192.168.4.1` in your web browser.
+3. **Configure Options:**
+    * **Wi-Fi & HomeKit:** Scan and select Wi-Fi network, enter password, set 8-digit HomeKit pairing code, select HomeKey pass color (Tan, Gold, Silver, Black), and configure AP Access Point Password (`accessPointPassword`).
+    * **Hardware Tab:** Select NFC reader type (PN532 vs PN7161) and presets, assign custom NFC GPIO pins (including IRQ and VEN for PN7160/PN7161), configure Ethernet settings, and view strapping pin safety warnings. Override strapping pin restrictions if required by custom hardware (`overrideStrappingRestriction`).
+4. **Save & Connect:** Upon clicking "Save", the captive portal submits configuration diffs and connects to your Wi-Fi network. On successful connection, the interface displays the assigned network IP address before closing.
 
 ## 5. HomeKit Pairing
 
-The default HomeKit pairing code is `466-37-726`. You can change this code in the web UI or through the captive portal during Wi-Fi setup.
-
-Once the device is connected to your Wi-Fi network, you can pair it with HomeKit by entering the setup code in the Home app.
+The default HomeKit pairing code is `466-37-726`. Once connected to your Wi-Fi network, open the Apple Home app, tap **Add Accessory**, and enter or scan the setup code.
 
 ## 6. Troubleshooting Common Setup Issues
 
-* **"Failed to connect to ESP32: Timed out waiting for packet header" or similar errors during flashing:**
-  * Ensure your ESP32 is properly in flash mode (hold BOOT, press/release EN, release BOOT).
-  * Double-check that you've selected the correct serial port.
-  * Try a different USB cable or USB port on your computer.
-  * Ensure your power supply is stable.
-* **ESP32 not creating Wi-Fi AP:**
-  * Verify the firmware flashed successfully.
-  * Try a hard reset (disconnect/reconnect USB power).
-  * Check serial output for any error messages.
-* **Cannot access web interface (192.168.4.1):**
-  * Make sure your device (phone/computer) is actually connected to the HomeKey-ESP32 Wi-Fi AP.
-  * Try clearing your browser's cache or using an incognito/private browsing window.
-  * Ensure no other network settings on your computer are interfering.
+* **Failed to connect during flashing:** Put board into bootloader mode manually (hold BOOT, tap RESET, release BOOT).
+* **NFC Reader Not Detected:** Verify power connections and ensure DIP switch is set to SPI mode for PN532, or IRQ/VEN pins are correctly mapped for PN7160/PN7161.
+* **Strapping Pin Warnings:** If assigning GPIOs 0, 2, 12, or 15 triggers a strapping pin conflict warning in the WebUI, verify pin usage or check `overrideStrappingRestriction` if using dedicated custom hardware.
 
----
-
-Congratulations! Your HomeKey-ESP32 is now flashed and should be connected to your network. The next step is to dive into the [Configuration Guide](../configuration) to fine-tune its settings and integrate it with HomeKit and Home Assistant!
