@@ -227,3 +227,43 @@ export async function scanWiFi(): Promise<ApiResponse<WiFiNetwork[]>> {
     return { success: false, error: message };
   }
 }
+
+/**
+ * Fetch the rolling log buffer.
+ *
+ * Plain text rather than JSON: the payload is already newline delimited and can
+ * be tens of kilobytes, so wrapping it would mean escaping every line for no
+ * benefit. Returns null when the request fails so the caller can distinguish
+ * "no buffer" from "empty buffer".
+ */
+export async function getBootLog(): Promise<string | null> {
+  try {
+    const response = await fetch(`/boot_log`, { method: 'GET' });
+    if (!response.ok) {
+      notifications.addError(`Failed to fetch boot log`);
+      return null;
+    }
+    return await response.text();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    notifications.addError(`Failed to fetch boot log: ${message}`);
+    return null;
+  }
+}
+
+/** Empty the rolling window. The frozen boot prologue is kept. */
+export async function clearBootLog(): Promise<boolean> {
+  try {
+    const response = await fetch(`/boot_log/clear`, { method: 'POST' });
+    if (!response.ok) {
+      notifications.addError(`Failed to clear boot log`);
+      return false;
+    }
+    notifications.addSuccess('Rolling log buffer cleared');
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error occurred';
+    notifications.addError(`Failed to clear boot log: ${message}`);
+    return false;
+  }
+}

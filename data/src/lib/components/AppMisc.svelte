@@ -503,6 +503,29 @@
 								</div>
 							</div>
 						</div>
+								
+								<div class="bg-base-200/50 rounded-xl p-4">
+									<p class="text-sm font-medium mb-2">Diagnostics</p>
+									<div class="form-control">
+										<!-- svelte-ignore a11y_label_has_associated_control -->
+										<label class="label">
+											<span class="label-text text-xs">Rolling log buffer (KB, 0 = off)</span>
+										</label>
+										<input
+											type="number"
+											min="0"
+											max="32"
+											bind:value={miscConfig.bootLogKb}
+											class="input input-sm input-bordered w-full"
+										/>
+										<p class="text-xs text-base-content/60 mt-1">
+											Captures logs from the first line of boot, including the reset reason -
+											which the live log cannot show, because it is emitted seconds before the
+											network comes up. Costs this much RAM permanently, and applies after a
+											reboot. Read it at <span class="font-mono">/boot_log</span>.
+										</p>
+									</div>
+								</div>
 					{/if}
 
 					{#if activeTab === 'security'}

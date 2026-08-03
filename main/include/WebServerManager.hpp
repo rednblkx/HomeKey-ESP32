@@ -118,6 +118,8 @@ private:
   static esp_err_t handleGetConfig(httpd_req_t *req);
   static esp_err_t handleGetEthConfig(httpd_req_t *req);
   static esp_err_t handleGetNfcPresets(httpd_req_t *req);
+  static esp_err_t handleGetBootLog(httpd_req_t *req);
+  static esp_err_t handleClearBootLog(httpd_req_t *req);
   static esp_err_t handleClearConfig(httpd_req_t *req);
   static esp_err_t handleSaveConfig(httpd_req_t *req);
   static esp_err_t handleReboot(httpd_req_t *req);

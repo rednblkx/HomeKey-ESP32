@@ -9,6 +9,7 @@
 #include "app_event_loop.hpp"
 #include "fmt/ranges.h"
 #include "WebServerManager.hpp"
+#include "BootLogBuffer.hpp"
 #include "ConfigManager.hpp"
 #include "HomeSpan.h"
 #include "MqttManager.hpp"
@@ -299,6 +300,8 @@ void WebServerManager::setupRoutes() {
       {"/config/save", HTTP_POST, handleSaveConfig, this},
       {"/eth_get_config", HTTP_GET, handleGetEthConfig, this},
       {"/nfc_get_presets", HTTP_GET, handleGetNfcPresets, this},
+      {"/boot_log", HTTP_GET, handleGetBootLog, this},
+      {"/boot_log/clear", HTTP_POST, handleClearBootLog, this},
 
       // Action endpoints
       {"/reboot_device", HTTP_POST, handleReboot, this},
@@ -624,6 +627,59 @@ esp_err_t WebServerManager::handleGetConfig(httpd_req_t *req) {
   std::string response = cjson_to_string_and_free(res);
   httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
   return ESP_OK;
+}
+
+/**
+ * @brief Return the rolling log buffer as plain text, oldest line first.
+ *
+ * Served as text/plain rather than JSON: the payload is already newline
+ * delimited, can be tens of kilobytes, and wrapping it in JSON would mean
+ * escaping every line for no benefit to the only consumer.
+ */
+esp_err_t WebServerManager::handleGetBootLog(httpd_req_t *req) {
+  WebServerManager *instance = getInstance(req);
+  if (!instance) {
+    httpd_resp_send_500(req);
+    return ESP_FAIL;
+  }
+  if (!instance->basicAuth(req)) {
+    return sendAuthFailure(req);
+  }
+
+  httpd_resp_set_type(req, "text/plain; charset=utf-8");
+  httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+
+  if (!bootlog::enabled()) {
+    return httpd_resp_sendstr(
+        req, "Rolling log buffer is disabled.\nEnable it in Settings, then reboot.\n");
+  }
+
+  char header[160];
+  const int n = snprintf(header, sizeof(header),
+                         "# rolling log buffer: %u of %u bytes used, %u lines dropped\n",
+                         (unsigned)bootlog::size(), (unsigned)bootlog::capacity(),
+                         (unsigned)bootlog::dropped());
+  httpd_resp_send_chunk(req, header, n);
+
+  const std::string body = bootlog::contents();
+  if (!body.empty()) {
+    httpd_resp_send_chunk(req, body.data(), body.size());
+  }
+  return httpd_resp_send_chunk(req, nullptr, 0);
+}
+
+esp_err_t WebServerManager::handleClearBootLog(httpd_req_t *req) {
+  WebServerManager *instance = getInstance(req);
+  if (!instance) {
+    httpd_resp_send_500(req);
+    return ESP_FAIL;
+  }
+  if (!instance->basicAuth(req)) {
+    return sendAuthFailure(req);
+  }
+  bootlog::clear();
+  httpd_resp_set_type(req, "application/json");
+  return httpd_resp_sendstr(req, "{\"success\":true}");
 }
 
 esp_err_t WebServerManager::handleGetNfcPresets(httpd_req_t *req) {
