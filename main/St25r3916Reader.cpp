@@ -726,8 +726,18 @@ bool St25r3916Reader::exchangeApdu(const std::vector<uint8_t>& send,
     // ISO 14443-4 allows the reader to request retransmission after a
     // transmission error. Two attempts is the conventional limit -- beyond that
     // the link is genuinely bad and failing fast beats stalling the phone.
+    // The budget is per recovery episode, not per transaction: it is cleared
+    // whenever a frame arrives intact. Otherwise a chained command that spent
+    // both retries on its first chunk would have none left for the remaining
+    // frames, which is precisely when errors are most likely.
     constexpr uint8_t kMaxNakRetries = 2;
     uint8_t nakRetries = 0;
+    // Tracks only whether the frame we are waiting on is a reply to an R(NAK),
+    // which is a different question from how much budget is left. Conflating
+    // the two left the resend-on-R-block branch armed after a recovery had
+    // already succeeded, so a later unexpected R-block resent the I-block
+    // instead of failing -- looping until the attempt cap.
+    bool awaitingNakReply = false;
 
     size_t txOff = 0;      // how much of `send` has been acknowledged
     size_t rxFrames = 0;   // response frames collected (1 unless the card chains)
@@ -771,6 +781,7 @@ bool St25r3916Reader::exchangeApdu(const std::vector<uint8_t>& send,
 
                 if (recoverable && nakRetries < kMaxNakRetries) {
                     nakRetries++;
+                    awaitingNakReply = true;
                     ESP_LOGW(TAG, "recoverable RX error (%s), sending R(NAK) %u/%u",
                              r.error ? r.error : "?", nakRetries, kMaxNakRetries);
                     // R(NAK) carries the current block number and must not toggle it.
@@ -816,15 +827,21 @@ bool St25r3916Reader::exchangeApdu(const std::vector<uint8_t>& send,
                 const bool isAck = (pcb & ~PCB_BLOCK_NUM) == PCB_R_ACK;
 
                 if (moreToSend && isAck) {
-                    // Expected mid-chain acknowledgement: this chunk is in.
+                    // Expected mid-chain acknowledgement: this chunk is in, so
+                    // the next one starts with a full retry budget.
                     m_blockNum ^= 1;
                     txOff += chunk;
+                    nakRetries = 0;
+                    awaitingNakReply = false;
                     chunkSettled = true;
                     break;
                 }
-                if (nakRetries > 0) {
+                if (awaitingNakReply) {
                     // The card answered our R(NAK) with an R-block, meaning it
-                    // never received the I-block. Resend it.
+                    // never received the I-block. Resend it. Cleared first so a
+                    // later unrelated R-block is treated as the protocol error
+                    // it is rather than triggering another resend.
+                    awaitingNakReply = false;
                     ESP_LOGW(TAG, "card answered R-block 0x%02X to our R(NAK); resending I-block",
                              pcb);
                     txLen = buildIBlock();
@@ -844,6 +861,10 @@ bool St25r3916Reader::exchangeApdu(const std::vector<uint8_t>& send,
                 ESP_LOGW(TAG, "ISO-DEP I-block carries no payload");
                 return false;
             }
+            // A good I-block ends any recovery episode: the continuation frames
+            // below get a full budget again.
+            nakRetries = 0;
+            awaitingNakReply = false;
             recv.insert(recv.end(), rx + 1, rx + r.len);
 
             // ---- Receive chaining: the card signals more with the M bit. Each

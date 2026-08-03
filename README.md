@@ -56,7 +56,7 @@ Configuration in the web UI:
 
 | Setting | Value |
 |---------|-------|
-| Reader Type | `ST25R3916` |
+| Reader Type | `ST25R3916 (I2C)` |
 | SDA Pin | `2` |
 | SCL Pin | `1` |
 | NeoPixel Pin (optional) | `35`, type `GRB` - gives tap/success/failure feedback |
