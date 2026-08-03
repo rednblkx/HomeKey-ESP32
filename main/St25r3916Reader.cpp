@@ -105,8 +105,18 @@ uint32_t fwiToMs(uint8_t fwi) {
     if (fwi > 14) fwi = 14;
     uint32_t ms = 5;
     for (uint8_t i = 0; i < fwi; i++) ms *= 2;
-    return ms + 5;
+    ms += 5;
+    // Clamp. FWI 14 works out to 81925 ms, and because there is no IRQ line the
+    // wait is a tight I2C poll -- a card advertising a large FWI would occupy the
+    // polling task for over a minute. A card that legitimately needs longer than
+    // the cap says so with S(WTX), which extends the timeout per exchange.
+    constexpr uint32_t kMaxFwtMs = 2000;
+    return ms > kMaxFwtMs ? kMaxFwtMs : ms;
 }
+
+// Largest frame either side puts on the wire: PCB + 256 byte INF + CRC + slack.
+// Bounds the FIFO write buffer and the ISO-DEP frame buffers.
+constexpr size_t kMaxFrame = 264;
 
 }  // namespace
 
@@ -275,8 +285,13 @@ bool St25r3916Reader::command(uint8_t cmd) {
 }
 
 bool St25r3916Reader::writeFifo(const uint8_t* data, size_t len) {
-    if (!m_dev || len > 512) return false;
-    uint8_t buf[513];
+    // Bounded by the largest frame a caller can build, not by the 512-byte FIFO.
+    // transceive() calls this while exchangeApdu() already holds tx[264] and
+    // rx[264] on the same stack, and that path also runs on the 4096-byte
+    // precompute task -- a 513-byte buffer here is pure stack pressure for
+    // capacity no caller can reach.
+    if (!m_dev || len + 1 > kMaxFrame) return false;
+    uint8_t buf[kMaxFrame];
     buf[0] = OP_LOAD_FIFO;
     memcpy(buf + 1, data, len);
     return i2c_master_transmit(m_dev, buf, len + 1, I2C_TIMEOUT_MS) == ESP_OK;
@@ -314,12 +329,16 @@ void St25r3916Reader::clearInterrupts() {
 }
 
 uint32_t St25r3916Reader::waitInterrupt(uint32_t mask, uint32_t timeoutMs) {
-    const uint32_t deadline = nowMs() + timeoutMs;
+    // Elapsed-delta rather than an absolute deadline: nowMs() wraps every ~49.7
+    // days, and a wrapped "nowMs() + timeoutMs" is already in the past, so every
+    // wait would return after a single poll for the length of that window.
+    // Unsigned subtraction stays correct across the wrap.
+    const uint32_t start = nowMs();
     uint32_t seen = 0;
     do {
         seen |= readInterrupts();
         if (seen & mask) break;
-    } while (nowMs() < deadline);
+    } while ((nowMs() - start) < timeoutMs);
     return seen;
 }
 
@@ -374,9 +393,18 @@ St25r3916Reader::RxResult St25r3916Reader::transceive(const uint8_t* tx, size_t 
         return r;
     }
 
-    const int64_t rxStart = esp_timer_get_time();
-    seen |= waitInterrupt(IRQ_RXE | IRQ_NRE | IRQ_ANY_ERROR, timeoutMs);
-    const int64_t rxWaitUs = esp_timer_get_time() - rxStart;
+    // readInterrupts() clears the status registers as it reads them, so the poll
+    // that observed IRQ_TXE may have latched IRQ_RXE in the same read. Entering
+    // the RX wait in that case is fatal to latency, not correctness: the bit has
+    // already been consumed, so the wait can never see it and spins for the whole
+    // timeout before the exchange succeeds anyway.
+    const uint32_t kRxSettled = IRQ_RXE | IRQ_NRE | IRQ_ANY_ERROR;
+    int64_t rxWaitUs = 0;
+    if (!(seen & kRxSettled)) {
+        const int64_t rxStart = esp_timer_get_time();
+        seen |= waitInterrupt(kRxSettled, timeoutMs);
+        rxWaitUs = esp_timer_get_time() - rxStart;
+    }
     r.irqs = seen;
 
     if (!(seen & IRQ_RXE)) {
@@ -417,6 +445,14 @@ St25r3916Reader::RxResult St25r3916Reader::shortFrame(uint8_t cmd, uint8_t* rx, 
                                                       uint32_t timeoutMs) {
     RxResult r;
 
+    // ATQA carries no CRC. AUX_NO_CRC_RX is otherwise whatever the previous
+    // transceive() left behind -- and in isTagStillPresent() that is an R(NAK)
+    // exchange with rxCrc = true, which clears the bit. The WUPA fallback would
+    // then have its reply checked against a CRC that ATQA does not contain, and
+    // only pass because the error flags are ignored below. Set it explicitly so
+    // the frame does not depend on unrelated state.
+    modifyReg(REG_AUX, 0, AUX_NO_CRC_RX);
+
     command(CMD_CLEAR_FIFO);
     clearInterrupts();
     command(cmd);
@@ -428,7 +464,11 @@ St25r3916Reader::RxResult St25r3916Reader::shortFrame(uint8_t cmd, uint8_t* rx, 
         return r;
     }
 
-    seen |= waitInterrupt(IRQ_RXE | IRQ_NRE | IRQ_ANY_ERROR, timeoutMs);
+    // Same latch-in-one-read case as transceive(); see the comment there.
+    const uint32_t kRxSettled = IRQ_RXE | IRQ_NRE | IRQ_ANY_ERROR;
+    if (!(seen & kRxSettled)) {
+        seen |= waitInterrupt(kRxSettled, timeoutMs);
+    }
     r.irqs = seen;
     if (!(seen & IRQ_RXE)) {
         r.error = "no card responded";
@@ -654,23 +694,25 @@ bool St25r3916Reader::exchangeApdu(const std::vector<uint8_t>& send,
     recv.clear();
     if (!m_connected || !m_isodepActive) return false;
 
-    // FSC covers PCB + payload + 2 CRC bytes. Chaining is not implemented, so
-    // report an oversized APDU rather than silently truncating it.
-    if (send.size() + 3 > m_fsc) {
-        ESP_LOGE(TAG, "APDU of %u bytes exceeds card FSC %u (chaining unimplemented)",
-                 static_cast<unsigned>(send.size()), m_fsc);
-        return false;
-    }
+    // FSC bounds what the *card* is willing to receive, so it caps our INF per
+    // frame: FSC = PCB + INF + 2 CRC bytes. Anything longer is split across
+    // chained I-blocks. FSC never bounds the card's own responses -- those are
+    // limited by the FSD we advertised in RATS -- so the RX buffer is sized from
+    // the frame buffer, not from FSC.
+    const size_t maxInf = (m_fsc > 3) ? static_cast<size_t>(m_fsc) - 3 : 13;
 
-    // Sized from FSC (max 256) rather than the 512-byte FIFO. This runs on the
-    // 4096-byte precompute task as well as the polling task, so every byte of
-    // stack matters -- an overflow there reboots the device mid-transaction.
-    // The PN532 backend keeps its buffers on the heap for the same reason.
+    // Sized from the largest frame either side may send (FSD/FSC max 256) rather
+    // than the 512-byte FIFO. This runs on the 4096-byte precompute task as well
+    // as the polling task, so every byte of stack matters -- an overflow there
+    // reboots the device mid-transaction. The PN532 backend keeps its buffers on
+    // the heap for the same reason.
     static constexpr size_t kFrameBuf = 264;  // PCB + 256 payload + CRC + slack
     uint8_t tx[kFrameBuf];
-    tx[0] = static_cast<uint8_t>(PCB_I_BLOCK | (m_blockNum & PCB_BLOCK_NUM));
-    memcpy(tx + 1, send.data(), send.size());
-    size_t txLen = send.size() + 1;
+    uint8_t rx[kFrameBuf];
+
+    // A chained response is assembled here across several frames. Bounded so a
+    // misbehaving card cannot grow the heap without limit.
+    static constexpr size_t kMaxResponse = 4096;
 
     // Caller timeout acts as a floor; the card's advertised FWT may be longer.
     uint32_t timeout = timeoutMs > m_fwtMs ? timeoutMs : m_fwtMs;
@@ -687,107 +729,215 @@ bool St25r3916Reader::exchangeApdu(const std::vector<uint8_t>& send,
     constexpr uint8_t kMaxNakRetries = 2;
     uint8_t nakRetries = 0;
 
-    for (uint8_t attempt = 0; attempt < 8; attempt++) {
-        uint8_t rx[kFrameBuf];
-        RxResult r = transceive(tx, txLen, rx, sizeof(rx), true, true, timeout);
+    size_t txOff = 0;      // how much of `send` has been acknowledged
+    size_t rxFrames = 0;   // response frames collected (1 unless the card chains)
+    size_t txFrames = 0;
 
-        if (!r.ok || r.len < 1) {
-            // ISO 14443-4 error recovery. A corrupted frame is a normal RF
-            // event, not a fatal one: the reader is supposed to send R(NAK) to
-            // request retransmission rather than abandon the transaction.
-            //
-            // This matters most for the 87-byte Auth0 response, the largest
-            // frame in a Home Key exchange and the one most likely to be hit.
-            // Without recovery a single bad CRC aborts authentication and the
-            // phone reports a protocol error.
-            const bool recoverable =
-                (r.irqs & (IRQ_CRC | IRQ_PAR | IRQ_ERR1 | IRQ_ERR2)) != 0 || (r.irqs & IRQ_RXE);
+    // Outer loop walks the command chunks. A command that fits in one frame runs
+    // this once, which is every Home Key exchange observed so far except
+    // attestation.
+    for (;;) {
+        const size_t remain = send.size() - txOff;
+        const size_t chunk = remain > maxInf ? maxInf : remain;
+        const bool moreToSend = (txOff + chunk) < send.size();
 
-            if (recoverable && nakRetries < kMaxNakRetries) {
-                nakRetries++;
-                ESP_LOGW(TAG, "recoverable RX error (%s), sending R(NAK) %u/%u",
-                         r.error ? r.error : "?", nakRetries, kMaxNakRetries);
-                // R(NAK) carries the current block number and must not toggle it.
-                tx[0] = static_cast<uint8_t>(PCB_R_NAK | (m_blockNum & PCB_BLOCK_NUM));
+        auto buildIBlock = [&]() -> size_t {
+            tx[0] = static_cast<uint8_t>(PCB_I_BLOCK | (m_blockNum & PCB_BLOCK_NUM) |
+                                         (moreToSend ? PCB_CHAINING : 0));
+            memcpy(tx + 1, send.data() + txOff, chunk);
+            return chunk + 1;
+        };
+
+        size_t txLen = buildIBlock();
+        txFrames++;
+        bool chunkSettled = false;
+
+        // Inner loop resolves one chunk: S(WTX) extensions and R(NAK)
+        // retransmissions do not advance the chain, they just re-run this.
+        for (uint8_t attempt = 0; attempt < 8 && !chunkSettled; attempt++) {
+            RxResult r = transceive(tx, txLen, rx, kFrameBuf, true, true, timeout);
+
+            if (!r.ok || r.len < 1) {
+                // ISO 14443-4 error recovery. A corrupted frame is a normal RF
+                // event, not a fatal one: the reader is supposed to send R(NAK)
+                // to request retransmission rather than abandon the transaction.
+                //
+                // This matters most for the 87-byte Auth0 response, the largest
+                // frame in a FAST-flow exchange, and for every frame of a chained
+                // attestation payload. Without recovery a single bad CRC aborts
+                // authentication and the phone reports a protocol error.
+                const bool recoverable =
+                    (r.irqs & (IRQ_CRC | IRQ_PAR | IRQ_ERR1 | IRQ_ERR2)) != 0 || (r.irqs & IRQ_RXE);
+
+                if (recoverable && nakRetries < kMaxNakRetries) {
+                    nakRetries++;
+                    ESP_LOGW(TAG, "recoverable RX error (%s), sending R(NAK) %u/%u",
+                             r.error ? r.error : "?", nakRetries, kMaxNakRetries);
+                    // R(NAK) carries the current block number and must not toggle it.
+                    tx[0] = static_cast<uint8_t>(PCB_R_NAK | (m_blockNum & PCB_BLOCK_NUM));
+                    txLen = 1;
+                    continue;
+                }
+
+                // A failure here leaves the session half-finished: our block
+                // number has not toggled but the card's may have.
+                ESP_LOGE(TAG, "ISO-DEP exchange FAILED after %lld ms: %s "
+                              "(blk=%u, frame %u, %u WTX round%s, %u NAK retr%s, "
+                              "irqs=0x%08X, %u byte cmd)",
+                         (esp_timer_get_time() - exchangeStart) / 1000,
+                         r.error ? r.error : "no response", static_cast<unsigned>(m_blockNum),
+                         static_cast<unsigned>(txFrames), wtxRounds, wtxRounds == 1 ? "" : "s",
+                         nakRetries, nakRetries == 1 ? "y" : "ies", r.irqs,
+                         static_cast<unsigned>(send.size()));
+                return false;
+            }
+
+            const uint8_t pcb = rx[0];
+
+            // ---- S(WTX): card wants more time, typically while doing crypto.
+            if ((pcb & PCB_TYPE_MASK) == PCB_TYPE_S) {
+                if ((pcb & S_BLOCK_MASK) == S_WTX && r.len >= 2) {
+                    const uint8_t wtxm = rx[1] & 0x3F;
+                    timeout = m_fwtMs * (wtxm ? wtxm : 1) + 10;
+                    wtxRounds++;
+                    ESP_LOGD(TAG, "S(WTX) round %u: WTXM=%u, extending timeout to %u ms",
+                             wtxRounds, wtxm, timeout);
+                    tx[0] = pcb;
+                    tx[1] = wtxm;
+                    txLen = 2;
+                    continue;
+                }
+                ESP_LOGW(TAG, "Unexpected S-block 0x%02X", pcb);
+                return false;
+            }
+
+            // ---- R-block.
+            if ((pcb & PCB_TYPE_MASK) == PCB_TYPE_R) {
+                const bool isAck = (pcb & ~PCB_BLOCK_NUM) == PCB_R_ACK;
+
+                if (moreToSend && isAck) {
+                    // Expected mid-chain acknowledgement: this chunk is in.
+                    m_blockNum ^= 1;
+                    txOff += chunk;
+                    chunkSettled = true;
+                    break;
+                }
+                if (nakRetries > 0) {
+                    // The card answered our R(NAK) with an R-block, meaning it
+                    // never received the I-block. Resend it.
+                    ESP_LOGW(TAG, "card answered R-block 0x%02X to our R(NAK); resending I-block",
+                             pcb);
+                    txLen = buildIBlock();
+                    continue;
+                }
+                ESP_LOGW(TAG, "Unexpected R-block 0x%02X", pcb);
+                return false;
+            }
+
+            // ---- I-block. Only legitimate once the whole command is sent.
+            if (moreToSend) {
+                ESP_LOGW(TAG, "card sent I-block 0x%02X mid-chain, expected R(ACK)", pcb);
+                return false;
+            }
+
+            if (r.len < 2) {
+                ESP_LOGW(TAG, "ISO-DEP I-block carries no payload");
+                return false;
+            }
+            recv.insert(recv.end(), rx + 1, rx + r.len);
+
+            // ---- Receive chaining: the card signals more with the M bit. Each
+            // continuation is requested with R(ACK) carrying the received block
+            // number toggled, per ISO 14443-4. S(WTX) can appear between frames.
+            uint8_t respPcb = pcb;
+            while (respPcb & PCB_CHAINING) {
+                if (recv.size() > kMaxResponse) {
+                    ESP_LOGE(TAG, "chained response exceeded %u bytes; aborting",
+                             static_cast<unsigned>(kMaxResponse));
+                    return false;
+                }
+                tx[0] = static_cast<uint8_t>(PCB_R_ACK |
+                                             ((respPcb ^ PCB_BLOCK_NUM) & PCB_BLOCK_NUM));
                 txLen = 1;
-                continue;
+
+                bool gotNext = false;
+                for (uint8_t chainAttempt = 0; chainAttempt < 8 && !gotNext; chainAttempt++) {
+                    RxResult cr = transceive(tx, txLen, rx, kFrameBuf, true, true, timeout);
+                    if (!cr.ok || cr.len < 1) {
+                        ESP_LOGE(TAG, "chained RX failed after %u frame%s: %s",
+                                 static_cast<unsigned>(rxFrames + 1), rxFrames == 0 ? "" : "s",
+                                 cr.error ? cr.error : "no response");
+                        return false;
+                    }
+                    const uint8_t cpcb = rx[0];
+                    if ((cpcb & PCB_TYPE_MASK) == PCB_TYPE_S &&
+                        (cpcb & S_BLOCK_MASK) == S_WTX && cr.len >= 2) {
+                        const uint8_t wtxm = rx[1] & 0x3F;
+                        timeout = m_fwtMs * (wtxm ? wtxm : 1) + 10;
+                        wtxRounds++;
+                        tx[0] = cpcb;
+                        tx[1] = wtxm;
+                        txLen = 2;
+                        continue;
+                    }
+                    if ((cpcb & PCB_TYPE_MASK) != 0x00 && (cpcb & PCB_TYPE_MASK) != PCB_I_BLOCK) {
+                        ESP_LOGW(TAG, "unexpected PCB 0x%02X during receive chaining", cpcb);
+                        return false;
+                    }
+                    if (cr.len < 2) {
+                        ESP_LOGW(TAG, "empty continuation frame during receive chaining");
+                        return false;
+                    }
+                    recv.insert(recv.end(), rx + 1, rx + cr.len);
+                    respPcb = cpcb;
+                    rxFrames++;
+                    gotNext = true;
+                }
+                if (!gotNext) {
+                    ESP_LOGW(TAG, "too many WTX rounds while receiving a chained response");
+                    return false;
+                }
             }
 
-            // A failure here leaves the session half-finished: our block number
-            // has not toggled but the card's may have.
-            ESP_LOGE(TAG, "ISO-DEP exchange FAILED after %lld ms: %s "
-                          "(blk=%u, %u WTX round%s, %u NAK retr%s, irqs=0x%08X, %u byte cmd)",
-                     (esp_timer_get_time() - exchangeStart) / 1000,
-                     r.error ? r.error : "no response", static_cast<unsigned>(m_blockNum),
-                     wtxRounds, wtxRounds == 1 ? "" : "s", nakRetries,
-                     nakRetries == 1 ? "y" : "ies", r.irqs,
-                     static_cast<unsigned>(send.size()));
-            return false;
-        }
+            // The card echoes our block number; take the next one from what it
+            // actually sent rather than assuming, so a chained response leaves
+            // the session correctly aligned.
+            m_blockNum = static_cast<uint8_t>((respPcb & PCB_BLOCK_NUM) ^ 1);
 
-        // A successful reply after an R(NAK) means the card retransmitted. If it
-        // answered R(ACK) instead, it never got our I-block -- resend that.
-        if (nakRetries > 0 && (rx[0] & PCB_TYPE_MASK) == PCB_TYPE_R) {
-            ESP_LOGW(TAG, "card answered R-block 0x%02X to our R(NAK); resending I-block",
-                     rx[0]);
-            tx[0] = static_cast<uint8_t>(PCB_I_BLOCK | (m_blockNum & PCB_BLOCK_NUM));
-            memcpy(tx + 1, send.data(), send.size());
-            txLen = send.size() + 1;
-            continue;
-        }
-
-        const uint8_t pcb = rx[0];
-
-        if ((pcb & PCB_TYPE_MASK) == PCB_TYPE_S) {
-            if ((pcb & S_BLOCK_MASK) == S_WTX && r.len >= 2) {
-                // Card wants more time, typically while doing crypto.
-                // Acknowledge with the same WTXM and keep waiting.
-                const uint8_t wtxm = rx[1] & 0x3F;
-                timeout = m_fwtMs * (wtxm ? wtxm : 1) + 10;
-                wtxRounds++;
-                ESP_LOGD(TAG, "S(WTX) round %u: WTXM=%u, extending timeout to %u ms",
-                         wtxRounds, wtxm, timeout);
-                tx[0] = pcb;
-                tx[1] = wtxm;
-                txLen = 2;
-                continue;
+            if (recv.size() < 2) {
+                ESP_LOGW(TAG, "ISO-DEP response shorter than SW1 SW2");
+                return false;
             }
-            ESP_LOGW(TAG, "Unexpected S-block 0x%02X", pcb);
-            return false;
-        }
-        if ((pcb & PCB_TYPE_MASK) == PCB_TYPE_R) {
-            ESP_LOGW(TAG, "Unexpected R-block 0x%02X", pcb);
-            return false;
-        }
-        if (pcb & PCB_CHAINING) {
-            ESP_LOGW(TAG, "Card used chaining (unimplemented)");
-            return false;
+
+            rxFrames++;
+            const int64_t elapsedMs = (esp_timer_get_time() - exchangeStart) / 1000;
+            const bool chained = (txFrames > 1 || rxFrames > 1);
+            if (chained) {
+                ESP_LOGI(TAG, "chained APDU ok: %lld ms, %u in / %u out "
+                              "(%u TX frame%s, %u RX frame%s, FSC %u, %u WTX)",
+                         elapsedMs, static_cast<unsigned>(send.size()),
+                         static_cast<unsigned>(recv.size()), static_cast<unsigned>(txFrames),
+                         txFrames == 1 ? "" : "s", static_cast<unsigned>(rxFrames),
+                         rxFrames == 1 ? "" : "s", m_fsc, wtxRounds);
+            } else if (elapsedMs > static_cast<int64_t>(m_fwtMs) / 2 || wtxRounds) {
+                // Anything past half the frame waiting time is worth reporting:
+                // a phone that is kept waiting near FWT deselects and reports a
+                // protocol error even though the exchange itself succeeded.
+                ESP_LOGW(TAG, "slow APDU: %lld ms (FWT %u ms, %u WTX round%s, %u byte cmd)",
+                         elapsedMs, m_fwtMs, wtxRounds, wtxRounds == 1 ? "" : "s",
+                         static_cast<unsigned>(send.size()));
+            } else {
+                ESP_LOGV(TAG, "APDU ok: %lld ms, %u in / %u out, blk %u->%u", elapsedMs,
+                         static_cast<unsigned>(send.size()), static_cast<unsigned>(recv.size()),
+                         static_cast<unsigned>(m_blockNum ^ 1), static_cast<unsigned>(m_blockNum));
+            }
+            return true;
         }
 
-        // I-block: strip the PCB; the remainder is the R-APDU including SW1 SW2.
-        if (r.len < 3) {
-            ESP_LOGW(TAG, "ISO-DEP response shorter than SW1 SW2");
+        if (!chunkSettled) {
+            ESP_LOGW(TAG, "chunk %u unresolved after 8 attempts (%u WTX rounds)",
+                     static_cast<unsigned>(txFrames), wtxRounds);
             return false;
         }
-        recv.assign(rx + 1, rx + r.len);
-        m_blockNum ^= 1;  // toggle only after a successful I-block exchange
-
-        const int64_t elapsedMs = (esp_timer_get_time() - exchangeStart) / 1000;
-        if (elapsedMs > static_cast<int64_t>(m_fwtMs) / 2 || wtxRounds) {
-            // Anything past half the frame waiting time is worth reporting:
-            // a phone that is kept waiting near FWT deselects and reports a
-            // protocol error even though the exchange itself succeeded.
-            ESP_LOGW(TAG, "slow APDU: %lld ms (FWT %u ms, %u WTX round%s, %u byte cmd)",
-                     elapsedMs, m_fwtMs, wtxRounds, wtxRounds == 1 ? "" : "s",
-                     static_cast<unsigned>(send.size()));
-        } else {
-            ESP_LOGV(TAG, "APDU ok: %lld ms, %u in / %u out, blk %u->%u", elapsedMs,
-                     static_cast<unsigned>(send.size()), static_cast<unsigned>(recv.size()),
-                     static_cast<unsigned>(m_blockNum ^ 1), static_cast<unsigned>(m_blockNum));
-        }
-        return true;
     }
-
-    ESP_LOGW(TAG, "Too many WTX rounds");
-    return false;
 }
