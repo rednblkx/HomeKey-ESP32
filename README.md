@@ -67,7 +67,7 @@ Measured on this hardware: full FAST-flow authentication in **130-160 ms**.
 >
 > The Grove connector does not break out the ST25R3916 IRQ pin, so the driver
 > polls the interrupt status registers over I2C instead. Hardware I2C at
-> 400 kHz is required - M5Stack document that SoftwareI2C latency is too high
+> 400 kHz is required - M5Stack documents that SoftwareI2C latency is too high
 > for the chip's RF timing.
 
 #### Ethernet

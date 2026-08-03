@@ -162,6 +162,12 @@ void setup() {
     ESP_LOGI(TAG, "NFC GPIO pins preset: Custom");
     ESP_LOGI(TAG, "NFC Custom GPIO pins: %d, %d, %d, %d", miscConfig.nfcGpioPins[0], miscConfig.nfcGpioPins[1], miscConfig.nfcGpioPins[2], miscConfig.nfcGpioPins[3]);
   }
+  // Resolve the pins once. NfcManager is handed the preset array when one is
+  // selected, so logging miscConfig.nfcGpioPins here would report SDA/SCL that
+  // the reader is not actually using.
+  const std::array<uint8_t, 4> &activeNfcPins =
+      miscConfig.nfcPinsPreset == PIN_UNSET ? miscConfig.nfcGpioPins
+                                            : nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins;
   const char *readerName = miscConfig.nfcReaderType == 0   ? "PN532 (SPI)"
                            : miscConfig.nfcReaderType == 1 ? "PN7160"
                            : miscConfig.nfcReaderType == 2 ? "ST25R3916 (I2C)"
@@ -170,13 +176,12 @@ void setup() {
   if (miscConfig.nfcReaderType == 1) {
     ESP_LOGI(TAG, "NFC IRQ pin: %d, VEN pin: %d", miscConfig.nfcIrqPin, miscConfig.nfcVenPin);
   } else if (miscConfig.nfcReaderType == 2) {
-    ESP_LOGI(TAG, "NFC I2C pins: SDA=%d, SCL=%d", miscConfig.nfcGpioPins[0],
-             miscConfig.nfcGpioPins[1]);
+    ESP_LOGI(TAG, "NFC I2C pins: SDA=%d, SCL=%d", activeNfcPins[0], activeNfcPins[1]);
   }
   readerDataManager->begin();
 
   nfcManager = std::make_unique<NfcManager>(*readerDataManager,
-                              miscConfig.nfcPinsPreset == PIN_UNSET ? miscConfig.nfcGpioPins : nfcGpioPinsPresets[miscConfig.nfcPinsPreset].gpioPins,
+                              activeNfcPins,
                               miscConfig.nfcReaderType,
                               miscConfig.nfcIrqPin,
                               miscConfig.nfcVenPin,
