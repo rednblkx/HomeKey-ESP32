@@ -1,6 +1,11 @@
-# Name, Type, SubType, Offset, Size, Flags
+# Name,   Type, SubType, Offset,  Size, Flags
+# App slots are 1856K rather than 1920K so a 128K core dump partition fits.
+# Chosen because it leaves nvs, otadata and spiffs at their existing offsets --
+# only app1 moves -- so enabling core dumps does not disturb HomeKit pairing,
+# reader credentials or the web assets.
 nvs,data,nvs,,0x10000,,
 otadata,data,ota,,0x2000,,
-app0,app,ota_0,,0x1E0000,,
-app1,app,ota_1,,0x1E0000,,
+app0,app,ota_0,0x20000,0x1D0000,,
+app1,app,ota_1,,0x1D0000,,
+coredump,data,coredump,,0x20000,,
 spiffs,data,spiffs,,0x20000,,

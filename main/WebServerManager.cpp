@@ -10,6 +10,9 @@
 #include "fmt/ranges.h"
 #include "WebServerManager.hpp"
 #include "ConfigManager.hpp"
+#include "esp_app_desc.h"
+#include "esp_core_dump.h"
+#include <cinttypes>
 #include "HomeSpan.h"
 #include "MqttManager.hpp"
 #include "NfcManager.hpp"
@@ -299,6 +302,9 @@ void WebServerManager::setupRoutes() {
       {"/config/save", HTTP_POST, handleSaveConfig, this},
       {"/eth_get_config", HTTP_GET, handleGetEthConfig, this},
       {"/nfc_get_presets", HTTP_GET, handleGetNfcPresets, this},
+      {"/coredump/info", HTTP_GET, handleCoreDumpInfo, this},
+      {"/coredump", HTTP_GET, handleCoreDumpDownload, this},
+      {"/coredump/erase", HTTP_POST, handleCoreDumpErase, this},
 
       // Action endpoints
       {"/reboot_device", HTTP_POST, handleReboot, this},
@@ -624,6 +630,182 @@ esp_err_t WebServerManager::handleGetConfig(httpd_req_t *req) {
   std::string response = cjson_to_string_and_free(res);
   httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
   return ESP_OK;
+}
+
+/**
+ * @brief Report the stored core dump, decoded on the device.
+ *
+ * A panic otherwise leaves only the reset reason -- "PANIC" without a location.
+ * Decoding the summary here rather than shipping the raw image means the common
+ * case needs no host tooling at all: the response already names the faulting
+ * task and carries the backtrace addresses, and only turning those addresses
+ * into file:line requires addr2line.
+ */
+esp_err_t WebServerManager::handleCoreDumpInfo(httpd_req_t *req) {
+  WebServerManager *instance = getInstance(req);
+  if (!instance) {
+    httpd_resp_send_500(req);
+    return ESP_FAIL;
+  }
+  if (!instance->basicAuth(req)) {
+    return sendAuthFailure(req);
+  }
+
+  cJSON *root = cJSON_CreateObject();
+
+#if CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH
+  cJSON_AddBoolToObject(root, "supported", true);
+
+  size_t addr = 0, size = 0;
+  const esp_err_t present = esp_core_dump_image_get(&addr, &size);
+  const bool available = (present == ESP_OK && size > 0);
+  cJSON_AddBoolToObject(root, "available", available);
+
+  if (available) {
+    cJSON_AddNumberToObject(root, "size", size);
+    // A corrupt image can still be downloaded for inspection, but ESP-IDF's
+    // on-device ELF parser assumes valid offsets and must not receive it.
+    const bool valid = esp_core_dump_image_check() == ESP_OK;
+    cJSON_AddBoolToObject(root, "valid", valid);
+
+    if (valid) {
+      char reason[64] = {0};
+      if (esp_core_dump_get_panic_reason(reason, sizeof(reason)) == ESP_OK) {
+        cJSON_AddStringToObject(root, "panicReason", reason);
+      }
+
+#if CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF
+      esp_core_dump_summary_t *summary = static_cast<esp_core_dump_summary_t *>(
+          calloc(1, sizeof(esp_core_dump_summary_t)));
+      if (summary) {
+        if (esp_core_dump_get_summary(summary) == ESP_OK) {
+          cJSON_AddStringToObject(root, "task", summary->exc_task);
+          char pc[16];
+          snprintf(pc, sizeof(pc), "0x%08" PRIx32, summary->exc_pc);
+          cJSON_AddStringToObject(root, "pc", pc);
+
+          // The dump records which build produced it. Comparing this against the
+          // running firmware catches the classic mistake of symbolicating a crash
+          // against an ELF that has since been rebuilt.
+          char sha[sizeof(summary->app_elf_sha256) + 1] = {0};
+          memcpy(sha, summary->app_elf_sha256, sizeof(summary->app_elf_sha256));
+          cJSON_AddStringToObject(root, "appElfSha256", sha);
+
+#if CONFIG_IDF_TARGET_ARCH_XTENSA
+          cJSON *bt = cJSON_AddArrayToObject(root, "backtrace");
+          for (uint32_t i = 0; i < summary->exc_bt_info.depth && i < 16; i++) {
+            char f[16];
+            snprintf(f, sizeof(f), "0x%08" PRIx32, summary->exc_bt_info.bt[i]);
+            cJSON_AddItemToArray(bt, cJSON_CreateString(f));
+          }
+          cJSON_AddBoolToObject(root, "backtraceCorrupted", summary->exc_bt_info.corrupted);
+#else
+          // RISC-V summaries carry a raw stack dump rather than an unwound
+          // backtrace; that has to be decoded from the downloaded image.
+          cJSON_AddNullToObject(root, "backtrace");
+          cJSON_AddStringToObject(root, "backtraceNote",
+                                  "RISC-V: no on-device unwind, decode the downloaded image");
+#endif
+        }
+        free(summary);
+      }
+#endif  // CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF
+    }
+  }
+#else
+  cJSON_AddBoolToObject(root, "supported", false);
+  cJSON_AddBoolToObject(root, "available", false);
+#endif
+
+  const esp_app_desc_t *app = esp_app_get_description();
+  cJSON_AddStringToObject(root, "runningVersion", app->version);
+
+  char *out = cJSON_PrintUnformatted(root);
+  httpd_resp_set_type(req, "application/json");
+  esp_err_t rc = httpd_resp_sendstr(req, out ? out : "{}");
+  cJSON_free(out);
+  cJSON_Delete(root);
+  return rc;
+}
+
+/** Stream the raw core dump image so it can be decoded with esp-coredump. */
+esp_err_t WebServerManager::handleCoreDumpDownload(httpd_req_t *req) {
+  WebServerManager *instance = getInstance(req);
+  if (!instance) {
+    httpd_resp_send_500(req);
+    return ESP_FAIL;
+  }
+  if (!instance->basicAuth(req)) {
+    return sendAuthFailure(req);
+  }
+
+#if CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH
+  size_t addr = 0, size = 0;
+  if (esp_core_dump_image_get(&addr, &size) != ESP_OK || size == 0) {
+    httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no core dump stored");
+    return ESP_FAIL;
+  }
+  const esp_partition_t *part = esp_partition_find_first(
+      ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_COREDUMP, nullptr);
+  if (!part) {
+    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no coredump partition");
+    return ESP_FAIL;
+  }
+
+  httpd_resp_set_type(req, "application/octet-stream");
+  httpd_resp_set_hdr(req, "Content-Disposition", "attachment; filename=\"coredump.elf\"");
+
+  // Streamed in chunks: the dump can be the whole partition and there is no
+  // reason to hold a second copy in heap on a device that has just crashed.
+  constexpr size_t kChunk = 1024;
+  uint8_t buf[kChunk];
+  size_t off = 0;
+  while (off < size) {
+    const size_t n = (size - off) < kChunk ? (size - off) : kChunk;
+    if (esp_partition_read(part, off, buf, n) != ESP_OK) {
+      ESP_LOGE(TAG, "core dump read failed at offset %u", static_cast<unsigned>(off));
+      return ESP_FAIL;
+    }
+    if (httpd_resp_send_chunk(req, reinterpret_cast<const char *>(buf), n) != ESP_OK) {
+      return ESP_FAIL;
+    }
+    off += n;
+  }
+  return httpd_resp_send_chunk(req, nullptr, 0);
+#else
+  httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "core dump support not built in");
+  return ESP_FAIL;
+#endif
+}
+
+/**
+ * @brief Erase the stored core dump.
+ *
+ * Needed because CONFIG_ESP_COREDUMP_FLASH_NO_OVERWRITE keeps the first dump:
+ * without an explicit erase, later crashes would not be recorded.
+ */
+esp_err_t WebServerManager::handleCoreDumpErase(httpd_req_t *req) {
+  WebServerManager *instance = getInstance(req);
+  if (!instance) {
+    httpd_resp_send_500(req);
+    return ESP_FAIL;
+  }
+  if (!instance->basicAuth(req)) {
+    return sendAuthFailure(req);
+  }
+#if CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH
+  const esp_err_t err = esp_core_dump_image_erase();
+  httpd_resp_set_type(req, "application/json");
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "core dump erase failed: %s", esp_err_to_name(err));
+    return httpd_resp_sendstr(req, "{\"success\":false}");
+  }
+  ESP_LOGI(TAG, "core dump erased; the next panic will be recorded");
+  return httpd_resp_sendstr(req, "{\"success\":true}");
+#else
+  httpd_resp_set_type(req, "application/json");
+  return httpd_resp_sendstr(req, "{\"success\":false,\"error\":\"not built in\"}");
+#endif
 }
 
 esp_err_t WebServerManager::handleGetNfcPresets(httpd_req_t *req) {

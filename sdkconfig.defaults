@@ -103,3 +103,24 @@ CONFIG_ESP_RMAKER_FACTORY_PARTITION_NAME=""
 CONFIG_ESP_RMAKER_FACTORY_NAMESPACE=""
 CONFIG_ESP_RMAKER_DEF_TIMEZONE=""
 CONFIG_ESP_RMAKER_SNTP_SERVER_NAME=""
+
+# Core dump to flash.
+#
+# The device has no reachable serial port in normal use, so a panic leaves no
+# backtrace: the reset reason alone says "PANIC" without saying where. This
+# stores an ELF core dump in a 128K partition created by shrinking both OTA app
+# slots by 64K. The web API exposes the decoded summary plus the raw image.
+#
+# ELF rather than BIN: esp_core_dump_get_summary() only works with ELF, and that
+# is what lets the device report the faulting task and backtrace itself instead
+# of requiring the user to run esp-coredump for every crash.
+CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
+CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF=y
+CONFIG_ESP_COREDUMP_CHECKSUM_CRC32=y
+CONFIG_ESP_COREDUMP_DECODE_INFO=y
+# Bound the dump to the tasks that matter. If the calculated image exceeds the
+# partition, ESP-IDF does not write a partial dump.
+CONFIG_ESP_COREDUMP_MAX_TASKS_NUM=16
+# Do not overwrite an unread dump: the first crash is usually the informative
+# one, and later reboots would otherwise bury it.
+CONFIG_ESP_COREDUMP_FLASH_NO_OVERWRITE=y
