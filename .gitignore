@@ -13,3 +13,4 @@ gha-creds-*.json
 docs/public
 .direnv/
 build-*/
+.claude/
