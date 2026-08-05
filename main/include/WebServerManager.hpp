@@ -70,6 +70,7 @@ public:
   void setMqttManager(MqttManager *mqttManager) { m_mqttManager = mqttManager; }
   void setNfcManager(NfcManager *nfcManager) { m_nfcManager = nfcManager; }
   void broadcastWs(const uint8_t *payload, size_t len, httpd_ws_type_t type);
+  bool shouldEnableHttps() const;
 
 private:
   // ------------------------------------------------------------------------

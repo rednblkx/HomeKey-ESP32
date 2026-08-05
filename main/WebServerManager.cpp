@@ -112,6 +112,30 @@ WebServerManager::~WebServerManager() {
   }
 }
 
+bool WebServerManager::shouldEnableHttps() const {
+    const auto& miscConfig = m_configManager.getConfig<espConfig::misc_config_t>();
+    if (!miscConfig.webHttpsEnabled) {
+        return false;
+    }
+
+    bool isMqttSslEnabled = m_configManager.getConfig<espConfig::mqttConfig_t>().useSSL;
+
+    size_t freeHeap = esp_get_free_heap_size();
+
+    if (isMqttSslEnabled && freeHeap < 75000) { // < 75 KB
+        ESP_LOGW(TAG, "HTTPS Web UI degraded to HTTP: Free heap (%zu bytes) insufficient for both HTTPS and MQTT SSL.", freeHeap);
+        return false;
+    }
+
+    if (freeHeap < 50000) { // < 50 KB absolute minimum for standalone HTTPS
+        ESP_LOGW(TAG, "HTTPS Web UI degraded to HTTP: Free heap (%zu bytes) below minimum threshold.", freeHeap);
+        return false;
+    }
+
+    return true;
+}
+
+
 // ============================================================================
 // Initialization
 /**
@@ -139,20 +163,24 @@ void WebServerManager::begin() {
   wifi_mode_t currentMode;
   esp_err_t wifiErr = esp_wifi_get_mode(&currentMode);
   bool isApMode = (wifiErr == ESP_OK && (currentMode == WIFI_MODE_AP || currentMode == WIFI_MODE_APSTA));
-  bool isHttpsEnabled = m_configManager.getConfig<espConfig::misc_config_t>().webHttpsEnabled;
+  bool isHttpsActive = !isApMode && shouldEnableHttps();
+
   httpd_ssl_config_t ssl_config = HTTPD_SSL_CONFIG_DEFAULT();
   ssl_config.httpd.max_uri_handlers = 22;
   ssl_config.httpd.max_open_sockets = 4;
   ssl_config.httpd.stack_size = 6144;
   ssl_config.httpd.uri_match_fn = httpd_uri_match_wildcard;
   ssl_config.httpd.lru_purge_enable = true;
-  ssl_config.httpd.backlog_conn = 6;
+  ssl_config.httpd.backlog_conn = 4;
 
-  if(isApMode || !isHttpsEnabled){
+  if (!isHttpsActive) {
     ssl_config.transport_mode = HTTPD_SSL_TRANSPORT_INSECURE;
+    ESP_LOGI(TAG, "Starting Web Server in HTTP mode");
+  } else {
+    ESP_LOGI(TAG, "Starting Web Server in HTTPS mode");
   }
 
-  if (isHttpsEnabled) {
+  if (isHttpsActive) {
     const auto& httpsCerts = m_configManager.getHttpsCertsConfig();
     if (!httpsCerts.serverCert.empty() && !httpsCerts.privateKey.empty()) {
       ssl_config.servercert = reinterpret_cast<const uint8_t *>(httpsCerts.serverCert.c_str());
@@ -941,14 +969,6 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     } else if (keyStr == "neoPixelType") {
       rebootNeeded = true;
       rebootMsg = "Pixel Type changed, reboot needed! Rebooting...";
-    } else if (keyStr == "webHttpsEnabled") {
-      size_t freeHeap = esp_get_free_heap_size();
-      ESP_LOGI(TAG, "Free Heap: %d", freeHeap);
-      if(cJSON_IsTrue(it) && freeHeap < (55 * 1024)){
-        success = false;
-        errorMsg = "HTTPS not available, not enough free memory!";
-        goto cleanup;
-      }
     }
     it = it->next;
   }
@@ -976,7 +996,6 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     }
   }
 
-  cleanup:
   cJSON_free(data_str);
 
   cJSON_Delete(configSchema);
@@ -1217,6 +1236,59 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
       if (!arrayValid) {
         isValid = false;
         break;
+      }
+    }
+
+    // --- Heap Memory Guard Checks ---
+    if (keyStr == "webHttpsEnabled" && cJSON_IsTrue(it)) {
+      size_t freeHeap = esp_get_free_heap_size();
+      bool isMqttSslActive = getInstance(req)->m_configManager.getConfig<espConfig::mqttConfig_t>().useSSL;
+
+      if (isMqttSslActive && freeHeap < (75 * 1024)) {
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_set_status(req, "400 Bad Request");
+        cJSON *res = cJSON_CreateObject();
+        cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+        cJSON_AddItemToObject(res, "error", cJSON_CreateString("HTTPS cannot be enabled while MQTT SSL is active (low RAM)."));
+        std::string response = cjson_to_string_and_free(res);
+        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+        cJSON_Delete(obj);
+        return false;
+      } else if (freeHeap < (50 * 1024)) {
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_set_status(req, "400 Bad Request");
+        cJSON *res = cJSON_CreateObject();
+        cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+        cJSON_AddItemToObject(res, "error", cJSON_CreateString("HTTPS cannot be enabled due to insufficient free heap memory."));
+        std::string response = cjson_to_string_and_free(res);
+        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+        cJSON_Delete(obj);
+        return false;
+      }
+    } else if (keyStr == "useSSL" && cJSON_IsTrue(it)) {
+      size_t freeHeap = esp_get_free_heap_size();
+      bool isHttpsActive = getInstance(req)->m_configManager.getConfig<espConfig::misc_config_t>().webHttpsEnabled;
+
+      if (isHttpsActive && freeHeap < (75 * 1024)) {
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_set_status(req, "400 Bad Request");
+        cJSON *res = cJSON_CreateObject();
+        cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+        cJSON_AddItemToObject(res, "error", cJSON_CreateString("MQTT SSL cannot be enabled while HTTPS is active (low RAM)."));
+        std::string response = cjson_to_string_and_free(res);
+        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+        cJSON_Delete(obj);
+        return false;
+      } else if (freeHeap < (50 * 1024)) {
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_set_status(req, "400 Bad Request");
+        cJSON *res = cJSON_CreateObject();
+        cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+        cJSON_AddItemToObject(res, "error", cJSON_CreateString("MQTT SSL cannot be enabled due to insufficient free heap memory."));
+        std::string response = cjson_to_string_and_free(res);
+        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+        cJSON_Delete(obj);
+        return false;
       }
     }
 
