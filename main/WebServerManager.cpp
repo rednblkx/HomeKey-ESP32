@@ -277,6 +277,31 @@ bool WebServerManager::basicAuth(httpd_req_t* req){
 // Route Setup
 // ============================================================================
 
+esp_err_t WebServerManager::ws_post_handshake_cb(httpd_req_t *req) {
+  WebServerManager *instance = getInstance(req);
+  if (!instance) {
+    return ESP_FAIL;
+  }
+
+  int sockfd = httpd_req_to_sockfd(req);
+  ESP_LOGI(TAG, "WebSocket connection established: fd=%d", sockfd);
+  instance->addWebSocketClient(sockfd);
+
+  // Send initial device status & metrics
+  std::string status = instance->getDeviceInfo();
+  instance->queue_ws_frame(sockfd, (const uint8_t *)status.c_str(),
+                           status.size(), HTTPD_WS_TYPE_TEXT);
+  std::string metrics = instance->getDeviceMetrics();
+  instance->queue_ws_frame(sockfd, (const uint8_t *)metrics.c_str(),
+                           metrics.size(), HTTPD_WS_TYPE_TEXT);
+
+  if (!esp_timer_is_active(instance->m_statusTimer)) {
+    esp_timer_start_periodic(instance->m_statusTimer, 5000 * 1000);
+  }
+
+  return ESP_OK;
+}
+
 void WebServerManager::setupRoutes() {
   ESP_LOGI(TAG, "Setting up routes...");
 
@@ -327,6 +352,9 @@ void WebServerManager::setupRoutes() {
                        .user_ctx = r.ctx};
 #ifdef CONFIG_HTTPD_WS_SUPPORT
     uri.is_websocket = r.is_ws;
+    if (r.is_ws) {
+      uri.ws_post_handshake_cb = ws_post_handshake_cb;
+    }
 #endif
     esp_err_t err = httpd_register_uri_handler(m_server, &uri);
     if (err != ESP_OK) {
@@ -1789,6 +1817,7 @@ esp_err_t WebServerManager::handleWebSocket(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
   if (!instance)
     return ESP_FAIL;
+
   if (req->method == HTTP_GET) {
     char *sessionId = new char[65];
     size_t sessionIdLen = 65;
@@ -1798,31 +1827,14 @@ esp_err_t WebServerManager::handleWebSocket(httpd_req_t *req) {
       return sendAuthFailure(req);
     }
     delete[] sessionId;
-    int sockfd = httpd_req_to_sockfd(req);
-    ESP_LOGI(TAG, "WebSocket client connected: fd=%d", sockfd);
-    instance->addWebSocketClient(sockfd);
-    if (!instance->m_wsBroadcastBuffer.empty()) {
-      for (auto &c : instance->m_wsBroadcastBuffer) {
-        instance->queue_ws_frame(sockfd, c.data(), c.size(), HTTPD_WS_TYPE_TEXT);
-      }
-      instance->m_wsBroadcastBuffer.clear();
-    }
 
-    std::string status = instance->getDeviceInfo();
-    instance->queue_ws_frame(sockfd, (const uint8_t *)status.c_str(),
-                             status.size(), HTTPD_WS_TYPE_TEXT);
-    std::string metrics = instance->getDeviceMetrics();
-    instance->queue_ws_frame(sockfd, (const uint8_t *)metrics.c_str(),
-                             metrics.size(), HTTPD_WS_TYPE_TEXT);
-
-    if (!esp_timer_is_active(instance->m_statusTimer))
-      esp_timer_start_periodic(instance->m_statusTimer, 5000 * 1000);
+    // Handshake check succeeded. Returning ESP_OK completes the handshake.
+    // The server will invoke WebServerManager::ws_post_handshake_cb immediately after.
     return ESP_OK;
   }
 
   // Receive WebSocket frame
   httpd_ws_frame_t ws_pkt = {};
-  ws_pkt.type = HTTPD_WS_TYPE_TEXT;
   esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 0);
 
   if (ret != ESP_OK) {
