@@ -16,6 +16,7 @@
 #include "ReaderDataManager.hpp"
 #include "cJSON.h"
 #include "config.hpp"
+#include "misc_config_nfc_pin_check.hpp"
 #include "esp_chip_info.h"
 #include "esp_err.h"
 #include "esp_heap_caps.h"
@@ -1126,12 +1127,37 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         break;
       }
 
-      if (auto owner = GPIOAllocator::instance().owner_of(incomingValue->valueint)) {
-        bool isAllowedStrapping = (owner == "STRAPPING" && overrideStrapping);
-
+      // Unchanged pins skip ownership. For nfcIrqPin/nfcVenPin an NFC-
+      // owned owner is allowed too (released by the save's reboot). See
+      // main/include/misc_config_nfc_pin_check.hpp for the rules.
+      const int   incomingPin   = incomingValue->valueint;
+      const int   currentPin    = cJSON_IsNumber(existingValue) ? existingValue->valueint : 255;
+      const bool  isNfcScalar   = (keyStr == "nfcIrqPin" || keyStr == "nfcVenPin");
+      auto        currentOwner  = GPIOAllocator::instance().owner_of(incomingPin);
+      if (isNfcScalar) {
+        auto d = webcfg::decideNfcPin(static_cast<uint8_t>(incomingPin),
+                                       static_cast<uint8_t>(currentPin),
+                                       currentOwner, overrideStrapping);
+        if (d == webcfg::NfcPinDecision::Conflict) {
+          std::string msg = std::to_string(incomingPin) +
+                            " for \"" + keyStr + "\" already owned by \"" +
+                            currentOwner.value() + "\".";
+          httpd_resp_set_type(req, "application/json");
+          httpd_resp_set_status(req, "400 Bad Request");
+          cJSON *res = cJSON_CreateObject();
+          cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+          cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
+          std::string response = cjson_to_string_and_free(res);
+          httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+          isValid = false;
+          break;
+        }
+      } else if (incomingPin != currentPin && currentOwner.has_value()) {
+        bool isAllowedStrapping = (currentOwner == "STRAPPING" && overrideStrapping);
         if (!isAllowedStrapping) {
-          std::string msg = std::to_string(incomingValue->valueint) +
-                            " for \"" + keyStr + "\" already owned by \"" + owner.value() + "\".";
+          std::string msg = std::to_string(incomingPin) +
+                            " for \"" + keyStr + "\" already owned by \"" +
+                            currentOwner.value() + "\".";
           httpd_resp_set_type(req, "application/json");
           httpd_resp_set_status(req, "400 Bad Request");
           cJSON *res = cJSON_CreateObject();
@@ -1156,17 +1182,50 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         isValid = false;
         break;
     } else if ((str_ends_with(keyStr.c_str(), "Pins") || str_ends_with(keyStr.c_str(), "SpiConfig")) && cJSON_IsArray(incomingValue)){
+      const bool isNfcArray = (keyStr == "nfcGpioPins");
+      cJSON *currentArr = cJSON_GetObjectItem(currentData, keyStr.c_str());
       cJSON *el = NULL;
       bool arrayValid = true;
+      int idx = 0;
       cJSON_ArrayForEach(el, incomingValue) {
-        if(cJSON_IsNumber(el)){
-          if (auto owner = GPIOAllocator::instance().owner_of(el->valueint)) {
-            bool isAllowedSPI = owner->contains("SPI");
-            bool isAllowedStrapping = (owner == "STRAPPING" && overrideStrapping);
-            
+        if (cJSON_IsNumber(el)) {
+          int currentPin = 255;
+          if (currentArr && cJSON_IsArray(currentArr)) {
+            cJSON *ce = cJSON_GetArrayItem(currentArr, idx);
+            if (ce && cJSON_IsNumber(ce)) currentPin = ce->valueint;
+          }
+          auto currentOwner = GPIOAllocator::instance().owner_of(el->valueint);
+
+          if (isNfcArray) {
+            // nfcGpioPins: NFC-owned leases may be displaced by the
+            // reboot that follows save; unchanged elements skip
+            // ownership entirely.
+            auto d = webcfg::decideNfcPin(static_cast<uint8_t>(el->valueint),
+                                           static_cast<uint8_t>(currentPin),
+                                           currentOwner, overrideStrapping);
+            if (d == webcfg::NfcPinDecision::Conflict) {
+              std::string msg = std::to_string(el->valueint) +
+                                " for \"" + keyStr + "\" already owned by \"" +
+                                currentOwner.value() + "\".";
+              httpd_resp_set_type(req, "application/json");
+              httpd_resp_set_status(req, "400 Bad Request");
+              cJSON *res = cJSON_CreateObject();
+              cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+              cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
+              std::string response = cjson_to_string_and_free(res);
+              httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+              arrayValid = false;
+              break;
+            }
+          } else if (el->valueint != currentPin && currentOwner.has_value()) {
+            // Non-NFC arrays (e.g. ethSpiConfig): pre-patch behaviour --
+            // SPI-family owner allowed, STRAPPING only with override.
+            bool isAllowedSPI = currentOwner->contains("SPI");
+            bool isAllowedStrapping = (currentOwner == "STRAPPING" && overrideStrapping);
             if (!isAllowedSPI && !isAllowedStrapping) {
               std::string msg = std::to_string(el->valueint) +
-                                " for \"" + keyStr + "\" already owned by \"" + owner.value() + "\".";
+                                " for \"" + keyStr + "\" already owned by \"" +
+                                currentOwner.value() + "\".";
               httpd_resp_set_type(req, "application/json");
               httpd_resp_set_status(req, "400 Bad Request");
               cJSON *res = cJSON_CreateObject();
@@ -1179,6 +1238,7 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
             }
           }
         }
+        idx++;
       }
       if (!arrayValid) {
         isValid = false;
