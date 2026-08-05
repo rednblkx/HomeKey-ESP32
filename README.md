@@ -33,10 +33,42 @@ The project aims to be the easy DIY solution for using Apple's HomeKey feature w
 ### Prerequisites
 
 - **ESP32 Development Board**
-- **PN532 NFC Module** (SPI interface)
+- **NFC reader** - one of:
+  - **PN532** (SPI)
+  - **PN7160** (SPI)
+  - **ST25R3916** (I2C)
 - **USB Cable** (for flashing and power)
 - **Computer** (Windows, Mac, or Linux)
 - **Basic Electronics Knowledge** (not a problem if you're new to this, ask away!)
+
+#### Solder-free option: M5Stack AtomS3 Lite + Unit NFC
+
+The ST25R3916 backend was developed against an M5Stack pairing that needs no
+soldering, breadboard or jumper wires - the two parts connect with the supplied
+Grove cable:
+
+| Part | Notes |
+|------|-------|
+| [M5Stack AtomS3 Lite](https://shop.m5stack.com/products/atoms3-lite-esp32s3-dev-kit) | ESP32-S3, 8 MB flash, USB-C, RGB status LED on GPIO 35 |
+| [M5Stack Unit NFC (ST25R3916)](https://shop.m5stack.com/products/nfc-universal-unit-st25r3916) | I2C address `0x50`, HY2.0-4P Grove connector |
+
+Configuration in the web UI:
+
+| Setting | Value |
+|---------|-------|
+| Reader Type | `ST25R3916 (I2C)` |
+| SDA Pin | `2` |
+| SCL Pin | `1` |
+| NeoPixel Pin (optional) | `35`, type `GRB` - gives tap/success/failure feedback |
+
+Measured on this hardware: full FAST-flow authentication in **130-160 ms**.
+
+> [!NOTE]
+>
+> The Grove connector does not break out the ST25R3916 IRQ pin, so the driver
+> polls the interrupt status registers over I2C instead. Hardware I2C at
+> 400 kHz is required - M5Stack documents that SoftwareI2C latency is too high
+> for the chip's RF timing.
 
 #### Ethernet
 
@@ -241,6 +273,9 @@ HomeKey-ESP32/
 │   ├── ConfigManager.cpp    # Configuration management
 │   ├── ReaderDataManager.cpp # Reader data management
 │   ├── NfcManager.cpp      # NFC communication
+│   ├── Pn532Reader.cpp     # PN532 backend (SPI)
+│   ├── Pn7160Reader.cpp    # PN7160 backend
+│   ├── St25r3916Reader.cpp # ST25R3916 backend (I2C)
 │   ├── HomeKitLock.cpp     # HomeKit integration
 │   ├── LockManager.cpp     # Lock state management
 │   ├── MqttManager.cpp     # MQTT client
@@ -263,7 +298,8 @@ HomeKey-ESP32/
 
 | Component | File | Purpose |
 |-----------|------|---------|
-| **NFC Manager** | [`NfcManager.cpp`](main/NfcManager.cpp) | Handles PN532 communication and HomeKey authentication |
+| **NFC Manager** | [`NfcManager.cpp`](main/NfcManager.cpp) | Drives the selected NFC backend and HomeKey authentication |
+| **NFC Backends** | [`Pn532Reader.cpp`](main/Pn532Reader.cpp) / [`Pn7160Reader.cpp`](main/Pn7160Reader.cpp) / [`St25r3916Reader.cpp`](main/St25r3916Reader.cpp) | Reader implementations behind the common `INfcReader` interface |
 | **HomeKit Bridge** | [`HomeKitLock.cpp`](main/HomeKitLock.cpp) | Manages Apple HomeKit integration and pairing |
 | **Lock Manager** | [`LockManager.cpp`](main/LockManager.cpp) | Controls lock state transitions and GPIO actions |
 | **MQTT Client** | [`MqttManager.cpp`](main/MqttManager.cpp) | Enables smart home integration via MQTT |
@@ -276,7 +312,10 @@ HomeKey-ESP32/
 # Install dependencies
 git submodule update --init --recursive
 
-# Install esp-idf (see https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html#get-started)
+# Install esp-idf v5.4 or newer -- CI builds against v5.5.4.
+# Earlier versions do not compile: the pn7160 and pn532_hal components use
+# esp_log_buffer.h and spi_bus_dma_memory_alloc, both introduced in v5.4.
+# See https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html#get-started
 
 # Build firmware
 idf.py build
