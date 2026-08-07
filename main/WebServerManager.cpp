@@ -1970,6 +1970,8 @@ void WebServerManager::addWebSocketClient(int fd) {
 
 void WebServerManager::removeWebSocketClient(int fd) {
   bool stopTimer = false;
+  size_t remaining = 0;
+  bool removed = false;
   {
     std::scoped_lock lock(m_wsClientsMutex);
     auto it = std::find_if(
@@ -1977,10 +1979,14 @@ void WebServerManager::removeWebSocketClient(int fd) {
         [fd](const std::unique_ptr<WsClient> &c) { return c->fd == fd; });
     if (it != m_wsClients.end()) {
       m_wsClients.erase(it);
-      ESP_LOGI(TAG, "Removed WebSocket client fd=%d, remaining: %zu", fd,
-               m_wsClients.size());
+      remaining = m_wsClients.size();
       stopTimer = m_wsClients.empty();
+      removed = true;
     }
+  }
+  if (removed) {
+    ESP_LOGI(TAG, "Removed WebSocket client fd=%d, remaining: %zu", fd,
+             remaining);
   }
   if (stopTimer && m_statusTimer && esp_timer_is_active(m_statusTimer)) {
     esp_timer_stop(m_statusTimer);
