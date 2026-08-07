@@ -1,9 +1,24 @@
 cmake_minimum_required(VERSION 3.16)
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-execute_process(COMMAND git describe --tags --always --dirty
-                OUTPUT_VARIABLE GIT_VERSION
-                OUTPUT_STRIP_TRAILING_WHITESPACE)
-set(PROJECT_VER ${GIT_VERSION})
+execute_process(
+    COMMAND git rev-parse --short HEAD
+    WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
+    OUTPUT_VARIABLE GIT_COMMIT_HASH
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+
+execute_process(
+    COMMAND git describe --tags --exact-match
+    WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
+    OUTPUT_VARIABLE GIT_EXACT_TAG
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+
+if(GIT_EXACT_TAG STREQUAL "dev" AND GIT_COMMIT_HASH)
+    set(PROJECT_VER "dev-${GIT_COMMIT_HASH}")
+endif()
 idf_build_set_property(MINIMAL_BUILD ON)
 project(HomeKey-ESP32)
 idf_build_get_property(IDF_TARGET IDF_TARGET)
