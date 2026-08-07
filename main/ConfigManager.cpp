@@ -1,4 +1,5 @@
 #include "ConfigManager.hpp"
+#include "BootLogBuffer.hpp"
 #include "MbedtlsHelpers.hpp"
 #include "cJSON.h"
 #include "config.hpp"
@@ -111,7 +112,8 @@ ConfigManager::ConfigManager() : m_isInitialized(false) {
       {"ethSpiConfig", &m_miscConfig.ethSpiConfig},
       {"logLevel", &m_miscConfig.logLevel},
       {"overrideStrappingRestriction", &m_miscConfig.overrideStrappingRestriction},
-      {"accessPointPassword", &m_miscConfig.accessPointPassword}
+      {"accessPointPassword", &m_miscConfig.accessPointPassword},
+      {"bootLogKb", &m_miscConfig.bootLogKb}
     }
     },
     {
@@ -328,6 +330,18 @@ bool ConfigManager::saveConfig() {
   ESP_LOGI(TAG, "Attempting to save '%s' configuration...", key.c_str());
   if (saveConfigToNvs(key.c_str())) {
     ESP_LOGI(TAG, "'%s' successfully saved and updated.", key.c_str());
+    if constexpr (std::is_same_v<ConfigType, espConfig::misc_config_t>) {
+      // Mirror this one setting to a standalone key. The rolling log buffer has
+      // to be running before this class deserialises MISCDATA -- the reset
+      // reason is logged well before that -- so it cannot ask us for the value.
+      // A plain nvs_get_u16 at boot is far cheaper than decoding the blob.
+      esp_err_t err = nvs_set_u16(m_nvsHandle, bootlog::kNvsKey, m_miscConfig.bootLogKb);
+      if (err == ESP_OK) {
+        nvs_commit(m_nvsHandle);
+      } else {
+        ESP_LOGW(TAG, "Failed to mirror %s: %s", bootlog::kNvsKey, esp_err_to_name(err));
+      }
+    }
     return true;
   }
   ESP_LOGE(TAG, "Failed to save '%s' configuration.", key.c_str());

@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <memory>
+#include "BootLogBuffer.hpp"
 #include "ConsoleLogSinker.h"
 #include "HomeSpan.h"
 #include "config.hpp"
@@ -108,6 +109,12 @@ void setup() {
   #endif
   loggable::espidf::LogHook::install(false, true);
   Sinker::instance().add_sinker(std::make_shared<loggable::ConsoleLogSinker>());
+  // Registered here, before the reset reason is logged below. That line is the
+  // single most useful piece of crash evidence and the WebSocket sink can never
+  // carry it -- that sink only exists once WiFi and the HTTP server are up,
+  // seconds later. On a board with no reachable serial port it is otherwise
+  // unobservable. No-op unless the user has enabled the buffer.
+  bootlog::initFromNvs();
   esp_err_t err = esp_event_loop_create_default();
   if (err != ESP_OK) {
     ESP_LOGE("Main", "Failed to create default event loop: %d", err);

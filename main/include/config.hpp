@@ -188,6 +188,10 @@ namespace espConfig
     uint8_t logLevel = ESP_LOG_ERROR;
     bool overrideStrappingRestriction = false;
     std::string accessPointPassword = AP_PASSWORD;
+    // Size of the rolling in-RAM log buffer, in KB. 0 disables it.
+    // Costs its full size in heap for the lifetime of the device, so it is off
+    // by default. Applied at boot, so a change takes effect on the next restart.
+    uint16_t bootLogKb = 0;
   };
   struct actions_config_t {
     enum colorMap

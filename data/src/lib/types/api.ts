@@ -187,6 +187,8 @@ export interface MiscConfig {
   ethSpiConfig: [number, number, number, number, number, number, number];
   /** Override Strapping GPIO Pin restriction */
   overrideStrappingRestriction: boolean;
+  /** Size of the rolling in-RAM log buffer in KB; 0 disables it. Applied at boot. */
+  bootLogKb?: number;
 }
 
 /**
