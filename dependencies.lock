@@ -586,6 +586,6 @@ direct_dependencies:
 - espressif/libsodium
 - idf
 - joltwallet/littlefs
-manifest_hash: 128033046eaf8eafe454b68599382f3e3fa7097fae1468920384ee62b719a930
+manifest_hash: db387e12200ef576b0cc5ec424dd5384f1ffca06bcb1114b02bbb643068176b8
 target: esp32c6
 version: 2.0.0
