@@ -1843,50 +1843,6 @@ struct AsyncWsData {
   std::vector<uint8_t> payload;
 };
 
-static void send_ws_work_cb(void *arg) {
-  std::unique_ptr<AsyncWsData> data(static_cast<AsyncWsData *>(arg));
-
-  if (data) {
-    httpd_ws_frame_t ws_pkt = {};
-    ws_pkt.final = true;
-    ws_pkt.fragmented = false;
-    ws_pkt.type = data->type;
-    ws_pkt.len = data->payload.size();
-    ws_pkt.payload = data->payload.empty() ? nullptr : data->payload.data();
-
-    httpd_ws_send_frame_async(data->server, data->fd, &ws_pkt);
-  }
-}
-
-esp_err_t WebServerManager::ws_send_frame(httpd_handle_t server, int fd,
-                                          const uint8_t *payload, size_t len,
-                                          httpd_ws_type_t type) {
-#ifdef CONFIG_HTTPD_WS_SUPPORT
-  if (!server)
-    return ESP_FAIL;
-
-  auto data = std::make_unique<AsyncWsData>();
-  data->server = server;
-  data->fd = fd;
-  data->type = type;
-
-  if (len > 0 && payload) {
-    data->payload.assign(payload, payload + len);
-  }
-
-  AsyncWsData *raw_data = data.release();
-
-  esp_err_t ret = httpd_queue_work(server, send_ws_work_cb, raw_data);
-  if (ret != ESP_OK) {
-    std::unique_ptr<AsyncWsData> cleanup(raw_data);
-  }
-
-  return ret;
-#else
-  return ESP_ERR_NOT_SUPPORTED;
-#endif
-}
-
 esp_err_t WebServerManager::handleWebSocket(httpd_req_t *req) {
 #ifndef CONFIG_HTTPD_WS_SUPPORT
   httpd_resp_set_status(req, "501 Not Implemented");
@@ -2071,9 +2027,14 @@ void WebServerManager::ws_send_task(void *arg) {
       }
 
       if (target_fd != -1) {
-        esp_err_t send_ret =
-            instance->ws_send_frame(instance->m_server, target_fd,
-                                    frame->payload, frame->len, frame->type);
+        httpd_ws_frame_t ws_pkt = {};
+        ws_pkt.final = true;
+        ws_pkt.fragmented = false;
+        ws_pkt.type = frame->type;
+        ws_pkt.len = frame->len;
+        ws_pkt.payload = frame->payload;
+
+        esp_err_t send_ret = httpd_ws_send_frame_async(instance->m_server, target_fd, &ws_pkt);
         if (send_ret != ESP_OK) {
           const char *err = esp_err_to_name(send_ret);
           bool is_err =
