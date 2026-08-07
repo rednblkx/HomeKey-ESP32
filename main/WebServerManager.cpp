@@ -50,6 +50,8 @@
 
 const char *WebServerManager::TAG = "WebServerManager";
 const size_t MAX_WS_PAYLOAD = 8192;
+const size_t HEAP_UPPER_THRESHOLD = 70 * 1000;
+const size_t HEAP_LOWER_THRESHOLD = 50 * 1000;
 
 // ============================================================================
 // Helper Functions
@@ -122,7 +124,7 @@ bool WebServerManager::shouldEnableHttps() const {
 
     size_t freeHeap = esp_get_free_heap_size();
 
-    if (isMqttSslEnabled && freeHeap < 70000) { // < 70 KB
+    if (isMqttSslEnabled && freeHeap < HEAP_UPPER_THRESHOLD) {
         ESP_LOGW(TAG, "HTTPS Web UI degraded to HTTP: Free heap (%zu bytes) insufficient for both HTTPS and MQTT SSL.", freeHeap);
         return false;
     }
@@ -1251,7 +1253,7 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
       size_t freeHeap = esp_get_free_heap_size();
       bool isMqttSslActive = getInstance(req)->m_configManager.getConfig<espConfig::mqttConfig_t>().useSSL;
 
-      if (isMqttSslActive && freeHeap < (75 * 1024)) {
+      if (isMqttSslActive && freeHeap < HEAP_UPPER_THRESHOLD) {
         httpd_resp_set_type(req, "application/json");
         httpd_resp_set_status(req, "400 Bad Request");
         cJSON *res = cJSON_CreateObject();
@@ -1261,7 +1263,7 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
         cJSON_Delete(obj);
         return false;
-      } else if (freeHeap < (50 * 1024)) {
+      } else if (freeHeap < HEAP_LOWER_THRESHOLD) {
         httpd_resp_set_type(req, "application/json");
         httpd_resp_set_status(req, "400 Bad Request");
         cJSON *res = cJSON_CreateObject();
@@ -1276,7 +1278,7 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
       size_t freeHeap = esp_get_free_heap_size();
       bool isHttpsActive = getInstance(req)->m_configManager.getConfig<espConfig::misc_config_t>().webHttpsEnabled;
 
-      if (isHttpsActive && freeHeap < (75 * 1024)) {
+      if (isHttpsActive && freeHeap < HEAP_UPPER_THRESHOLD) {
         httpd_resp_set_type(req, "application/json");
         httpd_resp_set_status(req, "400 Bad Request");
         cJSON *res = cJSON_CreateObject();
@@ -1286,7 +1288,7 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
         cJSON_Delete(obj);
         return false;
-      } else if (freeHeap < (50 * 1024)) {
+      } else if (freeHeap < HEAP_LOWER_THRESHOLD) {
         httpd_resp_set_type(req, "application/json");
         httpd_resp_set_status(req, "400 Bad Request");
         cJSON *res = cJSON_CreateObject();
