@@ -35,6 +35,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <dirent.h>
+#include <new>
 #include <esp_app_desc.h>
 #include <mutex>
 #include <esp_tls_crypto.h>
@@ -315,6 +316,15 @@ esp_err_t WebServerManager::ws_post_handshake_cb(httpd_req_t *req) {
   ESP_LOGI(TAG, "WebSocket connection established: fd=%d", sockfd);
   instance->addWebSocketClient(sockfd);
 
+  std::deque<std::vector<uint8_t>> backlog;  // swap out under lock, send outside it to avoid a log-reentrancy deadlock
+  {
+    std::scoped_lock lock(instance->m_wsBroadcastBufferMutex);
+    backlog.swap(instance->m_wsBroadcastBuffer);
+  }
+  for (auto &c : backlog) {
+    instance->queue_ws_frame(sockfd, c.data(), c.size(), HTTPD_WS_TYPE_TEXT);
+  }
+
   // Send initial device status & metrics
   std::string status = instance->getDeviceInfo();
   instance->queue_ws_frame(sockfd, (const uint8_t *)status.c_str(),
@@ -325,13 +335,6 @@ esp_err_t WebServerManager::ws_post_handshake_cb(httpd_req_t *req) {
 
   if (!esp_timer_is_active(instance->m_statusTimer)) {
     esp_timer_start_periodic(instance->m_statusTimer, 5000 * 1000);
-  }
-
-  if(!instance->m_wsBroadcastBuffer.empty()){
-    for (auto &v : instance->m_wsBroadcastBuffer) {
-      instance->queue_ws_frame(sockfd, v.data(), v.size(), HTTPD_WS_TYPE_TEXT);
-    }
-    instance->m_wsBroadcastBuffer.clear();
   }
 
   return ESP_OK;
@@ -931,7 +934,7 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
     return ESP_FAIL;
   }
-  char *data_str = cJSON_PrintUnformatted(obj);
+  char *data_str = nullptr;  // serialised after the loop below, which can still mutate obj
   std::string result;
   while (it) {
     cJSON *configSchemaItem = cJSON_GetObjectItem(configSchema, it->string);
@@ -980,6 +983,13 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     it = it->next;
   }
 
+  data_str = cJSON_PrintUnformatted(obj);
+  if (!data_str) {
+    success = false;
+    errorMsg = "Out of memory serialising configuration";
+    goto cleanup;
+  }
+
   if (type == "mqtt") {
     result = instance->m_configManager.updateFromJson<espConfig::mqttConfig_t>(data_str);
     if (!result.empty()) {
@@ -1022,6 +1032,7 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     }
     return ESP_OK;
   }
+cleanup:
   httpd_resp_set_type(req, "application/json");
   cJSON *res = cJSON_CreateObject();
   cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
@@ -1171,7 +1182,23 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         isValid = false;
         break;
       }
-      if (uint8_t pin = incomingValue->valueint; pin != 255 && !GPIO_IS_VALID_GPIO(pin) &&
+      const int rawPin = incomingValue->valueint;  // range-check before narrowing to uint8_t below
+      // valueint truncates, so reject fractional input too; 255.5 would otherwise pass as the 255 "unset" sentinel
+      if (rawPin < 0 || rawPin > 255 ||
+          incomingValue->valuedouble != static_cast<double>(rawPin)) {
+        std::string msg = std::to_string(rawPin) +
+                          " is not a valid GPIO Pin for \"" + keyStr + "\".";
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_set_status(req, "400 Bad Request");
+        cJSON *res = cJSON_CreateObject();
+        cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+        cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
+        std::string response = cjson_to_string_and_free(res);
+        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+        isValid = false;
+        break;
+      }
+      if (uint8_t pin = static_cast<uint8_t>(rawPin); pin != 255 && !GPIO_IS_VALID_GPIO(pin) &&
                                                 !GPIO_IS_VALID_OUTPUT_GPIO(pin)) {
         std::string msg = std::to_string(pin) +
                           " is not a valid GPIO Pin for \"" + keyStr + "\".";
@@ -1379,6 +1406,14 @@ esp_err_t WebServerManager::handleClearConfig(httpd_req_t *req) {
 // ============================================================================
 
 esp_err_t WebServerManager::handleReboot(httpd_req_t *req) {
+  WebServerManager *instance = getInstance(req);  // unlike other state-changing routes, this one skipped auth
+  if (!instance) {
+    httpd_resp_send_500(req);
+    return ESP_FAIL;
+  }
+  if (!instance->basicAuth(req)) {
+    return sendAuthFailure(req);
+  }
   httpd_resp_set_type(req, "application/json");
   httpd_resp_sendstr(req,
                      "{\"success\":\"true\",\"message\":\"Rebooting...\"}");
@@ -1690,18 +1725,24 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
   //   }
   // }
 
+  std::string setupCode;  // copy out before obj is freed below; setupCodeItem points into it
+  const bool haveSetupCode = setupCodeItem && cJSON_IsString(setupCodeItem) &&
+                             setupCodeItem->valuestring != nullptr;
+  if (haveSetupCode) {
+    setupCode = setupCodeItem->valuestring;
+  }
+
   auto cleaned_body_str = cjson_to_string_and_free(obj);
+  obj = nullptr;  // freed by the call above; every use past this point is a bug
   bool isValid = instance->validateRequest(req, currentConfigData, cleaned_body_str.c_str());
   cJSON_Delete(currentConfigData);
 
   if (!isValid) {
-    cJSON_Delete(obj);
     return ESP_FAIL; // validateRequest has already sent the HTTP error response
   }
 
   if (wifiProvided) {
     if (!connectWiFi(ssid.c_str(), password.c_str(), 15000)) {
-      cJSON_Delete(obj);
       httpd_resp_set_status(req, "400 Bad Request");
       httpd_resp_set_type(req, "application/json");
       cJSON *errorRes = cJSON_CreateObject();
@@ -1714,14 +1755,12 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
     homeSpan.setWifiCredentials(ssid.c_str(), password.c_str());
   }
 
-  if (setupCodeItem && cJSON_IsString(setupCodeItem)) {
-    homeSpan.setPairingCode(setupCodeItem->valuestring, false);
+  if (haveSetupCode) {
+    homeSpan.setPairingCode(setupCode.c_str(), false);
   }
 
   instance->m_configManager.updateFromJson<espConfig::misc_config_t>(cleaned_body_str);
   instance->m_configManager.saveConfig<espConfig::misc_config_t>();
-
-  cJSON_Delete(obj);
 
   httpd_resp_set_type(req, "application/json");
   cJSON *res = cJSON_CreateObject();
@@ -2011,6 +2050,7 @@ void WebServerManager::broadcastWs(const uint8_t *payload, size_t len,
   }
   static const size_t max_buffer = 64;
   if (fds.empty()) {
+    std::scoped_lock lock(m_wsBroadcastBufferMutex);  // concurrent logging tasks race on this deque without it
     if(m_wsBroadcastBuffer.size() >= max_buffer){
       m_wsBroadcastBuffer.pop_front();
     }
@@ -2024,7 +2064,7 @@ void WebServerManager::broadcastWs(const uint8_t *payload, size_t len,
 
 void WebServerManager::queue_ws_frame(int fd, const uint8_t *payload,
                                       size_t len, httpd_ws_type_t type) {
-  WsFrame *frame = new WsFrame;
+  WsFrame *frame = new (std::nothrow) WsFrame;  // plain new would abort() on OOM; exceptions are disabled
   if (!frame)
     return;
 
@@ -2035,7 +2075,11 @@ void WebServerManager::queue_ws_frame(int fd, const uint8_t *payload,
     memcpy(frame->inlinePayload, payload, len);
     frame->payload = frame->inlinePayload;
   } else {
-    frame->payload = new uint8_t[len];
+    frame->payload = new (std::nothrow) uint8_t[len];
+    if (!frame->payload) {
+      delete frame;
+      return;
+    }
     memcpy(frame->payload, payload, len);
   }
 
@@ -2306,8 +2350,11 @@ void WebServerManager::otaTask(void *pvParameters) {
        params->state->error = "No OTA partition";
        goto error;
     }
-    if (esp_ota_begin(params->state->updatePartition, params->contentLength, &params->state->handle) != ESP_OK) {
-       params->state->error = "OTA begin failed";
+    esp_err_t beginErr = esp_ota_begin(params->state->updatePartition, params->contentLength,
+                                       &params->state->handle);
+    if (beginErr != ESP_OK) {
+       params->state->error = std::string("OTA begin failed: ") + esp_err_to_name(beginErr);  // report which failure mode
+       ESP_LOGE(TAG, "esp_ota_begin failed: %s", esp_err_to_name(beginErr));
        goto error;
     }
   } else {
@@ -2407,6 +2454,11 @@ error:
   instance->broadcastOTAStatus(*params->state);
   if (params->state->handle) esp_ota_abort(params->state->handle);
   if (buffer) free(buffer);
+
+  // A failed LittleFS upload leaves the filesystem unmounted from earlier in this task; remount so static/web routes don't all 404
+  if (params->uploadType == OTAUploadType::LITTLEFS && !LittleFS.begin()) {
+    ESP_LOGE(TAG, "Failed to remount LittleFS after a failed filesystem update");
+  }
   
   httpd_resp_set_type(req, "application/json");
   httpd_resp_set_status(req, "500 Internal Server Error");
@@ -2489,7 +2541,18 @@ esp_err_t WebServerManager::handleCertificateUpload(httpd_req_t *req) {
     httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
     return ESP_FAIL;
   }
-  uint8_t type_int = std::stoi(type_param);
+  // reject non-digit/empty here; std::stoi() would throw and this firmware has exceptions disabled, so it would abort()
+  if (type_param[0] < '0' || type_param[0] > '9') {
+    httpd_resp_set_type(req, "application/json");
+    cJSON *res = cJSON_CreateObject();
+    cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+    cJSON_AddItemToObject(res, "error", cJSON_CreateString("Invalid 'type' parameter"));
+    httpd_resp_set_status(req, "400 Bad Request");
+    std::string response = cjson_to_string_and_free(res);
+    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+    return ESP_FAIL;
+  }
+  const uint8_t type_int = static_cast<uint8_t>(type_param[0] - '0');
   const espConfig::CertType type = type_int > (static_cast<uint8_t>(espConfig::CertType::MAX) - 1) ? espConfig::CertType::MAX : static_cast<espConfig::CertType>(type_int);
   const size_t content_len = req->content_len;
   if (content_len == 0 || content_len > 8192) {
@@ -2642,7 +2705,18 @@ esp_err_t WebServerManager::handleCertificateDelete(httpd_req_t *req) {
     httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
     return ESP_FAIL;
   }
-  uint8_t type_int = std::stoi(type_param);
+  // reject non-digit/empty here; std::stoi() would throw and this firmware has exceptions disabled, so it would abort()
+  if (type_param[0] < '0' || type_param[0] > '9') {
+    httpd_resp_set_type(req, "application/json");
+    cJSON *res = cJSON_CreateObject();
+    cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+    cJSON_AddItemToObject(res, "error", cJSON_CreateString("Invalid 'type' parameter"));
+    httpd_resp_set_status(req, "400 Bad Request");
+    std::string response = cjson_to_string_and_free(res);
+    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+    return ESP_FAIL;
+  }
+  const uint8_t type_int = static_cast<uint8_t>(type_param[0] - '0');
   const espConfig::CertType type = type_int > (static_cast<uint8_t>(espConfig::CertType::MAX) - 1) ? espConfig::CertType::MAX : static_cast<espConfig::CertType>(type_int);
   if (type == espConfig::CertType::MAX) {
     httpd_resp_set_type(req, "application/json");
