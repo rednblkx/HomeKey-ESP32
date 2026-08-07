@@ -129,7 +129,7 @@ bool WebServerManager::shouldEnableHttps() const {
         return false;
     }
 
-    if (freeHeap < 50000) { // < 50 KB absolute minimum for standalone HTTPS
+    if (freeHeap < HEAP_LOWER_THRESHOLD) {
         ESP_LOGW(TAG, "HTTPS Web UI degraded to HTTP: Free heap (%zu bytes) below minimum threshold.", freeHeap);
         return false;
     }
