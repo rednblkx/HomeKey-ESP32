@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.16)
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+execute_process(COMMAND git describe --tags --always --dirty
+                OUTPUT_VARIABLE GIT_VERSION
+                OUTPUT_STRIP_TRAILING_WHITESPACE)
+set(PROJECT_VER ${GIT_VERSION})
 idf_build_set_property(MINIMAL_BUILD ON)
 project(HomeKey-ESP32)
 idf_build_get_property(IDF_TARGET IDF_TARGET)
