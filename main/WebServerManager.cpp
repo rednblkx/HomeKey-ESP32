@@ -1032,6 +1032,7 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     }
     return ESP_OK;
   }
+cleanup:
   httpd_resp_set_type(req, "application/json");
   cJSON *res = cJSON_CreateObject();
   cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
