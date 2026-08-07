@@ -7,12 +7,12 @@
 /**
  * Rolling in-RAM log ring, installed before anything else in setup().
  *
- * The WebSocket log sink can only carry what is logged after WiFi and the HTTP
- * server are up, several seconds into boot. Everything before that -- most
- * importantly the reset reason, which is logged within the first ~50 ms and is
- * the only record of *why* a device restarted -- is unobservable on a board with
- * no accessible serial port. This ring captures from the first log line and can
- * be read back over HTTP once the network exists.
+ * The WebSocket log sink only carries what is logged after
+ * WebSocketLogSinker is registered. The reset reason is emitted before that
+ * registration, so it never reaches the live stream and, on a board with no
+ * accessible serial port, is unobservable -- it is the only record of *why* a
+ * device restarted. This ring captures from the first log line and can be read
+ * back over HTTP once the network exists.
  *
  * Rolling rather than boot-only: the reset reason answers "why did it restart",
  * but the lines immediately before a fault are what identify the code path, and

@@ -1851,12 +1851,6 @@ esp_err_t WebServerManager::handleWebSocket(httpd_req_t *req) {
     int sockfd = httpd_req_to_sockfd(req);
     ESP_LOGI(TAG, "WebSocket client connected: fd=%d", sockfd);
     instance->addWebSocketClient(sockfd);
-    if (!instance->m_wsBroadcastBuffer.empty()) {
-      for (auto &c : instance->m_wsBroadcastBuffer) {
-        instance->queue_ws_frame(sockfd, c.data(), c.size(), HTTPD_WS_TYPE_TEXT);
-      }
-      instance->m_wsBroadcastBuffer.clear();
-    }
 
     std::string status = instance->getDeviceInfo();
     instance->queue_ws_frame(sockfd, (const uint8_t *)status.c_str(),
@@ -1957,18 +1951,10 @@ void WebServerManager::broadcastWs(const uint8_t *payload, size_t len,
                                    httpd_ws_type_t type) {
   std::vector<int> fds;
   {
-    std::scoped_lock lock(m_wsClientsMutex); 
+    std::scoped_lock lock(m_wsClientsMutex);
     fds.reserve(m_wsClients.size());
     for (const auto &c : m_wsClients)
       fds.push_back(c->fd);
-  }
-  static const size_t max_buffer = 64;
-  if (fds.empty()) {
-    if(m_wsBroadcastBuffer.size() >= max_buffer){
-      m_wsBroadcastBuffer.pop_front();
-    }
-    m_wsBroadcastBuffer.emplace_back(payload, payload + len);
-    return;
   }
   for (int fd : fds){
     queue_ws_frame(fd, payload, len, type);

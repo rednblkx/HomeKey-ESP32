@@ -520,9 +520,9 @@
 										/>
 										<p class="text-xs text-base-content/60 mt-1">
 											Captures logs from the first line of boot, including the reset reason -
-											which the live log cannot show, because it is emitted seconds before the
-											network comes up. Costs this much RAM permanently, and applies after a
-											reboot. Read it at <span class="font-mono">/boot_log</span>.
+											which the live log cannot show, because it is emitted before the
+											WebSocket log sink is registered. Costs this much RAM permanently, and
+											applies after a reboot. Read it at <span class="font-mono">/boot_log</span>.
 										</p>
 									</div>
 								</div>

@@ -27,25 +27,47 @@
     return lastItem.index >= filteredCount() - 1;
   });
 
-  // Boot log. The live WebSocket stream cannot show the early boot sequence --
-  // it only exists once WiFi and the HTTP server are up, seconds after the
-  // reset reason has already been logged. This pulls the device-side buffer on
-  // demand instead of replaying it into the live stream, which would mix
-  // historical lines into a view the user is reading as "now".
+  // Boot log. The live WebSocket stream cannot show messages emitted before
+  // WebSocketLogSinker is registered -- the reset reason is one of them. This
+  // pulls the device-side buffer on demand instead of replaying it into the
+  // live stream, which would mix historical lines into a view the user is
+  // reading as "now".
   let bootLogText = $state<string | null>(null);
   let bootLogOpen = $state(false);
   let bootLogLoading = $state(false);
+  let bootLogLoaded = $state(false);
 
   async function loadBootLog() {
     bootLogLoading = true;
-    bootLogText = await getBootLog();
-    bootLogLoading = false;
     bootLogOpen = true;
+    try {
+      bootLogText = await getBootLog();
+    } catch {
+      // getBootLog() already catches its own errors, but if the contract ever
+      // changes the modal must not stay stuck on "Loading…".
+      bootLogText = null;
+    } finally {
+      bootLogLoaded = true;
+      bootLogLoading = false;
+    }
   }
 
   async function emptyBootLog() {
     if (await clearBootLog()) await loadBootLog();
   }
+
+  function closeBootLog() {
+    bootLogOpen = false;
+  }
+
+  $effect(() => {
+    if (!bootLogOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeBootLog();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   let searchText = $state('');
   let logLevels = $state<Record<LogLevel, boolean>>({
@@ -368,24 +390,45 @@
 
   {#if bootLogOpen}
     <!-- Boot log: the device-side rolling buffer, including the reset reason,
-         which the live stream below cannot contain. -->
-    <div class="pb-4" transition:fade={{ duration: 120 }}>
-      <div class="bg-base-200 rounded-lg border border-base-300">
-        <div class="flex items-center justify-between px-4 py-2 border-b border-base-300">
-          <div>
-            <p class="text-sm font-medium">Boot log</p>
+         which the live stream never carries because it is emitted before
+         WebSocketLogSinker is registered. Rendered in a responsive modal so it
+         does not fight the live view for vertical space, and so it fits narrow
+         screens. -->
+    <div
+      class="fixed inset-0 z-40 flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="boot-log-title"
+      transition:fade={{ duration: 120 }}
+    >
+      <div class="bg-base-100 border border-base-300 rounded-t-lg sm:rounded-lg shadow-xl w-full sm:max-w-3xl max-h-[90vh] sm:max-h-[85vh] flex flex-col">
+        <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 px-4 py-3 border-b border-base-300">
+          <div class="min-w-0">
+            <p id="boot-log-title" class="text-sm font-medium">Boot log</p>
             <p class="text-xs text-base-content/60">
               Captured from the first line of boot, including the reset reason.
               Enable and size it in Settings &rsaquo; Hardware &rsaquo; Diagnostics.
             </p>
           </div>
-          <div class="flex gap-2">
-            <button onclick={loadBootLog} class="btn btn-xs btn-outline" disabled={bootLogLoading}>Refresh</button>
-            <button onclick={emptyBootLog} class="btn btn-xs btn-outline">Clear</button>
-            <button onclick={() => (bootLogOpen = false)} class="btn btn-xs btn-ghost">Close</button>
+          <div class="flex gap-2 shrink-0 flex-wrap">
+            <button onclick={loadBootLog} class="btn btn-xs btn-outline" disabled={bootLogLoading}>
+              {bootLogLoading ? 'Loading…' : 'Refresh'}
+            </button>
+            <button onclick={emptyBootLog} class="btn btn-xs btn-outline" disabled={bootLogLoading}>Clear</button>
+            <button onclick={closeBootLog} class="btn btn-xs btn-ghost" aria-label="Close boot log">Close</button>
           </div>
         </div>
-        <pre class="text-xs font-mono p-3 overflow-auto max-h-80 whitespace-pre-wrap break-all">{bootLogText ?? 'No data.'}</pre>
+        <div class="flex-1 min-h-0 overflow-auto">
+          {#if bootLogLoading && !bootLogLoaded}
+            <div class="p-6 text-center text-sm text-base-content/60">Loading…</div>
+          {:else if bootLogLoaded && bootLogText === null}
+            <div class="p-6 text-center text-sm text-error">Failed to load boot log.</div>
+          {:else if bootLogLoaded && bootLogText === ''}
+            <div class="p-6 text-center text-sm text-base-content/60">No data.</div>
+          {:else}
+            <pre class="text-xs font-mono p-3 whitespace-pre-wrap break-all">{bootLogText}</pre>
+          {/if}
+        </div>
       </div>
     </div>
   {/if}

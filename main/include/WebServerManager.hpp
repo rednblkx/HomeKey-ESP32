@@ -5,7 +5,6 @@
 #include "esp_partition.h"
 #include "esp_timer.h"
 #include "app_event_loop.hpp"
-#include <deque>
 #include <memory>
 #include <atomic>
 #include <string>
@@ -192,8 +191,6 @@ private:
   std::vector<std::unique_ptr<WsClient>> m_wsClients;
   std::mutex m_wsClientsMutex;
   esp_timer_handle_t m_statusTimer;
-  std::deque<std::vector<uint8_t>> m_wsBroadcastBuffer;
-
 
   std::atomic<bool> m_otaInProgress{false};
   bool m_isInitialized{false};
