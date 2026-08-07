@@ -327,6 +327,13 @@ esp_err_t WebServerManager::ws_post_handshake_cb(httpd_req_t *req) {
     esp_timer_start_periodic(instance->m_statusTimer, 5000 * 1000);
   }
 
+  if(!instance->m_wsBroadcastBuffer.empty()){
+    for (auto &v : instance->m_wsBroadcastBuffer) {
+      instance->queue_ws_frame(sockfd, v.data(), v.size(), HTTPD_WS_TYPE_TEXT);
+    }
+    instance->m_wsBroadcastBuffer.clear();
+  }
+
   return ESP_OK;
 }
 
