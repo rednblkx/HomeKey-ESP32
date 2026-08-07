@@ -122,7 +122,7 @@ bool WebServerManager::shouldEnableHttps() const {
 
     size_t freeHeap = esp_get_free_heap_size();
 
-    if (isMqttSslEnabled && freeHeap < 75000) { // < 75 KB
+    if (isMqttSslEnabled && freeHeap < 70000) { // < 70 KB
         ESP_LOGW(TAG, "HTTPS Web UI degraded to HTTP: Free heap (%zu bytes) insufficient for both HTTPS and MQTT SSL.", freeHeap);
         return false;
     }
