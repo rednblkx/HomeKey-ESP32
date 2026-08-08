@@ -7,7 +7,6 @@
   [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
   
   **Apple HomeKey functionality for the rest of us**
-  
 
   [Documentation](https://rednblkx.github.io/HomeKey-ESP32/)
 
@@ -29,6 +28,9 @@ The project aims to be the easy DIY solution for using Apple's HomeKey feature w
 > if you want to know as soon as it is available.
 
 ## Getting Started
+
+> [!TIP]
+> A wiki documenting the project can be found at https://rednblkx.github.io/HomeKey-ESP32/
 
 ### Prerequisites
 
@@ -93,6 +95,10 @@ The following chips are supported for Ethernet:
 5. **Start Using HomeKey!**
    - Hold your iPhone or Apple Watch near the NFC reader
    - Enjoy instant, secure access to your home! 🎉
+
+### Updating
+
+Follow the update in the documentation at: https://rednblkx.github.io/HomeKey-ESP32/updates/
 
 ## System Architecture
 
