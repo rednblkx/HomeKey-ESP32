@@ -6,11 +6,18 @@ Thank you for your interest in contributing to HomeKey-ESP32! We welcome contrib
 >
 > AI/LLM Guidelines
 >
-> Use of LLMs is permitted to produce the code or content for the wiki as long as the following guidelines are followed:
+> Use of LLMs is permitted to produce the code or content for the wiki as long as the following rules are followed:
 >
 > - Ensure no unnecessary information is added
 > - Ensure no unnecessary dependencies are added
 > - Ensure the PR does not include changes to unrelated files and/or unrelated changes within the same file, keep it focused on the purpose of the PR
+>
+> All of the above implies of course human review, and in short, this is about using the tools at your disposal to assist you, not the other way around,
+> "AI Slop" will not be tolerated.
+>
+> If you cannot follow this, you're still welcomed to open an issue with your suggestions, but again, try to not over-rely
+> on AI since it could hallucinate stuff and only makes it harder for everyone else to understand the issue, use your own words as much as you can to
+> explain what needs fixing or what should be added.
 
 ## How to Contribute
 
