@@ -9,15 +9,15 @@ execute_process(
 )
 
 execute_process(
-    COMMAND git describe --tags --exact-match
+    COMMAND git describe --tags
     WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}"
     OUTPUT_VARIABLE GIT_EXACT_TAG
     OUTPUT_STRIP_TRAILING_WHITESPACE
     ERROR_QUIET
 )
 
-if(GIT_EXACT_TAG STREQUAL "dev" AND GIT_COMMIT_HASH)
-    set(PROJECT_VER "dev-${GIT_COMMIT_HASH}")
+if(GIT_EXACT_TAG MATCHES "^dev" AND GIT_COMMIT_HASH)
+    set(PROJECT_VER "${GIT_COMMIT_HASH}")
 endif()
 idf_build_set_property(MINIMAL_BUILD ON)
 project(HomeKey-ESP32)
