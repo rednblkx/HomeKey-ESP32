@@ -189,34 +189,46 @@ jobs:
     if: ${{ github.ref == 'refs/heads/main' }}
     needs: [littlefs, esp-idf-builds]
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
       - name: Get Artifacts
         uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
+
       - name: Create fresh dev release
         uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs');
             const path = require('path');
+            const { execSync } = require('child_process');
 
-            let body = `Development build for commit ${context.sha}`;
+            const serverUrl = process.env.GITHUB_SERVER_URL || 'https://github.com';
+            const repoOwner = context.repo.owner;
+            const repoName = context.repo.repo;
+
+            let latestTag = '';
             try {
-              const { data: notes } = await github.rest.repos.generateReleaseNotes({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                tag_name: 'dev',
-                target_commitish: context.sha
-              });
-              body = notes.body;
+              latestTag = execSync('git describe --tags --abbrev=0 --match "v*" HEAD^').toString().trim();
             } catch (e) {
-              console.log('Failed to generate automatic release notes, falling back to default body');
+              try {
+                latestTag = execSync('git describe --tags --abbrev=0 --match "v*"').toString().trim();
+              } catch (err) {
+                console.log('No previous version tag found');
+              }
             }
 
+            let body = `**Full Changelog**: ${serverUrl}/${repoOwner}/${repoName}/compare/${latestTag || 'HEAD~1'}...dev`;
+
             const { data: release } = await github.rest.repos.createRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
+              owner: repoOwner,
+              repo: repoName,
               tag_name: 'dev',
               name: 'development',
               target_commitish: context.sha,
@@ -244,8 +256,8 @@ jobs:
                 continue;
               }
               await github.rest.repos.uploadReleaseAsset({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
+                owner: repoOwner,
+                repo: repoName,
                 release_id: release.id,
                 name: file,
                 data: fs.readFileSync(filePath)
