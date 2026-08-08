@@ -1679,23 +1679,6 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
     return ESP_FAIL;
   }
 
-  // cJSON *overrideSR_item = cJSON_GetObjectItem(obj, "overrideStrappingRestriction");
-  // if (overrideSR_item) {
-  //   cJSON *dup_override = cJSON_Duplicate(overrideSR_item, true);
-  //   if (dup_override) {
-  //     ESP_LOGW(TAG, "REPLACED!");
-  //     cJSON_ReplaceItemInObject(currentConfigData, "overrideStrappingRestriction", dup_override);
-  //   }
-  // }
-  //
-  // cJSON *fastPolling_item = cJSON_GetObjectItem(obj, "nfcFastPollingEnabled");
-  // if (fastPolling_item) {
-  //   cJSON *dup_fast_polling = cJSON_Duplicate(fastPolling_item, true);
-  //   if (dup_fast_polling) {
-  //     cJSON_ReplaceItemInObject(currentConfigData, "nfcFastPollingEnabled", dup_fast_polling);
-  //   }
-  // }
-
   auto cleaned_body_str = cjson_to_string_and_free(obj);
   bool isValid = instance->validateRequest(req, currentConfigData, cleaned_body_str.c_str());
   cJSON_Delete(currentConfigData);
