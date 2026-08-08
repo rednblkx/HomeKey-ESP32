@@ -50,14 +50,10 @@ jobs:
                 throw e;
               }
             }
-      - name: Cleanup dev release
+      - name: Delete existing dev release
         uses: actions/github-script@v9
         with:
           script: |
-            const serverUrl = process.env.GITHUB_SERVER_URL || 'https://github.com';
-            const runUrl = `${serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const body = `Latest commits are being processed, come back later.\nBuild status can be checked [here](${runUrl})`;
-
             try {
               const { data: release } = await github.rest.repos.getReleaseByTag({
                 owner: context.repo.owner,
@@ -65,23 +61,15 @@ jobs:
                 tag: 'dev'
               });
 
-              for (const asset of release.assets) {
-                await github.rest.repos.deleteReleaseAsset({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  asset_id: asset.id
-                });
-              }
-
-              await github.rest.repos.updateRelease({
+              await github.rest.repos.deleteRelease({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                release_id: release.id,
-                body: body
+                release_id: release.id
               });
+              console.log(`Deleted existing dev release (ID: ${release.id})`);
             } catch (e) {
               if (e.status === 404 || (e.response && e.response.status === 404)) {
-                console.log('No dev release found, skipping cleanup');
+                console.log('No existing dev release found, proceeding to create new one');
               } else {
                 throw e;
               }
@@ -206,12 +194,35 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
-      - name: Update dev release
+      - name: Create fresh dev release
         uses: actions/github-script@v9
         with:
           script: |
             const fs = require('fs');
             const path = require('path');
+
+            let body = `Development build for commit ${context.sha}`;
+            try {
+              const { data: notes } = await github.rest.repos.generateReleaseNotes({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag_name: 'dev',
+                target_commitish: context.sha
+              });
+              body = notes.body;
+            } catch (e) {
+              console.log('Failed to generate automatic release notes, falling back to default body');
+            }
+
+            const { data: release } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: 'dev',
+              name: 'development',
+              target_commitish: context.sha,
+              prerelease: true,
+              body: body
+            });
 
             const artifactsDir = 'artifacts';
             const files = [
@@ -225,36 +236,6 @@ jobs:
               'esp32s3.firmware.factory.bin',
               'littlefs.bin'
             ];
-
-            let release;
-            try {
-              const { data: existing } = await github.rest.repos.getReleaseByTag({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                tag: 'dev'
-              });
-              release = existing;
-            } catch (e) {
-              if (e.status === 404 || (e.response && e.response.status === 404)) {
-                const { data: notes } = await github.rest.repos.generateReleaseNotes({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  tag_name: 'dev',
-                  target_commitish: context.sha
-                });
-                const { data: newRelease } = await github.rest.repos.createRelease({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  tag_name: 'dev',
-                  name: 'development',
-                  prerelease: true,
-                  body: notes.body
-                });
-                release = newRelease;
-              } else {
-                throw e;
-              }
-            }
 
             for (const file of files) {
               const filePath = path.join(artifactsDir, file);
@@ -270,17 +251,3 @@ jobs:
                 data: fs.readFileSync(filePath)
               });
             }
-
-            const { data: notes } = await github.rest.repos.generateReleaseNotes({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              tag_name: 'dev',
-              target_commitish: context.sha
-            });
-
-            await github.rest.repos.updateRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              release_id: release.id,
-              body: notes.body
-            });
