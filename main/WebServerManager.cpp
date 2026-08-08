@@ -1585,7 +1585,9 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
 
   std::string ssid;
   std::string password;
+  std::string setupCode;
   bool wifiProvided = false;
+  bool hasSetupCode = false;
 
   cJSON *ssidItem = cJSON_GetObjectItem(obj, "wifiSsid");
   cJSON *passwordItem = cJSON_GetObjectItem(obj, "wifiPassword");
@@ -1651,10 +1653,10 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
 
   cJSON *setupCodeItem = cJSON_GetObjectItem(obj, "setupCode");
   if (setupCodeItem && cJSON_IsString(setupCodeItem)) {
-    const char *setupCode = setupCodeItem->valuestring;
-    if (!(strcmp(setupCode, "00000000") && strcmp(setupCode, "11111111") && strcmp(setupCode, "22222222") && strcmp(setupCode, "33333333") && 
-          strcmp(setupCode, "44444444") && strcmp(setupCode, "55555555") && strcmp(setupCode, "66666666") && strcmp(setupCode, "77777777") &&
-          strcmp(setupCode, "88888888") && strcmp(setupCode, "99999999") && strcmp(setupCode, "12345678") && strcmp(setupCode, "87654321"))) {
+    const char *code = setupCodeItem->valuestring;
+    if (!(strcmp(code, "00000000") && strcmp(code, "11111111") && strcmp(code, "22222222") && strcmp(code, "33333333") && 
+          strcmp(code, "44444444") && strcmp(code, "55555555") && strcmp(code, "66666666") && strcmp(code, "77777777") &&
+          strcmp(code, "88888888") && strcmp(code, "99999999") && strcmp(code, "12345678") && strcmp(code, "87654321"))) {
       cJSON_Delete(obj);
       httpd_resp_set_status(req, "400 Bad Request");
       httpd_resp_set_type(req, "application/json");
@@ -1665,6 +1667,8 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
       httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
       return ESP_FAIL;
     }
+    setupCode = code;
+    hasSetupCode = true;
   }
 
   std::string currentConfigJson = instance->m_configManager.serializeToJson<espConfig::misc_config_t>();
@@ -1697,13 +1701,11 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
   cJSON_Delete(currentConfigData);
 
   if (!isValid) {
-    cJSON_Delete(obj);
     return ESP_FAIL; // validateRequest has already sent the HTTP error response
   }
 
   if (wifiProvided) {
     if (!connectWiFi(ssid.c_str(), password.c_str(), 15000)) {
-      cJSON_Delete(obj);
       httpd_resp_set_status(req, "400 Bad Request");
       httpd_resp_set_type(req, "application/json");
       cJSON *errorRes = cJSON_CreateObject();
@@ -1716,14 +1718,12 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
     homeSpan.setWifiCredentials(ssid.c_str(), password.c_str());
   }
 
-  if (setupCodeItem && cJSON_IsString(setupCodeItem)) {
-    homeSpan.setPairingCode(setupCodeItem->valuestring, false);
+  if (hasSetupCode) {
+    homeSpan.setPairingCode(setupCode.c_str(), false);
   }
 
   instance->m_configManager.updateFromJson<espConfig::misc_config_t>(cleaned_body_str);
   instance->m_configManager.saveConfig<espConfig::misc_config_t>();
-
-  cJSON_Delete(obj);
 
   httpd_resp_set_type(req, "application/json");
   cJSON *res = cJSON_CreateObject();
