@@ -14,7 +14,7 @@ namespace loggable {
  *
  * @param webServerManager Pointer to the WebServerManager used to broadcast messages to connected WebSocket clients. If `nullptr`, broadcasting is disabled.
  */
-WebSocketLogSinker::WebSocketLogSinker(WebServerManager* webServerManager)
+WebSocketLogSinker::WebSocketLogSinker(WebServerManager& webServerManager)
     : m_webServerManager(webServerManager) {
 }
 
@@ -46,8 +46,6 @@ const char* WebSocketLogSinker::level_to_string(LogLevel level) {
  * @param message Log message to serialize and broadcast.
  */
 void WebSocketLogSinker::consume(const LogMessage& message) {
-    if (!m_webServerManager) return;
-
     // Re-entrancy guard to prevent nested broadcasts triggered by logging during a broadcast.
     static thread_local bool in_append = false;
     if (in_append) return; 
@@ -72,7 +70,7 @@ void WebSocketLogSinker::consume(const LogMessage& message) {
 
     char* json_string = cJSON_PrintUnformatted(root);
     if (json_string) {
-        m_webServerManager->broadcastWs(reinterpret_cast<const uint8_t *>(json_string), strlen(json_string),
+        m_webServerManager.broadcastWs(reinterpret_cast<const uint8_t *>(json_string), strlen(json_string),
               HTTPD_WS_TYPE_TEXT);
         cJSON_free(json_string);
     }

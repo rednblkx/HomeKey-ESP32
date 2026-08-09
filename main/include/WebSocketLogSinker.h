@@ -1,7 +1,6 @@
 #pragma once
 
 #include "loggable.hpp"
-#include <memory>
 
 class WebServerManager;
 
@@ -19,7 +18,7 @@ public:
      * Construct a WebSocketLogSinker bound to a WebServerManager.
      * @param webServerManager Pointer to the WebServerManager used to emit log messages; must remain valid for the sink's lifetime.
      */
-    explicit WebSocketLogSinker(WebServerManager* webServerManager);
+    explicit WebSocketLogSinker(WebServerManager& webServerManager);
     ~WebSocketLogSinker() override = default;
     /**
      * Process and forward a log message to the associated WebServerManager.
@@ -28,7 +27,7 @@ public:
     void consume(const LogMessage& message) override;
 
 private:
-    WebServerManager* m_webServerManager;
+    WebServerManager& m_webServerManager;
     /**
      * Convert a LogLevel value to its null-terminated string representation.
      * @param level Log level to convert.

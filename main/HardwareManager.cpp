@@ -332,7 +332,7 @@ void HardwareManager::begin() {
     xTaskCreateUniversal(feedbackTaskEntry, "feedback_task", 3580, this, 3, &m_feedbackTaskHandle, 1);
 
     m_lockControlQueue = xQueueCreate(5, sizeof(int));
-    xTaskCreateUniversal(lockControlTaskEntry, "lock_control_task", 4096, this, 3, &m_lockControlTaskHandle, 1);
+    xTaskCreateUniversal(lockControlTaskEntry, "lock_control_task", 3072, this, 3, &m_lockControlTaskHandle, 1);
     ESP_LOGI(TAG, "Hardware initialization complete.");
 }
 

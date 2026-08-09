@@ -23,11 +23,11 @@
 #include "lwip/inet.h"
 
 std::unique_ptr<LockManager> lockManager;
-std::unique_ptr<ReaderDataManager> readerDataManager;
-std::unique_ptr<ConfigManager> configManager;
+ReaderDataManager readerDataManager;
+ConfigManager configManager;
 std::unique_ptr<HardwareManager> hardwareManager;
 std::unique_ptr<MqttManager> mqttManager;
-std::unique_ptr<WebServerManager> webServerManager;
+WebServerManager webServerManager(configManager, readerDataManager);
 std::unique_ptr<HomeKitLock> homekitLock;
 std::unique_ptr<NfcManager> nfcManager;
 
@@ -67,19 +67,19 @@ std::function<void(int)> lambda = [](int status) {
     char identifier[18];
     sprintf(identifier, "%.2s%.2s%.2s%.2s%.2s%.2s", HAPClient::accessory.ID, HAPClient::accessory.ID + 3, HAPClient::accessory.ID + 6, HAPClient::accessory.ID + 9, HAPClient::accessory.ID + 12, HAPClient::accessory.ID + 15);
     mqttManager->begin(std::string(identifier));
-    webServerManager->begin(); 
+    webServerManager.begin(); 
   } else if (status == 0){
     pollHS = false;
     mqttManager->end();
-    webServerManager->end();
+    webServerManager.end();
     WiFi.mode(WIFI_AP_STA);
     uint8_t mac[6];
     esp_read_mac(mac, ESP_MAC_BT);
     const std::string macStr = fmt::format("HK_{:02X}{:02X}{:02X}{:02X}", mac[2], mac[3], mac[4], mac[5]);
-    auto misc = configManager->getConfig<espConfig::misc_config_t>();
+    auto misc = configManager.getConfig<espConfig::misc_config_t>();
     WiFi.softAP(macStr.c_str(), misc.accessPointPassword.c_str(), 11, false, 2, false, WIFI_AUTH_WPA2_WPA3_PSK, WIFI_CIPHER_TYPE_AES_CMAC128); 
     start_captive_portal();
-    webServerManager->begin();
+    webServerManager.begin();
     while(true){
       vTaskDelay(pdMS_TO_TICKS(100));
     }
@@ -106,8 +106,12 @@ void setup() {
   #ifdef CONFIG_INIT_ARDU_SERIAL_LOGGING
   Serial.begin(115200);
   #endif
+  configManager.begin();
+  esp_log_level_set("*", static_cast<esp_log_level_t>(configManager.getConfig<espConfig::misc_config_t>().logLevel));
+  loggable::Sinker::instance().set_level((loggable::LogLevel)configManager.getConfig<espConfig::misc_config_t>().logLevel);
   loggable::espidf::LogHook::install(false, true);
   Sinker::instance().add_sinker(std::make_shared<loggable::ConsoleLogSinker>());
+  Sinker::instance().add_sinker(std::make_shared<loggable::WebSocketLogSinker>(webServerManager));
   esp_err_t err = esp_event_loop_create_default();
   if (err != ESP_OK) {
     ESP_LOGE("Main", "Failed to create default event loop: %d", err);
@@ -142,18 +146,11 @@ void setup() {
     }
   }
 
-  readerDataManager = std::make_unique<ReaderDataManager>();
-  configManager = std::make_unique<ConfigManager>();
-  configManager->begin();
-  esp_log_level_set("*", static_cast<esp_log_level_t>(configManager->getConfig<espConfig::misc_config_t>().logLevel));
-  loggable::Sinker::instance().set_level((loggable::LogLevel)configManager->getConfig<espConfig::misc_config_t>().logLevel);
-  webServerManager = std::make_unique<WebServerManager>(*configManager, *readerDataManager);
-  Sinker::instance().add_sinker(std::make_shared<loggable::WebSocketLogSinker>(webServerManager.get()));
-  hardwareManager = std::make_unique<HardwareManager>(configManager->getConfig<espConfig::actions_config_t>());
-  lockManager = std::make_unique<LockManager>(configManager->getConfig<espConfig::misc_config_t>(), configManager->getConfig<espConfig::actions_config_t>());
-  mqttManager = std::make_unique<MqttManager>(*configManager);
-  homekitLock = std::make_unique<HomeKitLock>(lambda, *lockManager, *configManager, *readerDataManager);
-  espConfig::misc_config_t miscConfig = configManager->getConfig<espConfig::misc_config_t>();
+  hardwareManager = std::make_unique<HardwareManager>(configManager.getConfig<espConfig::actions_config_t>());
+  lockManager = std::make_unique<LockManager>(configManager.getConfig<espConfig::misc_config_t>(), configManager.getConfig<espConfig::actions_config_t>());
+  mqttManager = std::make_unique<MqttManager>(configManager);
+  homekitLock = std::make_unique<HomeKitLock>(lambda, *lockManager, configManager, readerDataManager);
+  espConfig::misc_config_t miscConfig = configManager.getConfig<espConfig::misc_config_t>();
   static const char* TAG = "Main";
   if(miscConfig.nfcPinsPreset != PIN_UNSET){
     ESP_LOGI(TAG, "NFC GPIO pins preset: %s", nfcGpioPinsPresets[miscConfig.nfcPinsPreset].name.c_str());
@@ -178,9 +175,9 @@ void setup() {
   } else if (miscConfig.nfcReaderType == 2) {
     ESP_LOGI(TAG, "NFC I2C pins: SDA=%d, SCL=%d", activeNfcPins[0], activeNfcPins[1]);
   }
-  readerDataManager->begin();
+  readerDataManager.begin();
 
-  nfcManager = std::make_unique<NfcManager>(*readerDataManager,
+  nfcManager = std::make_unique<NfcManager>(readerDataManager,
                               activeNfcPins,
                               miscConfig.nfcReaderType,
                               miscConfig.nfcIrqPin,
@@ -189,8 +186,8 @@ void setup() {
                               miscConfig.nfcFastPollingEnabled);
   nfcManager->begin();
 
-  webServerManager->setNfcManager(nfcManager.get());
-  webServerManager->setMqttManager(mqttManager.get());
+  webServerManager.setNfcManager(nfcManager.get());
+  webServerManager.setMqttManager(mqttManager.get());
   hardwareManager->begin();
   homekitLock->begin();
   lockManager->begin();
