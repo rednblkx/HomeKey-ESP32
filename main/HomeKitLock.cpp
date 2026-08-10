@@ -428,27 +428,7 @@ void HomeKitLock::setupDebugCommands() {
         ESP_LOGI(TAG, "NONE");
       }
 
-      esp_log_level_set(TAG, level);
-      esp_log_level_set("HK_HomeKit", level);
-      esp_log_level_set("HKAuthCtx", level);
-      esp_log_level_set("HKFastAuth", level);
-      esp_log_level_set("HKStdAuth", level);
-      esp_log_level_set("HKAttestAuth", level);
-      esp_log_level_set("PN532", level);
-      esp_log_level_set("PN532_SPI", level);
-      esp_log_level_set("ISO18013_SC", level);
-      esp_log_level_set("LockMechanism", level);
-      esp_log_level_set("NFCAccess", level);
-      esp_log_level_set("actions-config", level);
-      esp_log_level_set("misc-config", level);
-      esp_log_level_set("mqttconfig", level);
-      esp_log_level_set("HardwareManager", level);
-      esp_log_level_set("ReaderDataManager", level);
-      esp_log_level_set("LockManager", level);
-      esp_log_level_set("MqttManager", level);
-      esp_log_level_set("WebServerManager", level);
-      esp_log_level_set("ConfigManager", level);
-      esp_log_level_set("NfcManager", level);
+      esp_log_level_set("*", level);
     });
     new SpanUserCommand('F', "Set HomeKey Flow", [](const char *buf){
       KeyFlow hkFlow = KeyFlow::kFlowFAST;
