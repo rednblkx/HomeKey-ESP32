@@ -1941,6 +1941,10 @@ void WebServerManager::removeWebSocketClient(int fd) {
   }
 }
 
+void WebServerManager::setWSBackLogSize(const uint16_t size){
+  wsBacklogSize = size;
+}
+
 void WebServerManager::broadcastWs(const uint8_t *payload, size_t len,
                                    httpd_ws_type_t type) {
   std::vector<int> fds;
@@ -1950,9 +1954,8 @@ void WebServerManager::broadcastWs(const uint8_t *payload, size_t len,
     for (const auto &c : m_wsClients)
       fds.push_back(c->fd);
   }
-  static const size_t max_buffer = 64;
-  if (fds.empty()) {
-    if(m_wsBroadcastBuffer.size() >= max_buffer){
+  if (fds.empty() && wsBacklogSize > 0) {
+    if(m_wsBroadcastBuffer.size() >= wsBacklogSize){
       m_wsBroadcastBuffer.pop_front();
     }
     m_wsBroadcastBuffer.emplace_back(payload, payload + len);

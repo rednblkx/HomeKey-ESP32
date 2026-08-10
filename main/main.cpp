@@ -21,6 +21,7 @@
 #include "loggable_espidf.hpp"
 #include "WebSocketLogSinker.h"
 #include "lwip/inet.h"
+#include "nvs_flash.h"
 
 std::unique_ptr<LockManager> lockManager;
 ReaderDataManager readerDataManager;
@@ -87,6 +88,20 @@ std::function<void(int)> lambda = [](int status) {
 };
 using namespace loggable;
 
+bool initLogging(){
+  uint8_t logLevel;
+  if(!configManager.getNVSLogLevel(logLevel)) return false;
+  uint16_t backlogMaxSize;
+  if(!configManager.getBacklogMaxSize(backlogMaxSize)) return false;
+  webServerManager.setWSBackLogSize(backlogMaxSize);
+  esp_log_level_set("*", static_cast<esp_log_level_t>(logLevel));
+  loggable::Sinker::instance().set_level(static_cast<loggable::LogLevel>(logLevel));
+  loggable::espidf::LogHook::install(false, true);
+  Sinker::instance().add_sinker(std::make_shared<loggable::ConsoleLogSinker>());
+  Sinker::instance().add_sinker(std::make_shared<loggable::WebSocketLogSinker>(webServerManager));
+  return true;
+}
+
 /**
  * @brief Initialize runtime, configure logging/serial, and instantiate core subsystem managers.
  *
@@ -106,13 +121,14 @@ void setup() {
   #ifdef CONFIG_INIT_ARDU_SERIAL_LOGGING
   Serial.begin(115200);
   #endif
-  uint8_t logLevel;
-  configManager.getNVSLogLevel(logLevel);
-  esp_log_level_set("*", static_cast<esp_log_level_t>(logLevel));
-  loggable::Sinker::instance().set_level(static_cast<loggable::LogLevel>(logLevel));
-  loggable::espidf::LogHook::install(false, true);
-  Sinker::instance().add_sinker(std::make_shared<loggable::ConsoleLogSinker>());
-  Sinker::instance().add_sinker(std::make_shared<loggable::WebSocketLogSinker>(webServerManager));
+  if(esp_err_t err = nvs_flash_init(); err != ESP_OK){
+    ESP_LOGI("Main", "Failed to initialize NVS. Aborting. err=%d", err);
+    return;
+  }
+  if(!initLogging()){
+    ESP_LOGE("Main", "Could not initialize logging. Aborting.");
+    return;
+  }
   esp_err_t err = esp_event_loop_create_default();
   if (err != ESP_OK) {
     ESP_LOGE("Main", "Failed to create default event loop: %d", err);

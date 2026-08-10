@@ -1,5 +1,6 @@
 #pragma once
 #include "config.hpp"
+#include <cstddef>
 #include <cstdint>
 #include <nvs.h>
 #include <variant>
@@ -70,6 +71,8 @@ public:
 
     bool setNVSLogLevel(const uint8_t level);
     bool getNVSLogLevel(uint8_t &level);
+    bool setBacklogMaxSize(const uint16_t size);
+    bool getBacklogMaxSize(uint16_t &size);
 
   private:
     using ConfigMapType = std::map<std::string,

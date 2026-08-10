@@ -1552,7 +1552,7 @@ bool ConfigManager::setNVSLogLevel(const uint8_t level) {
   if(!m_nvsHandle){
     esp_err_t err = nvs_open("SAVED_DATA", NVS_READWRITE, &m_nvsHandle);
     if (err != ESP_OK) {
-      ESP_LOGE(TAG, "Error (%s) opening NVS handle!", esp_err_to_name(err));
+      ESP_LOGE(TAG, "Error (%#04x) opening NVS handle!", err);
       return false;
     }
   }
@@ -1560,15 +1560,13 @@ bool ConfigManager::setNVSLogLevel(const uint8_t level) {
   esp_err_t set_err = nvs_set_u8(m_nvsHandle, key, level);
 
   if (set_err != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to set blob in NVS for key '%s': %s", key,
-             esp_err_to_name(set_err));
+    ESP_LOGE(TAG, "Failed to set blob in NVS for key '%s': %#04x", key, set_err);
     return false;
   }
 
   esp_err_t commit_err = nvs_commit(m_nvsHandle);
   if (commit_err != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to commit NVS changes for key '%s': %s", key,
-             esp_err_to_name(commit_err));
+    ESP_LOGE(TAG, "Failed to commit NVS changes for key '%s': %#04x", key, commit_err);
     return false;
   } else {
     ESP_LOGI(TAG, "Log level '%d' successfully commited to NVS.", level);
@@ -1580,21 +1578,68 @@ bool ConfigManager::getNVSLogLevel(uint8_t &level) {
   if(!m_nvsHandle){
     esp_err_t err = nvs_open("SAVED_DATA", NVS_READWRITE, &m_nvsHandle);
     if (err != ESP_OK) {
-      ESP_LOGE(TAG, "Error (%s) opening NVS handle!", esp_err_to_name(err));
+      ESP_LOGE(TAG, "Error (%#04x) opening NVS handle!", err);
       return false;
     }
   }
   const char *key = "GlobalLogLevel";
   esp_err_t get_err = nvs_get_u8(m_nvsHandle, key, &level);
   if (get_err == ESP_ERR_NVS_NOT_FOUND){
-    ESP_LOGW(TAG, "Global log level not found in NVS. Returning default level.",
-          key);
+    ESP_LOGW(TAG, "%s not found in NVS. Returning default level.",
+              key);
     level = esp_log_get_default_level();
     return true;
   }
   if (get_err != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to get blob in NVS for key '%s': %s", key,
-             get_err);
+    ESP_LOGE(TAG, "Failed to get blob in NVS for key '%s': %#04x", key,
+              get_err);
+    return false;
+  }
+  return true;
+}
+
+bool ConfigManager::setBacklogMaxSize(const uint16_t size){
+  if(!m_nvsHandle){
+    esp_err_t err = nvs_open("SAVED_DATA", NVS_READWRITE, &m_nvsHandle);
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "Error (%#04x) opening NVS handle!", err);
+      return false;
+    }
+  }
+  const char* key = "BackLogMaxSize";
+  esp_err_t set_err = nvs_set_u16(m_nvsHandle, key, size);
+
+  if (set_err != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to set blob in NVS for key '%s': %#04x", key, set_err);
+    return false;
+  }
+  esp_err_t commit_err = nvs_commit(m_nvsHandle);
+  if (commit_err != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to commit NVS changes for key '%s': %#04x", key, commit_err);
+    return false;
+  } else {
+    ESP_LOGI(TAG, "BackLogMaxSize set to '%d' and successfully commited to NVS.", size);
+  }
+  return true;
+}
+
+bool ConfigManager::getBacklogMaxSize(uint16_t &size) {
+  if(!m_nvsHandle){
+    esp_err_t err = nvs_open("SAVED_DATA", NVS_READWRITE, &m_nvsHandle);
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "Error (%#04x) opening NVS handle!", err);
+      return false;
+    }
+  }
+const char *key = "BackLogMaxSize";
+  esp_err_t get_err = nvs_get_u16(m_nvsHandle, key, &size);
+  if (get_err == ESP_ERR_NVS_NOT_FOUND){
+    ESP_LOGW(TAG, "%s not found in NVS.", key);
+    return true;
+  }
+  if (get_err != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to get blob in NVS for key '%s': %#04x", key,
+              get_err);
     return false;
   }
   return true;
