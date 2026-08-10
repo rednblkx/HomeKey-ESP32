@@ -11,7 +11,8 @@ export type SystemInfo = {
   nfc_connected: boolean,
   mqtt_connected: boolean,
   mqtt_error_code: number,
-  mqtt_error_message?: string
+  mqtt_error_message?: string,
+  backlog_max_size: number
 };
 
 export const systemInfo : SystemInfo = $state({
@@ -26,7 +27,8 @@ export const systemInfo : SystemInfo = $state({
   chip_model: 0,
   nfc_connected: false,
   mqtt_connected: false,
-  mqtt_error_code: 0
+  mqtt_error_code: 0,
+  backlog_max_size: 0
 });
 
 /**
