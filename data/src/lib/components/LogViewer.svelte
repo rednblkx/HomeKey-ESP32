@@ -6,6 +6,7 @@
   import { systemInfo } from '$lib/stores/system.svelte';
   import { clearLogs, logs } from '$lib/stores/logs.svelte';
   import { createVirtualizer } from '@tanstack/svelte-virtual';
+    import { rebootDevice } from '$lib/services/api';
 
   let scrollEl = $state<HTMLDivElement | null>(null);
   let virtualizer = $state<ReturnType<
@@ -226,9 +227,17 @@
 
 <div class="h-full flex flex-col text-base-content">
   <!-- Header -->
-  <div class="pt-4 pb-2">
-    <h1 class="text-xl font-semibold">System Logs</h1>
-    <p class="text-sm text-base-content/60">Real-time device logs via WebSocket.</p>
+  <div class="pt-4 pb-2 flex justify-between items-center">
+    <div>
+      <h1 class="text-xl font-semibold">System Logs</h1>
+      <p class="text-sm text-base-content/60">Real-time device logs via WebSocket.</p>
+    </div>
+    <button onclick={async () => await rebootDevice()} class="btn btn-sm btn-outline gap-1 join-item">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+      </svg>
+      Reboot
+    </button>
   </div>
 
   <!-- Toolbar Card -->
