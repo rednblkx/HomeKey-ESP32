@@ -1,6 +1,6 @@
 dependencies:
   idf:
-    version: '>=5.4.0'
-  espressif/arduino-esp32: ==3.3.5
+    version: '>=5.5.5'
+  espressif/arduino-esp32: ==3.3.11
   joltwallet/littlefs: ^1.20.1
   espp/serialization: ^1.0.22

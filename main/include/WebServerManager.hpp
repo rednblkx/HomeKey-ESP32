@@ -69,6 +69,7 @@ public:
   void setMqttManager(MqttManager *mqttManager) { m_mqttManager = mqttManager; }
   void setNfcManager(NfcManager *nfcManager) { m_nfcManager = nfcManager; }
   void broadcastWs(const uint8_t *payload, size_t len, httpd_ws_type_t type);
+  bool shouldEnableHttps() const;
 
 private:
   // ------------------------------------------------------------------------
@@ -165,10 +166,8 @@ private:
   static bool validateRequest(httpd_req_t *req, cJSON *currentData,
                               const char *body);
   static WebServerManager *getInstance(httpd_req_t *req);
-  static esp_err_t ws_send_frame(httpd_handle_t server, int fd,
-                                 const uint8_t *payload, size_t len,
-                                 httpd_ws_type_t type = HTTPD_WS_TYPE_TEXT);
   static esp_err_t sendAuthFailure(httpd_req_t *req);
+  static esp_err_t ws_post_handshake_cb(httpd_req_t *req);
 
   // ------------------------------------------------------------------------
   // Member Variables

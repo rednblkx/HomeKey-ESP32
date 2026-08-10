@@ -51,6 +51,8 @@
 
 const char *WebServerManager::TAG = "WebServerManager";
 const size_t MAX_WS_PAYLOAD = 8192;
+const size_t HEAP_UPPER_THRESHOLD = 70 * 1000;
+const size_t HEAP_LOWER_THRESHOLD = 50 * 1000;
 
 // ============================================================================
 // Helper Functions
@@ -113,6 +115,30 @@ WebServerManager::~WebServerManager() {
   }
 }
 
+bool WebServerManager::shouldEnableHttps() const {
+    const auto& miscConfig = m_configManager.getConfig<espConfig::misc_config_t>();
+    if (!miscConfig.webHttpsEnabled) {
+        return false;
+    }
+
+    bool isMqttSslEnabled = m_configManager.getConfig<espConfig::mqttConfig_t>().useSSL;
+
+    size_t freeHeap = esp_get_free_heap_size();
+
+    if (isMqttSslEnabled && freeHeap < HEAP_UPPER_THRESHOLD) {
+        ESP_LOGW(TAG, "HTTPS Web UI degraded to HTTP: Free heap (%zu bytes) insufficient for both HTTPS and MQTT SSL.", freeHeap);
+        return false;
+    }
+
+    if (freeHeap < HEAP_LOWER_THRESHOLD) {
+        ESP_LOGW(TAG, "HTTPS Web UI degraded to HTTP: Free heap (%zu bytes) below minimum threshold.", freeHeap);
+        return false;
+    }
+
+    return true;
+}
+
+
 // ============================================================================
 // Initialization
 /**
@@ -140,20 +166,24 @@ void WebServerManager::begin() {
   wifi_mode_t currentMode;
   esp_err_t wifiErr = esp_wifi_get_mode(&currentMode);
   bool isApMode = (wifiErr == ESP_OK && (currentMode == WIFI_MODE_AP || currentMode == WIFI_MODE_APSTA));
-  bool isHttpsEnabled = m_configManager.getConfig<espConfig::misc_config_t>().webHttpsEnabled;
+  bool isHttpsActive = !isApMode && shouldEnableHttps();
+
   httpd_ssl_config_t ssl_config = HTTPD_SSL_CONFIG_DEFAULT();
   ssl_config.httpd.max_uri_handlers = 22;
   ssl_config.httpd.max_open_sockets = 4;
   ssl_config.httpd.stack_size = 6144;
   ssl_config.httpd.uri_match_fn = httpd_uri_match_wildcard;
   ssl_config.httpd.lru_purge_enable = true;
-  ssl_config.httpd.backlog_conn = 6;
+  ssl_config.httpd.backlog_conn = 4;
 
-  if(isApMode || !isHttpsEnabled){
+  if (!isHttpsActive) {
     ssl_config.transport_mode = HTTPD_SSL_TRANSPORT_INSECURE;
+    ESP_LOGI(TAG, "Starting Web Server in HTTP mode");
+  } else {
+    ESP_LOGI(TAG, "Starting Web Server in HTTPS mode");
   }
 
-  if (isHttpsEnabled) {
+  if (isHttpsActive) {
     const auto& httpsCerts = m_configManager.getHttpsCertsConfig();
     if (!httpsCerts.serverCert.empty() && !httpsCerts.privateKey.empty()) {
       ssl_config.servercert = reinterpret_cast<const uint8_t *>(httpsCerts.serverCert.c_str());
@@ -278,6 +308,31 @@ bool WebServerManager::basicAuth(httpd_req_t* req){
 // Route Setup
 // ============================================================================
 
+esp_err_t WebServerManager::ws_post_handshake_cb(httpd_req_t *req) {
+  WebServerManager *instance = getInstance(req);
+  if (!instance) {
+    return ESP_FAIL;
+  }
+
+  int sockfd = httpd_req_to_sockfd(req);
+  ESP_LOGI(TAG, "WebSocket connection established: fd=%d", sockfd);
+  instance->addWebSocketClient(sockfd);
+
+  // Send initial device status & metrics
+  std::string status = instance->getDeviceInfo();
+  instance->queue_ws_frame(sockfd, (const uint8_t *)status.c_str(),
+                           status.size(), HTTPD_WS_TYPE_TEXT);
+  std::string metrics = instance->getDeviceMetrics();
+  instance->queue_ws_frame(sockfd, (const uint8_t *)metrics.c_str(),
+                           metrics.size(), HTTPD_WS_TYPE_TEXT);
+
+  if (!esp_timer_is_active(instance->m_statusTimer)) {
+    esp_timer_start_periodic(instance->m_statusTimer, 5000 * 1000);
+  }
+
+  return ESP_OK;
+}
+
 void WebServerManager::setupRoutes() {
   ESP_LOGI(TAG, "Setting up routes...");
 
@@ -330,6 +385,9 @@ void WebServerManager::setupRoutes() {
                        .user_ctx = r.ctx};
 #ifdef CONFIG_HTTPD_WS_SUPPORT
     uri.is_websocket = r.is_ws;
+    if (r.is_ws) {
+      uri.ws_post_handshake_cb = ws_post_handshake_cb;
+    }
 #endif
     esp_err_t err = httpd_register_uri_handler(m_server, &uri);
     if (err != ESP_OK) {
@@ -420,6 +478,9 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
   if (strlen(filename) == 0){
     filename = "/index.html.gz";
     use_compressed = true;
+    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+  } else {
+    httpd_resp_set_hdr(req, "Cache-Control", "public, max-age=31536000, immutable");
   }
 
   // Check for gzip compressed version
@@ -469,8 +530,7 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
     content_type = "image/webp";
 
   httpd_resp_set_type(req, content_type);
-  httpd_resp_set_hdr(req, "Connection", "close");
-  httpd_resp_set_hdr(req, "Cache-Control", "max-age=86400");
+  httpd_resp_set_hdr(req, "Connection", "keep-alive");
   if (use_compressed)
     httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
 
@@ -484,13 +544,17 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
   esp_err_t err = ESP_OK;
   while ((bytes_read = file.read((uint8_t*)buffer, 4096)) > 0) {
       err = httpd_resp_send_chunk(req, buffer, bytes_read);
+      vTaskDelay(pdMS_TO_TICKS(5));
       if (err != ESP_OK) break;
   }
 
   free(buffer);
   file.close();
-  httpd_resp_send_chunk(req, NULL, 0); // End stream
-  return err;
+  if (err != ESP_OK) {
+      httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "TLS send error");
+      return err;
+  }
+  return httpd_resp_send_chunk(req, NULL, 0); // End chunked stream cleanly
 }
 
 /**
@@ -522,8 +586,8 @@ esp_err_t WebServerManager::handleRootOrHash(httpd_req_t *req) {
     return ESP_FAIL;
   }
   httpd_resp_set_type(req, "text/html");
-  httpd_resp_set_hdr(req, "Connection", "close");
-  httpd_resp_set_hdr(req, "Cache-Control", "max-age=86400");
+  httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+  httpd_resp_set_hdr(req, "Connection", "keep-alive");
   httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
 
   char buffer[1024];
@@ -963,14 +1027,6 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     } else if (keyStr == "neoPixelType") {
       rebootNeeded = true;
       rebootMsg = "Pixel Type changed, reboot needed! Rebooting...";
-    } else if (keyStr == "webHttpsEnabled") {
-      size_t freeHeap = esp_get_free_heap_size();
-      ESP_LOGI(TAG, "Free Heap: %d", freeHeap);
-      if(cJSON_IsTrue(it) && freeHeap < (55 * 1024)){
-        success = false;
-        errorMsg = "HTTPS not available, not enough free memory!";
-        goto cleanup;
-      }
     }
     it = it->next;
   }
@@ -998,7 +1054,6 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     }
   }
 
-  cleanup:
   cJSON_free(data_str);
 
   cJSON_Delete(configSchema);
@@ -1239,6 +1294,59 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
       if (!arrayValid) {
         isValid = false;
         break;
+      }
+    }
+
+    // --- Heap Memory Guard Checks ---
+    if (keyStr == "webHttpsEnabled" && cJSON_IsTrue(it)) {
+      size_t freeHeap = esp_get_free_heap_size();
+      bool isMqttSslActive = getInstance(req)->m_configManager.getConfig<espConfig::mqttConfig_t>().useSSL;
+
+      if (isMqttSslActive && freeHeap < HEAP_UPPER_THRESHOLD) {
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_set_status(req, "400 Bad Request");
+        cJSON *res = cJSON_CreateObject();
+        cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+        cJSON_AddItemToObject(res, "error", cJSON_CreateString("HTTPS cannot be enabled while MQTT SSL is active (low RAM)."));
+        std::string response = cjson_to_string_and_free(res);
+        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+        cJSON_Delete(obj);
+        return false;
+      } else if (freeHeap < HEAP_LOWER_THRESHOLD) {
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_set_status(req, "400 Bad Request");
+        cJSON *res = cJSON_CreateObject();
+        cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+        cJSON_AddItemToObject(res, "error", cJSON_CreateString("HTTPS cannot be enabled due to insufficient free heap memory."));
+        std::string response = cjson_to_string_and_free(res);
+        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+        cJSON_Delete(obj);
+        return false;
+      }
+    } else if (keyStr == "useSSL" && cJSON_IsTrue(it)) {
+      size_t freeHeap = esp_get_free_heap_size();
+      bool isHttpsActive = getInstance(req)->m_configManager.getConfig<espConfig::misc_config_t>().webHttpsEnabled;
+
+      if (isHttpsActive && freeHeap < HEAP_UPPER_THRESHOLD) {
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_set_status(req, "400 Bad Request");
+        cJSON *res = cJSON_CreateObject();
+        cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+        cJSON_AddItemToObject(res, "error", cJSON_CreateString("MQTT SSL cannot be enabled while HTTPS is active (low RAM)."));
+        std::string response = cjson_to_string_and_free(res);
+        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+        cJSON_Delete(obj);
+        return false;
+      } else if (freeHeap < HEAP_LOWER_THRESHOLD) {
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_set_status(req, "400 Bad Request");
+        cJSON *res = cJSON_CreateObject();
+        cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+        cJSON_AddItemToObject(res, "error", cJSON_CreateString("MQTT SSL cannot be enabled due to insufficient free heap memory."));
+        std::string response = cjson_to_string_and_free(res);
+        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+        cJSON_Delete(obj);
+        return false;
       }
     }
 
@@ -1526,7 +1634,9 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
 
   std::string ssid;
   std::string password;
+  std::string setupCode;
   bool wifiProvided = false;
+  bool hasSetupCode = false;
 
   cJSON *ssidItem = cJSON_GetObjectItem(obj, "wifiSsid");
   cJSON *passwordItem = cJSON_GetObjectItem(obj, "wifiPassword");
@@ -1592,10 +1702,10 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
 
   cJSON *setupCodeItem = cJSON_GetObjectItem(obj, "setupCode");
   if (setupCodeItem && cJSON_IsString(setupCodeItem)) {
-    const char *setupCode = setupCodeItem->valuestring;
-    if (!(strcmp(setupCode, "00000000") && strcmp(setupCode, "11111111") && strcmp(setupCode, "22222222") && strcmp(setupCode, "33333333") && 
-          strcmp(setupCode, "44444444") && strcmp(setupCode, "55555555") && strcmp(setupCode, "66666666") && strcmp(setupCode, "77777777") &&
-          strcmp(setupCode, "88888888") && strcmp(setupCode, "99999999") && strcmp(setupCode, "12345678") && strcmp(setupCode, "87654321"))) {
+    const char *code = setupCodeItem->valuestring;
+    if (!(strcmp(code, "00000000") && strcmp(code, "11111111") && strcmp(code, "22222222") && strcmp(code, "33333333") && 
+          strcmp(code, "44444444") && strcmp(code, "55555555") && strcmp(code, "66666666") && strcmp(code, "77777777") &&
+          strcmp(code, "88888888") && strcmp(code, "99999999") && strcmp(code, "12345678") && strcmp(code, "87654321"))) {
       cJSON_Delete(obj);
       httpd_resp_set_status(req, "400 Bad Request");
       httpd_resp_set_type(req, "application/json");
@@ -1606,6 +1716,8 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
       httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
       return ESP_FAIL;
     }
+    setupCode = code;
+    hasSetupCode = true;
   }
 
   std::string currentConfigJson = instance->m_configManager.serializeToJson<espConfig::misc_config_t>();
@@ -1616,35 +1728,16 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
     return ESP_FAIL;
   }
 
-  // cJSON *overrideSR_item = cJSON_GetObjectItem(obj, "overrideStrappingRestriction");
-  // if (overrideSR_item) {
-  //   cJSON *dup_override = cJSON_Duplicate(overrideSR_item, true);
-  //   if (dup_override) {
-  //     ESP_LOGW(TAG, "REPLACED!");
-  //     cJSON_ReplaceItemInObject(currentConfigData, "overrideStrappingRestriction", dup_override);
-  //   }
-  // }
-  //
-  // cJSON *fastPolling_item = cJSON_GetObjectItem(obj, "nfcFastPollingEnabled");
-  // if (fastPolling_item) {
-  //   cJSON *dup_fast_polling = cJSON_Duplicate(fastPolling_item, true);
-  //   if (dup_fast_polling) {
-  //     cJSON_ReplaceItemInObject(currentConfigData, "nfcFastPollingEnabled", dup_fast_polling);
-  //   }
-  // }
-
   auto cleaned_body_str = cjson_to_string_and_free(obj);
   bool isValid = instance->validateRequest(req, currentConfigData, cleaned_body_str.c_str());
   cJSON_Delete(currentConfigData);
 
   if (!isValid) {
-    cJSON_Delete(obj);
     return ESP_FAIL; // validateRequest has already sent the HTTP error response
   }
 
   if (wifiProvided) {
     if (!connectWiFi(ssid.c_str(), password.c_str(), 15000)) {
-      cJSON_Delete(obj);
       httpd_resp_set_status(req, "400 Bad Request");
       httpd_resp_set_type(req, "application/json");
       cJSON *errorRes = cJSON_CreateObject();
@@ -1657,14 +1750,12 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
     homeSpan.setWifiCredentials(ssid.c_str(), password.c_str());
   }
 
-  if (setupCodeItem && cJSON_IsString(setupCodeItem)) {
-    homeSpan.setPairingCode(setupCodeItem->valuestring, false);
+  if (hasSetupCode) {
+    homeSpan.setPairingCode(setupCode.c_str(), false);
   }
 
   instance->m_configManager.updateFromJson<espConfig::misc_config_t>(cleaned_body_str);
   instance->m_configManager.saveConfig<espConfig::misc_config_t>();
-
-  cJSON_Delete(obj);
 
   httpd_resp_set_type(req, "application/json");
   cJSON *res = cJSON_CreateObject();
@@ -1786,50 +1877,6 @@ struct AsyncWsData {
   std::vector<uint8_t> payload;
 };
 
-static void send_ws_work_cb(void *arg) {
-  std::unique_ptr<AsyncWsData> data(static_cast<AsyncWsData *>(arg));
-
-  if (data) {
-    httpd_ws_frame_t ws_pkt = {};
-    ws_pkt.final = true;
-    ws_pkt.fragmented = false;
-    ws_pkt.type = data->type;
-    ws_pkt.len = data->payload.size();
-    ws_pkt.payload = data->payload.empty() ? nullptr : data->payload.data();
-
-    httpd_ws_send_frame_async(data->server, data->fd, &ws_pkt);
-  }
-}
-
-esp_err_t WebServerManager::ws_send_frame(httpd_handle_t server, int fd,
-                                          const uint8_t *payload, size_t len,
-                                          httpd_ws_type_t type) {
-#ifdef CONFIG_HTTPD_WS_SUPPORT
-  if (!server)
-    return ESP_FAIL;
-
-  auto data = std::make_unique<AsyncWsData>();
-  data->server = server;
-  data->fd = fd;
-  data->type = type;
-
-  if (len > 0 && payload) {
-    data->payload.assign(payload, payload + len);
-  }
-
-  AsyncWsData *raw_data = data.release();
-
-  esp_err_t ret = httpd_queue_work(server, send_ws_work_cb, raw_data);
-  if (ret != ESP_OK) {
-    std::unique_ptr<AsyncWsData> cleanup(raw_data);
-  }
-
-  return ret;
-#else
-  return ESP_ERR_NOT_SUPPORTED;
-#endif
-}
-
 esp_err_t WebServerManager::handleWebSocket(httpd_req_t *req) {
 #ifndef CONFIG_HTTPD_WS_SUPPORT
   httpd_resp_set_status(req, "501 Not Implemented");
@@ -1839,6 +1886,7 @@ esp_err_t WebServerManager::handleWebSocket(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
   if (!instance)
     return ESP_FAIL;
+
   if (req->method == HTTP_GET) {
     char *sessionId = new char[65];
     size_t sessionIdLen = 65;
@@ -1848,25 +1896,14 @@ esp_err_t WebServerManager::handleWebSocket(httpd_req_t *req) {
       return sendAuthFailure(req);
     }
     delete[] sessionId;
-    int sockfd = httpd_req_to_sockfd(req);
-    ESP_LOGI(TAG, "WebSocket client connected: fd=%d", sockfd);
-    instance->addWebSocketClient(sockfd);
 
-    std::string status = instance->getDeviceInfo();
-    instance->queue_ws_frame(sockfd, (const uint8_t *)status.c_str(),
-                             status.size(), HTTPD_WS_TYPE_TEXT);
-    std::string metrics = instance->getDeviceMetrics();
-    instance->queue_ws_frame(sockfd, (const uint8_t *)metrics.c_str(),
-                             metrics.size(), HTTPD_WS_TYPE_TEXT);
-
-    if (!esp_timer_is_active(instance->m_statusTimer))
-      esp_timer_start_periodic(instance->m_statusTimer, 5000 * 1000);
+    // Handshake check succeeded. Returning ESP_OK completes the handshake.
+    // The server will invoke WebServerManager::ws_post_handshake_cb immediately after.
     return ESP_OK;
   }
 
   // Receive WebSocket frame
   httpd_ws_frame_t ws_pkt = {};
-  ws_pkt.type = HTTPD_WS_TYPE_TEXT;
   esp_err_t ret = httpd_ws_recv_frame(req, &ws_pkt, 0);
 
   if (ret != ESP_OK) {
@@ -1930,6 +1967,8 @@ void WebServerManager::addWebSocketClient(int fd) {
 
 void WebServerManager::removeWebSocketClient(int fd) {
   bool stopTimer = false;
+  size_t remaining = 0;
+  bool removed = false;
   {
     std::scoped_lock lock(m_wsClientsMutex);
     auto it = std::find_if(
@@ -1937,10 +1976,14 @@ void WebServerManager::removeWebSocketClient(int fd) {
         [fd](const std::unique_ptr<WsClient> &c) { return c->fd == fd; });
     if (it != m_wsClients.end()) {
       m_wsClients.erase(it);
-      ESP_LOGI(TAG, "Removed WebSocket client fd=%d, remaining: %zu", fd,
-               m_wsClients.size());
+      remaining = m_wsClients.size();
       stopTimer = m_wsClients.empty();
+      removed = true;
     }
+  }
+  if (removed) {
+    ESP_LOGI(TAG, "Removed WebSocket client fd=%d, remaining: %zu", fd,
+             remaining);
   }
   if (stopTimer && m_statusTimer && esp_timer_is_active(m_statusTimer)) {
     esp_timer_stop(m_statusTimer);
@@ -2010,9 +2053,14 @@ void WebServerManager::ws_send_task(void *arg) {
       }
 
       if (target_fd != -1) {
-        esp_err_t send_ret =
-            instance->ws_send_frame(instance->m_server, target_fd,
-                                    frame->payload, frame->len, frame->type);
+        httpd_ws_frame_t ws_pkt = {};
+        ws_pkt.final = true;
+        ws_pkt.fragmented = false;
+        ws_pkt.type = frame->type;
+        ws_pkt.len = frame->len;
+        ws_pkt.payload = frame->payload;
+
+        esp_err_t send_ret = httpd_ws_send_frame_async(instance->m_server, target_fd, &ws_pkt);
         if (send_ret != ESP_OK) {
           const char *err = esp_err_to_name(send_ret);
           bool is_err =

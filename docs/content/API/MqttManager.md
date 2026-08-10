@@ -23,7 +23,7 @@ This class acts as a translator, converting internal application events (like lo
 
 ### MqttManager()
 
-Constructs a new `MqttManager` instance. The constructor retrieves the necessary MQTT and SSL configurations from the provided `ConfigManager` and sets up subscribers and publishers with the `espp::EventManager`. This wiring connects the manager to the application's event bus.
+Constructs a new `MqttManager` instance. The constructor retrieves the necessary MQTT and SSL configurations from the provided `ConfigManager`. This wiring connects the manager to the application's event bus.
 
 **Signature:**
 ```cpp
