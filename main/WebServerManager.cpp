@@ -2081,6 +2081,15 @@ esp_err_t WebServerManager::handleWebSocketMessage(httpd_req_t *req,
       m_configManager.setNVSLogLevel(level);
     }
     response = getDeviceInfo();
+  } else if (msg_type == "set_backlog_max_size") {
+    cJSON *item = cJSON_GetObjectItem(json, "data");
+    if(item && cJSON_IsNumber(item)) {
+      if(item->valueint >= 0 && item->valueint <= 65535){
+        wsBacklogSize = item->valueint;
+        m_configManager.setBacklogMaxSize(item->valueint);
+      } else ESP_LOGE(TAG, "Number outside of range for 'set_backlog_max_size'");
+    }
+    response = getDeviceInfo();
   } else {
     cJSON *unknown = cJSON_CreateObject();
     cJSON_AddStringToObject(unknown, "type", "error");
@@ -2131,6 +2140,7 @@ std::string WebServerManager::getDeviceInfo() {
   esp_chip_info(&chipInfo);
   cJSON_AddNumberToObject(info, "chip_model", chipInfo.model);
   cJSON_AddNumberToObject(info, "log_level", esp_log_level_get("*"));
+  cJSON_AddNumberToObject(info, "backlog_max_size", wsBacklogSize);
   return cjson_to_string_and_free(info);
 }
 
