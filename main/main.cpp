@@ -107,9 +107,6 @@ void setup() {
   #ifdef CONFIG_INIT_ARDU_SERIAL_LOGGING
   Serial.begin(115200);
   #endif
-  configManager.begin();
-  esp_log_level_set("*", static_cast<esp_log_level_t>(configManager.getConfig<espConfig::misc_config_t>().logLevel));
-  loggable::Sinker::instance().set_level((loggable::LogLevel)configManager.getConfig<espConfig::misc_config_t>().logLevel);
   loggable::espidf::LogHook::install(false, true);
   Sinker::instance().add_sinker(std::make_shared<loggable::ConsoleLogSinker>());
   // Registered here, before the reset reason is logged below. That line is the
@@ -120,6 +117,9 @@ void setup() {
   // the reset reason is otherwise unobservable. No-op unless the user has
   // enabled the buffer.
   bootlog::initFromNvs();
+  configManager.begin();
+  esp_log_level_set("*", static_cast<esp_log_level_t>(configManager.getConfig<espConfig::misc_config_t>().logLevel));
+  loggable::Sinker::instance().set_level((loggable::LogLevel)configManager.getConfig<espConfig::misc_config_t>().logLevel);
   Sinker::instance().add_sinker(std::make_shared<loggable::WebSocketLogSinker>(webServerManager));
   esp_err_t err = esp_event_loop_create_default();
   if (err != ESP_OK) {
