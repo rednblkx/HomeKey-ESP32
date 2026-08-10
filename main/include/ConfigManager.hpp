@@ -1,5 +1,6 @@
 #pragma once
 #include "config.hpp"
+#include <cstdint>
 #include <nvs.h>
 #include <variant>
 #include <vector>
@@ -67,6 +68,9 @@ public:
       return m_httpsCertsConfig;
     }
 
+    bool setNVSLogLevel(const uint8_t level);
+    bool getNVSLogLevel(uint8_t &level);
+
   private:
     using ConfigMapType = std::map<std::string,
                       std::variant<
@@ -93,7 +97,7 @@ public:
     espConfig::https_certs_t m_httpsCertsConfig;
     espConfig::misc_config_t m_miscConfig;
     espConfig::actions_config_t m_actionsConfig;
-    nvs_handle m_nvsHandle;
+    nvs_handle m_nvsHandle = 0;
     bool m_isInitialized;
     static const char* TAG;
 };

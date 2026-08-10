@@ -2075,8 +2075,7 @@ esp_err_t WebServerManager::handleWebSocketMessage(httpd_req_t *req,
       esp_log_level_t level = esp_log_level_t(level_item->valueint >= 0 && level_item->valueint < 6 ? level_item->valueint : ESP_LOG_WARN);
       esp_log_level_set("*", level);
       loggable::Sinker::instance().set_level(level_item->valueint >= 0 && level_item->valueint < 6 ? (loggable::LogLevel)level_item->valueint : loggable::LogLevel::Warning);
-      m_configManager.updateFromJson<espConfig::misc_config_t>("{\"logLevel\":" + std::to_string(level) + "}");
-      m_configManager.saveConfig<espConfig::misc_config_t>();
+      m_configManager.setNVSLogLevel(level);
     }
     response = getDeviceInfo();
   } else {

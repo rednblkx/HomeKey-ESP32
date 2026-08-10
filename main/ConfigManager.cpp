@@ -2,11 +2,14 @@
 #include "MbedtlsHelpers.hpp"
 #include "cJSON.h"
 #include "config.hpp"
+#include <cstdint>
 #include <ranges>
 #include <string>
 #include <vector>
 #include <limits>
+#include "esp_err.h"
 #include "esp_log.h"
+#include "esp_log_level.h"
 #include "fmt/ranges.h"
 #include "mbedtls/sha256.h"
 #include "mbedtls/x509.h"
@@ -109,7 +112,6 @@ ConfigManager::ConfigManager() : m_isInitialized(false) {
       {"ethSpiBus", &m_miscConfig.ethSpiBus},
       {"ethRmiiConfig", &m_miscConfig.ethRmiiConfig},
       {"ethSpiConfig", &m_miscConfig.ethSpiConfig},
-      {"logLevel", &m_miscConfig.logLevel},
       {"overrideStrappingRestriction", &m_miscConfig.overrideStrappingRestriction},
       {"accessPointPassword", &m_miscConfig.accessPointPassword}
     }
@@ -180,10 +182,12 @@ bool ConfigManager::begin() {
 
   ESP_LOGI(TAG, "Initializing...");
 
-  esp_err_t err = nvs_open("SAVED_DATA", NVS_READWRITE, &m_nvsHandle);
-  if (err != ESP_OK) {
-    ESP_LOGE(TAG, "Error (%s) opening NVS handle!", esp_err_to_name(err));
-    return false;
+  if(!m_nvsHandle){
+    esp_err_t err = nvs_open("SAVED_DATA", NVS_READWRITE, &m_nvsHandle);
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "Error (%s) opening NVS handle!", esp_err_to_name(err));
+      return false;
+    }
   }
 
   nvs_stats_t nvs_stats;
@@ -1542,4 +1546,56 @@ std::vector<CertificateStatus> ConfigManager::getCertificatesStatus(){
     }
   }
   return certificates;
+}
+
+bool ConfigManager::setNVSLogLevel(const uint8_t level) {
+  if(!m_nvsHandle){
+    esp_err_t err = nvs_open("SAVED_DATA", NVS_READWRITE, &m_nvsHandle);
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "Error (%s) opening NVS handle!", esp_err_to_name(err));
+      return false;
+    }
+  }
+  const char* key = "GlobalLogLevel";
+  esp_err_t set_err = nvs_set_u8(m_nvsHandle, key, level);
+
+  if (set_err != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to set blob in NVS for key '%s': %s", key,
+             esp_err_to_name(set_err));
+    return false;
+  }
+
+  esp_err_t commit_err = nvs_commit(m_nvsHandle);
+  if (commit_err != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to commit NVS changes for key '%s': %s", key,
+             esp_err_to_name(commit_err));
+    return false;
+  } else {
+    ESP_LOGI(TAG, "Log level '%d' successfully commited to NVS.", level);
+  }
+  return true;
+}
+
+bool ConfigManager::getNVSLogLevel(uint8_t &level) {
+  if(!m_nvsHandle){
+    esp_err_t err = nvs_open("SAVED_DATA", NVS_READWRITE, &m_nvsHandle);
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "Error (%s) opening NVS handle!", esp_err_to_name(err));
+      return false;
+    }
+  }
+  const char *key = "GlobalLogLevel";
+  esp_err_t get_err = nvs_get_u8(m_nvsHandle, key, &level);
+  if (get_err == ESP_ERR_NVS_NOT_FOUND){
+    ESP_LOGW(TAG, "Global log level not found in NVS. Returning default level.",
+          key);
+    level = esp_log_get_default_level();
+    return true;
+  }
+  if (get_err != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to get blob in NVS for key '%s': %s", key,
+             get_err);
+    return false;
+  }
+  return true;
 }

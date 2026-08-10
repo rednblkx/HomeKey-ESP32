@@ -106,9 +106,10 @@ void setup() {
   #ifdef CONFIG_INIT_ARDU_SERIAL_LOGGING
   Serial.begin(115200);
   #endif
-  configManager.begin();
-  esp_log_level_set("*", static_cast<esp_log_level_t>(configManager.getConfig<espConfig::misc_config_t>().logLevel));
-  loggable::Sinker::instance().set_level((loggable::LogLevel)configManager.getConfig<espConfig::misc_config_t>().logLevel);
+  uint8_t logLevel;
+  configManager.getNVSLogLevel(logLevel);
+  esp_log_level_set("*", static_cast<esp_log_level_t>(logLevel));
+  loggable::Sinker::instance().set_level(static_cast<loggable::LogLevel>(logLevel));
   loggable::espidf::LogHook::install(false, true);
   Sinker::instance().add_sinker(std::make_shared<loggable::ConsoleLogSinker>());
   Sinker::instance().add_sinker(std::make_shared<loggable::WebSocketLogSinker>(webServerManager));
@@ -146,6 +147,7 @@ void setup() {
     }
   }
 
+  configManager.begin();
   hardwareManager = std::make_unique<HardwareManager>(configManager.getConfig<espConfig::actions_config_t>());
   lockManager = std::make_unique<LockManager>(configManager.getConfig<espConfig::misc_config_t>(), configManager.getConfig<espConfig::actions_config_t>());
   mqttManager = std::make_unique<MqttManager>(configManager);
