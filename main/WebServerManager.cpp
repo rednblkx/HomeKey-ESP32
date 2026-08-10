@@ -1703,7 +1703,8 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
   }
 
   cJSON *nfcReaderTypeItem = cJSON_GetObjectItem(obj, "nfcReaderType");
-  if (nfcReaderTypeItem && cJSON_IsNumber(nfcReaderTypeItem) && (nfcReaderTypeItem->valueint < 0 || nfcReaderTypeItem->valueint > 1)) {
+  // 0 = PN532 (SPI), 1 = PN7160, 2 = ST25R3916 (I2C).
+  if (nfcReaderTypeItem && cJSON_IsNumber(nfcReaderTypeItem) && (nfcReaderTypeItem->valueint < 0 || nfcReaderTypeItem->valueint > 2)) {
     cJSON_Delete(obj);
     httpd_resp_set_status(req, "400 Bad Request");
     httpd_resp_set_type(req, "application/json");
