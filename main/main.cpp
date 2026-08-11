@@ -122,7 +122,7 @@ void setup() {
   Serial.begin(115200);
   #endif
   if(esp_err_t err = nvs_flash_init(); err != ESP_OK){
-    ESP_LOGI("Main", "Failed to initialize NVS. Aborting. err=%d", err);
+    ESP_LOGE("Main", "Failed to initialize NVS. Aborting. err=%d", err);
     return;
   }
   if(!initLogging()){
