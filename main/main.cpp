@@ -91,7 +91,7 @@ using namespace loggable;
 bool initLogging(){
   uint8_t logLevel;
   if(!configManager.getNVSLogLevel(logLevel)) return false;
-  uint16_t backlogMaxSize;
+  uint16_t backlogMaxSize = 0;
   if(!configManager.getBacklogMaxSize(backlogMaxSize)) return false;
   webServerManager.setWSBackLogSize(backlogMaxSize);
   esp_log_level_set("*", static_cast<esp_log_level_t>(logLevel));
