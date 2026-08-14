@@ -1220,8 +1220,10 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
     } else if ((str_ends_with(keyStr.c_str(), "Pins") || str_ends_with(keyStr.c_str(), "SpiConfig")) && cJSON_IsArray(incomingValue)){
       cJSON *el = NULL;
       bool arrayValid = true;
+      int i = 0;
       cJSON_ArrayForEach(el, incomingValue) {
         if(cJSON_IsNumber(el)){
+          if(i == 0 && keyStr == "ethSpiConfig") continue;
           if (auto owner = GPIOAllocator::instance().owner_of(el->valueint)) {
             bool isAllowedSPI = owner->contains("SPI");
             bool isAllowedStrapping = (owner == "STRAPPING" && overrideStrapping);
@@ -1241,6 +1243,7 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
             }
           }
         }
+        i++;
       }
       if (!arrayValid) {
         isValid = false;
