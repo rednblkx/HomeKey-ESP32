@@ -16,7 +16,6 @@
 #include "ReaderDataManager.hpp"
 #include "cJSON.h"
 #include "config.hpp"
-#include "misc_config_nfc_pin_check.hpp"
 #include "esp_chip_info.h"
 #include "esp_err.h"
 #include "esp_heap_caps.h"
@@ -40,7 +39,6 @@
 #include <mutex>
 #include <esp_tls_crypto.h>
 #include <stdbool.h>
-#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
@@ -73,6 +71,25 @@ static inline std::string cjson_to_string_and_free(cJSON *obj) {
   free(raw);
   cJSON_Delete(obj);
   return out;
+}
+
+inline constexpr const char *kNfcOwnerNames[] = {
+    "SPI2_SS", "SPI2_SCK", "SPI2_MISO", "SPI2_MOSI",  // PN532 / PN7160
+    "I2C_SDA", "I2C_SCL",                             // ST25R3916
+    "NFC_IRQ", "NFC_VEN",                             // PN7160 side pins
+};
+
+inline bool decideNfcPin(uint8_t incoming_pin,
+                          uint8_t current_pin,
+                          const std::optional<std::string> &owner_of_incoming,
+                          bool override_strapping) {
+    if (incoming_pin == current_pin) return true;
+    if (!owner_of_incoming.has_value()) return true;
+
+    if (owner_of_incoming == "STRAPPING") return override_strapping;
+
+    return std::any_of(std::begin(kNfcOwnerNames), std::end(kNfcOwnerNames),
+                        [&](const char *name) { return owner_of_incoming == name; });
 }
 
 // ============================================================================
@@ -1189,18 +1206,15 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         break;
       }
 
-      // Unchanged pins skip ownership. For nfcIrqPin/nfcVenPin an NFC-
-      // owned owner is allowed too (released by the save's reboot). See
-      // main/include/misc_config_nfc_pin_check.hpp for the rules.
       const int   incomingPin   = incomingValue->valueint;
       const int   currentPin    = cJSON_IsNumber(existingValue) ? existingValue->valueint : 255;
       const bool  isNfcScalar   = (keyStr == "nfcIrqPin" || keyStr == "nfcVenPin");
       auto        currentOwner  = GPIOAllocator::instance().owner_of(incomingPin);
       if (isNfcScalar) {
-        auto d = webcfg::decideNfcPin(static_cast<uint8_t>(incomingPin),
+        auto decision = decideNfcPin(static_cast<uint8_t>(incomingPin),
                                        static_cast<uint8_t>(currentPin),
                                        currentOwner, overrideStrapping);
-        if (d == webcfg::NfcPinDecision::Conflict) {
+        if (!decision) {
           std::string msg = std::to_string(incomingPin) +
                             " for \"" + keyStr + "\" already owned by \"" +
                             currentOwner.value() + "\".";
@@ -1263,10 +1277,10 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
             // nfcGpioPins: NFC-owned leases may be displaced by the
             // reboot that follows save; unchanged elements skip
             // ownership entirely.
-            auto d = webcfg::decideNfcPin(static_cast<uint8_t>(el->valueint),
+            auto decision = decideNfcPin(static_cast<uint8_t>(el->valueint),
                                            static_cast<uint8_t>(currentPin),
                                            currentOwner, overrideStrapping);
-            if (d == webcfg::NfcPinDecision::Conflict) {
+            if (!decision) {
               std::string msg = std::to_string(el->valueint) +
                                 " for \"" + keyStr + "\" already owned by \"" +
                                 currentOwner.value() + "\".";
@@ -1281,7 +1295,7 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
               break;
             }
           } else if (el->valueint != currentPin && currentOwner.has_value()) {
-            // Non-NFC arrays (e.g. ethSpiConfig): pre-patch behaviour --
+            // Non-NFC arrays (e.g. ethSpiConfig)
             // SPI-family owner allowed, STRAPPING only with override.
             bool isAllowedSPI = currentOwner->contains("SPI");
             bool isAllowedStrapping = (currentOwner == "STRAPPING" && overrideStrapping);
