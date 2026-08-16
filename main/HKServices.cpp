@@ -1,3 +1,4 @@
+#include "DDKReaderData.h"
 #include "config.hpp"
 #include "eventStructs.hpp"
 #include "HomeKitLock.hpp"
@@ -175,13 +176,14 @@ boolean HomeKitLock::NFCAccessService::update() {
     TLV8 res(NULL, 0);
     if (!result.empty()) {
         res.unpack(result.data(), result.size());
+        if(auto it = res.find(kReader_Reader_Key_Response); res.len(it) == 3){
+            HomekitEvent event{.type=ACCESSDATA_CHANGED, .data={}};
+            std::vector<uint8_t> event_data;
+            alpaca::serialize(event, event_data);
+            AppEventLoop::publish(HK_EVENT, HK_INTERNAL_EVENT, event_data.data(), event_data.size());
+        }
     }
     m_nfcControlPoint->setTLV(res, false);
-
-    HomekitEvent event{.type=ACCESSDATA_CHANGED, .data={}};
-    std::vector<uint8_t> event_data;
-    alpaca::serialize(event, event_data);
-    AppEventLoop::publish(HK_EVENT, HK_INTERNAL_EVENT, event_data.data(), event_data.size());
     return true;
 }
 
