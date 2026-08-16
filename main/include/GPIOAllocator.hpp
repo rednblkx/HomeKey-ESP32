@@ -35,23 +35,17 @@ inline constexpr uint8_t STRAPPING_PINS[] = {
   2, 4, 5, 6, 7, 8, 9, 20, 21
 };
 #elifdef CONFIG_IDF_TARGET_ESP32S3
-// GPIO 33-37 carry the additional data lines used by octal SPI flash and octal
-// PSRAM. On quad-flash parts without octal PSRAM they are ordinary GPIOs, and
-// boards do use them: the M5Stack AtomS3 Lite (ESP32-S3FN8, in-package quad
-// flash, no PSRAM) wires its RGB LED to GPIO 35. Reserving them unconditionally
-// makes that LED impossible to drive, and RESTRICTED_PINS has no override --
-// overrideStrappingRestriction only downgrades STRAPPING_PINS to a warning.
 #if defined(CONFIG_ESPTOOLPY_OCT_FLASH) || defined(CONFIG_SPIRAM_MODE_OCT)
 inline constexpr uint8_t RESTRICTED_PINS[] = {
-  9, 10, 11, 12, 13, 14, 19, 20, 33, 34, 35, 36, 37, 38, 39
+  9, 19, 20, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 43, 44
 };
 #else
 inline constexpr uint8_t RESTRICTED_PINS[] = {
-  9, 10, 11, 12, 13, 14, 19, 20, 38, 39
+  9, 19, 20, 26, 27, 28, 29, 30, 31, 32, 38, 39, 43, 44
 };
 #endif
 inline constexpr uint8_t STRAPPING_PINS[] = {
-  0, 3, 43, 44, 45, 46, 47, 48
+  0, 3, 45, 46, 47, 48
 };
 #else
 inline constexpr uint8_t RESTRICTED_PINS[] = {};

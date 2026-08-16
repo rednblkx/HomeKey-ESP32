@@ -1251,6 +1251,7 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
       int idx = 0;
       cJSON_ArrayForEach(el, incomingValue) {
         if (cJSON_IsNumber(el)) {
+          if(idx == 0 && keyStr == "ethSpiConfig") continue;
           int currentPin = 255;
           if (currentArr && cJSON_IsArray(currentArr)) {
             cJSON *ce = cJSON_GetArrayItem(currentArr, idx);
@@ -2002,6 +2003,10 @@ void WebServerManager::removeWebSocketClient(int fd) {
   }
 }
 
+void WebServerManager::setWSBackLogSize(const uint16_t size){
+  wsBacklogSize = size;
+}
+
 void WebServerManager::broadcastWs(const uint8_t *payload, size_t len,
                                    httpd_ws_type_t type) {
   std::vector<int> fds;
@@ -2011,9 +2016,8 @@ void WebServerManager::broadcastWs(const uint8_t *payload, size_t len,
     for (const auto &c : m_wsClients)
       fds.push_back(c->fd);
   }
-  static const size_t max_buffer = 64;
-  if (fds.empty()) {
-    if(m_wsBroadcastBuffer.size() >= max_buffer){
+  if (fds.empty() && wsBacklogSize > 0) {
+    if(m_wsBroadcastBuffer.size() >= wsBacklogSize){
       m_wsBroadcastBuffer.pop_front();
     }
     m_wsBroadcastBuffer.emplace_back(payload, payload + len);
@@ -2136,8 +2140,16 @@ esp_err_t WebServerManager::handleWebSocketMessage(httpd_req_t *req,
       esp_log_level_t level = esp_log_level_t(level_item->valueint >= 0 && level_item->valueint < 6 ? level_item->valueint : ESP_LOG_WARN);
       esp_log_level_set("*", level);
       loggable::Sinker::instance().set_level(level_item->valueint >= 0 && level_item->valueint < 6 ? (loggable::LogLevel)level_item->valueint : loggable::LogLevel::Warning);
-      m_configManager.updateFromJson<espConfig::misc_config_t>("{\"logLevel\":" + std::to_string(level) + "}");
-      m_configManager.saveConfig<espConfig::misc_config_t>();
+      m_configManager.setNVSLogLevel(level);
+    }
+    response = getDeviceInfo();
+  } else if (msg_type == "set_backlog_max_size") {
+    cJSON *item = cJSON_GetObjectItem(json, "data");
+    if(item && cJSON_IsNumber(item)) {
+      if(item->valueint >= 0 && item->valueint <= 65535){
+        wsBacklogSize = item->valueint;
+        m_configManager.setBacklogMaxSize(item->valueint);
+      } else ESP_LOGE(TAG, "Number outside of range for 'set_backlog_max_size'");
     }
     response = getDeviceInfo();
   } else {
@@ -2190,6 +2202,7 @@ std::string WebServerManager::getDeviceInfo() {
   esp_chip_info(&chipInfo);
   cJSON_AddNumberToObject(info, "chip_model", chipInfo.model);
   cJSON_AddNumberToObject(info, "log_level", esp_log_level_get("*"));
+  cJSON_AddNumberToObject(info, "backlog_max_size", wsBacklogSize);
   return cjson_to_string_and_free(info);
 }
 

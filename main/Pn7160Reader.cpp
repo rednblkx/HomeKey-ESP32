@@ -3,9 +3,11 @@
 #include "esp_log.h"
 #include "esp32-hal.h"
 #include "esp_log_buffer.h"
+#include "esp_log_level.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/projdefs.h"
 #include "freertos/task.h"
+#include "nci/constants.hpp"
 #include "pn7160.hpp"
 #include "portmacro.h"
 #include <vector>
@@ -47,7 +49,16 @@ bool Pn7160Reader::init() {
         stop();
         return false;
     }
+    uint8_t frameSize = m_ecpData.size() - 2;
+    std::vector<uint8_t> CFG = { 0x01, 0xA0, 0x6C, 0x1E, frameSize };
+    CFG.insert(CFG.end(), m_ecpData.begin(), m_ecpData.end() - 2);
+    CFG.resize(34, 0x00);
 
+    if (const esp_err_t err = m_nci->core_set_config(CFG); err != nci::STATUS_OK) {
+        ESP_LOGE(TAG, "Failed to set initial ECP config (NCI Status=0x%02X)", err);
+        stop();
+        return false;
+    }
     {
         NciMessage cfg;
         const uint8_t kPmuQuery[] = {0x1, 0xA0, 0x0E};
@@ -382,27 +393,32 @@ bool Pn7160Reader::healthCheck() {
 }
 
  bool Pn7160Reader::updateECP() {
-    if (!m_nci) return false;
-    NciMessage cfg;
-    constexpr uint8_t kEcpQuery[] = {0x1, 0xA0, 0x6C};
-    if (const esp_err_t ret = m_nci->core_get_config(kEcpQuery, cfg); ret != nci::STATUS_OK) {
-      ESP_LOGE(TAG, "Failed to get config (NCI Status=0x%02X)", ret);
-      return false;
-    }
-    if(cfg.size() > 23 &&
-        !std::equal(cfg.get_payload_ptr() + 14, cfg.get_payload_ptr() + 22, m_ecpData.begin() + 10)){
-      std::vector<uint8_t> CFG = {
-          0x01,
-          0xA0, 0x6C,
-          0x1E, static_cast<unsigned char>(m_ecpData.size() - 2)
-      };
-      CFG.insert(CFG.end(), m_ecpData.begin(), m_ecpData.end() - 2);
-      CFG.resize(34);
+    if (!m_nci || !m_connected) return false;
 
-      if (const esp_err_t ret = m_nci->core_set_config(CFG); ret != nci::STATUS_OK) {
-          ESP_LOGE(TAG, "Failed to set config (NCI Status=0x%02X)", ret);
+    if(auto ret = m_nci->rf_stop_discovery(); ret != nci::STATUS_OK){
+        ESP_LOGE(TAG, "Failed to stop discovery (NCI Status=0x%02X)", ret);
         return false;
-      }
     }
-    return true;
+
+    uint8_t frameSize = m_ecpData.size() - 2; // 16 bytes (Header + GID)
+    std::vector<uint8_t> CFG = {
+        0x01,        // Number of parameter fields
+        0xA0, 0x6C,  // Tag: ECP Configuration
+        0x1E,        // Length
+        frameSize    // Frame size
+    };
+    CFG.insert(CFG.end(), m_ecpData.begin(), m_ecpData.end() - 2);
+    CFG.resize(34, 0x00); // Pad to 34 bytes (5 header bytes + 29 data bytes)
+
+    esp_err_t ret = m_nci->core_set_config(CFG);
+    if (ret != nci::STATUS_OK) {
+        ESP_LOGE(TAG, "Failed to update PN7160 ECP config (NCI Status=0x%02X)", ret);
+        beginDiscovery();
+        return false;
+    }
+
+    ESP_LOGI(TAG, "ECP Frame updated.");
+    ESP_LOG_BUFFER_HEX_LEVEL(TAG, CFG.data(), CFG.size(), ESP_LOG_DEBUG);
+
+    return beginDiscovery();
 }

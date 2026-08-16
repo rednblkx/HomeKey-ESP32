@@ -37,9 +37,9 @@ public:
      */
     ~NfcManager() = default;
     bool begin();
-    void updateEcpData();
 
 private:
+    std::atomic<bool> m_reconfigRequested{false};
     // --- Task Management ---
     static void pollingTaskEntry(void* instance);
     void pollingTask();

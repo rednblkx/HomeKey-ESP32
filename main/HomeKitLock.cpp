@@ -428,27 +428,7 @@ void HomeKitLock::setupDebugCommands() {
         ESP_LOGI(TAG, "NONE");
       }
 
-      esp_log_level_set(TAG, level);
-      esp_log_level_set("HK_HomeKit", level);
-      esp_log_level_set("HKAuthCtx", level);
-      esp_log_level_set("HKFastAuth", level);
-      esp_log_level_set("HKStdAuth", level);
-      esp_log_level_set("HKAttestAuth", level);
-      esp_log_level_set("PN532", level);
-      esp_log_level_set("PN532_SPI", level);
-      esp_log_level_set("ISO18013_SC", level);
-      esp_log_level_set("LockMechanism", level);
-      esp_log_level_set("NFCAccess", level);
-      esp_log_level_set("actions-config", level);
-      esp_log_level_set("misc-config", level);
-      esp_log_level_set("mqttconfig", level);
-      esp_log_level_set("HardwareManager", level);
-      esp_log_level_set("ReaderDataManager", level);
-      esp_log_level_set("LockManager", level);
-      esp_log_level_set("MqttManager", level);
-      esp_log_level_set("WebServerManager", level);
-      esp_log_level_set("ConfigManager", level);
-      esp_log_level_set("NfcManager", level);
+      esp_log_level_set("*", level);
     });
     new SpanUserCommand('F', "Set HomeKey Flow", [](const char *buf){
       KeyFlow hkFlow = KeyFlow::kFlowFAST;
@@ -592,10 +572,12 @@ void HomeKitLock::apStarted() {
  *
  * When called, this updates the ReaderDataManager to match the current set of paired controllers:
  * - If there are zero admin controllers, deletes all stored reader data.
- * - Otherwise, ensures each controller's LTPK has a corresponding issuer entry and, if any new issuers
- *   were added, attempts to persist the updated reader data to NVS.
+ * - Otherwise, ensures each controller's LTPK has a corresponding issuer entry, removes any stored
+ *   issuers that no longer correspond to a paired controller, and persists the reader data to NVS
+ *   if anything changed.
  *
- * Side effects: may delete reader data, add issuer entries, and write data to NVS; logs success or failure.
+ * Side effects: may delete reader data, add or remove issuer entries, and write data to NVS; logs
+ * success or failure.
  */
 void HomeKitLock::controllerCallback() {
     ESP_LOGI(TAG, "HomeKit controller list changed.");
@@ -604,17 +586,43 @@ void HomeKitLock::controllerCallback() {
         m_readerDataManager.deleteAllReaderData();
         return;
     }
+
     bool dataChanged = false;
+
+    // Add any controllers that don't yet have a corresponding issuer,
+    // and track their identifiers so we know which issuers are still valid.
+    std::vector<std::vector<uint8_t>> currentIssuerIds;
     for (auto it = homeSpan.controllerListBegin(); it != homeSpan.controllerListEnd(); ++it) {
         std::vector<uint8_t> issuerId = Utils::getHashIdentifier(it->getLTPK(), 32);
+        currentIssuerIds.push_back(issuerId);
         if (m_readerDataManager.addIssuerIfNotExists(issuerId, it->getLTPK())) {
+            ESP_LOGI(TAG, "New controller paired, issuer added.");
             dataChanged = true;
         }
     }
-    if(dataChanged) {
-        ESP_LOGI(TAG, "New issuers added, saving reader data to NVS.");
+
+    // Remove any stored issuers that no longer correspond to a paired controller.
+    // Iterate over a snapshot copy since removeIssuerIfItExists locks internally
+    // and may mutate the manager's live issuer list.
+    readerData_t readerDataSnapshot = m_readerDataManager.getReaderDataCopy();
+    for (const auto& issuer : readerDataSnapshot.issuers) {
+        bool stillPaired = std::any_of(currentIssuerIds.begin(), currentIssuerIds.end(),
+            [&issuer](const std::vector<uint8_t>& id) {
+                return issuer.issuer_id.size() == id.size() &&
+                       std::equal(issuer.issuer_id.begin(), issuer.issuer_id.end(), id.begin());
+            });
+        if (!stillPaired) {
+            if (m_readerDataManager.removeIssuerIfItExists(issuer.issuer_id)) {
+                ESP_LOGI(TAG, "Controller unpaired, issuer removed.");
+                dataChanged = true;
+            }
+        }
+    }
+
+    if (dataChanged) {
+        ESP_LOGI(TAG, "Issuer list changed, saving reader data to NVS.");
         if (!m_readerDataManager.saveData()) {
-            ESP_LOGE(TAG, "Failed to save updated reader data after pairing!");
+            ESP_LOGE(TAG, "Failed to save updated reader data after controller list change!");
         }
     }
 }

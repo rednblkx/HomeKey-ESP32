@@ -4,6 +4,8 @@
 #include <esp_log.h>
 #include <algorithm>
 #include <ranges>
+#include "app_event_loop.hpp"
+#include "eventStructs.hpp"
 #include "msgpack.h"
 
 const char* ReaderDataManager::TAG = "ReaderDataManager";
@@ -265,6 +267,10 @@ bool ReaderDataManager::deleteAllReaderData() {
         return false;
     }
     
+    HomekitEvent event{.type=ACCESSDATA_CHANGED, .data={}};
+    std::vector<uint8_t> event_data;
+    alpaca::serialize(event, event_data);
+    AppEventLoop::publish(HK_EVENT, HK_INTERNAL_EVENT, event_data.data(), event_data.size());
     ESP_LOGI(TAG, "Reader data successfully erased from NVS.");
     return true;
 }
@@ -295,6 +301,34 @@ bool ReaderDataManager::addIssuerIfNotExists(const std::vector<uint8_t>& issuerI
     newIssuer.issuer_pk.assign(publicKey, publicKey + 32);
 
     m_readerData.issuers.emplace_back(newIssuer);
+    return true;
+}
+
+/**
+ * @brief Removes an issuer from the in-memory issuer list if one with a matching identifier exists.
+ *
+ * Searches the manager's in-memory issuers vector for an issuer whose identifier matches
+ * `issuerId`. If found, the issuer is erased from the vector. This does NOT automatically
+ * persist the change to NVS; call saveData() afterwards if the removal should be persisted.
+ *
+ * @param issuerId Byte sequence identifying the issuer to remove.
+ * @return true if a matching issuer was found and removed, false otherwise.
+ */
+bool ReaderDataManager::removeIssuerIfItExists(const std::vector<uint8_t>& issuerId) {
+    std::lock_guard<std::mutex> lock(m_readerDataMutex);
+    auto it = std::find_if(m_readerData.issuers.begin(), m_readerData.issuers.end(),
+        [&issuerId](const hkIssuer_t& issuer) {
+            return issuer.issuer_id.size() == issuerId.size() &&
+                   std::equal(issuer.issuer_id.begin(), issuer.issuer_id.end(), issuerId.begin());
+        });
+
+    if (it == m_readerData.issuers.end()) {
+        ESP_LOGD(TAG, "Issuer not found, nothing to remove.");
+        return false;
+    }
+
+    ESP_LOGI(TAG, "Removing issuer.");
+    m_readerData.issuers.erase(it);
     return true;
 }
 

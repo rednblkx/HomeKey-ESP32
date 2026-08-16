@@ -2,11 +2,14 @@
 #include "MbedtlsHelpers.hpp"
 #include "cJSON.h"
 #include "config.hpp"
+#include <cstdint>
 #include <ranges>
 #include <string>
 #include <vector>
 #include <limits>
+#include "esp_err.h"
 #include "esp_log.h"
+#include "esp_log_level.h"
 #include "fmt/ranges.h"
 #include "mbedtls/sha256.h"
 #include "mbedtls/x509.h"
@@ -109,7 +112,6 @@ ConfigManager::ConfigManager() : m_isInitialized(false) {
       {"ethSpiBus", &m_miscConfig.ethSpiBus},
       {"ethRmiiConfig", &m_miscConfig.ethRmiiConfig},
       {"ethSpiConfig", &m_miscConfig.ethSpiConfig},
-      {"logLevel", &m_miscConfig.logLevel},
       {"overrideStrappingRestriction", &m_miscConfig.overrideStrappingRestriction},
       {"accessPointPassword", &m_miscConfig.accessPointPassword}
     }
@@ -180,10 +182,12 @@ bool ConfigManager::begin() {
 
   ESP_LOGI(TAG, "Initializing...");
 
-  esp_err_t err = nvs_open("SAVED_DATA", NVS_READWRITE, &m_nvsHandle);
-  if (err != ESP_OK) {
-    ESP_LOGE(TAG, "Error (%s) opening NVS handle!", esp_err_to_name(err));
-    return false;
+  if(!m_nvsHandle){
+    esp_err_t err = nvs_open("SAVED_DATA", NVS_READWRITE, &m_nvsHandle);
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "Error (%04#x) opening NVS handle!", err);
+      return false;
+    }
   }
 
   nvs_stats_t nvs_stats;
@@ -265,10 +269,10 @@ bool ConfigManager::deleteConfig() {
     bool ssl_ok = (err_ssl == ESP_OK || err_ssl == ESP_ERR_NVS_NOT_FOUND);
 
     if (!mqtt_ok) {
-      ESP_LOGE(TAG, "Failed to erase MQTTDATA: %s", esp_err_to_name(err_mqtt));
+      ESP_LOGE(TAG, "Failed to erase MQTTDATA: %04#x", err_mqtt);
     }
     if (!ssl_ok) {
-      ESP_LOGE(TAG, "Failed to erase MQTTSSLDATA: %s", esp_err_to_name(err_ssl));
+      ESP_LOGE(TAG, "Failed to erase MQTTSSLDATA: %04#x", err_ssl);
     }
 
     if (mqtt_ok && ssl_ok) {
@@ -276,7 +280,7 @@ bool ConfigManager::deleteConfig() {
       if (commit_err == ESP_OK) {
         return true;
       }
-      ESP_LOGE(TAG, "Failed to commit deleteConfig: %s", esp_err_to_name(commit_err));
+      ESP_LOGE(TAG, "Failed to commit deleteConfig: %04#x", commit_err);
       return false;
     }
     return false;
@@ -294,7 +298,7 @@ bool ConfigManager::deleteConfig() {
       esp_err_t commit_err = nvs_commit(m_nvsHandle);
       return commit_err == ESP_OK;
     }
-    ESP_LOGE(TAG, "Failed to erase HTTPSDATA: %s", esp_err_to_name(err));
+    ESP_LOGE(TAG, "Failed to erase HTTPSDATA: %04#x", err);
     return false;
   } else {
     static_assert(std::is_void_v<ConfigType> && false, "Unsupported ConfigType for deleteConfig");
@@ -362,8 +366,8 @@ void ConfigManager::loadConfigFromNvs(const char *key) {
              key);
     return;
   } else if (err != ESP_OK) {
-    ESP_LOGE(TAG, "Error (%s) getting blob size for key '%s'",
-             esp_err_to_name(err), key);
+    ESP_LOGE(TAG, "Error (%04#x) getting blob size for key '%s'",
+             err, key);
     return;
   }
 
@@ -384,7 +388,7 @@ void ConfigManager::loadConfigFromNvs(const char *key) {
   err = nvs_get_blob(m_nvsHandle, key, buffer.data(), &required_size);
 
   if (err != ESP_OK) {
-    ESP_LOGE(TAG, "Error (%s) reading blob for key '%s'", esp_err_to_name(err),
+    ESP_LOGE(TAG, "Error (%04#x) reading blob for key '%s'", err,
              key);
     return;
   }
@@ -445,15 +449,13 @@ bool ConfigManager::saveConfigToNvs(const char *key) {
   esp_err_t set_err = nvs_set_blob(m_nvsHandle, key, buf.data(), buf.size());
 
   if (set_err != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to set blob in NVS for key '%s': %s", key,
-             esp_err_to_name(set_err));
+    ESP_LOGE(TAG, "Failed to set blob in NVS for key '%s': %04#x", key, set_err);
     return false;
   }
 
   esp_err_t commit_err = nvs_commit(m_nvsHandle);
   if (commit_err != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to commit NVS changes for key '%s': %s", key,
-             esp_err_to_name(commit_err));
+    ESP_LOGE(TAG, "Failed to commit NVS changes for key '%s': %04#x", key, commit_err);
     return false;
   }
   return true;
@@ -1542,4 +1544,101 @@ std::vector<CertificateStatus> ConfigManager::getCertificatesStatus(){
     }
   }
   return certificates;
+}
+
+bool ConfigManager::setNVSLogLevel(const uint8_t level) {
+  if(!m_nvsHandle){
+    esp_err_t err = nvs_open("SAVED_DATA", NVS_READWRITE, &m_nvsHandle);
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "Error (%04#x) opening NVS handle!", err);
+      return false;
+    }
+  }
+  const char* key = "GlobalLogLevel";
+  esp_err_t set_err = nvs_set_u8(m_nvsHandle, key, level);
+
+  if (set_err != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to set blob in NVS for key '%s': %04#x", key, set_err);
+    return false;
+  }
+
+  esp_err_t commit_err = nvs_commit(m_nvsHandle);
+  if (commit_err != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to commit NVS changes for key '%s': %04#x", key, commit_err);
+    return false;
+  } else {
+    ESP_LOGI(TAG, "Log level '%d' successfully commited to NVS.", level);
+  }
+  return true;
+}
+
+bool ConfigManager::getNVSLogLevel(uint8_t &level) {
+  if(!m_nvsHandle){
+    esp_err_t err = nvs_open("SAVED_DATA", NVS_READWRITE, &m_nvsHandle);
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "Error (%04#x) opening NVS handle!", err);
+      return false;
+    }
+  }
+  const char *key = "GlobalLogLevel";
+  esp_err_t get_err = nvs_get_u8(m_nvsHandle, key, &level);
+  if (get_err == ESP_ERR_NVS_NOT_FOUND){
+    ESP_LOGW(TAG, "%s not found in NVS. Returning default level.",
+              key);
+    level = esp_log_get_default_level();
+    return true;
+  }
+  if (get_err != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to get blob in NVS for key '%s': %04#x", key,
+              get_err);
+    return false;
+  }
+  return true;
+}
+
+bool ConfigManager::setBacklogMaxSize(const uint16_t size){
+  if(!m_nvsHandle){
+    esp_err_t err = nvs_open("SAVED_DATA", NVS_READWRITE, &m_nvsHandle);
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "Error (%04#x) opening NVS handle!", err);
+      return false;
+    }
+  }
+  const char* key = "BackLogMaxSize";
+  esp_err_t set_err = nvs_set_u16(m_nvsHandle, key, size);
+
+  if (set_err != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to set blob in NVS for key '%s': %04#x", key, set_err);
+    return false;
+  }
+  esp_err_t commit_err = nvs_commit(m_nvsHandle);
+  if (commit_err != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to commit NVS changes for key '%s': %04#x", key, commit_err);
+    return false;
+  } else {
+    ESP_LOGI(TAG, "BackLogMaxSize set to '%d' and successfully commited to NVS.", size);
+  }
+  return true;
+}
+
+bool ConfigManager::getBacklogMaxSize(uint16_t &size) {
+  if(!m_nvsHandle){
+    esp_err_t err = nvs_open("SAVED_DATA", NVS_READWRITE, &m_nvsHandle);
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "Error (%04#x) opening NVS handle!", err);
+      return false;
+    }
+  }
+  const char *key = "BackLogMaxSize";
+  esp_err_t get_err = nvs_get_u16(m_nvsHandle, key, &size);
+  if (get_err == ESP_ERR_NVS_NOT_FOUND){
+    ESP_LOGW(TAG, "%s not found in NVS.", key);
+    return true;
+  }
+  if (get_err != ESP_OK) {
+    ESP_LOGE(TAG, "Failed to get blob in NVS for key '%s': %04#x", key,
+              get_err);
+    return false;
+  }
+  return true;
 }

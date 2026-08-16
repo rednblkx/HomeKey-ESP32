@@ -13,6 +13,7 @@
 #include "utils.hpp"
 
 #include <array>
+#include <cstdint>
 #include <esp_log.h>
 #include <chrono>
 #include <functional>
@@ -20,6 +21,7 @@
 
 const char* NfcManager::TAG = "NfcManager";
 
+static const uint8_t ECP_HEAD[] = { 0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x00 };
 
 /**
  * @brief Task entry wrapper that invokes an instance's auth precompute task.
@@ -247,13 +249,9 @@ NfcManager::NfcManager(ReaderDataManager& readerDataManager,
       m_hkAuthPrecomputeEnabled(hkAuthPrecomputeEnabled),
       m_nfcFastPollingEnabled(nfcFastPollingEnabled),
       m_pollingTaskHandle(nullptr),
-      m_retryTaskHandle(nullptr),
-      m_ecpData({ 0x6A, 0x2, 0xCB, 0x2, 0x6, 0x2, 0x11, 0x0 })
+      m_retryTaskHandle(nullptr)
 {
-  // An I2C reader uses only two of the four pins. Claiming all four as SPI
-  // would reserve two arbitrary GPIOs under misleading names -- on a board like
-  // the AtomS3 Lite, which exposes only a handful, that can collide with
-  // something real.
+  std::copy(ECP_HEAD, ECP_HEAD + 8, m_ecpData.begin());
   if (nfcReaderType == 2) {
     pinAllocations.emplace(PinFunctions::SDA, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[0]), GPIO_MODE_DISABLE, "I2C_SDA"));
     pinAllocations.emplace(PinFunctions::SCL, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[1]), GPIO_MODE_DISABLE, "I2C_SCL"));
@@ -275,7 +273,17 @@ NfcManager::NfcManager(ReaderDataManager& readerDataManager,
     if(ec) { ESP_LOGE(TAG, "Failed to deserialize HomeKit event: %s", ec.message().c_str()); return; }
     switch(hk_event.type) {
       case ACCESSDATA_CHANGED: {
-        updateEcpData();
+        const auto readerData = m_readerDataManager.getReaderDataCopy();
+        const auto& readerGid = readerData.reader_gid;
+        if (readerGid.size() == 8) {
+            std::copy(ECP_HEAD, ECP_HEAD + 8, m_ecpData.begin());
+            memcpy(m_ecpData.data() + 8, readerGid.data(), 8);
+            Utils::crc16a(m_ecpData.data(), 16, m_ecpData.data() + 16);
+        } else {
+            std::fill(m_ecpData.begin(), m_ecpData.end(), 0);
+        }
+        
+        m_reconfigRequested.store(true, std::memory_order_release);
         invalidateAuthCache();
       }
       break;
@@ -304,6 +312,14 @@ NfcManager::NfcManager(ReaderDataManager& readerDataManager,
  * @return `true` if the NFC polling task was started, `false` otherwise.
  */
 bool NfcManager::begin() {
+    const auto readerData = m_readerDataManager.getReaderDataCopy();
+    const auto& readerGid = readerData.reader_gid;
+    if (readerGid.size() == 8) {
+        memcpy(m_ecpData.data() + 8, readerGid.data(), 8);
+        Utils::crc16a(m_ecpData.data(), 16, m_ecpData.data() + 16);
+    } else if(readerGid.size() == 0) {
+        std::fill(m_ecpData.begin(), m_ecpData.end(), 0);
+    }
     if (m_nfcReaderType == 0) {
         m_reader = std::make_unique<Pn532Reader>(nfcGpioPins, m_ecpData);
         ESP_LOGI(TAG, "Using PN532 reader");
@@ -346,28 +362,6 @@ bool NfcManager::begin() {
 }
 
 /**
- * @brief Update the internal ECP data buffer with the reader GID and its CRC16.
- *
- * If the Reader GID is 8 bytes long, copies it into bytes 8–15 of the internal
- * ECP buffer and computes a CRC16 over the first 16 bytes, storing the 2-byte
- * CRC at bytes 16–17 of the buffer. If the Reader GID is not provisioned,
- * logs a warning and leaves the ECP buffer unchanged.
- */
-void NfcManager::updateEcpData() {
-    const auto readerData = m_readerDataManager.getReaderDataCopy();
-    const auto& readerGid = readerData.reader_gid;
-    if (readerGid.size() == 8) {
-        memcpy(m_ecpData.data() + 8, readerGid.data(), 8);
-        Utils::crc16a(m_ecpData.data(), 16, m_ecpData.data() + 16);
-        if(m_nfcReaderType == 1 && m_reader){
-          m_reader->updateECP();
-        }
-    } else {
-        ESP_LOGW(TAG, "Reader GID is not provisioned. ECP data may be invalid.");
-    }
-}
-
-/**
  * @brief Initialize the selected NFC reader and refresh ECP data.
  *
  * Delegates to the active reader's init() method. On success, updates the manager's
@@ -379,9 +373,6 @@ bool NfcManager::initializeReader() {
     if (!m_reader) {
         ESP_LOGE(TAG, "No reader instance available.");
         return false;
-    }
-    if(m_nfcReaderType != 1) {
-	    updateEcpData();
     }
     if (!m_reader->init()) {
     		err:
@@ -436,6 +427,19 @@ void NfcManager::pollingTask() {
              static_cast<unsigned int>(passiveTargetTimeoutMs));
 
     while (true) {
+        if (m_reconfigRequested.exchange(false, std::memory_order_acq_rel)) {
+          ESP_LOGI(TAG, "ECP Frame update requested...");
+          if (m_reader) {
+              if (!m_reader->updateECP()) {
+                  ESP_LOGE(TAG, "ECP update failed; performing full reader re-initialization.");
+                  m_reader->stop();
+                  if (!initializeReader()) {
+                      vTaskDelay(pdMS_TO_TICKS(1000));
+                      continue;
+                  }
+              }
+          }
+        }
         if (!m_reader->healthCheck()) {
 					ESP_LOGE(TAG, "NFC reader is unresponsive. Attempting to reconnect...");
 					while (true) {

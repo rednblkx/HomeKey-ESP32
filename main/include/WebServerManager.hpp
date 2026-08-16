@@ -5,6 +5,7 @@
 #include "esp_partition.h"
 #include "esp_timer.h"
 #include "app_event_loop.hpp"
+#include <cstdint>
 #include <deque>
 #include <memory>
 #include <atomic>
@@ -70,7 +71,7 @@ public:
   void setMqttManager(MqttManager *mqttManager) { m_mqttManager = mqttManager; }
   void setNfcManager(NfcManager *nfcManager) { m_nfcManager = nfcManager; }
   void broadcastWs(const uint8_t *payload, size_t len, httpd_ws_type_t type);
-  bool shouldEnableHttps() const;
+  void setWSBackLogSize(const uint16_t size);
 
 private:
   // ------------------------------------------------------------------------
@@ -167,6 +168,7 @@ private:
   static WebServerManager *getInstance(httpd_req_t *req);
   static esp_err_t sendAuthFailure(httpd_req_t *req);
   static esp_err_t ws_post_handshake_cb(httpd_req_t *req);
+  bool shouldEnableHttps() const;
 
   // ------------------------------------------------------------------------
   // Member Variables
@@ -190,7 +192,7 @@ private:
   std::mutex m_wsClientsMutex;
   esp_timer_handle_t m_statusTimer;
   std::deque<std::vector<uint8_t>> m_wsBroadcastBuffer;
-
+  uint16_t wsBacklogSize = 0;
 
   std::atomic<bool> m_otaInProgress{false};
   bool m_isInitialized{false};
