@@ -305,6 +305,34 @@ bool ReaderDataManager::addIssuerIfNotExists(const std::vector<uint8_t>& issuerI
 }
 
 /**
+ * @brief Removes an issuer from the in-memory issuer list if one with a matching identifier exists.
+ *
+ * Searches the manager's in-memory issuers vector for an issuer whose identifier matches
+ * `issuerId`. If found, the issuer is erased from the vector. This does NOT automatically
+ * persist the change to NVS; call saveData() afterwards if the removal should be persisted.
+ *
+ * @param issuerId Byte sequence identifying the issuer to remove.
+ * @return true if a matching issuer was found and removed, false otherwise.
+ */
+bool ReaderDataManager::removeIssuerIfItExists(const std::vector<uint8_t>& issuerId) {
+    std::lock_guard<std::mutex> lock(m_readerDataMutex);
+    auto it = std::find_if(m_readerData.issuers.begin(), m_readerData.issuers.end(),
+        [&issuerId](const hkIssuer_t& issuer) {
+            return issuer.issuer_id.size() == issuerId.size() &&
+                   std::equal(issuer.issuer_id.begin(), issuer.issuer_id.end(), issuerId.begin());
+        });
+
+    if (it == m_readerData.issuers.end()) {
+        ESP_LOGD(TAG, "Issuer not found, nothing to remove.");
+        return false;
+    }
+
+    ESP_LOGI(TAG, "Removing issuer.");
+    m_readerData.issuers.erase(it);
+    return true;
+}
+
+/**
  * @brief Packs an hkEndpoint_t into MessagePack format using the provided packer.
  *
  * Serializes the endpoint's seven fields: "endpointId", "last_used_at", "counter",

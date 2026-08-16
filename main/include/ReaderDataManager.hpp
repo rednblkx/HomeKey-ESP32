@@ -87,7 +87,14 @@ public:
      * @return True if a new issuer was added, false if it already existed.
      */
     bool addIssuerIfNotExists(const std::vector<uint8_t>& issuerId, const uint8_t* publicKey);
-    
+  
+    /**
+     * @brief Removes an issuer from the in-memory list if it exists.
+     * NOTE: This does NOT automatically save to NVS. Call saveData() afterwards.
+     * @param issuerId The 8-byte unique identifier for the issuer.
+     * @return True if a matching issuer was found and removed, false if none existed.
+     */
+    bool removeIssuerIfItExists(const std::vector<uint8_t>& issuerId);
     /**
      * @brief Persists the current in-memory reader data to NVS.
      * @return A constant pointer to the current in-memory readerData_t object on success, otherwise `nullptr`.
