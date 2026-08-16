@@ -91,7 +91,7 @@ bool Pn532Reader::pollForTag(std::vector<uint8_t>& uid,
     if (!m_frontend) return false;
     uint8_t sel_res = 0;
     std::vector<uint8_t> res;
-    (void)m_frontend->InCommunicateThru({m_ecpData.begin(), m_ecpData.size()}, res, 50);
+    (void)m_frontend->InCommunicateThru(m_ecpData, res, 50);
     const pn532::Status status = m_frontend->InListPassiveTarget(
         0x0, uid, atqa, sel_res, timeoutMs);
     sak = sel_res;
