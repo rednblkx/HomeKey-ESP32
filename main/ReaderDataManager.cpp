@@ -4,6 +4,8 @@
 #include <esp_log.h>
 #include <algorithm>
 #include <ranges>
+#include "app_event_loop.hpp"
+#include "eventStructs.hpp"
 #include "msgpack.h"
 
 const char* ReaderDataManager::TAG = "ReaderDataManager";
@@ -265,6 +267,10 @@ bool ReaderDataManager::deleteAllReaderData() {
         return false;
     }
     
+    HomekitEvent event{.type=ACCESSDATA_CHANGED, .data={}};
+    std::vector<uint8_t> event_data;
+    alpaca::serialize(event, event_data);
+    AppEventLoop::publish(HK_EVENT, HK_INTERNAL_EVENT, event_data.data(), event_data.size());
     ESP_LOGI(TAG, "Reader data successfully erased from NVS.");
     return true;
 }
