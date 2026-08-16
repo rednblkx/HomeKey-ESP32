@@ -43,35 +43,6 @@ The project aims to be the easy DIY solution for using Apple's HomeKey feature w
 - **Computer** (Windows, Mac, or Linux)
 - **Basic Electronics Knowledge** (not a problem if you're new to this, ask away!)
 
-#### Solder-free option: M5Stack AtomS3 Lite + Unit NFC
-
-The ST25R3916 backend was developed against an M5Stack pairing that needs no
-soldering, breadboard or jumper wires - the two parts connect with the supplied
-Grove cable:
-
-| Part | Notes |
-|------|-------|
-| [M5Stack AtomS3 Lite](https://shop.m5stack.com/products/atoms3-lite-esp32s3-dev-kit) | ESP32-S3, 8 MB flash, USB-C, RGB status LED on GPIO 35 |
-| [M5Stack Unit NFC (ST25R3916)](https://shop.m5stack.com/products/nfc-universal-unit-st25r3916) | I2C address `0x50`, HY2.0-4P Grove connector |
-
-Configuration in the web UI:
-
-| Setting | Value |
-|---------|-------|
-| Reader Type | `ST25R3916 (I2C)` |
-| SDA Pin | `2` |
-| SCL Pin | `1` |
-| NeoPixel Pin (optional) | `35`, type `GRB` - gives tap/success/failure feedback |
-
-Measured on this hardware: full FAST-flow authentication in **130-160 ms**.
-
-> [!NOTE]
->
-> The Grove connector does not break out the ST25R3916 IRQ pin, so the driver
-> polls the interrupt status registers over I2C instead. Hardware I2C at
-> 400 kHz is required - M5Stack documents that SoftwareI2C latency is too high
-> for the chip's RF timing.
-
 #### Ethernet
 
 The following chips are supported for Ethernet:
