@@ -1026,23 +1026,14 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
 bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
                                        cJSON *obj) {
   bool overrideStrapping = false;
-  
   cJSON *ovrStrItem = cJSON_GetObjectItem(obj, "overrideStrappingRestriction");
+  if (!ovrStrItem) ovrStrItem = cJSON_GetObjectItem(currentData, "overrideStrappingRestriction");
+
   if (ovrStrItem) {
     overrideStrapping = cJSON_IsBool(ovrStrItem) && cJSON_IsTrue(ovrStrItem);
   } else {
-    ovrStrItem = cJSON_GetObjectItem(currentData, "overrideStrappingRestriction");
-    if (ovrStrItem) {
-      overrideStrapping = cJSON_IsBool(ovrStrItem) && cJSON_IsTrue(ovrStrItem);
-    } else {
-      std::string misc = getInstance(req)->m_configManager.serializeToJson<espConfig::misc_config_t>();
-      cJSON *miscData = cJSON_Parse(misc.c_str());
-      if (miscData) {
-        cJSON *savedOvr = cJSON_GetObjectItem(miscData, "overrideStrappingRestriction");
-        overrideStrapping = savedOvr && (cJSON_IsTrue(savedOvr) || (cJSON_IsNumber(savedOvr) && savedOvr->valueint));
-        cJSON_Delete(miscData);
-      }
-    }
+    overrideStrapping = getInstance(req)->m_configManager
+        .getConfig<espConfig::misc_config_t>().overrideStrappingRestriction;
   }
 
   cJSON *it = obj->child;
