@@ -164,7 +164,7 @@ private:
 
   // Utility methods
   static bool validateRequest(httpd_req_t *req, cJSON *currentData,
-                              const char *body);
+                              cJSON *obj);
   static WebServerManager *getInstance(httpd_req_t *req);
   static esp_err_t sendAuthFailure(httpd_req_t *req);
   static esp_err_t ws_post_handshake_cb(httpd_req_t *req);

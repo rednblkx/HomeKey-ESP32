@@ -929,7 +929,7 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     return ESP_FAIL;
   }
 
-  if (!validateRequest(req, configSchema, content.data())) {
+  if (!validateRequest(req, configSchema, obj)) {
     cJSON_Delete(configSchema);
     cJSON_Delete(obj);
     return ESP_FAIL;
@@ -1053,19 +1053,7 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
 }
 
 bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
-                                       const char *body) {
-  cJSON *obj = cJSON_Parse(body);
-  if (!obj) {
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_status(req, "400 Bad Request");
-    cJSON *res = cJSON_CreateObject();
-    cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-    cJSON_AddItemToObject(res, "error", cJSON_CreateString("Invalid JSON"));
-    std::string response = cjson_to_string_and_free(res);
-    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-    return false;
-  }
-
+                                       cJSON *obj) {
   bool overrideStrapping = false;
   
   cJSON *ovrStrItem = cJSON_GetObjectItem(obj, "overrideStrappingRestriction");
@@ -1336,7 +1324,6 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         cJSON_AddItemToObject(res, "error", cJSON_CreateString("HTTPS cannot be enabled while MQTT SSL is active (low RAM)."));
         std::string response = cjson_to_string_and_free(res);
         httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-        cJSON_Delete(obj);
         return false;
       } else if (freeHeap < HEAP_LOWER_THRESHOLD) {
         httpd_resp_set_type(req, "application/json");
@@ -1346,7 +1333,6 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         cJSON_AddItemToObject(res, "error", cJSON_CreateString("HTTPS cannot be enabled due to insufficient free heap memory."));
         std::string response = cjson_to_string_and_free(res);
         httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-        cJSON_Delete(obj);
         return false;
       }
     } else if (keyStr == "useSSL" && cJSON_IsTrue(it)) {
@@ -1361,7 +1347,6 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         cJSON_AddItemToObject(res, "error", cJSON_CreateString("MQTT SSL cannot be enabled while HTTPS is active (low RAM)."));
         std::string response = cjson_to_string_and_free(res);
         httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-        cJSON_Delete(obj);
         return false;
       } else if (freeHeap < HEAP_LOWER_THRESHOLD) {
         httpd_resp_set_type(req, "application/json");
@@ -1371,7 +1356,6 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         cJSON_AddItemToObject(res, "error", cJSON_CreateString("MQTT SSL cannot be enabled due to insufficient free heap memory."));
         std::string response = cjson_to_string_and_free(res);
         httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-        cJSON_Delete(obj);
         return false;
       }
     }
@@ -1405,7 +1389,6 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
     it = it->next;
   }
   
-  cJSON_Delete(obj);
   return isValid;
 }
 
@@ -1434,12 +1417,10 @@ esp_err_t WebServerManager::handleClearConfig(httpd_req_t *req) {
   }
 
   std::string type = type_param;
-  bool success =
-      (type == "mqtt")
-          ? instance->m_configManager.deleteConfig<espConfig::mqttConfig_t>()
-      : (type == "misc" || type == "actions")
-          ? instance->m_configManager.deleteConfig<espConfig::misc_config_t>()
-          : false;
+  bool success = false;
+  if (type == "mqtt")        success = instance->m_configManager.deleteConfig<espConfig::mqttConfig_t>();
+  else if (type == "misc")   success = instance->m_configManager.deleteConfig<espConfig::misc_config_t>();
+  else if (type == "actions")success = instance->m_configManager.deleteConfig<espConfig::actions_config_t>();
 
   if (success) {
     httpd_resp_send(req, "Cleared! Rebooting...", HTTPD_RESP_USE_STRLEN);
@@ -1755,13 +1736,14 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
     return ESP_FAIL;
   }
 
-  auto cleaned_body_str = cjson_to_string_and_free(obj);
-  bool isValid = instance->validateRequest(req, currentConfigData, cleaned_body_str.c_str());
+  bool isValid = instance->validateRequest(req, currentConfigData, obj);
   cJSON_Delete(currentConfigData);
 
   if (!isValid) {
+    cJSON_Delete(obj);
     return ESP_FAIL; // validateRequest has already sent the HTTP error response
   }
+  auto cleaned_body_str = cjson_to_string_and_free(obj);
 
   if (wifiProvided) {
     if (!connectWiFi(ssid.c_str(), password.c_str(), 15000)) {

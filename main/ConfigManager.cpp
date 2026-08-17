@@ -307,6 +307,7 @@ bool ConfigManager::deleteConfig() {
 }
 template bool ConfigManager::deleteConfig<espConfig::mqttConfig_t>();
 template bool ConfigManager::deleteConfig<espConfig::misc_config_t>();
+template bool ConfigManager::deleteConfig<espConfig::actions_config_t>();
 
 template <typename ConfigType>
 /**
