@@ -1098,6 +1098,14 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         sendJsonError(req, msg);
         break;
       }
+      static constexpr std::array<const char*, 12> kWeakCodes = {
+        "00000000","11111111","22222222","33333333","44444444","55555555",
+        "66666666","77777777","88888888","99999999","12345678","87654321"
+      };
+      if (std::find(kWeakCodes.begin(), kWeakCodes.end(), code) != kWeakCodes.end()) {
+        sendJsonError(req, "\"" + code + "\" is too simple to use as a Setup Code.");
+        break;
+      }
       if (homeSpan.controllerListBegin() != homeSpan.controllerListEnd() &&
           code.compare(cJSON_GetStringValue(existingValue)) != 0) {
         sendJsonError(req, "Setup Code can only be set if no devices are paired");
@@ -1574,21 +1582,7 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
 
   cJSON *setupCodeItem = cJSON_GetObjectItem(obj, "setupCode");
   if (setupCodeItem && cJSON_IsString(setupCodeItem)) {
-    const char *code = setupCodeItem->valuestring;
-    if (!(strcmp(code, "00000000") && strcmp(code, "11111111") && strcmp(code, "22222222") && strcmp(code, "33333333") && 
-          strcmp(code, "44444444") && strcmp(code, "55555555") && strcmp(code, "66666666") && strcmp(code, "77777777") &&
-          strcmp(code, "88888888") && strcmp(code, "99999999") && strcmp(code, "12345678") && strcmp(code, "87654321"))) {
-      cJSON_Delete(obj);
-      httpd_resp_set_status(req, "400 Bad Request");
-      httpd_resp_set_type(req, "application/json");
-      cJSON *res = cJSON_CreateObject();
-      cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-      cJSON_AddItemToObject(res, "error", cJSON_CreateString("Invalid Setup Code format or too simple"));
-      std::string response = cjson_to_string_and_free(res);
-      httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-      return ESP_FAIL;
-    }
-    setupCode = code;
+    setupCode = setupCodeItem->valuestring;
     hasSetupCode = true;
   }
 
