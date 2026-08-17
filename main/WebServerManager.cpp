@@ -166,6 +166,24 @@ bool WebServerManager::sendJsonError(httpd_req_t *req, const std::string &msg,
   return ESP_OK;
 }
 
+std::string ownerConflictMsg(int pin, const std::string &key, const std::string &owner) {
+  return std::to_string(pin) + " for \"" + key + "\" already owned by \"" + owner + "\".";
+}
+
+bool WebServerManager::heapGuardOk(httpd_req_t *req, bool otherActive,
+                                    const char *thisName, const char *otherName) {
+  size_t freeHeap = esp_get_free_heap_size();
+  if (otherActive && freeHeap < HEAP_UPPER_THRESHOLD) {
+    sendJsonError(req, std::string(thisName) + " cannot be enabled while " + otherName + " is active (low RAM).");
+    return false;
+  }
+  if (freeHeap < HEAP_LOWER_THRESHOLD) {
+    sendJsonError(req, std::string(thisName) + " cannot be enabled due to insufficient free heap memory.");
+    return false;
+  }
+  return true;
+}
+
 // ============================================================================
 // Initialization
 /**
@@ -1206,23 +1224,11 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
     }
     // --- Heap Memory Guard Checks ---
     if (keyStr == "webHttpsEnabled" && cJSON_IsTrue(it)) {
-      size_t freeHeap = esp_get_free_heap_size();
-      bool isMqttSslActive = getInstance(req)->m_configManager.getConfig<espConfig::mqttConfig_t>().useSSL;
-
-      if (isMqttSslActive && freeHeap < HEAP_UPPER_THRESHOLD) {
-        return sendJsonError(req, "HTTPS cannot be enabled while MQTT SSL is active (low RAM).");
-      } else if (freeHeap < HEAP_LOWER_THRESHOLD) {
-        return sendJsonError(req, "HTTPS cannot be enabled due to insufficient free heap memory.");
-      }
+      bool mqttSsl = getInstance(req)->m_configManager.getConfig<espConfig::mqttConfig_t>().useSSL;
+      if (!heapGuardOk(req, mqttSsl, "HTTPS", "MQTT SSL")) { cJSON_Delete(obj); return false; }
     } else if (keyStr == "useSSL" && cJSON_IsTrue(it)) {
-      size_t freeHeap = esp_get_free_heap_size();
-      bool isHttpsActive = getInstance(req)->m_configManager.getConfig<espConfig::misc_config_t>().webHttpsEnabled;
-
-      if (isHttpsActive && freeHeap < HEAP_UPPER_THRESHOLD) {
-        return sendJsonError(req, "MQTT SSL cannot be enabled while HTTPS is active (low RAM).");
-      } else if (freeHeap < HEAP_LOWER_THRESHOLD) {
-        return sendJsonError(req, "MQTT SSL cannot be enabled due to insufficient free heap memory.");
-      }
+      bool https = getInstance(req)->m_configManager.getConfig<espConfig::misc_config_t>().webHttpsEnabled;
+      if (!heapGuardOk(req, https, "MQTT SSL", "HTTPS")) { cJSON_Delete(obj); return false; }
     }
 
     // Boolean coercion
