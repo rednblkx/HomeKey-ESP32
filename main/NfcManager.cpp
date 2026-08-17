@@ -10,6 +10,7 @@
 #include "Pn7160Reader.hpp"
 #include "St25r3916Reader.hpp"
 #include "hal/gpio_types.h"
+#include "magic_enum.hpp"
 #include "utils.hpp"
 
 #include <array>
@@ -252,7 +253,7 @@ NfcManager::NfcManager(ReaderDataManager& readerDataManager,
       m_retryTaskHandle(nullptr)
 {
   std::copy(ECP_HEAD, ECP_HEAD + 8, m_ecpData.begin());
-  if (nfcReaderType == 2) {
+  if (nfcReaderType == ST25R3916) {
     pinAllocations.emplace(PinFunctions::SDA, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[0]), GPIO_MODE_DISABLE, "I2C_SDA"));
     pinAllocations.emplace(PinFunctions::SCL, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[1]), GPIO_MODE_DISABLE, "I2C_SCL"));
   } else {
@@ -261,10 +262,17 @@ NfcManager::NfcManager(ReaderDataManager& readerDataManager,
     pinAllocations.emplace(PinFunctions::MISO, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[2]), GPIO_MODE_DISABLE, "SPI2_MISO"));
     pinAllocations.emplace(PinFunctions::MOSI, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[3]), GPIO_MODE_DISABLE, "SPI2_MOSI"));
   }
-  if(nfcIrqPin != 255)
-    pinAllocations.emplace(PinFunctions::IRQ, GPIOAllocator::instance().acquire(gpio_num_t(nfcIrqPin), GPIO_MODE_DISABLE, "NFC_IRQ"));
-  if(nfcVenPin != 255)
-    pinAllocations.emplace(PinFunctions::VEN, GPIOAllocator::instance().acquire(gpio_num_t(nfcVenPin), GPIO_MODE_DISABLE, "NFC_VEN"));
+  if (nfcReaderType == PN7160){
+    if(nfcIrqPin != 255)
+      pinAllocations.emplace(PinFunctions::IRQ, GPIOAllocator::instance().acquire(gpio_num_t(nfcIrqPin), GPIO_MODE_DISABLE, "NFC_IRQ"));
+    if(nfcVenPin != 255)
+      pinAllocations.emplace(PinFunctions::VEN, GPIOAllocator::instance().acquire(gpio_num_t(nfcVenPin), GPIO_MODE_DISABLE, "NFC_VEN"));
+  }
+  for(auto &p : pinAllocations){
+    if(!p.second.has_value()){
+      ESP_LOGW(TAG, "Could not acquire GPIO Pin for '%s' with error '%s'", magic_enum::enum_name(p.first).cbegin(), magic_enum::enum_name(p.second.error()).cbegin());
+    }
+  }
   m_hk_event = AppEventLoop::subscribe(HK_EVENT, HK_INTERNAL_EVENT, [&](const uint8_t* data, size_t size){
     if(size == 0 || data == nullptr) return;
     std::span<const uint8_t> payload(data, size);

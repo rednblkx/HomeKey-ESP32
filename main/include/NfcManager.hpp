@@ -5,6 +5,7 @@
 #include "freertos/task.h"
 #include <array>
 #include <atomic>
+#include <cstdint>
 #include <expected>
 #include <functional>
 #include <map>
@@ -19,6 +20,12 @@ class ReaderDataManager;
 class MqttManager;
 class DDKAuthenticationContext;
 namespace espConfig { struct misc_config_t; }
+
+enum ReaderType : uint8_t {
+  PN532,
+  PN7160,
+  ST25R3916
+};
 
 class NfcManager {
 public:
