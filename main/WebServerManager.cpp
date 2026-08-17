@@ -39,7 +39,6 @@
 #include <mutex>
 #include <esp_tls_crypto.h>
 #include <stdbool.h>
-#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
@@ -72,6 +71,25 @@ static inline std::string cjson_to_string_and_free(cJSON *obj) {
   free(raw);
   cJSON_Delete(obj);
   return out;
+}
+
+inline constexpr const char *kNfcOwnerNames[] = {
+    "SPI2_SS", "SPI2_SCK", "SPI2_MISO", "SPI2_MOSI",  // PN532 / PN7160
+    "I2C_SDA", "I2C_SCL",                             // ST25R3916
+    "NFC_IRQ", "NFC_VEN",                             // PN7160 side pins
+};
+
+inline bool decideNfcPin(uint8_t incoming_pin,
+                          uint8_t current_pin,
+                          const std::optional<std::string> &owner_of_incoming,
+                          bool override_strapping) {
+    if (incoming_pin == current_pin) return true;
+    if (!owner_of_incoming.has_value()) return true;
+
+    if (owner_of_incoming == "STRAPPING") return override_strapping;
+
+    return std::any_of(std::begin(kNfcOwnerNames), std::end(kNfcOwnerNames),
+                        [&](const char *name) { return owner_of_incoming == name; });
 }
 
 // ============================================================================
@@ -1188,12 +1206,34 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         break;
       }
 
-      if (auto owner = GPIOAllocator::instance().owner_of(incomingValue->valueint)) {
-        bool isAllowedStrapping = (owner == "STRAPPING" && overrideStrapping);
-
+      const int   incomingPin   = incomingValue->valueint;
+      const int   currentPin    = cJSON_IsNumber(existingValue) ? existingValue->valueint : 255;
+      const bool  isNfcScalar   = (keyStr == "nfcIrqPin" || keyStr == "nfcVenPin");
+      auto        currentOwner  = GPIOAllocator::instance().owner_of(incomingPin);
+      if (isNfcScalar) {
+        auto decision = decideNfcPin(static_cast<uint8_t>(incomingPin),
+                                       static_cast<uint8_t>(currentPin),
+                                       currentOwner, overrideStrapping);
+        if (!decision) {
+          std::string msg = std::to_string(incomingPin) +
+                            " for \"" + keyStr + "\" already owned by \"" +
+                            currentOwner.value() + "\".";
+          httpd_resp_set_type(req, "application/json");
+          httpd_resp_set_status(req, "400 Bad Request");
+          cJSON *res = cJSON_CreateObject();
+          cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+          cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
+          std::string response = cjson_to_string_and_free(res);
+          httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+          isValid = false;
+          break;
+        }
+      } else if (incomingPin != currentPin && currentOwner.has_value()) {
+        bool isAllowedStrapping = (currentOwner == "STRAPPING" && overrideStrapping);
         if (!isAllowedStrapping) {
-          std::string msg = std::to_string(incomingValue->valueint) +
-                            " for \"" + keyStr + "\" already owned by \"" + owner.value() + "\".";
+          std::string msg = std::to_string(incomingPin) +
+                            " for \"" + keyStr + "\" already owned by \"" +
+                            currentOwner.value() + "\".";
           httpd_resp_set_type(req, "application/json");
           httpd_resp_set_status(req, "400 Bad Request");
           cJSON *res = cJSON_CreateObject();
@@ -1218,19 +1258,51 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         isValid = false;
         break;
     } else if ((str_ends_with(keyStr.c_str(), "Pins") || str_ends_with(keyStr.c_str(), "SpiConfig")) && cJSON_IsArray(incomingValue)){
+      const bool isNfcArray = (keyStr == "nfcGpioPins");
+      cJSON *currentArr = cJSON_GetObjectItem(currentData, keyStr.c_str());
       cJSON *el = NULL;
       bool arrayValid = true;
-      int i = 0;
+      int idx = 0;
       cJSON_ArrayForEach(el, incomingValue) {
-        if(cJSON_IsNumber(el)){
-          if(i == 0 && keyStr == "ethSpiConfig") continue;
-          if (auto owner = GPIOAllocator::instance().owner_of(el->valueint)) {
-            bool isAllowedSPI = owner->contains("SPI");
-            bool isAllowedStrapping = (owner == "STRAPPING" && overrideStrapping);
-            
+        if (cJSON_IsNumber(el)) {
+          if(idx == 0 && keyStr == "ethSpiConfig") continue;
+          int currentPin = 255;
+          if (currentArr && cJSON_IsArray(currentArr)) {
+            cJSON *ce = cJSON_GetArrayItem(currentArr, idx);
+            if (ce && cJSON_IsNumber(ce)) currentPin = ce->valueint;
+          }
+          auto currentOwner = GPIOAllocator::instance().owner_of(el->valueint);
+
+          if (isNfcArray) {
+            // nfcGpioPins: NFC-owned leases may be displaced by the
+            // reboot that follows save; unchanged elements skip
+            // ownership entirely.
+            auto decision = decideNfcPin(static_cast<uint8_t>(el->valueint),
+                                           static_cast<uint8_t>(currentPin),
+                                           currentOwner, overrideStrapping);
+            if (!decision) {
+              std::string msg = std::to_string(el->valueint) +
+                                " for \"" + keyStr + "\" already owned by \"" +
+                                currentOwner.value() + "\".";
+              httpd_resp_set_type(req, "application/json");
+              httpd_resp_set_status(req, "400 Bad Request");
+              cJSON *res = cJSON_CreateObject();
+              cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+              cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
+              std::string response = cjson_to_string_and_free(res);
+              httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+              arrayValid = false;
+              break;
+            }
+          } else if (el->valueint != currentPin && currentOwner.has_value()) {
+            // Non-NFC arrays (e.g. ethSpiConfig)
+            // SPI-family owner allowed, STRAPPING only with override.
+            bool isAllowedSPI = currentOwner->contains("SPI");
+            bool isAllowedStrapping = (currentOwner == "STRAPPING" && overrideStrapping);
             if (!isAllowedSPI && !isAllowedStrapping) {
               std::string msg = std::to_string(el->valueint) +
-                                " for \"" + keyStr + "\" already owned by \"" + owner.value() + "\".";
+                                " for \"" + keyStr + "\" already owned by \"" +
+                                currentOwner.value() + "\".";
               httpd_resp_set_type(req, "application/json");
               httpd_resp_set_status(req, "400 Bad Request");
               cJSON *res = cJSON_CreateObject();
@@ -1243,7 +1315,7 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
             }
           }
         }
-        i++;
+        idx++;
       }
       if (!arrayValid) {
         isValid = false;
@@ -1646,7 +1718,8 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
   }
 
   cJSON *nfcReaderTypeItem = cJSON_GetObjectItem(obj, "nfcReaderType");
-  if (nfcReaderTypeItem && cJSON_IsNumber(nfcReaderTypeItem) && (nfcReaderTypeItem->valueint < 0 || nfcReaderTypeItem->valueint > 1)) {
+  // 0 = PN532 (SPI), 1 = PN7160, 2 = ST25R3916 (I2C).
+  if (nfcReaderTypeItem && cJSON_IsNumber(nfcReaderTypeItem) && (nfcReaderTypeItem->valueint < 0 || nfcReaderTypeItem->valueint > 2)) {
     cJSON_Delete(obj);
     httpd_resp_set_status(req, "400 Bad Request");
     httpd_resp_set_type(req, "application/json");

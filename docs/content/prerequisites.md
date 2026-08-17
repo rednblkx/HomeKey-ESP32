@@ -64,9 +64,9 @@ Generally, any board should be fine. However, some may have non-genuine modules 
 > [!TIP]
 > Genuine development boards can be ordered from major distributors like Mouser or Digikey, though it's pricey compared to something like AliExpress.
 
-#### 2.1.2. NFC Reader Modules (PN532 & PN7160 / PN7161)
+#### 2.1.2. NFC Reader Modules (PN532, PN7161 and ST25R3916)
 
-HomeKey-ESP32 supports both **PN532** and **NXP PN7160 / PN7161** NFC controllers.
+HomeKey-ESP32 supports **PN532**, **NXP PN7160 / PN7161**, and ST25R3916 NFC controllers.
 
 *   **PN532 NFC Module:**
     *   **Interface:** SPI protocol.
@@ -77,6 +77,9 @@ HomeKey-ESP32 supports both **PN532** and **NXP PN7160 / PN7161** NFC controller
     *   **Interface:** SPI protocol with dedicated **IRQ** (Interrupt Request) and **VEN** (Enable/Reset) control pins.
     *   **Features:** Enhanced Contactless Polling (ECP) support, fast tag discovery, integrated presence checks for non ISO-DEP cards, and reliable hardware performance.
         *   PN7161 has native ECP support and that is how ECP is implemented on this firmware for it, however, currently there's no fallback implemented for PN7160 which doesn't has native ECP support.
+
+*   **ST25R3916**:
+    *   Interface: I2C protocol
 
 ##### Choosing Your NFC Module: A Mini Buyer's Guide
 
@@ -108,3 +111,33 @@ You can also buy from Elechouse for best quality (original red board designer) o
 
 > [!NOTE]
 > The project and its owner are not affiliated with the aforementioned products nor with their designer/manufacturer or any relevant party, this section is only meant to list solutions and to praise community efforts.
+
+### 2.3. Option C - M5Stack AtomS3 Lite + Unit NFC
+
+The ST25R3916 backend was developed against an M5Stack pairing that needs no
+soldering, breadboard or jumper wires - the two parts connect with the supplied
+Grove cable:
+
+| Part | Notes |
+|------|-------|
+| [M5Stack AtomS3 Lite](https://shop.m5stack.com/products/atoms3-lite-esp32s3-dev-kit) | ESP32-S3, 8 MB flash, USB-C, RGB status LED on GPIO 35 |
+| [M5Stack Unit NFC (ST25R3916)](https://shop.m5stack.com/products/nfc-universal-unit-st25r3916) | I2C address `0x50`, HY2.0-4P Grove connector |
+
+Configuration in the web UI:
+
+| Setting | Value |
+|---------|-------|
+| Reader Type | `ST25R3916 (I2C)` |
+| SDA Pin | `2` |
+| SCL Pin | `1` |
+| NeoPixel Pin (optional) | `35`, type `GRB` - gives tap/success/failure feedback |
+
+Measured on this hardware: full FAST-flow authentication in **130-160 ms**.
+
+> [!NOTE]
+>
+> For developers:
+> The Grove connector does not break out the ST25R3916 IRQ pin, so the driver
+> polls the interrupt status registers over I2C instead. Hardware I2C at
+> 400 kHz is required - M5Stack documents that SoftwareI2C latency is too high
+> for the chip's RF timing.

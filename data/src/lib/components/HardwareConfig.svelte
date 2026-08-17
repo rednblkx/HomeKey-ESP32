@@ -45,6 +45,17 @@
 
 	const isCaptivePortal = $derived(route.pathname.startsWith('/captive-portal'));
 
+	// Reader type 2 (ST25R3916) is I2C: it uses only the first two pin slots,
+	// as SDA and SCL. Showing them as SS/SCK/MISO/MOSI is not just cosmetic --
+	// it invites setting MISO/MOSI to real GPIOs that the firmware will never
+	// claim, and makes a correct I2C config look wrong.
+	const isI2cReader = $derived(nfcReaderType === 2);
+	const pinLabels = $derived(
+		isI2cReader
+			? ['SDA Pin', 'SCL Pin', '', '']
+			: ['SS Pin', 'SCK Pin', 'MISO Pin', 'MOSI Pin']
+	);
+
 	let currentEthChip = $derived(() => {
 		if (ethPhyType !== undefined && ethConfig?.supportedChips) {
 			return ethConfig.supportedChips[ethPhyType];
@@ -111,6 +122,7 @@
 			>
 				<option value={0}>PN532</option>
 				<option value={1}>PN7161</option>
+				<option value={2}>ST25R3916 (I2C)</option>
 			</select>
 		</div>
 		<div class="form-control mb-2">
@@ -133,10 +145,10 @@
 				<option value={255}>Custom</option>
 			</select>
 		</div>
-		<div class="grid grid-cols-4 gap-2 mb-2">
+		<div class="grid {isI2cReader ? 'grid-cols-2' : 'grid-cols-4'} gap-2 mb-2">
 			<div class="form-control">
 				<label class="label" for="nfcSsPin">
-					<span class="label-text text-xs">SS Pin</span>
+					<span class="label-text text-xs">{pinLabels[0]}</span>
 				</label>
 				<input
 					id="nfcSsPin"
@@ -148,7 +160,7 @@
 			</div>
 			<div class="form-control">
 				<label class="label" for="nfcSckPin">
-					<span class="label-text text-xs">SCK Pin</span>
+					<span class="label-text text-xs">{pinLabels[1]}</span>
 				</label>
 				<input
 					id="nfcSckPin"
@@ -158,31 +170,39 @@
 					class="input input-sm input-bordered w-full"
 				/>
 			</div>
-			<div class="form-control">
-				<label class="label" for="nfcMisoPin">
-					<span class="label-text text-xs">MISO Pin</span>
-				</label>
-				<input
-					id="nfcMisoPin"
-					type="number"
-					disabled={nfcPinsPreset !== 255 || loading}
-					bind:value={nfcGpioPins[2]}
-					class="input input-sm input-bordered w-full"
-				/>
-			</div>
-			<div class="form-control">
-				<label class="label" for="nfcMosiPin">
-					<span class="label-text text-xs">MOSI Pin</span>
-				</label>
-				<input
-					id="nfcMosiPin"
-					type="number"
-					disabled={nfcPinsPreset !== 255 || loading}
-					bind:value={nfcGpioPins[3]}
-					class="input input-sm input-bordered w-full"
-				/>
-			</div>
+			{#if !isI2cReader}
+				<div class="form-control">
+					<label class="label" for="nfcMisoPin">
+						<span class="label-text text-xs">{pinLabels[2]}</span>
+					</label>
+					<input
+						id="nfcMisoPin"
+						type="number"
+						disabled={nfcPinsPreset !== 255 || loading}
+						bind:value={nfcGpioPins[2]}
+						class="input input-sm input-bordered w-full"
+					/>
+				</div>
+				<div class="form-control">
+					<label class="label" for="nfcMosiPin">
+						<span class="label-text text-xs">{pinLabels[3]}</span>
+					</label>
+					<input
+						id="nfcMosiPin"
+						type="number"
+						disabled={nfcPinsPreset !== 255 || loading}
+						bind:value={nfcGpioPins[3]}
+						class="input input-sm input-bordered w-full"
+					/>
+				</div>
+			{/if}
 		</div>
+		{#if isI2cReader}
+			<p class="text-xs opacity-60 mb-2">
+				I2C reader: only SDA and SCL are used. On an M5Stack AtomS3 Lite Grove
+				port that is SDA&nbsp;=&nbsp;2, SCL&nbsp;=&nbsp;1.
+			</p>
+		{/if}
 		{#if nfcReaderType === 1}
 			<div class="grid grid-cols-2 gap-2 mb-2">
 				<div class="form-control">

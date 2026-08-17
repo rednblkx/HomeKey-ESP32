@@ -16,7 +16,7 @@
 
 The project aims to be the easy DIY solution for using Apple's HomeKey feature without the need to purchase a compatible smart lock that you probably don't want. HomeKey-ESP32 brings Apple's secure NFC-based unlocking to an ESP32 module near you, enabling you to unlock doors and whatnot with a simple tap of your iPhone or Apple Watch.
 
-**No proprietary hardware required** – just an ESP32 and a PN532 NFC module
+**No proprietary hardware required** – just an ESP32 and one of the supported NFC modules
 
 > [!WARNING]
 > The flash memory is not encrypted as this kinda started as a pet project of mine but a lot of people started using
@@ -35,7 +35,10 @@ The project aims to be the easy DIY solution for using Apple's HomeKey feature w
 ### Prerequisites
 
 - **ESP32 Development Board**
-- **PN532 NFC Module** (SPI interface)
+- **NFC reader** - one of:
+  - **PN532** (SPI)
+  - **PN7160** (SPI) - available in the dev release
+  - **ST25R3916** (I2C) - available in the dev release
 - **USB Cable** (for flashing and power)
 - **Computer** (Windows, Mac, or Linux)
 - **Basic Electronics Knowledge** (not a problem if you're new to this, ask away!)
@@ -72,7 +75,7 @@ The following chips are supported for Ethernet:
    - This contains everything you need - no compilation required!
 
 2. **Connect Your Hardware**
-   - Wire your PN532 NFC module to your ESP32 using the default pins
+   - Wire your chosen NFC module to your ESP32 using the default pins
    - Refer to the [detailed wiring guide](https://rednblkx.github.io/HomeKey-ESP32/setup/#21-nfc-module-wiring) for your specific setup
 
 3. **Flash the Firmware**
@@ -106,7 +109,7 @@ Follow the update in the documentation at: https://rednblkx.github.io/HomeKey-ES
   
 ```mermaid
 graph TD
-    A[iPhone/Apple Watch] -->|NFC| B[PN532 Module]
+    A[iPhone/Apple Watch] -->|RF| B[NFC Module]
     B -->|SPI| C[ESP32]
     C -->|MQTT| D[Home Assistant/Broker]
     C -->|HomeKit| E[Apple Home]
@@ -247,6 +250,9 @@ HomeKey-ESP32/
 │   ├── ConfigManager.cpp    # Configuration management
 │   ├── ReaderDataManager.cpp # Reader data management
 │   ├── NfcManager.cpp      # NFC communication
+│   ├── Pn532Reader.cpp     # PN532 backend (SPI)
+│   ├── Pn7160Reader.cpp    # PN7160 backend
+│   ├── St25r3916Reader.cpp # ST25R3916 backend (I2C)
 │   ├── HomeKitLock.cpp     # HomeKit integration
 │   ├── LockManager.cpp     # Lock state management
 │   ├── MqttManager.cpp     # MQTT client
@@ -269,7 +275,8 @@ HomeKey-ESP32/
 
 | Component | File | Purpose |
 |-----------|------|---------|
-| **NFC Manager** | [`NfcManager.cpp`](main/NfcManager.cpp) | Handles PN532 communication and HomeKey authentication |
+| **NFC Manager** | [`NfcManager.cpp`](main/NfcManager.cpp) | Drives the selected NFC backend and HomeKey authentication |
+| **NFC Backends** | [`Pn532Reader.cpp`](main/Pn532Reader.cpp) / [`Pn7160Reader.cpp`](main/Pn7160Reader.cpp) / [`St25r3916Reader.cpp`](main/St25r3916Reader.cpp) | Reader implementations behind the common `INfcReader` interface |
 | **HomeKit Bridge** | [`HomeKitLock.cpp`](main/HomeKitLock.cpp) | Manages Apple HomeKit integration and pairing |
 | **Lock Manager** | [`LockManager.cpp`](main/LockManager.cpp) | Controls lock state transitions and GPIO actions |
 | **MQTT Client** | [`MqttManager.cpp`](main/MqttManager.cpp) | Enables smart home integration via MQTT |
@@ -282,7 +289,10 @@ HomeKey-ESP32/
 # Install dependencies
 git submodule update --init --recursive
 
-# Install esp-idf (see https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html#get-started)
+# Install esp-idf v5.4 or newer -- CI builds against v5.5.4.
+# Earlier versions do not compile: the pn7160 and pn532_hal components use
+# esp_log_buffer.h and spi_bus_dma_memory_alloc, both introduced in v5.4.
+# See https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html#get-started
 
 # Build firmware
 idf.py build
