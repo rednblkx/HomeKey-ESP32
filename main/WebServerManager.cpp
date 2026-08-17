@@ -30,6 +30,7 @@
 #include "sodium/randombytes.h"
 #include <LittleFS.h>
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -1044,7 +1045,7 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
     if (!existingValue) {
       std::string msg = "\"" + keyStr + "\" is not a valid configuration key.";
       sendJsonError(req, msg);
-      break;
+      return false;
     }
 
     // Type validation
@@ -1069,16 +1070,12 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
                         "\". Received: " + std::string(valueStr);
       free(valueStr);
       sendJsonError(req, msg);
-      break;
+      return false;
     }
 
     // Setup code validation
     if (keyStr == "setupCode") {
-      if (!cJSON_IsString(incomingValue)) {
-        std::string msg = "Value for \"" + keyStr + "\" must be a string.";
-        sendJsonError(req, msg);
-        break;
-      }
+      // Type check above already guarantees cJSON_IsString
       std::string code = incomingValue->valuestring;
       if (code.length() != 8 ||
           std::find_if(code.begin(), code.end(), [](unsigned char c) {
@@ -1087,7 +1084,7 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         std::string msg =
             "\"" + code + "\" is not valid. Must be an 8-digit number.";
         sendJsonError(req, msg);
-        break;
+        return false;
       }
       static constexpr std::array<const char*, 12> kWeakCodes = {
         "00000000","11111111","22222222","33333333","44444444","55555555",
@@ -1095,22 +1092,16 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
       };
       if (std::find(kWeakCodes.begin(), kWeakCodes.end(), code) != kWeakCodes.end()) {
         sendJsonError(req, "\"" + code + "\" is too simple to use as a Setup Code.");
-        break;
+        return false;
       }
       if (homeSpan.controllerListBegin() != homeSpan.controllerListEnd() &&
           code.compare(cJSON_GetStringValue(existingValue)) != 0) {
         sendJsonError(req, "Setup Code can only be set if no devices are paired");
-        break;
+        return false;
       }
     }
     // Pin validation
     else if (str_ends_with(keyStr.c_str(), "Pin")) {
-      if (!cJSON_IsNumber(incomingValue)) {
-        std::string msg = "Value for \"" + keyStr + "\" must be a number.";
-        sendJsonError(req, msg);
-        break;
-      }
-
       // Reject anything outside uint8_t range BEFORE truncating, so a value
       // like 256 can't wrap to a valid-looking pin (0) and slip past both
       // the GPIO-validity check and the ownership check below.
@@ -1118,17 +1109,18 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         std::string msg = std::to_string(incomingValue->valueint) +
                           " is not a valid GPIO Pin for \"" + keyStr + "\".";
         sendJsonError(req, msg);
-        break;
+        return false;
       }
 
       const uint8_t incomingPin = static_cast<uint8_t>(incomingValue->valueint);
 
-      if (incomingPin != 255 && !GPIO_IS_VALID_GPIO(incomingPin) &&
-                                !GPIO_IS_VALID_OUTPUT_GPIO(incomingPin)) {
+      // Fix: Should use || instead of && because output is a strict subset of input.
+      if (incomingPin != 255 && (!GPIO_IS_VALID_GPIO(incomingPin) ||
+                                 !GPIO_IS_VALID_OUTPUT_GPIO(incomingPin))) {
         std::string msg = std::to_string(incomingPin) +
                           " is not a valid GPIO Pin for \"" + keyStr + "\".";
         sendJsonError(req, msg);
-        break;
+        return false;
       }
 
       const uint8_t currentPin   = (cJSON_IsNumber(existingValue) &&
@@ -1146,28 +1138,28 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
                             " for \"" + keyStr + "\" already owned by \"" +
                             currentOwner.value() + "\".";
           sendJsonError(req, msg);
-          break;
+          return false;
         }
       } else if (incomingPin != currentPin && currentOwner.has_value()) {
         bool isAllowedStrapping = (currentOwner == "STRAPPING" && overrideStrapping);
-        if (!isAllowedStrapping) {
+        bool isAllowedSPI = currentOwner->contains("SPI"); // Unify behavior with array elements
+        if (!isAllowedStrapping && !isAllowedSPI) {
           std::string msg = std::to_string(incomingPin) +
                             " for \"" + keyStr + "\" already owned by \"" +
                             currentOwner.value() + "\".";
           sendJsonError(req, msg);
-          break;
+          return false;
         }
       }
     } else if (keyStr == "ethSpiBus" && cJSON_IsNumber(incomingValue) && (incomingValue->valueint < SPI2_HOST || incomingValue->valueint >= SPI_HOST_MAX)){
         std::string msg = std::to_string(incomingValue->valueint) +
                       " is not a valid SPI Bus value";
         sendJsonError(req, msg);
-        break;
+        return false;
     } else if ((str_ends_with(keyStr.c_str(), "Pins") || str_ends_with(keyStr.c_str(), "SpiConfig")) && cJSON_IsArray(incomingValue)){
       const bool isNfcArray = (keyStr == "nfcGpioPins");
       cJSON *currentArr = cJSON_GetObjectItem(currentData, keyStr.c_str());
       cJSON *el = NULL;
-      bool arrayValid = true;
       int idx = 0;
       cJSON_ArrayForEach(el, incomingValue) {
         if (cJSON_IsNumber(el)) {
@@ -1179,8 +1171,7 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
             std::string msg = std::to_string(el->valueint) +
                               " is not a valid GPIO Pin for \"" + keyStr + "\".";
             sendJsonError(req, msg);
-            arrayValid = false;
-            break;
+            return false;
           }
           const uint8_t elPin = static_cast<uint8_t>(el->valueint);
 
@@ -1199,8 +1190,7 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
                                 " for \"" + keyStr + "\" already owned by \"" +
                                 currentOwner.value() + "\".";
               sendJsonError(req, msg);
-              arrayValid = false;
-              break;
+              return false;
             }
           } else if (elPin != currentPin && currentOwner.has_value()) {
             bool isAllowedSPI = currentOwner->contains("SPI");
@@ -1210,49 +1200,30 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
                                 " for \"" + keyStr + "\" already owned by \"" +
                                 currentOwner.value() + "\".";
               sendJsonError(req, msg);
-              arrayValid = false;
-              break;
+              return false;
             }
           }
         }
         idx++;
       }
-      if (!arrayValid) {
-        break;
-      }
     }
     // --- Heap Memory Guard Checks ---
     if (keyStr == "webHttpsEnabled" && cJSON_IsTrue(it)) {
       bool mqttSsl = getInstance(req)->m_configManager.getConfig<espConfig::mqttConfig_t>().useSSL;
-      if (!heapGuardOk(req, mqttSsl, "HTTPS", "MQTT SSL")) { cJSON_Delete(obj); return false; }
+      if (!heapGuardOk(req, mqttSsl, "HTTPS", "MQTT SSL")) { return false; }
     } else if (keyStr == "useSSL" && cJSON_IsTrue(it)) {
       bool https = getInstance(req)->m_configManager.getConfig<espConfig::misc_config_t>().webHttpsEnabled;
-      if (!heapGuardOk(req, https, "MQTT SSL", "HTTPS")) { cJSON_Delete(obj); return false; }
+      if (!heapGuardOk(req, https, "MQTT SSL", "HTTPS")) { return false; }
     }
 
-    // Boolean coercion
-    if (cJSON_IsBool(existingValue)) {
-      bool valueOk = cJSON_IsBool(incomingValue);
-      if (!valueOk && cJSON_IsNumber(incomingValue)) {
-        int val = incomingValue->valueint;
-        if (val == 0 || val == 1) {
-          cJSON_SetBoolValue(incomingValue, val);
-          valueOk = true;
-        }
-      }
-      if (!valueOk) {
-        char *valueStr = cJSON_PrintUnformatted(incomingValue);
-        std::string msg =
-            std::string(valueStr) + " is not valid for \"" + keyStr + "\".";
-        free(valueStr);
-        sendJsonError(req, msg);
-        break;
-      }
+    if (cJSON_IsBool(existingValue) && cJSON_IsNumber(incomingValue)) {
+      cJSON_SetBoolValue(incomingValue, incomingValue->valueint);
     }
+    
     it = it->next;
   }
   
-  return ESP_OK;
+  return true;
 }
 
 esp_err_t WebServerManager::handleClearConfig(httpd_req_t *req) {
