@@ -155,8 +155,8 @@ bool WebServerManager::shouldEnableHttps() const {
     return true;
 }
 
-bool WebServerManager::sendJsonError(httpd_req_t *req, const std::string &msg,
-                                      const char *status = "400 Bad Request") {
+esp_err_t WebServerManager::sendJsonError(httpd_req_t *req, const std::string &msg,
+                                      const char *status) {
   httpd_resp_set_type(req, "application/json");
   httpd_resp_set_status(req, status);
   cJSON *res = cJSON_CreateObject();
@@ -509,7 +509,7 @@ esp_err_t WebServerManager::sendAuthFailure(httpd_req_t *req) {
   httpd_resp_set_hdr(req, "Connection", "keep-alive");
   httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"Polaris\"");
   httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, NULL);
-  return ESP_FAIL;
+  return ESP_OK;
 }
 
 // ============================================================================
@@ -666,14 +666,14 @@ esp_err_t WebServerManager::handleGetConfig(httpd_req_t *req) {
   }
   if (!instance) {
     httpd_resp_send_500(req);
-    return ESP_FAIL;
+    return ESP_OK;
   }
 
   char query[256], type_param[64];
   if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK ||
       httpd_query_key_value(query, "type", type_param, sizeof(type_param)) !=
           ESP_OK) {
-    return instance->sendJsonError(req, "Missing 'type' parameter");
+    return sendJsonError(req, "Missing 'type' parameter");
   }
 
   std::string type = type_param, responseJson;
@@ -717,7 +717,7 @@ esp_err_t WebServerManager::handleGetConfig(httpd_req_t *req) {
     cJSON_AddItemToObject(hkInfo, "issuers", issuersArray);
     responseJson = cjson_to_string_and_free(hkInfo);
   } else {
-    return instance->sendJsonError(req, "Invalid 'type' parameter");
+    return sendJsonError(req, "Invalid 'type' parameter");
   }
 
   httpd_resp_set_type(req, "application/json");
@@ -858,36 +858,36 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
   }
   if (!instance) {
     httpd_resp_send_500(req);
-    return ESP_FAIL;
+    return ESP_OK;
   }
 
-  // Parse query parameters
   char query[256], type_param[64];
   if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK ||
       httpd_query_key_value(query, "type", type_param, sizeof(type_param)) !=
           ESP_OK) {
-    return instance->sendJsonError(req, "Missing 'type' parameter");
+    return sendJsonError(req, "Missing 'type' parameter");
   }
 
-  // Read request body
   const size_t max_content_size = 2048;
   if (req->content_len >= max_content_size) {
-    return instance->sendJsonError(req, "Request body too large", "413 Payload Too Large");
+    return sendJsonError(req, "Request body too large", "413 Payload Too Large");
   }
 
   std::vector<char> content(max_content_size, 0);
   int ret = httpd_req_recv(req, content.data(), content.size() - 1);
   if (ret <= 0) {
-    instance->sendJsonError(req, "Invalid request body");
+    // recv itself failed — the socket may already be broken, so let the
+    // framework close it rather than risk sending on a dead connection.
+    return ESP_FAIL;
   }
   content[ret] = '\0';
 
   cJSON *obj = cJSON_Parse(content.data());
   if (!obj) {
     instance->sendJsonError(req, "Invalid JSON");
+    return ESP_OK;
   }
 
-  // Load current configuration
   std::string type = type_param;
   cJSON *configSchema = nullptr;
 
@@ -904,23 +904,24 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
         instance->m_configManager.serializeToJson<espConfig::actions_config_t>();
     configSchema = cJSON_Parse(s.c_str());
   } else {
-    instance->sendJsonError(req, "Invalid 'type' parameter");
+    cJSON_Delete(obj);
+    return sendJsonError(req, "Invalid 'type' parameter");
   }
 
   if (!validateRequest(req, configSchema, obj)) {
     cJSON_Delete(configSchema);
     cJSON_Delete(obj);
-    return ESP_FAIL;
+    return ESP_OK;   // validateRequest already sent a full error response
   }
 
   bool success = false, rebootNeeded = false;
   std::string rebootMsg, errorMsg;
 
-  // Process configuration changes and publish events
   cJSON *it = obj->child;
-  if(it == NULL){
+  if (it == NULL) {
+    cJSON_Delete(configSchema);
     cJSON_Delete(obj);
-    instance->sendJsonError(req, "Received empty object, nothing to save");
+    return sendJsonError(req, "Received empty object, nothing to save");
   }
   char *data_str = cJSON_PrintUnformatted(obj);
   std::string result;
@@ -995,7 +996,6 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
   }
 
   cJSON_free(data_str);
-
   cJSON_Delete(configSchema);
   cJSON_Delete(obj);
 
@@ -1020,7 +1020,7 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
   httpd_resp_set_status(req, HTTPD_500);
   std::string response = cjson_to_string_and_free(res);
   httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-  return ESP_FAIL;
+  return ESP_OK;
 }
 
 bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,

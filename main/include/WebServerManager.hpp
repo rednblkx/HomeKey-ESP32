@@ -168,7 +168,8 @@ private:
   static WebServerManager *getInstance(httpd_req_t *req);
   static esp_err_t sendAuthFailure(httpd_req_t *req);
   static esp_err_t ws_post_handshake_cb(httpd_req_t *req);
-  static bool sendJsonError(httpd_req_t *req, const std::string &msg, const char *status);
+  static esp_err_t sendJsonError(httpd_req_t *req, const std::string &msg, 
+                            const char *status = "400 Bad Request");
   static bool heapGuardOk(httpd_req_t *req, bool otherActive,
                                     const char *thisName, const char *otherName);
   bool shouldEnableHttps() const;
