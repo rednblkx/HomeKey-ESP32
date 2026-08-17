@@ -64,7 +64,7 @@ Generally, any board should be fine. However, some may have non-genuine modules 
 > [!TIP]
 > Genuine development boards can be ordered from major distributors like Mouser or Digikey, though it's pricey compared to something like AliExpress.
 
-#### 2.1.2. NFC Reader Modules (PN532 & PN7160 / PN7161)
+#### 2.1.2. NFC Reader Modules (PN532, PN7161 and ST25R3916)
 
 HomeKey-ESP32 supports **PN532**, **NXP PN7160 / PN7161**, and ST25R3916 NFC controllers.
 
@@ -78,7 +78,7 @@ HomeKey-ESP32 supports **PN532**, **NXP PN7160 / PN7161**, and ST25R3916 NFC con
     *   **Features:** Enhanced Contactless Polling (ECP) support, fast tag discovery, integrated presence checks for non ISO-DEP cards, and reliable hardware performance.
         *   PN7161 has native ECP support and that is how ECP is implemented on this firmware for it, however, currently there's no fallback implemented for PN7160 which doesn't has native ECP support.
 
-* ST25R3916:
+*   **ST25R3916**:
     *   Interface: I2C protocol
 
 ##### Choosing Your NFC Module: A Mini Buyer's Guide
