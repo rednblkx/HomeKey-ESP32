@@ -7,6 +7,7 @@
 #include "eventStructs.hpp"
 #include "hal/gpio_types.h"
 #include "soc/gpio_num.h"
+#include "magic_enum.hpp"
 
 const char* HardwareManager::TAG = "HardwareManager";
 
@@ -51,7 +52,7 @@ HardwareManager::HardwareManager(const espConfig::actions_config_t& miscConfig)
       GPIOAllocator::instance().acquire(gpio_num_t(miscConfig.tagEventPin), GPIO_MODE_OUTPUT, "TAG_EVENT_PIN"));
   for(auto &p : pinAllocations){
     if(!p.second.has_value()){
-      ESP_LOGW(TAG, "Could not acquire GPIO Pin for '%d' with error '%d'", p.first, p.second.error());
+      ESP_LOGW(TAG, "Could not acquire GPIO Pin for '%s' with error '%s'", magic_enum::enum_name(p.first).cbegin(), magic_enum::enum_name(p.second.error()).cbegin());
     }
   }
   m_hardware_action_event = AppEventLoop::subscribe(HW_EVENT, HW_ACTION, [&](const uint8_t* data, size_t size){
