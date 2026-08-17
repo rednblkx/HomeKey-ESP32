@@ -16,6 +16,7 @@
 #include "ReaderDataManager.hpp"
 #include "HK_HomeKit.h"
 #include "esp_mac.h"
+#include "hal/spi_types.h"
 #include "utils.hpp"
 
 const char* HomeKitLock::TAG = "HomeKitBridge";
@@ -223,10 +224,15 @@ void HomeKitLock::initializeETH() {
         return; 
       }
 
-      auto lease_sck = GPIOAllocator::instance().acquire(gpio_num_t(eth_sck), GPIO_MODE_DISABLE, "ETH_SPI_SCK");
-      auto lease_miso = GPIOAllocator::instance().acquire(gpio_num_t(eth_miso), GPIO_MODE_DISABLE, "ETH_SPI_MISO");
-      auto lease_mosi = GPIOAllocator::instance().acquire(gpio_num_t(eth_mosi), GPIO_MODE_DISABLE, "ETH_SPI_MOSI");
-
+#if SOC_SPI_PERIPH_NUM > 2
+    auto lease_sck = GPIOAllocator::instance().acquire(gpio_num_t(eth_sck), GPIO_MODE_DISABLE, spiHost == SPI2_HOST ? "SPI2_SCK" : spiHost == SPI3_HOST ? "SPI3_SCK" : "ETH_SCK");
+    auto lease_miso = GPIOAllocator::instance().acquire(gpio_num_t(eth_miso), GPIO_MODE_DISABLE, spiHost == SPI2_HOST ? "SPI2_MISO" : spiHost == SPI3_HOST ? "SPI3_MISO" : "ETH_MISO");
+    auto lease_mosi = GPIOAllocator::instance().acquire(gpio_num_t(eth_mosi), GPIO_MODE_DISABLE, spiHost == SPI2_HOST ? "SPI2_MOSI" : spiHost == SPI3_HOST ? "SPI3_MOSI" : "ETH_MOSI");
+#else
+    auto lease_sck = GPIOAllocator::instance().acquire(gpio_num_t(eth_sck), GPIO_MODE_DISABLE, "SPI2_SCK");
+    auto lease_miso = GPIOAllocator::instance().acquire(gpio_num_t(eth_miso), GPIO_MODE_DISABLE, "SPI2_MISO");
+    auto lease_mosi = GPIOAllocator::instance().acquire(gpio_num_t(eth_mosi), GPIO_MODE_DISABLE, "SPI2_MOSI");
+#endif
       if (lease_sck.has_value() && lease_miso.has_value() && lease_mosi.has_value()) {
         eth_leases.push_back(std::move(lease_sck.value()));
         eth_leases.push_back(std::move(lease_miso.value()));
