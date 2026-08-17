@@ -155,6 +155,16 @@ bool WebServerManager::shouldEnableHttps() const {
     return true;
 }
 
+bool WebServerManager::sendJsonError(httpd_req_t *req, const std::string &msg,
+                                      const char *status = "400 Bad Request") {
+  httpd_resp_set_type(req, "application/json");
+  httpd_resp_set_status(req, status);
+  cJSON *res = cJSON_CreateObject();
+  cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
+  cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
+  httpd_resp_send(req, cjson_to_string_and_free(res).c_str(), HTTPD_RESP_USE_STRLEN);
+  return ESP_OK;
+}
 
 // ============================================================================
 // Initialization
@@ -645,14 +655,7 @@ esp_err_t WebServerManager::handleGetConfig(httpd_req_t *req) {
   if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK ||
       httpd_query_key_value(query, "type", type_param, sizeof(type_param)) !=
           ESP_OK) {
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_status(req, "400 Bad Request");
-    cJSON *res = cJSON_CreateObject();
-    cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-    cJSON_AddItemToObject(res, "error", cJSON_CreateString("Missing 'type' parameter"));
-    std::string response = cjson_to_string_and_free(res);
-    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-    return ESP_FAIL;
+    return instance->sendJsonError(req, "Missing 'type' parameter");
   }
 
   std::string type = type_param, responseJson;
@@ -696,14 +699,7 @@ esp_err_t WebServerManager::handleGetConfig(httpd_req_t *req) {
     cJSON_AddItemToObject(hkInfo, "issuers", issuersArray);
     responseJson = cjson_to_string_and_free(hkInfo);
   } else {
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_status(req, "400 Bad Request");
-    cJSON *res = cJSON_CreateObject();
-    cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-    cJSON_AddItemToObject(res, "error", cJSON_CreateString("Invalid 'type' parameter"));
-    std::string response = cjson_to_string_and_free(res);
-    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-    return ESP_FAIL;
+    return instance->sendJsonError(req, "Invalid 'type' parameter");
   }
 
   httpd_resp_set_type(req, "application/json");
@@ -852,53 +848,25 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
   if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK ||
       httpd_query_key_value(query, "type", type_param, sizeof(type_param)) !=
           ESP_OK) {
-    httpd_resp_set_status(req, "400 Bad Request");
-    httpd_resp_set_type(req, "application/json");
-    cJSON *res = cJSON_CreateObject();
-    cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-    cJSON_AddItemToObject(res, "error", cJSON_CreateString("Missing 'type' parameter"));
-    std::string response = cjson_to_string_and_free(res);
-    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-    return ESP_FAIL;
+    return instance->sendJsonError(req, "Missing 'type' parameter");
   }
 
   // Read request body
   const size_t max_content_size = 2048;
   if (req->content_len >= max_content_size) {
-    httpd_resp_set_status(req, "413 Payload Too Large");
-    httpd_resp_set_type(req, "application/json");
-    cJSON *res = cJSON_CreateObject();
-    cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-    cJSON_AddItemToObject(res, "error", cJSON_CreateString("Request body too large"));
-    std::string response = cjson_to_string_and_free(res);
-    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-    return ESP_FAIL;
+    return instance->sendJsonError(req, "Request body too large", "413 Payload Too Large");
   }
 
   std::vector<char> content(max_content_size, 0);
   int ret = httpd_req_recv(req, content.data(), content.size() - 1);
   if (ret <= 0) {
-    httpd_resp_set_status(req, "400 Bad Request");
-    httpd_resp_set_type(req, "application/json");
-    cJSON *res = cJSON_CreateObject();
-    cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-    cJSON_AddItemToObject(res, "error", cJSON_CreateString("Invalid request body"));
-    std::string response = cjson_to_string_and_free(res);
-    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-    return ESP_FAIL;
+    instance->sendJsonError(req, "Invalid request body");
   }
   content[ret] = '\0';
 
   cJSON *obj = cJSON_Parse(content.data());
   if (!obj) {
-    httpd_resp_set_status(req, "400 Bad Request");
-    httpd_resp_set_type(req, "application/json");
-    cJSON *res = cJSON_CreateObject();
-    cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-    cJSON_AddItemToObject(res, "error", cJSON_CreateString("Invalid JSON"));
-    std::string response = cjson_to_string_and_free(res);
-    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-    return ESP_FAIL;
+    instance->sendJsonError(req, "Invalid JSON");
   }
 
   // Load current configuration
@@ -918,15 +886,7 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
         instance->m_configManager.serializeToJson<espConfig::actions_config_t>();
     configSchema = cJSON_Parse(s.c_str());
   } else {
-    cJSON_Delete(obj);
-    httpd_resp_set_status(req, "400 Bad Request");
-    httpd_resp_set_type(req, "application/json");
-    cJSON *res = cJSON_CreateObject();
-    cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-    cJSON_AddItemToObject(res, "error", cJSON_CreateString("Invalid 'type' parameter"));
-    std::string response = cjson_to_string_and_free(res);
-    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-    return ESP_FAIL;
+    instance->sendJsonError(req, "Invalid 'type' parameter");
   }
 
   if (!validateRequest(req, configSchema, obj)) {
@@ -942,14 +902,7 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
   cJSON *it = obj->child;
   if(it == NULL){
     cJSON_Delete(obj);
-    httpd_resp_set_status(req, HTTPD_400);
-    httpd_resp_set_type(req, "application/json");
-    cJSON *res = cJSON_CreateObject();
-    cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-    cJSON_AddItemToObject(res, "error", cJSON_CreateString("Received empty object, nothing to save"));
-    std::string response = cjson_to_string_and_free(res);
-    httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-    return ESP_FAIL;
+    instance->sendJsonError(req, "Received empty object, nothing to save");
   }
   char *data_str = cJSON_PrintUnformatted(obj);
   std::string result;
@@ -1074,7 +1027,6 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
     }
   }
 
-  bool isValid = true;
   cJSON *it = obj->child;
   while (it) {
     std::string keyStr = it->string;
@@ -1082,14 +1034,7 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
 
     if (!existingValue) {
       std::string msg = "\"" + keyStr + "\" is not a valid configuration key.";
-      httpd_resp_set_type(req, "application/json");
-      httpd_resp_set_status(req, "400 Bad Request");
-      cJSON *res = cJSON_CreateObject();
-      cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-      cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
-      std::string response = cjson_to_string_and_free(res);
-      httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-      isValid = false;
+      sendJsonError(req, msg);
       break;
     }
 
@@ -1114,14 +1059,7 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
       std::string msg = "Invalid type for key \"" + keyStr +
                         "\". Received: " + std::string(valueStr);
       free(valueStr);
-      httpd_resp_set_type(req, "application/json");
-      httpd_resp_set_status(req, "400 Bad Request");
-      cJSON *res = cJSON_CreateObject();
-      cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-      cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
-      std::string response = cjson_to_string_and_free(res);
-      httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-      isValid = false;
+      sendJsonError(req, msg);
       break;
     }
 
@@ -1129,10 +1067,7 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
     if (keyStr == "setupCode") {
       if (!cJSON_IsString(incomingValue)) {
         std::string msg = "Value for \"" + keyStr + "\" must be a string.";
-        httpd_resp_set_type(req, "application/json");
-        httpd_resp_set_status(req, "400 Bad Request");
-        httpd_resp_send(req, msg.c_str(), msg.length());
-        isValid = false;
+        sendJsonError(req, msg);
         break;
       }
       std::string code = incomingValue->valuestring;
@@ -1142,26 +1077,12 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
           }) != code.end()) {
         std::string msg =
             "\"" + code + "\" is not valid. Must be an 8-digit number.";
-        httpd_resp_set_type(req, "application/json");
-        httpd_resp_set_status(req, "400 Bad Request");
-        cJSON *res = cJSON_CreateObject();
-        cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-        cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
-        std::string response = cjson_to_string_and_free(res);
-        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-        isValid = false;
+        sendJsonError(req, msg);
         break;
       }
       if (homeSpan.controllerListBegin() != homeSpan.controllerListEnd() &&
           code.compare(cJSON_GetStringValue(existingValue)) != 0) {
-        httpd_resp_set_type(req, "application/json");
-        httpd_resp_set_status(req, "400 Bad Request");
-        cJSON *res = cJSON_CreateObject();
-        cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-        cJSON_AddItemToObject(res, "error", cJSON_CreateString("Setup Code can only be set if no devices are paired"));
-        std::string response = cjson_to_string_and_free(res);
-        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-        isValid = false;
+        sendJsonError(req, "Setup Code can only be set if no devices are paired");
         break;
       }
     }
@@ -1169,14 +1090,7 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
     else if (str_ends_with(keyStr.c_str(), "Pin")) {
       if (!cJSON_IsNumber(incomingValue)) {
         std::string msg = "Value for \"" + keyStr + "\" must be a number.";
-        httpd_resp_set_type(req, "application/json");
-        httpd_resp_set_status(req, "400 Bad Request");
-        cJSON *res = cJSON_CreateObject();
-        cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-        cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
-        std::string response = cjson_to_string_and_free(res);
-        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-        isValid = false;
+        sendJsonError(req, msg);
         break;
       }
 
@@ -1186,14 +1100,7 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
       if (incomingValue->valueint < 0 || incomingValue->valueint > 255) {
         std::string msg = std::to_string(incomingValue->valueint) +
                           " is not a valid GPIO Pin for \"" + keyStr + "\".";
-        httpd_resp_set_type(req, "application/json");
-        httpd_resp_set_status(req, "400 Bad Request");
-        cJSON *res = cJSON_CreateObject();
-        cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-        cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
-        std::string response = cjson_to_string_and_free(res);
-        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-        isValid = false;
+        sendJsonError(req, msg);
         break;
       }
 
@@ -1203,14 +1110,7 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
                                 !GPIO_IS_VALID_OUTPUT_GPIO(incomingPin)) {
         std::string msg = std::to_string(incomingPin) +
                           " is not a valid GPIO Pin for \"" + keyStr + "\".";
-        httpd_resp_set_type(req, "application/json");
-        httpd_resp_set_status(req, "400 Bad Request");
-        cJSON *res = cJSON_CreateObject();
-        cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-        cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
-        std::string response = cjson_to_string_and_free(res);
-        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-        isValid = false;
+        sendJsonError(req, msg);
         break;
       }
 
@@ -1228,14 +1128,7 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
           std::string msg = std::to_string(incomingPin) +
                             " for \"" + keyStr + "\" already owned by \"" +
                             currentOwner.value() + "\".";
-          httpd_resp_set_type(req, "application/json");
-          httpd_resp_set_status(req, "400 Bad Request");
-          cJSON *res = cJSON_CreateObject();
-          cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-          cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
-          std::string response = cjson_to_string_and_free(res);
-          httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-          isValid = false;
+          sendJsonError(req, msg);
           break;
         }
       } else if (incomingPin != currentPin && currentOwner.has_value()) {
@@ -1244,28 +1137,14 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
           std::string msg = std::to_string(incomingPin) +
                             " for \"" + keyStr + "\" already owned by \"" +
                             currentOwner.value() + "\".";
-          httpd_resp_set_type(req, "application/json");
-          httpd_resp_set_status(req, "400 Bad Request");
-          cJSON *res = cJSON_CreateObject();
-          cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-          cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
-          std::string response = cjson_to_string_and_free(res);
-          httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-          isValid = false;
+          sendJsonError(req, msg);
           break;
         }
       }
     } else if (keyStr == "ethSpiBus" && cJSON_IsNumber(incomingValue) && (incomingValue->valueint < SPI2_HOST || incomingValue->valueint >= SPI_HOST_MAX)){
         std::string msg = std::to_string(incomingValue->valueint) +
                       " is not a valid SPI Bus value";
-        httpd_resp_set_type(req, "application/json");
-        httpd_resp_set_status(req, "400 Bad Request");
-        cJSON *res = cJSON_CreateObject();
-        cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-        cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
-        std::string response = cjson_to_string_and_free(res);
-        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-        isValid = false;
+        sendJsonError(req, msg);
         break;
     } else if ((str_ends_with(keyStr.c_str(), "Pins") || str_ends_with(keyStr.c_str(), "SpiConfig")) && cJSON_IsArray(incomingValue)){
       const bool isNfcArray = (keyStr == "nfcGpioPins");
@@ -1282,13 +1161,7 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
           if (el->valueint < 0 || el->valueint > 255) {
             std::string msg = std::to_string(el->valueint) +
                               " is not a valid GPIO Pin for \"" + keyStr + "\".";
-            httpd_resp_set_type(req, "application/json");
-            httpd_resp_set_status(req, "400 Bad Request");
-            cJSON *res = cJSON_CreateObject();
-            cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-            cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
-            std::string response = cjson_to_string_and_free(res);
-            httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+            sendJsonError(req, msg);
             arrayValid = false;
             break;
           }
@@ -1308,13 +1181,7 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
               std::string msg = std::to_string(elPin) +
                                 " for \"" + keyStr + "\" already owned by \"" +
                                 currentOwner.value() + "\".";
-              httpd_resp_set_type(req, "application/json");
-              httpd_resp_set_status(req, "400 Bad Request");
-              cJSON *res = cJSON_CreateObject();
-              cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-              cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
-              std::string response = cjson_to_string_and_free(res);
-              httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+              sendJsonError(req, msg);
               arrayValid = false;
               break;
             }
@@ -1325,13 +1192,7 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
               std::string msg = std::to_string(elPin) +
                                 " for \"" + keyStr + "\" already owned by \"" +
                                 currentOwner.value() + "\".";
-              httpd_resp_set_type(req, "application/json");
-              httpd_resp_set_status(req, "400 Bad Request");
-              cJSON *res = cJSON_CreateObject();
-              cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-              cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
-              std::string response = cjson_to_string_and_free(res);
-              httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+              sendJsonError(req, msg);
               arrayValid = false;
               break;
             }
@@ -1340,7 +1201,6 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         idx++;
       }
       if (!arrayValid) {
-        isValid = false;
         break;
       }
     }
@@ -1350,46 +1210,18 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
       bool isMqttSslActive = getInstance(req)->m_configManager.getConfig<espConfig::mqttConfig_t>().useSSL;
 
       if (isMqttSslActive && freeHeap < HEAP_UPPER_THRESHOLD) {
-        httpd_resp_set_type(req, "application/json");
-        httpd_resp_set_status(req, "400 Bad Request");
-        cJSON *res = cJSON_CreateObject();
-        cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-        cJSON_AddItemToObject(res, "error", cJSON_CreateString("HTTPS cannot be enabled while MQTT SSL is active (low RAM)."));
-        std::string response = cjson_to_string_and_free(res);
-        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-        return false;
+        return sendJsonError(req, "HTTPS cannot be enabled while MQTT SSL is active (low RAM).");
       } else if (freeHeap < HEAP_LOWER_THRESHOLD) {
-        httpd_resp_set_type(req, "application/json");
-        httpd_resp_set_status(req, "400 Bad Request");
-        cJSON *res = cJSON_CreateObject();
-        cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-        cJSON_AddItemToObject(res, "error", cJSON_CreateString("HTTPS cannot be enabled due to insufficient free heap memory."));
-        std::string response = cjson_to_string_and_free(res);
-        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-        return false;
+        return sendJsonError(req, "HTTPS cannot be enabled due to insufficient free heap memory.");
       }
     } else if (keyStr == "useSSL" && cJSON_IsTrue(it)) {
       size_t freeHeap = esp_get_free_heap_size();
       bool isHttpsActive = getInstance(req)->m_configManager.getConfig<espConfig::misc_config_t>().webHttpsEnabled;
 
       if (isHttpsActive && freeHeap < HEAP_UPPER_THRESHOLD) {
-        httpd_resp_set_type(req, "application/json");
-        httpd_resp_set_status(req, "400 Bad Request");
-        cJSON *res = cJSON_CreateObject();
-        cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-        cJSON_AddItemToObject(res, "error", cJSON_CreateString("MQTT SSL cannot be enabled while HTTPS is active (low RAM)."));
-        std::string response = cjson_to_string_and_free(res);
-        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-        return false;
+        return sendJsonError(req, "MQTT SSL cannot be enabled while HTTPS is active (low RAM).");
       } else if (freeHeap < HEAP_LOWER_THRESHOLD) {
-        httpd_resp_set_type(req, "application/json");
-        httpd_resp_set_status(req, "400 Bad Request");
-        cJSON *res = cJSON_CreateObject();
-        cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-        cJSON_AddItemToObject(res, "error", cJSON_CreateString("MQTT SSL cannot be enabled due to insufficient free heap memory."));
-        std::string response = cjson_to_string_and_free(res);
-        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-        return false;
+        return sendJsonError(req, "MQTT SSL cannot be enabled due to insufficient free heap memory.");
       }
     }
 
@@ -1408,21 +1240,14 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData,
         std::string msg =
             std::string(valueStr) + " is not valid for \"" + keyStr + "\".";
         free(valueStr);
-        httpd_resp_set_type(req, "application/json");
-        httpd_resp_set_status(req, "400 Bad Request");
-        cJSON *res = cJSON_CreateObject();
-        cJSON_AddItemToObject(res, "success", cJSON_CreateBool(false));
-        cJSON_AddItemToObject(res, "error", cJSON_CreateString(msg.c_str()));
-        std::string response = cjson_to_string_and_free(res);
-        httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-        isValid = false;
+        sendJsonError(req, msg);
         break;
       }
     }
     it = it->next;
   }
   
-  return isValid;
+  return ESP_OK;
 }
 
 esp_err_t WebServerManager::handleClearConfig(httpd_req_t *req) {
