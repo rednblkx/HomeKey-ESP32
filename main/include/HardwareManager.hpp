@@ -155,5 +155,12 @@ private:
     };
 
     std::map<PinFunctions, std::expected<GPIOAllocator::GPIOLease, GPIOAllocator::GPIOAllocatorError>> pinAllocations;
+
+    // True when the entry holds a usable pin. acquire() succeeds for the
+    // 255 "no pin" sentinel with an empty lease, so has_value() alone is not
+    // enough to gate hardware access.
+    static bool live(const std::expected<GPIOAllocator::GPIOLease, GPIOAllocator::GPIOAllocatorError>& e) {
+      return e.has_value() && e->valid();
+    }
     bool isr_service_installed;
 };

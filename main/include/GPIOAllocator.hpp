@@ -3,14 +3,16 @@
 #include "esp_log.h"
 #include "hal/gpio_types.h"
 #include "soc/gpio_num.h"
+#include "config.hpp" // PIN_UNSET sentinel
 #include <algorithm>
 #include <array>
 #include <cstdint>
 #include <expected>
-#include <iterator>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <vector>
 
 
 #ifdef CONFIG_IDF_TARGET_ESP32C6
@@ -65,95 +67,171 @@ public:
     RESTRICTED = 3
   };
 
+  enum class PinConsumer : uint8_t {
+    None = 0,
+    Hardware,
+    Nfc,
+    Eth,
+    HomeKit
+  };
+
+  enum class PinRole : uint8_t {
+    SpiSck = 0, SpiMiso, SpiMosi, SpiCs,   // SCK/MISO/MOSI passive; CS exclusive per device
+    I2cSda, I2cScl,                        // passive I2C bus pins
+    NfcIrq, NfcVen,                        // PN7160 side pins
+    EthIrq, EthRst,                        // SPI ethernet side pins
+    Irq,                                   // generic interrupt input
+    Led,                                   // active-driven LED, shareable with other Led claims
+    GpioOut, GpioIn                        // plain exclusive GPIO
+  };
+
+  static bool role_is_passive(PinRole role) {
+    return (role >= PinRole::SpiSck && role <= PinRole::SpiMosi) ||
+           (role >= PinRole::I2cSda && role <= PinRole::I2cScl);
+  }
+
+  struct PinHolder {
+    PinConsumer consumer;
+    PinRole role;
+    const char* tag;
+  };
+
+  struct PinStatus {
+    bool restricted = false;
+    bool strapping = false;
+    std::vector<PinHolder> holders;
+    bool claimed() const { return !holders.empty(); }
+  };
+
+  struct PinControl {
+    gpio_num_t pin() const { return pin_; }
+    gpio_mode_t mode() const { return mode_; }
+    ~PinControl();
+  private:
+    friend class GPIOAllocator;
+    PinControl(gpio_num_t pin, gpio_mode_t mode) : pin_(pin), mode_(mode) { gpio_set_direction(pin_, mode_); }
+    gpio_num_t pin_;
+    gpio_mode_t mode_;
+  };
+
   class GPIOLease {
   public:
-    GPIOLease() = delete;
-    GPIOLease(const GPIOLease&) = delete;
-    GPIOLease& operator=(const GPIOLease&) = delete;
-    GPIOLease(GPIOLease&& other) noexcept : pin_(other.pin_), mode_(other.mode_) {
-      other.pin_ = GPIO_NUM_NC;
-    }
+    GPIOLease() = default;
+    GPIOLease(const GPIOLease&) = default;
+    GPIOLease& operator=(const GPIOLease&) = default;
+    GPIOLease(GPIOLease&&) = default;
+    GPIOLease& operator=(GPIOLease&&) = default;
 
-    GPIOLease& operator=(GPIOLease&& other) noexcept {
-      if (this != &other) {
-        reset();
-        pin_ = other.pin_;
-        mode_ = other.mode_;
-        other.pin_ = GPIO_NUM_NC;
-      }
-      return *this;
+    bool valid() const { return control_ != nullptr; }
+    explicit operator bool() const { return valid(); }
+    gpio_num_t get_pin() const { return control_ ? control_->pin_ : GPIO_NUM_NC; }
+    gpio_mode_t get_mode() const { return control_ ? control_->mode_ : GPIO_MODE_DISABLE; }
+    void set_level(bool level) {
+      if (!control_) { ESP_LOGW("GPIOLease", "set_level on unconfigured/released lease"); return; }
+      gpio_set_level(control_->pin_, level);
     }
-    ~GPIOLease() { if(pin_ != GPIO_NUM_NC) { ESP_LOGD("GPIOLease", "GPIO pin %d released", pin_); reset(); } };
-    void set_level(bool level) { gpio_set_level(pin_, level); };
-    bool get_level() const { return gpio_get_level(pin_); };
-    gpio_mode_t get_mode() const { return mode_; };
-    void set_direction(gpio_mode_t mode) { gpio_set_direction(pin_, mode); };
-    void set_pullup(bool val) { val ? gpio_pullup_en(pin_) : gpio_pullup_dis(pin_); };
-    void set_pulldown(bool val) { val ? gpio_pulldown_en(pin_) : gpio_pulldown_dis(pin_); };
-    gpio_num_t get_pin() const { return pin_; };
+    bool get_level() const { return control_ ? gpio_get_level(control_->pin_) : 0; }
+    void set_direction(gpio_mode_t mode) {
+      if (!control_) { ESP_LOGW("GPIOLease", "set_direction on unconfigured/released lease"); return; }
+      gpio_set_direction(control_->pin_, mode);
+    }
+    void set_pullup(bool val) {
+      if (!control_) { ESP_LOGW("GPIOLease", "set_pullup on unconfigured/released lease"); return; }
+      val ? gpio_pullup_en(control_->pin_) : gpio_pullup_dis(control_->pin_);
+    }
+    void set_pulldown(bool val) {
+      if (!control_) { ESP_LOGW("GPIOLease", "set_pulldown on unconfigured/released lease"); return; }
+      val ? gpio_pulldown_en(control_->pin_) : gpio_pulldown_dis(control_->pin_);
+    }
 
   private:
     friend class GPIOAllocator;
-    GPIOLease(gpio_num_t pin, gpio_mode_t mode) : pin_(pin), mode_(mode) {gpio_set_direction(pin, mode);};
-    void reset() {
-      if (pin_ != GPIO_NUM_NC && pin_ >= 0 && pin_ < GPIO_NUM_MAX) {
-        gpio_reset_pin(pin_);
-        std::lock_guard lock(GPIOAllocator::mutex_);
-        GPIOAllocator::owners_[pin_].clear();
-      }
-    }
-    gpio_num_t pin_ = GPIO_NUM_NC;
-    gpio_mode_t mode_ = GPIO_MODE_INPUT_OUTPUT_OD;
+    explicit GPIOLease(std::shared_ptr<PinControl> control) : control_(std::move(control)) {}
+    std::shared_ptr<PinControl> control_;
   };
 
-  std::expected<GPIOLease, GPIOAllocatorError> acquire(gpio_num_t pin, gpio_mode_t mode, const std::string &tag) {
+  std::expected<GPIOLease, GPIOAllocatorError> acquire(gpio_num_t pin, gpio_mode_t mode,
+                                                       PinRole role, PinConsumer consumer,
+                                                       const char* tag) {
     std::lock_guard lock(mutex_);
-    if((uint8_t)pin == (uint8_t)GPIO_NUM_NC){
-      return std::unexpected<GPIOAllocatorError>(INVALID_GPIO_NUM);
+    // 255 = "this function has no pin" is a normal config state, not a
+    // claim: succeed with an empty lease whose accessors safely no-op.
+    if ((uint8_t)pin == PIN_UNSET) {
+      return GPIOLease{};
     }
-    ESP_LOGD("GPIOAllocator", "Allocating GPIO Pin %d for '%s'", pin, tag.c_str());
-    if(pin >= GPIO_NUM_MAX){
-      ESP_LOGE("GPIOAllocator", "'%d' Outside gpio number pin", pin);
-      return std::unexpected<GPIOAllocatorError>(INVALID_GPIO_NUM);
+    if (auto verdict = validate_locked(pin, mode, role, consumer); !verdict) {
+      ESP_LOGE("GPIOAllocator", "GPIO %d %s (requested by '%s')", pin,
+               error_str(verdict.error()), tag);
+      return std::unexpected<GPIOAllocatorError>(verdict.error());
     }
-    if(std::find_if(std::begin(RESTRICTED_PINS), std::end(RESTRICTED_PINS), [&](auto e){ return e == pin;}) != std::end(RESTRICTED_PINS)){
-      ESP_LOGE("GPIOAllocator", "GPIO Pin %d restricted, reserved by internal function!", pin);
-      return std::unexpected<GPIOAllocatorError>(RESTRICTED);
-    }
-    if(std::find_if(std::begin(STRAPPING_PINS), std::end(STRAPPING_PINS), [&](auto e){ return e == pin;}) != std::end(STRAPPING_PINS)){
+    ESP_LOGD("GPIOAllocator", "Allocating GPIO Pin %d for '%s'", pin, tag);
+    if (std::find_if(std::begin(STRAPPING_PINS), std::end(STRAPPING_PINS), [&](auto e){ return e == pin;}) != std::end(STRAPPING_PINS)) {
       ESP_LOGW("GPIOAllocator", "GPIO Pin %d is a strapping pin, using it may have unexpected consequences!", pin);
     }
-    if(!GPIO_IS_VALID_GPIO(pin)){
-      ESP_LOGE("GPIOAllocator", "INVALID GPIO NUMBER!");
-      return std::unexpected<GPIOAllocatorError>(INVALID_GPIO_NUM);
+
+    auto& entry = entries_[static_cast<size_t>(pin)];
+    auto control = entry.control.lock();
+    if (!control) {
+      control = std::shared_ptr<PinControl>(new PinControl(pin, mode));
+      entry.control = control;
     }
-    if((mode == GPIO_MODE_OUTPUT || mode == GPIO_MODE_INPUT_OUTPUT || mode == GPIO_MODE_OUTPUT_OD || mode == GPIO_MODE_INPUT_OUTPUT_OD) && !GPIO_IS_VALID_OUTPUT_GPIO(pin)) {
-      ESP_LOGE("GPIOAllocator", "Invalid GPIO Direction!");
-      return std::unexpected<GPIOAllocatorError>(INVALID_GPIO_DIRECTION);
+    entry.holders.push_back({consumer, role, tag});
+    return GPIOLease(std::move(control));
+  }
+
+  std::expected<void, GPIOAllocatorError> validate(gpio_num_t pin, gpio_mode_t mode,
+                                                   PinRole role, PinConsumer consumer) const {
+    std::lock_guard lock(mutex_);
+    if ((uint8_t)pin == PIN_UNSET) {
+      return {}; // "no pin" is always a valid configuration choice
     }
-    if(!owners_[pin].empty()){
-      ESP_LOGE("GPIOAllocator", "GPIO %d already owned by '%s'!", pin, owners_[pin].c_str());
-      return std::unexpected<GPIOAllocatorError>(ALREADY_OWNED);
+    return validate_locked(pin, mode, role, consumer);
+  }
+
+  static constexpr const char* error_str(GPIOAllocatorError err) {
+    switch (err) {
+      case INVALID_GPIO_NUM:        return "is not a valid GPIO number";
+      case INVALID_GPIO_DIRECTION:  return "cannot be used with the requested direction";
+      case ALREADY_OWNED:           return "is already claimed by an incompatible component/role";
+      case RESTRICTED:              return "is restricted, reserved by internal functions";
     }
-    owners_[pin] = tag;
-    return GPIOLease(pin, mode);
+    return "has an unknown validation error";
+  }
+
+  [[nodiscard]] PinStatus status_of(uint8_t pin) const {
+    std::lock_guard lock(mutex_);
+    PinStatus status;
+    if (pin >= entries_.size()) {
+      return status;
+    }
+    if(std::find_if(std::begin(RESTRICTED_PINS), std::end(RESTRICTED_PINS), [&](auto e){ return e == pin;}) != std::end(RESTRICTED_PINS)){
+      status.restricted = true;
+    }
+    if(std::find_if(std::begin(STRAPPING_PINS), std::end(STRAPPING_PINS), [&](auto e){ return e == pin;}) != std::end(STRAPPING_PINS)){
+      status.strapping = true;
+    }
+    status.holders = entries_[pin].holders;
+    return status;
   }
 
   [[nodiscard]] std::optional<std::string> owner_of(uint8_t pin) const {
     std::lock_guard lock(mutex_);
-    if (pin >= owners_.size() || owners_[pin].empty()) {
-        if(std::find_if(std::begin(RESTRICTED_PINS), std::end(RESTRICTED_PINS), [&](auto e){ return e == pin;}) != std::end(RESTRICTED_PINS)){
-          ESP_LOGE("GPIOAllocator", "GPIO Pin %d restricted, reserved by internal function!", pin);
-          return "INTERNAL";
-        }
-        if(std::find_if(std::begin(STRAPPING_PINS), std::end(STRAPPING_PINS), [&](auto e){ return e == pin;}) != std::end(STRAPPING_PINS)){
-          ESP_LOGW("GPIOAllocator", "GPIO Pin %d is a strapping pin, using it may have unexpected consequences!", pin);
-          return "STRAPPING";
-        }
-        return std::nullopt;
+    if (pin >= entries_.size()) {
+      return std::nullopt;
     }
-    ESP_LOGD("GPIOAllocator", "Owners Size: %d Pin: %d Owner: %s", owners_.size(), pin, owners_[pin].c_str());
-    return owners_[pin];
+    const auto& holders = entries_[pin].holders;
+    if (!holders.empty()) {
+      return join_holders(holders);
+    }
+    if(std::find_if(std::begin(RESTRICTED_PINS), std::end(RESTRICTED_PINS), [&](auto e){ return e == pin;}) != std::end(RESTRICTED_PINS)){
+      ESP_LOGE("GPIOAllocator", "GPIO Pin %d restricted, reserved by internal function!", pin);
+      return std::string("INTERNAL");
+    }
+    if(std::find_if(std::begin(STRAPPING_PINS), std::end(STRAPPING_PINS), [&](auto e){ return e == pin;}) != std::end(STRAPPING_PINS)){
+      ESP_LOGW("GPIOAllocator", "GPIO Pin %d is a strapping pin, using it may have unexpected consequences!", pin);
+      return std::string("STRAPPING");
+    }
+    return std::nullopt;
   }
 private:
   GPIOAllocator() = default;
@@ -162,7 +240,66 @@ private:
   GPIOAllocator& operator=(const GPIOAllocator&) = delete;
   GPIOAllocator(GPIOAllocator&&) = delete;
   GPIOAllocator& operator=(GPIOAllocator&&) = delete;
-  friend class GPIOLease;
+
+  struct PinEntry {
+    std::vector<PinHolder> holders;
+    std::weak_ptr<PinControl> control;
+  };
+
+  static bool shareable(PinRole role, PinConsumer consumer, const PinEntry& entry) {
+    if (entry.holders.empty()) return true;
+    if (role_is_passive(role)) {
+      return std::all_of(entry.holders.begin(), entry.holders.end(),
+                         [&](const PinHolder& h) { return h.role == role; });
+    }
+    if (role == PinRole::Led) {
+      return std::all_of(entry.holders.begin(), entry.holders.end(),
+                         [&](const PinHolder& h) { return h.role == PinRole::Led; });
+    }
+    return false;
+  }
+
+  std::expected<void, GPIOAllocatorError> validate_locked(gpio_num_t pin, gpio_mode_t mode,
+                                                          PinRole role, PinConsumer consumer) const {
+    if ((uint8_t)pin == (uint8_t)GPIO_NUM_NC || pin >= GPIO_NUM_MAX || !GPIO_IS_VALID_GPIO(pin)) {
+      return std::unexpected<GPIOAllocatorError>(INVALID_GPIO_NUM);
+    }
+    if (std::find_if(std::begin(RESTRICTED_PINS), std::end(RESTRICTED_PINS), [&](auto e){ return e == pin;}) != std::end(RESTRICTED_PINS)) {
+      return std::unexpected<GPIOAllocatorError>(RESTRICTED);
+    }
+    if ((mode == GPIO_MODE_OUTPUT || mode == GPIO_MODE_INPUT_OUTPUT || mode == GPIO_MODE_OUTPUT_OD || mode == GPIO_MODE_INPUT_OUTPUT_OD) && !GPIO_IS_VALID_OUTPUT_GPIO(pin)) {
+      return std::unexpected<GPIOAllocatorError>(INVALID_GPIO_DIRECTION);
+    }
+    if (pin < entries_.size() && !entries_[static_cast<size_t>(pin)].holders.empty()) {
+      const auto& entry = entries_[static_cast<size_t>(pin)];
+      if (entry.control.expired()) {
+        return std::expected<void, GPIOAllocatorError>{}; // racing release, pin is free
+      }
+      if (!shareable(role, consumer, entry)) {
+        return std::unexpected<GPIOAllocatorError>(ALREADY_OWNED);
+      }
+    }
+    return std::expected<void, GPIOAllocatorError>{};
+  }
+
+  static std::string join_holders(const std::vector<PinHolder>& holders) {
+    std::string out;
+    for (const auto& h : holders) {
+      if (!out.empty()) out += ", ";
+      out += h.tag;
+    }
+    return out;
+  }
+
+  void release_entry(gpio_num_t pin) {
+    if ((uint8_t)pin == (uint8_t)GPIO_NUM_NC || pin >= GPIO_NUM_MAX) return;
+    std::lock_guard lock(mutex_);
+    auto& entry = entries_[static_cast<size_t>(pin)];
+    if (entry.control.expired()) {
+      entry.holders.clear();
+    }
+  }
+
   static std::mutex mutex_;
-  static std::array<std::string, GPIO_NUM_MAX> owners_;
+  static std::array<PinEntry, GPIO_NUM_MAX> entries_;
 };

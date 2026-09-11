@@ -66,23 +66,70 @@ static inline bool str_ends_with(const char *str, const char *suffix) {
   return lenstr >= lensuf && memcmp(str + lenstr - lensuf, suffix, lensuf) == 0;
 }
 
-inline constexpr const char *kNfcOwnerNames[] = {
-    "SPI2_SS", "SPI2_SCK", "SPI2_MISO", "SPI2_MOSI",  // PN532 / PN7160
-    "I2C_SDA", "I2C_SCL",                             // ST25R3916
-    "NFC_IRQ", "NFC_VEN",                             // PN7160 side pins
-};
+inline std::optional<std::string> check_pin_reassignment(uint8_t incoming_pin,
+                                                         uint8_t current_pin,
+                                                         const std::string& key,
+                                                         int array_index,
+                                                         bool override_strapping) {
+    if (incoming_pin == current_pin || incoming_pin == 255) return std::nullopt;
 
-inline bool decideNfcPin(uint8_t incoming_pin,
-                          uint8_t current_pin,
-                          const std::optional<std::string> &owner_of_incoming,
-                          bool override_strapping) {
-    if (incoming_pin == current_pin) return true;
-    if (!owner_of_incoming.has_value()) return true;
+    GPIOAllocator::PinRole role = GPIOAllocator::PinRole::GpioOut;
+    GPIOAllocator::PinConsumer consumer = GPIOAllocator::PinConsumer::Hardware;
+    bool output_capable = true;
+    if (key == "nfcGpioPins") {
+      consumer = GPIOAllocator::PinConsumer::Nfc;
+      switch (array_index) {
+        case 0: role = GPIOAllocator::PinRole::SpiCs;   break; // SS / SDA
+        case 1: role = GPIOAllocator::PinRole::SpiSck;  break; // SCK / SCL
+        case 2: role = GPIOAllocator::PinRole::SpiMiso; break;
+        case 3: role = GPIOAllocator::PinRole::SpiMosi; break;
+      }
+    } else if (key == "nfcIrqPin") {
+      consumer = GPIOAllocator::PinConsumer::Nfc;
+      role = GPIOAllocator::PinRole::NfcIrq;
+    } else if (key == "nfcVenPin") {
+      consumer = GPIOAllocator::PinConsumer::Nfc;
+      role = GPIOAllocator::PinRole::NfcVen;
+    } else if (key == "ethSpiConfig") {
+      consumer = GPIOAllocator::PinConsumer::Eth;
+      switch (array_index) {
+        case 1: role = GPIOAllocator::PinRole::SpiCs;   break; // CS
+        case 2: role = GPIOAllocator::PinRole::EthIrq;  break; // IRQ
+        case 3: role = GPIOAllocator::PinRole::EthRst;  break; // RST
+        case 4: role = GPIOAllocator::PinRole::SpiSck;  break; // SCK
+        case 5: role = GPIOAllocator::PinRole::SpiMiso; break;
+        case 6: role = GPIOAllocator::PinRole::SpiMosi; break;
+      }
+    } else if (key == "controlPin") {
+      consumer = GPIOAllocator::PinConsumer::HomeKit;
+      role = GPIOAllocator::PinRole::GpioIn;
+      output_capable = false;
+    } else if (key == "hsStatusPin") {
+      consumer = GPIOAllocator::PinConsumer::HomeKit;
+      role = GPIOAllocator::PinRole::Led;
+    } else if (key == "nfcSuccessPin" || key == "nfcFailPin" ||
+               key == "tagEventPin" || key == "hkAltActionInitLedPin") {
+      consumer = GPIOAllocator::PinConsumer::Hardware;
+      role = GPIOAllocator::PinRole::Led;
+    } else if (key == "hkAltActionInitPin") {
+      consumer = GPIOAllocator::PinConsumer::Hardware;
+      role = GPIOAllocator::PinRole::Irq;
+      output_capable = false;
+    }
 
-    if (owner_of_incoming == "STRAPPING") return override_strapping;
-
-    return std::any_of(std::begin(kNfcOwnerNames), std::end(kNfcOwnerNames),
-                        [&](const char *name) { return owner_of_incoming == name; });
+    auto status = GPIOAllocator::instance().status_of(incoming_pin);
+    if (status.strapping && status.holders.empty()) {
+      if (override_strapping) return std::nullopt;
+      return std::string("is a strapping pin and strapping override is disabled");
+    }
+    auto verdict = GPIOAllocator::instance().validate(
+        gpio_num_t(incoming_pin),
+        output_capable ? GPIO_MODE_OUTPUT : GPIO_MODE_INPUT,
+        role, consumer);
+    if (verdict) return std::nullopt;
+    return std::string(GPIOAllocator::error_str(verdict.error())) +
+           " (currently held by: " +
+           GPIOAllocator::instance().owner_of(incoming_pin).value_or("unknown") + ")";
 }
 
 // ============================================================================
@@ -1111,28 +1158,10 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData, cJS
                                     existingValue->valueint <= 255)
                                         ? static_cast<uint8_t>(existingValue->valueint)
                                         : uint8_t{255};
-      const bool    isNfcScalar  = (keyStr == "nfcIrqPin" || keyStr == "nfcVenPin");
-      auto          currentOwner = GPIOAllocator::instance().owner_of(incomingPin);
-
-      if (isNfcScalar) {
-        auto decision = decideNfcPin(incomingPin, currentPin, currentOwner, overrideStrapping);
-        if (!decision) {
-          std::string msg = std::to_string(incomingPin) +
-                            " for \"" + keyStr + "\" already owned by \"" +
-                            currentOwner.value() + "\".";
-          sendJsonError(req, msg);
-          return false;
-        }
-      } else if (incomingPin != currentPin && currentOwner.has_value()) {
-        bool isAllowedStrapping = (currentOwner == "STRAPPING" && overrideStrapping);
-        bool isAllowedSPI = currentOwner->contains("SPI"); // Unify behavior with array elements
-        if (!isAllowedStrapping && !isAllowedSPI) {
-          std::string msg = std::to_string(incomingPin) +
-                            " for \"" + keyStr + "\" already owned by \"" +
-                            currentOwner.value() + "\".";
-          sendJsonError(req, msg);
-          return false;
-        }
+      if (auto error = check_pin_reassignment(incomingPin, currentPin, keyStr, -1, overrideStrapping)) {
+        std::string msg = std::to_string(incomingPin) + " for \"" + keyStr + "\" " + *error + ".";
+        sendJsonError(req, msg);
+        return false;
       }
     } else if (keyStr == "ethSpiBus" && cJSON_IsNumber(incomingValue) && (incomingValue->valueint < SPI2_HOST || incomingValue->valueint >= SPI_HOST_MAX)){
         std::string msg = std::to_string(incomingValue->valueint) +
@@ -1140,7 +1169,6 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData, cJS
         sendJsonError(req, msg);
         return false;
     } else if ((str_ends_with(keyStr.c_str(), "Pins") || str_ends_with(keyStr.c_str(), "SpiConfig")) && cJSON_IsArray(incomingValue)){
-      const bool isNfcArray = (keyStr == "nfcGpioPins");
       cJSON *currentArr = cJSON_GetObjectItem(currentData, keyStr.c_str());
       cJSON *el = NULL;
       int idx = 0;
@@ -1164,27 +1192,10 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData, cJS
             if (ce && cJSON_IsNumber(ce) && ce->valueint >= 0 && ce->valueint <= 255)
               currentPin = static_cast<uint8_t>(ce->valueint);
           }
-          auto currentOwner = GPIOAllocator::instance().owner_of(elPin);
-
-          if (isNfcArray) {
-            auto decision = decideNfcPin(elPin, currentPin, currentOwner, overrideStrapping);
-            if (!decision) {
-              std::string msg = std::to_string(elPin) +
-                                " for \"" + keyStr + "\" already owned by \"" +
-                                currentOwner.value() + "\".";
-              sendJsonError(req, msg);
-              return false;
-            }
-          } else if (elPin != currentPin && currentOwner.has_value()) {
-            bool isAllowedSPI = currentOwner->contains("SPI");
-            bool isAllowedStrapping = (currentOwner == "STRAPPING" && overrideStrapping);
-            if (!isAllowedSPI && !isAllowedStrapping) {
-              std::string msg = std::to_string(elPin) +
-                                " for \"" + keyStr + "\" already owned by \"" +
-                                currentOwner.value() + "\".";
-              sendJsonError(req, msg);
-              return false;
-            }
+          if (auto error = check_pin_reassignment(elPin, currentPin, keyStr, idx, overrideStrapping)) {
+            std::string msg = std::to_string(elPin) + " for \"" + keyStr + "\" " + *error + ".";
+            sendJsonError(req, msg);
+            return false;
           }
         }
         idx++;

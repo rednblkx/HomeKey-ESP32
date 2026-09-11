@@ -88,19 +88,19 @@ NfcManager::NfcManager(NvsCredentialStore& readerDataManager,
 {
   std::copy(ECP_HEAD, ECP_HEAD + 8, m_ecpData.begin());
   if (nfcReaderType == ST25R3916) {
-    pinAllocations.emplace(PinFunctions::SDA, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[0]), GPIO_MODE_DISABLE, "I2C_SDA"));
-    pinAllocations.emplace(PinFunctions::SCL, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[1]), GPIO_MODE_DISABLE, "I2C_SCL"));
+    pinAllocations.emplace(PinFunctions::SDA, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[0]), GPIO_MODE_DISABLE, GPIOAllocator::PinRole::I2cSda, GPIOAllocator::PinConsumer::Nfc, "I2C_SDA"));
+    pinAllocations.emplace(PinFunctions::SCL, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[1]), GPIO_MODE_DISABLE, GPIOAllocator::PinRole::I2cScl, GPIOAllocator::PinConsumer::Nfc, "I2C_SCL"));
   } else {
-    pinAllocations.emplace(PinFunctions::SS, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[0]), GPIO_MODE_DISABLE, "SPI2_SS"));
-    pinAllocations.emplace(PinFunctions::SCK, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[1]), GPIO_MODE_DISABLE, "SPI2_SCK"));
-    pinAllocations.emplace(PinFunctions::MISO, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[2]), GPIO_MODE_DISABLE, "SPI2_MISO"));
-    pinAllocations.emplace(PinFunctions::MOSI, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[3]), GPIO_MODE_DISABLE, "SPI2_MOSI"));
+    pinAllocations.emplace(PinFunctions::SS, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[0]), GPIO_MODE_DISABLE, GPIOAllocator::PinRole::SpiCs, GPIOAllocator::PinConsumer::Nfc, "SPI2_SS"));
+    pinAllocations.emplace(PinFunctions::SCK, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[1]), GPIO_MODE_DISABLE, GPIOAllocator::PinRole::SpiSck, GPIOAllocator::PinConsumer::Nfc, "SPI2_SCK"));
+    pinAllocations.emplace(PinFunctions::MISO, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[2]), GPIO_MODE_DISABLE, GPIOAllocator::PinRole::SpiMiso, GPIOAllocator::PinConsumer::Nfc, "SPI2_MISO"));
+    pinAllocations.emplace(PinFunctions::MOSI, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[3]), GPIO_MODE_DISABLE, GPIOAllocator::PinRole::SpiMosi, GPIOAllocator::PinConsumer::Nfc, "SPI2_MOSI"));
   }
   if (nfcReaderType == PN7160){
     if(nfcIrqPin != 255)
-      pinAllocations.emplace(PinFunctions::IRQ, GPIOAllocator::instance().acquire(gpio_num_t(nfcIrqPin), GPIO_MODE_DISABLE, "NFC_IRQ"));
+      pinAllocations.emplace(PinFunctions::IRQ, GPIOAllocator::instance().acquire(gpio_num_t(nfcIrqPin), GPIO_MODE_DISABLE, GPIOAllocator::PinRole::NfcIrq, GPIOAllocator::PinConsumer::Nfc, "NFC_IRQ"));
     if(nfcVenPin != 255)
-      pinAllocations.emplace(PinFunctions::VEN, GPIOAllocator::instance().acquire(gpio_num_t(nfcVenPin), GPIO_MODE_DISABLE, "NFC_VEN"));
+      pinAllocations.emplace(PinFunctions::VEN, GPIOAllocator::instance().acquire(gpio_num_t(nfcVenPin), GPIO_MODE_DISABLE, GPIOAllocator::PinRole::NfcVen, GPIOAllocator::PinConsumer::Nfc, "NFC_VEN"));
   }
   for(auto &p : pinAllocations){
     if(!p.second.has_value()){

@@ -17,6 +17,7 @@
 #include "esp_mac.h"
 #include "hal/spi_types.h"
 #include "utils.hpp"
+#include "SharedLed.hpp"
 
 const char* HomeKitLock::TAG = "HomeKitBridge";
 static HomeKitLock* s_instance = nullptr;
@@ -195,74 +196,65 @@ void HomeKitLock::initializeETH() {
                     "defined, cannot setup Ethernet.");
       return;
     }
-    auto owner_sck = GPIOAllocator::instance().owner_of(eth_sck);
-    auto owner_miso = GPIOAllocator::instance().owner_of(eth_miso);
-    auto owner_mosi = GPIOAllocator::instance().owner_of(eth_mosi);
 
-    bool sck_shared_with_nfc = (owner_sck == "SPI2_SCK");
-    bool miso_shared_with_nfc = (owner_miso == "SPI2_MISO");
-    bool mosi_shared_with_nfc = (owner_mosi == "SPI2_MOSI");
+    auto is_nfc_bus_claim = [](const GPIOAllocator::PinStatus& status, GPIOAllocator::PinRole role) {
+      return std::any_of(status.holders.begin(), status.holders.end(),
+                         [&](const GPIOAllocator::PinHolder& h) {
+                           return h.consumer == GPIOAllocator::PinConsumer::Nfc && h.role == role;
+                         });
+    };
 
     if (spiHost == SPI2_HOST) {
-      if (!sck_shared_with_nfc || !miso_shared_with_nfc || !mosi_shared_with_nfc) {
+      auto sck_status = GPIOAllocator::instance().status_of(eth_sck);
+      auto miso_status = GPIOAllocator::instance().status_of(eth_miso);
+      auto mosi_status = GPIOAllocator::instance().status_of(eth_mosi);
+      if (!is_nfc_bus_claim(sck_status, GPIOAllocator::PinRole::SpiSck) ||
+          !is_nfc_bus_claim(miso_status, GPIOAllocator::PinRole::SpiMiso) ||
+          !is_nfc_bus_claim(mosi_status, GPIOAllocator::PinRole::SpiMosi)) {
         ESP_LOGE(TAG, "Ethernet conflict: When using SPI2, Ethernet must share the exact same SCK/MISO/MOSI pins as NFC.");
         ESP_LOGE(TAG, "Current owners - SCK (%d): %s, MISO (%d): %s, MOSI (%d): %s",
-                 eth_sck, owner_sck.value_or("free").data(),
-                 eth_miso, owner_miso.value_or("free").data(),
-                 eth_mosi, owner_mosi.value_or("free").data());
-        return; 
-      }
-      ESP_LOGI(TAG, "Ethernet is verified to share the SPI2 bus pins with the NFC module.");
-    } else {
-      if (owner_sck.has_value() || owner_miso.has_value() || owner_mosi.has_value()) {
-        ESP_LOGE(TAG, "Ethernet conflict: One or more SPI pins for Ethernet are already allocated.");
-        ESP_LOGE(TAG, "Current owners - SCK (%d): %s, MISO (%d): %s, MOSI (%d): %s",
-                 eth_sck, owner_sck.value_or("free").data(),
-                 eth_miso, owner_miso.value_or("free").data(),
-                 eth_mosi, owner_mosi.value_or("free").data());
-        return; 
-      }
-
-#if SOC_SPI_PERIPH_NUM > 2
-    auto lease_sck = GPIOAllocator::instance().acquire(gpio_num_t(eth_sck), GPIO_MODE_DISABLE, spiHost == SPI2_HOST ? "SPI2_SCK" : spiHost == SPI3_HOST ? "SPI3_SCK" : "ETH_SCK");
-    auto lease_miso = GPIOAllocator::instance().acquire(gpio_num_t(eth_miso), GPIO_MODE_DISABLE, spiHost == SPI2_HOST ? "SPI2_MISO" : spiHost == SPI3_HOST ? "SPI3_MISO" : "ETH_MISO");
-    auto lease_mosi = GPIOAllocator::instance().acquire(gpio_num_t(eth_mosi), GPIO_MODE_DISABLE, spiHost == SPI2_HOST ? "SPI2_MOSI" : spiHost == SPI3_HOST ? "SPI3_MOSI" : "ETH_MOSI");
-#else
-    auto lease_sck = GPIOAllocator::instance().acquire(gpio_num_t(eth_sck), GPIO_MODE_DISABLE, "SPI2_SCK");
-    auto lease_miso = GPIOAllocator::instance().acquire(gpio_num_t(eth_miso), GPIO_MODE_DISABLE, "SPI2_MISO");
-    auto lease_mosi = GPIOAllocator::instance().acquire(gpio_num_t(eth_mosi), GPIO_MODE_DISABLE, "SPI2_MOSI");
-#endif
-      if (lease_sck.has_value() && lease_miso.has_value() && lease_mosi.has_value()) {
-        eth_leases.push_back(std::move(lease_sck.value()));
-        eth_leases.push_back(std::move(lease_miso.value()));
-        eth_leases.push_back(std::move(lease_mosi.value()));
-        ESP_LOGI(TAG, "Allocated Ethernet SPI Host pins (SCK: %d, MISO: %d, MOSI: %d)", eth_sck, eth_miso, eth_mosi);
-      } else {
-        ESP_LOGE(TAG, "Failed to allocate Ethernet SPI Host pins.");
-        eth_leases.clear();
+                 eth_sck, GPIOAllocator::instance().owner_of(eth_sck).value_or("free").c_str(),
+                 eth_miso, GPIOAllocator::instance().owner_of(eth_miso).value_or("free").c_str(),
+                 eth_mosi, GPIOAllocator::instance().owner_of(eth_mosi).value_or("free").c_str());
         return;
       }
     }
 
-    auto check_and_allocate = [&](uint8_t pin, const std::string& tag_name, gpio_mode_t mode) -> bool {
-      if (pin == 255) return true;
-      if (auto owner = GPIOAllocator::instance().owner_of(pin); owner && owner != "STRAPPING") {
-        ESP_LOGE(TAG, "Pin %d for %s is already allocated to '%s'.", pin, tag_name.c_str(), owner.value().data());
-        return false;
-      }
-      auto lease = GPIOAllocator::instance().acquire(gpio_num_t(pin), mode, tag_name);
+    auto acquire_bus = [&](uint8_t pin, GPIOAllocator::PinRole role, const char* tag) -> bool {
+      auto lease = GPIOAllocator::instance().acquire(gpio_num_t(pin), GPIO_MODE_DISABLE, role,
+                                                     GPIOAllocator::PinConsumer::Eth, tag);
       if (lease.has_value()) {
         eth_leases.push_back(std::move(lease.value()));
         return true;
-      } else {
-        ESP_LOGE(TAG, "Failed to allocate Pin %d for %s.", pin, tag_name.c_str());
-        return false;
       }
+      ESP_LOGE(TAG, "Failed to allocate Ethernet bus pin %d for %s.", pin, tag);
+      return false;
     };
 
-    if (!check_and_allocate(eth_cs, "ETH_SPI_CS", GPIO_MODE_DISABLE) ||
-        !check_and_allocate(eth_irq, "ETH_SPI_IRQ", GPIO_MODE_INPUT) ||
-        !check_and_allocate(eth_rst, "ETH_SPI_RST", GPIO_MODE_OUTPUT)) {
+    if (!acquire_bus(eth_sck, GPIOAllocator::PinRole::SpiSck, spiHost == SPI2_HOST ? "SPI2_SCK_ETH" : "ETH_SCK") ||
+        !acquire_bus(eth_miso, GPIOAllocator::PinRole::SpiMiso, spiHost == SPI2_HOST ? "SPI2_MISO_ETH" : "ETH_MISO") ||
+        !acquire_bus(eth_mosi, GPIOAllocator::PinRole::SpiMosi, spiHost == SPI2_HOST ? "SPI2_MOSI_ETH" : "ETH_MOSI")) {
+      eth_leases.clear();
+      return;
+    }
+    ESP_LOGI(TAG, "Allocated Ethernet SPI Host pins (SCK: %d, MISO: %d, MOSI: %d)", eth_sck, eth_miso, eth_mosi);
+
+    auto check_and_allocate = [&](uint8_t pin, const char* tag_name, GPIOAllocator::PinRole role, gpio_mode_t mode) -> bool {
+      if (pin == 255) return true;
+      auto lease = GPIOAllocator::instance().acquire(gpio_num_t(pin), mode, role,
+                                                     GPIOAllocator::PinConsumer::Eth, tag_name);
+      if (lease.has_value()) {
+        eth_leases.push_back(std::move(lease.value()));
+        return true;
+      }
+      ESP_LOGE(TAG, "Failed to allocate Pin %d for %s: %s.", pin, tag_name,
+               GPIOAllocator::instance().owner_of(pin).value_or("acquire failed").c_str());
+      return false;
+    };
+
+    if (!check_and_allocate(eth_cs, "ETH_SPI_CS", GPIOAllocator::PinRole::SpiCs, GPIO_MODE_DISABLE) ||
+        !check_and_allocate(eth_irq, "ETH_SPI_IRQ", GPIOAllocator::PinRole::EthIrq, GPIO_MODE_INPUT) ||
+        !check_and_allocate(eth_rst, "ETH_SPI_RST", GPIOAllocator::PinRole::EthRst, GPIO_MODE_OUTPUT)) {
       eth_leases.clear();
       return;
     }
@@ -329,19 +321,22 @@ void HomeKitLock::begin() {
     ESP_LOGI(TAG, "Starting HomeSpan setup...");
 
     if (miscConfig.controlPin != 255){
-      static auto hsControlPin = GPIOAllocator::instance().acquire(gpio_num_t(miscConfig.controlPin), GPIO_MODE_DISABLE, "HS_CONTROL_PIN");
+      static auto hsControlPin = GPIOAllocator::instance().acquire(gpio_num_t(miscConfig.controlPin), GPIO_MODE_DISABLE, GPIOAllocator::PinRole::GpioIn, GPIOAllocator::PinConsumer::HomeKit, "HS_CONTROL_PIN");
       if(hsControlPin.has_value())
         homeSpan.setControlPin(miscConfig.controlPin);
-      else 
+      else
         ESP_LOGW(TAG, "Could not acquire pin for the HomeSpan Control pin, error: %d", hsControlPin.error());
     }
     if (miscConfig.hsStatusPin != 255){
-      static auto hsStatusPin = GPIOAllocator::instance().acquire(gpio_num_t(miscConfig.hsStatusPin), GPIO_MODE_DISABLE, "HS_STATUS_PIN");
-      if(hsStatusPin.has_value())
-        homeSpan.setStatusPin(miscConfig.hsStatusPin);
-      else 
+      static auto hsStatusPin = GPIOAllocator::instance().acquire(gpio_num_t(miscConfig.hsStatusPin), GPIO_MODE_OUTPUT, GPIOAllocator::PinRole::Led, GPIOAllocator::PinConsumer::HomeKit, "HS_STATUS_PIN");
+      if(hsStatusPin.has_value()) {
+        static SharedLed statusLed{std::move(hsStatusPin.value())};
+        statusLed.set_restore_hook([]() {homeSpan.refreshStatusDevice();});
+        homeSpan.setStatusDevice(&statusLed);
+      } else {
         ESP_LOGW(TAG, "Could not acquire pin for the HomeSpan Status pin, error: %d", hsStatusPin.error());
-    } 
+      }
+    }
     #ifdef CONFIG_INIT_ARDU_SERIAL_LOGGING
     ESP_LOGI(TAG, "Press any key within 1 second for console access.");
     vTaskDelay(pdMS_TO_TICKS(1000));
