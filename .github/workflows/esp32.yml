@@ -27,9 +27,24 @@ jobs:
     if: ${{ github.ref == 'refs/heads/main' }}
     steps:
       - name: Update dev tag
+        id: update-dev-tag
         uses: actions/github-script@v9
         with:
           script: |
+            let previousSha = '';
+            try {
+              const { data: ref } = await github.rest.git.getRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: 'tags/dev'
+              });
+              previousSha = ref.object.sha;
+            } catch (e) {
+              if (e.status !== 404 && (!e.response || e.response.status !== 404)) {
+                throw e;
+              }
+            }
+            core.setOutput('previous_sha', previousSha);
             try {
               await github.rest.git.updateRef({
                 owner: context.repo.owner,
@@ -50,10 +65,13 @@ jobs:
                 throw e;
               }
             }
-      - name: Delete existing dev release
+      - name: Replace dev release body
         uses: actions/github-script@v9
         with:
           script: |
+            const serverUrl = process.env.GITHUB_SERVER_URL || 'https://github.com';
+            const runUrl = `${serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
             try {
               const { data: release } = await github.rest.repos.getReleaseByTag({
                 owner: context.repo.owner,
@@ -61,15 +79,27 @@ jobs:
                 tag: 'dev'
               });
 
-              await github.rest.repos.deleteRelease({
+              const previousSha = '${{ steps.update-dev-tag.outputs.previous_sha }}' || release.target_commitish || '';
+              let body = 'The CI pipeline is currently building the newest changes\n';
+              body += `Check the build status [here](${runUrl})\n`;
+              if (previousSha) {
+                const shortSha = previousSha.substring(0, 7);
+                const commitUrl = `${serverUrl}/${context.repo.owner}/${context.repo.repo}/commit/${previousSha}`;
+                body += `Attached are artifacts from the previous build ([${shortSha}])(${commitUrl})`;
+              } else {
+                body += 'Attached are artifacts from the previous build';
+              }
+
+              await github.rest.repos.updateRelease({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                release_id: release.id
+                release_id: release.id,
+                body: body
               });
-              console.log(`Deleted existing dev release (ID: ${release.id})`);
+              console.log(`Updated dev release body (ID: ${release.id})`);
             } catch (e) {
               if (e.status === 404 || (e.response && e.response.status === 404)) {
-                console.log('No existing dev release found, proceeding to create new one');
+                console.log('No existing dev release found, proceeding');
               } else {
                 throw e;
               }
@@ -200,6 +230,31 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+
+      - name: Delete existing dev release
+        uses: actions/github-script@v9
+        with:
+          script: |
+            try {
+              const { data: release } = await github.rest.repos.getReleaseByTag({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                tag: 'dev'
+              });
+
+              await github.rest.repos.deleteRelease({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                release_id: release.id
+              });
+              console.log(`Deleted existing dev release (ID: ${release.id})`);
+            } catch (e) {
+              if (e.status === 404 || (e.response && e.response.status === 404)) {
+                console.log('No existing dev release found, proceeding to create new one');
+              } else {
+                throw e;
+              }
+            }
 
       - name: Create fresh dev release
         uses: actions/github-script@v9
