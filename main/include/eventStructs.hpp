@@ -2,7 +2,13 @@
 #include <cstdint>
 #include <string>
 #include <vector>
-#include <serialization.hpp>
+// alpaca's crc32.h platform detection misses freestanding RISC-V targets
+// (no __linux__/__APPLE__); the espp wrapper header used to paper over this
+// by force-defining __gnu_linux__. We need the same for __builtin_prefetch.
+#ifndef __gnu_linux__
+#define __gnu_linux__
+#endif
+#include "alpaca/alpaca.h"
 #include "app_events.hpp"
 
 enum class MqttErrorCode : uint8_t {

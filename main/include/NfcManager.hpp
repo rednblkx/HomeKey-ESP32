@@ -99,6 +99,19 @@ private:
       SDA,
       SCL
     };
+    static constexpr const char* pin_function_str(PinFunctions fn) {
+      switch (fn) {
+        case SCK:  return "SCK";
+        case MISO: return "MISO";
+        case MOSI: return "MOSI";
+        case SS:   return "SS";
+        case IRQ:  return "IRQ";
+        case VEN:  return "VEN";
+        case SDA:  return "SDA";
+        case SCL:  return "SCL";
+      }
+      return "Unknown";
+    }
 
     std::map<PinFunctions, std::expected<GPIOAllocator::GPIOLease, GPIOAllocator::GPIOAllocatorError>> pinAllocations;
 

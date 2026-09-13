@@ -16,7 +16,6 @@
 #include "Pn7160Reader.hpp"
 #include "St25r3916Reader.hpp"
 #include "hal/gpio_types.h"
-#include "magic_enum.hpp"
 #include "utils.hpp"
 
 #include <array>
@@ -25,7 +24,11 @@
 #include <chrono>
 #include <functional>
 #include <memory>
-#include <serialization.hpp>
+// See eventStructs.hpp: alpaca crc32 platform-detection workaround.
+#ifndef __gnu_linux__
+#define __gnu_linux__
+#endif
+#include "alpaca/alpaca.h"
 
 const char* NfcManager::TAG = "NfcManager";
 
@@ -104,7 +107,7 @@ NfcManager::NfcManager(NvsCredentialStore& readerDataManager,
   }
   for(auto &p : pinAllocations){
     if(!p.second.has_value()){
-      ESP_LOGW(TAG, "Could not acquire GPIO Pin for '%s' with error '%s'", magic_enum::enum_name(p.first).cbegin(), magic_enum::enum_name(p.second.error()).cbegin());
+      ESP_LOGW(TAG, "Could not acquire GPIO Pin for '%s' with error '%s'", pin_function_str(p.first), GPIOAllocator::error_str(p.second.error()));
     }
   }
   m_hk_event = AppEventLoop::subscribe(HK_EVENT, HK_INTERNAL_EVENT, [&](const uint8_t* data, size_t size){

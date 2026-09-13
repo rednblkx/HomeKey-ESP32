@@ -42,7 +42,6 @@
 #include <esp_tls_crypto.h>
 #include <stdbool.h>
 #include <string>
-#include <thread>
 #include <vector>
 #include "JsonGuard.hpp"
 
@@ -1322,10 +1321,8 @@ esp_err_t WebServerManager::handleStartConfigAP(httpd_req_t *req) {
       .toStringUnformatted();
   httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
   vTaskDelay(pdMS_TO_TICKS(1000));
-  std::jthread j([](){
-    homeSpan.processSerialCommand("A");
-  });
-  j.detach();
+  auto run = [](void* p){ homeSpan.processSerialCommand("A"); vTaskDelete(nullptr); };
+  xTaskCreate(run, "hs_cmd", 4096, NULL, 3, nullptr);
   return ESP_OK;
 }
 

@@ -13,7 +13,10 @@ FetchContent_Declare(
   GIT_REPOSITORY https://github.com/fmtlib/fmt
   GIT_TAG        12.1.0)
 FetchContent_MakeAvailable(fmt)
-target_link_libraries(${COMPONENT_LIB} PUBLIC fmt::fmt-header-only)
+target_compile_options(fmt PUBLIC "-DFMT_THROW(x)=::fmt::assert_fail(__FILE__,__LINE__,\"fmt error\")")
+target_compile_definitions(fmt PUBLIC "-DFMT_USE_LOCALE=0")
+target_compile_definitions(fmt PRIVATE "-DFMT_OS=0")
+target_link_libraries(${COMPONENT_LIB} PRIVATE fmt::fmt)
 if(NOT DEFINED ENV{CI})
   add_custom_target(webui 
     WORKING_DIRECTORY ${COMPONENT_DIR}/../data 

@@ -198,6 +198,17 @@ public:
     return "has an unknown validation error";
   }
 
+  static constexpr const char* consumer_str(PinConsumer consumer) {
+    switch (consumer) {
+      case PinConsumer::None:     return "None";
+      case PinConsumer::Hardware: return "Hardware";
+      case PinConsumer::Nfc:      return "Nfc";
+      case PinConsumer::Eth:      return "Eth";
+      case PinConsumer::HomeKit:  return "HomeKit";
+    }
+    return "Unknown";
+  }
+
   [[nodiscard]] PinStatus status_of(uint8_t pin) const {
     std::lock_guard lock(mutex_);
     PinStatus status;

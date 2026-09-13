@@ -153,6 +153,19 @@ private:
       ALT_ACTION_LED,
       TAG_EVENT
     };
+    static constexpr const char* pin_function_str(PinFunctions fn) {
+      switch (fn) {
+        case ACTION:         return "ACTION";
+        case SUCCESS:        return "SUCCESS";
+        case FAIL:           return "FAIL";
+        case PIXEL:          return "PIXEL";
+        case ALT_ACTION:     return "ALT_ACTION";
+        case ALT_ACTION_INIT: return "ALT_ACTION_INIT";
+        case ALT_ACTION_LED: return "ALT_ACTION_LED";
+        case TAG_EVENT:      return "TAG_EVENT";
+      }
+      return "Unknown";
+    }
 
     std::map<PinFunctions, std::expected<GPIOAllocator::GPIOLease, GPIOAllocator::GPIOAllocatorError>> pinAllocations;
 
