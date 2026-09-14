@@ -41,7 +41,7 @@ void ethEventHandler(arduino_event_id_t event, arduino_event_info_t info) {
       ESP_LOGI(TAG, "ETH Connected");
       break;
     case ARDUINO_EVENT_ETH_GOT_IP: {
-      ESP_LOGI(TAG, "ETH Got IP: '%s'", esp_netif_get_desc(info.got_ip.esp_netif));
+      ESP_LOGI(TAG, "ETH Got IP: " IPSTR, IP2STR(&info.got_ip.ip_info.ip));
       char ip[16];
       esp_ip4addr_ntoa(&info.got_ip.ip_info.ip, ip, sizeof(ip));
       AppEventLoop::publish(ETH_APP_EVENT, ETH_GOT_IP, ip, strlen(ip));
