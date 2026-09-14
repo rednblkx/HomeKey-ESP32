@@ -789,8 +789,8 @@ esp_err_t WebServerManager::handleGetNfcPresets(httpd_req_t *req) {
     return ESP_FAIL;
   }
 
-  JsonBuilder response = JsonBuilder::object();
-  response.withArray("presets", [&](JsonBuilder& presetsArray) {
+  JsonBuilder presets = JsonBuilder::object();
+  presets.withArray("presets", [&](JsonBuilder& presetsArray) {
     for (auto &&v : nfcGpioPinsPresets) {
       JsonBuilder preset = JsonBuilder::object();
       preset.addString("name", v.name.c_str());
@@ -805,6 +805,8 @@ esp_err_t WebServerManager::handleGetNfcPresets(httpd_req_t *req) {
       presetsArray.addItemToArray(std::move(preset).release());
     }
   });
+  JsonBuilder response = JsonBuilder::object();
+  response.addItem("data", std::move(presets).release());
   response.addBool("success", true);
 
   std::string resp = response.toStringUnformatted();
