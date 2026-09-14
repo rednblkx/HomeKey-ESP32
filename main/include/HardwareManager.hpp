@@ -10,7 +10,7 @@
 #include "GPIOAllocator.hpp"
 
 class ConfigManager;
-class Pixel;
+class NeoPixel;
 namespace espConfig { struct actions_config_t; }
 
 /**
@@ -105,7 +105,7 @@ private:
     // --- Member Variables ---
     const espConfig::actions_config_t& m_miscConfig;
 
-    Pixel* m_pixel = nullptr;
+    NeoPixel* m_pixel = nullptr;
   
     esp_timer_handle_t m_gpioSuccessTimer;
     esp_timer_handle_t m_gpioFailTimer;

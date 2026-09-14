@@ -1,9 +1,12 @@
 #include "ConfigManager.hpp"
 #include "MbedtlsHelpers.hpp"
+#include <psa/crypto.h>
 #include "cJSON.h"
 #include "config.hpp"
 #include <cstdint>
 #include <ranges>
+#include <algorithm>
+#include <cstring>
 #include <string>
 #include <vector>
 #include <limits>
@@ -11,23 +14,15 @@
 #include "esp_log.h"
 #include "esp_log_level.h"
 #include "fmt/ranges.h"
-#include "mbedtls/sha256.h"
 #include "mbedtls/x509.h"
 #include "msgpack.h"
-#include <LittleFS.h>
 #include "fmt/format.h"
 #include "nvs.h"
-#include <mbedtls/entropy.h>
-#include <mbedtls/ctr_drbg.h>
-#include <mbedtls/x509_crt.h>
-#include <mbedtls/pk.h>
-#include <mbedtls/error.h>
-
+#include "MbedtlsHelpers.hpp"
+#include <psa/crypto.h>
 
 const char* ConfigManager::TAG = "ConfigManager";
 
-using crypto::ScopedEntropy;
-using crypto::ScopedCtrDrbg;
 using crypto::ScopedPk;
 using crypto::ScopedX509Crt;
 
@@ -1277,8 +1272,7 @@ bool ConfigManager::validateCertificateWithMbedTLS(const std::string& certConten
 
     if (ret != 0) {
         char error_buf[100];
-        mbedtls_strerror(ret, error_buf, sizeof(error_buf));
-        ESP_LOGE(TAG, "Certificate parsing failed: %s (error code: %d)", error_buf, ret);
+        ESP_LOGE(TAG, "Certificate parsing failed (error code: %d)", ret);
         return false;
     }
 
@@ -1304,7 +1298,7 @@ bool ConfigManager::validateCertificateWithMbedTLS(const std::string& certConten
         isValid = false;
     }
     
-    if (mbedtls_pk_get_type(&cert.get()->pk) == MBEDTLS_PK_NONE) {
+    if (crypto::pk_get_type(&cert.get()->pk) == MBEDTLS_PK_NONE) {
         ESP_LOGE(TAG, "Certificate missing public key");
         isValid = false;
     }
@@ -1336,38 +1330,28 @@ bool ConfigManager::validateCertificateWithMbedTLS(const std::string& certConten
 bool ConfigManager::validatePrivateKeyContent(const std::string& keyContent) {
     ScopedPk pk;
 
-    int ret = mbedtls_pk_parse_key(pk.get(), reinterpret_cast<const unsigned char*>(keyContent.c_str()), keyContent.length() + 1, nullptr, 0, nullptr, nullptr);
+    int ret = mbedtls_pk_parse_key(pk.get(), reinterpret_cast<const unsigned char*>(keyContent.c_str()), keyContent.length() + 1, nullptr, 0);
 
     if (ret != 0) {
         char error_buf[100];
-        mbedtls_strerror(ret, error_buf, sizeof(error_buf));
-        ESP_LOGE(TAG, "Private key parsing failed: %s (error code: %d)", error_buf, ret);
+        ESP_LOGE(TAG, "Private key parsing failed (error code: %d)", ret);
         return false;
     }
 
-    mbedtls_pk_type_t key_type = mbedtls_pk_get_type(pk.get());
-    if (key_type != MBEDTLS_PK_RSA && key_type != MBEDTLS_PK_ECKEY) {
-        ESP_LOGE(TAG, "Unsupported private key type: %d", key_type);
+    if (!crypto::pk_is_rsa(pk.get()) && !crypto::pk_is_ec(pk.get())) {
+        ESP_LOGE(TAG, "Unsupported private key type: %d", crypto::pk_get_type(pk.get()));
         return false;
     }
 
-    if (key_type == MBEDTLS_PK_RSA) {
-        size_t key_bits = mbedtls_pk_get_bitlen(pk.get());
+    if (crypto::pk_is_rsa(pk.get())) {
+        size_t key_bits = crypto::pk_key_bits(pk.get());
         if (key_bits < 2048) {
             ESP_LOGW(TAG, "RSA key size is only %zu bits, recommended minimum is 2048 bits", key_bits);
         }
     }
 
-    if (key_type == MBEDTLS_PK_ECKEY) {
-        const mbedtls_ecp_keypair* ec_key = mbedtls_pk_ec(*pk.get());
-        if(!ec_key) {
-            ESP_LOGE(TAG, "Failed to access EC key context");
-            return false;
-        }
-    }
-
     ESP_LOGI(TAG, "Private key validated successfully - Type: %s, Size: %zu bits",
-             key_type == MBEDTLS_PK_RSA ? "RSA" : "EC", mbedtls_pk_get_bitlen(pk.get()));
+             crypto::pk_type_name(pk.get()), crypto::pk_key_bits(pk.get()));
 
     return true;
 }
@@ -1378,69 +1362,48 @@ bool ConfigManager::validateKeyCertPair(const std::string& privateKey, const std
         return false;
     }
 
-    ScopedEntropy entropy;
-    ScopedCtrDrbg ctr_drbg;
-
-    int ret = mbedtls_ctr_drbg_seed(ctr_drbg.get(), mbedtls_entropy_func, entropy.get(),
-                                  nullptr, 0);
-    if (ret != 0) {
-        ESP_LOGE("ConfigManager", "mbedtls_ctr_drbg_seed: %d", ret);
-        return false;
-    }
-
     ScopedPk pk;
-    ret = mbedtls_pk_parse_key(pk.get(), reinterpret_cast<const unsigned char*>(privateKey.c_str()), privateKey.length() + 1, nullptr, 0, mbedtls_ctr_drbg_random, ctr_drbg.get());
+    int ret = mbedtls_pk_parse_key(pk.get(), reinterpret_cast<const unsigned char*>(privateKey.c_str()), privateKey.length() + 1, nullptr, 0);
     if (ret != 0) {
-        char error_buf[100];
-        mbedtls_strerror(ret, error_buf, sizeof(error_buf));
-        ESP_LOGE("ConfigManager", "Failed to parse %s private key: %s (error code: %d)", context, error_buf, ret);
+        ESP_LOGE("ConfigManager", "Failed to parse %s private key (error code: %d)", context, ret);
         return false;
     }
 
     ScopedX509Crt cert;
     ret = mbedtls_x509_crt_parse(cert.get(), reinterpret_cast<const unsigned char*>(certificate.c_str()), certificate.length() + 1);
     if (ret != 0) {
-        char error_buf[100];
-        mbedtls_strerror(ret, error_buf, sizeof(error_buf));
-        ESP_LOGE("ConfigManager", "Failed to parse %s certificate: %s (error code: %d)", context, error_buf, ret);
+        ESP_LOGE("ConfigManager", "Failed to parse %s certificate (error code: %d)", context, ret);
         return false;
     }
 
-    ret = mbedtls_pk_check_pair(&cert.get()->pk, pk.get(), mbedtls_ctr_drbg_random, ctr_drbg.get());
+    ret = mbedtls_pk_check_pair(&cert.get()->pk, pk.get());
     if (ret != 0) {
         char error_buf[100];
-        mbedtls_strerror(ret, error_buf, sizeof(error_buf));
-        ESP_LOGE("ConfigManager", "%s private key does not match certificate public key: %s (error code: %d)", context, error_buf, ret);
+        ESP_LOGE("ConfigManager", "%s private key does not match certificate public key (error code: %d)", context, ret);
         return false;
     }
 
-    mbedtls_pk_type_t cert_key_type = mbedtls_pk_get_type(&cert.get()->pk);
-    mbedtls_pk_type_t key_type = mbedtls_pk_get_type(pk.get());
-
-    if (cert_key_type != key_type) {
-        ESP_LOGE("ConfigManager", "%s certificate and private key have different types (cert: %d, key: %d)", context, cert_key_type, key_type);
+    if (crypto::pk_get_type(&cert.get()->pk) != crypto::pk_get_type(pk.get())) {
+        ESP_LOGE("ConfigManager", "%s certificate and private key have different types (cert: %d, key: %d)",
+                 context, crypto::pk_get_type(&cert.get()->pk), crypto::pk_get_type(pk.get()));
         return false;
     }
 
-    if (key_type == MBEDTLS_PK_RSA) {
-        size_t cert_key_bits = mbedtls_pk_get_bitlen(&cert.get()->pk);
-        size_t key_bits = mbedtls_pk_get_bitlen(pk.get());
+    if (crypto::pk_is_rsa(pk.get())) {
+        size_t cert_key_bits = crypto::pk_key_bits(&cert.get()->pk);
+        size_t key_bits = crypto::pk_key_bits(pk.get());
         if (cert_key_bits != key_bits) {
             ESP_LOGE("ConfigManager", "%s RSA key sizes don't match (cert: %zu bits, key: %zu bits)", context, cert_key_bits, key_bits);
             return false;
         }
     }
 
-    if (key_type == MBEDTLS_PK_ECKEY || key_type == MBEDTLS_PK_ECKEY_DH || key_type == MBEDTLS_PK_ECDSA) {
-        const mbedtls_ecp_keypair* cert_ec = mbedtls_pk_ec(cert.get()->pk);
-        const mbedtls_ecp_keypair* key_ec = mbedtls_pk_ec(*pk.get());
-        if (cert_ec && key_ec) {
-            mbedtls_ecp_group_id cert_curve = cert_ec->MBEDTLS_PRIVATE(grp).id;
-            mbedtls_ecp_group_id key_curve = key_ec->MBEDTLS_PRIVATE(grp).id;
-            if (cert_curve != key_curve) {
-                ESP_LOGE("ConfigManager", "%s EC curves don't match (cert: %d, key: %d)", context, cert_curve, key_curve);
-                return false;
-            }
+    if (crypto::pk_is_ec(pk.get())) {
+        psa_ecc_family_t cert_curve = crypto::pk_ec_family(&cert.get()->pk);
+        psa_ecc_family_t key_curve = crypto::pk_ec_family(pk.get());
+        if (cert_curve != key_curve) {
+            ESP_LOGE("ConfigManager", "%s EC curves don't match (cert: %d, key: %d)", context, cert_curve, key_curve);
+            return false;
         }
     }
 
@@ -1499,8 +1462,17 @@ std::vector<CertificateStatus> ConfigManager::getCertificatesStatus(){
         ESP_LOGE(TAG, "Unable to retrieve serial number for '%s' certificate: %d", typeStr, ret);
         continue;
       }
+      // PSA SHA-1 fingerprint of the raw certificate (MBEDTLS_SHA1_C was
+      // removed with mbedtls 4; the PSA implementation remains).
       unsigned char sha1_hash[20];
-      mbedtls_sha1(cert.get()->raw.p, cert.get()->raw.len, sha1_hash);
+      {
+        size_t hash_len = 0;
+        if (psa_hash_compute(PSA_ALG_SHA_1, cert.get()->raw.p, cert.get()->raw.len,
+                             sha1_hash, sizeof(sha1_hash), &hash_len) != PSA_SUCCESS ||
+            hash_len != sizeof(sha1_hash)) {
+          memset(sha1_hash, 0, sizeof(sha1_hash));
+        }
+      }
       mbedtls_x509_time valid_from = cert.get()->valid_from;
       mbedtls_x509_time valid_to = cert.get()->valid_to;
 
@@ -1525,23 +1497,21 @@ std::vector<CertificateStatus> ConfigManager::getCertificatesStatus(){
     } else if(not certStr.empty() && isPrivateKey){
       ScopedPk pk;
 
-      int ret = mbedtls_pk_parse_key(pk.get(), reinterpret_cast<const unsigned char*>(certStr.c_str()), certStr.length() + 1, nullptr, 0, nullptr, nullptr);
+      int ret = mbedtls_pk_parse_key(pk.get(), reinterpret_cast<const unsigned char*>(certStr.c_str()), certStr.length() + 1, nullptr, 0);
 
       if (ret != 0) {
           char error_buf[100];
-          mbedtls_strerror(ret, error_buf, sizeof(error_buf));
-          ESP_LOGE(TAG, "Private key parsing failed: %s (error code: %d)", error_buf, ret);
+          ESP_LOGE(TAG, "Private key parsing failed (error code: %d)", ret);
           continue;
       }
 
-      mbedtls_pk_type_t key_type = mbedtls_pk_get_type(pk.get());
-      if (key_type != MBEDTLS_PK_RSA && key_type != MBEDTLS_PK_ECKEY && key_type != MBEDTLS_PK_ECKEY_DH && key_type != MBEDTLS_PK_ECDSA) {
-          ESP_LOGE(TAG, "Unsupported private key type: %d", key_type);
+      if (!crypto::pk_is_rsa(pk.get()) && !crypto::pk_is_ec(pk.get())) {
+          ESP_LOGE(TAG, "Unsupported private key type: %d", crypto::pk_get_type(pk.get()));
           continue;
       }
       certificates.emplace_back(CertificateStatus{
           .type = certType,
-          .keyType = std::string(mbedtls_pk_get_name(pk.get()))});
+          .keyType = std::string(crypto::pk_type_name(pk.get()))});
     }
   }
   return certificates;

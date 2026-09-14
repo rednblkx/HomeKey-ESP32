@@ -1,6 +1,6 @@
 #include "HardwareManager.hpp"
 #include "LockManager.hpp"
-#include "Pixel.h"
+#include "NeoPixel.hpp"
 #include "config.hpp"
 #include "driver/gpio.h"
 #include "esp_timer.h"
@@ -220,7 +220,7 @@ void HardwareManager::begin() {
       gpio_num_t init_pin = pinAllocations.at(ALT_ACTION_INIT).value().get_pin();
       pinAllocations.at(ALT_ACTION_INIT).value().set_pullup(true);
       m_initiatorQueue = xQueueCreate(1, sizeof(uint8_t));
-      xTaskCreateUniversal(initiator_task_entry, "initiator_task", 3580, this, 3, &m_initiatorTaskHandle, 1);
+      xTaskCreatePinnedToCore(initiator_task_entry, "initiator_task", 3580, this, 3, &m_initiatorTaskHandle, tskNO_AFFINITY);
       if(esp_err_t err = gpio_install_isr_service(0); err == ESP_OK || err == ESP_ERR_INVALID_STATE){
         isr_service_installed = true;
       }
@@ -235,7 +235,7 @@ void HardwareManager::begin() {
             ESP_LOGW(TAG, "Invalid NeoPixel type index (%d), defaulting to GRB.", pixelTypeIndex);
             pixelTypeIndex = 5; // GRB
         }
-        m_pixel = new Pixel(m_miscConfig.nfcNeopixelPin, pixelTypeMap[pixelTypeIndex]);
+        m_pixel = new NeoPixel(m_miscConfig.nfcNeopixelPin, pixelTypeIndex);
         m_pixel->off(); // Ensure pixel is off at startup
         ESP_LOGI(TAG, "NeoPixel initialized on pin %d with type %s.", m_miscConfig.nfcNeopixelPin, pixelTypeMap[pixelTypeIndex]);
     } else {
@@ -334,10 +334,10 @@ void HardwareManager::begin() {
     create_timer(altActionInit_timer_args, m_altActionInitTimer, "altActionInitTimer");
 
     m_feedbackQueue = xQueueCreate(5, sizeof(FeedbackType));
-    xTaskCreateUniversal(feedbackTaskEntry, "feedback_task", 3580, this, 3, &m_feedbackTaskHandle, 1);
+    xTaskCreatePinnedToCore(feedbackTaskEntry, "feedback_task", 3580, this, 3, &m_feedbackTaskHandle, tskNO_AFFINITY);
 
     m_lockControlQueue = xQueueCreate(5, sizeof(int));
-    xTaskCreateUniversal(lockControlTaskEntry, "lock_control_task", 3072, this, 3, &m_lockControlTaskHandle, 1);
+    xTaskCreatePinnedToCore(lockControlTaskEntry, "lock_control_task", 3072, this, 3, &m_lockControlTaskHandle, tskNO_AFFINITY);
     ESP_LOGI(TAG, "Hardware initialization complete.");
 }
 
@@ -584,13 +584,13 @@ void HardwareManager::feedbackTask() {
                     if(m_pixelSuccessTimer && esp_timer_is_active(m_pixelSuccessTimer)) esp_timer_stop(m_pixelSuccessTimer);
                     if (m_pixel != nullptr) {
                         auto color = m_miscConfig.neopixelSuccessColor;
-                        m_pixel->set(m_pixel->RGB(color[espConfig::actions_config_t::colorMap::R], color[espConfig::actions_config_t::colorMap::G], color[espConfig::actions_config_t::colorMap::B]));
+                        m_pixel->set(m_pixel->rgb(color[espConfig::actions_config_t::colorMap::R], color[espConfig::actions_config_t::colorMap::G], color[espConfig::actions_config_t::colorMap::B]));
 
                         if (m_pixelSuccessTimer) esp_timer_start_once(m_pixelSuccessTimer, m_miscConfig.neopixelSuccessTime * 1000);
                     }
                     if (live(pinAllocations.at(SUCCESS))) {
                         auto& success_lease = pinAllocations.at(SUCCESS).value();
-                        // Shared LED (e.g. HomeSpan status pin): the arbiter
+                        // Shared LED (e.g. HomeKit status pin): the arbiter
                         // drives the flash and restores the blink afterwards.
                         if (!SharedLed::preempt_pin(static_cast<int>(success_lease.get_pin()),
                                                     m_miscConfig.nfcSuccessHL,
@@ -607,7 +607,7 @@ void HardwareManager::feedbackTask() {
                     if(m_pixelFailTimer && esp_timer_is_active(m_pixelFailTimer)) esp_timer_stop(m_pixelFailTimer);
                     if (m_pixel != nullptr) {
                         auto color = m_miscConfig.neopixelFailureColor;
-                        m_pixel->set(m_pixel->RGB(color[espConfig::actions_config_t::colorMap::R], color[espConfig::actions_config_t::colorMap::G], color[espConfig::actions_config_t::colorMap::B]));
+                        m_pixel->set(m_pixel->rgb(color[espConfig::actions_config_t::colorMap::R], color[espConfig::actions_config_t::colorMap::G], color[espConfig::actions_config_t::colorMap::B]));
 
                         if (m_pixelFailTimer) esp_timer_start_once(m_pixelFailTimer, m_miscConfig.neopixelFailTime * 1000);
                     }
@@ -627,7 +627,7 @@ void HardwareManager::feedbackTask() {
                     if(m_pixelTagEventTimer && esp_timer_is_active(m_pixelTagEventTimer)) esp_timer_stop(m_pixelTagEventTimer);
                     if (m_pixel != nullptr) {
                         auto color = m_miscConfig.neopixelTagEventColor;
-                        m_pixel->set(m_pixel->RGB(color[espConfig::actions_config_t::colorMap::R], color[espConfig::actions_config_t::colorMap::G], color[espConfig::actions_config_t::colorMap::B]));
+                        m_pixel->set(m_pixel->rgb(color[espConfig::actions_config_t::colorMap::R], color[espConfig::actions_config_t::colorMap::G], color[espConfig::actions_config_t::colorMap::B]));
 
                         if (m_pixelTagEventTimer) esp_timer_start_once(m_pixelTagEventTimer, m_miscConfig.neopixelTagEventTime * 1000);
                     }

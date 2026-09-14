@@ -17,6 +17,8 @@ class NvsCredentialStore;
 class SystemManager;
 class MqttManager;
 class NfcManager;
+class NetworkManager;
+class HomeKitService;
 namespace loggable {
 class WebSocketLogSinker;
 }
@@ -69,6 +71,8 @@ public:
   bool basicAuth(httpd_req_t* req);
   void setMqttManager(MqttManager *mqttManager) { m_mqttManager = mqttManager; }
   void setNfcManager(NfcManager *nfcManager) { m_nfcManager = nfcManager; }
+  void setNetworkManager(NetworkManager *networkManager) { m_networkManager = networkManager; }
+  void setHomeKitService(HomeKitService *homeKit) { m_homeKit = homeKit; }
   void broadcastWs(const uint8_t *payload, size_t len, httpd_ws_type_t type);
   void setWSBackLogSize(const uint16_t size);
 
@@ -189,6 +193,8 @@ private:
   NvsCredentialStore &m_readerDataManager;
   MqttManager *m_mqttManager;
   NfcManager *m_nfcManager;
+  NetworkManager *m_networkManager = nullptr;
+  HomeKitService *m_homeKit = nullptr;
 
   // WebSocket infrastructure
   QueueHandle_t m_wsQueue;

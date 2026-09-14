@@ -364,7 +364,7 @@ void MqttManager::onData(const std::string& topic, const std::string& data) {
     auto to_u8 = [](const std::string &str, uint8_t& out) -> bool {
       const char* begin = str.c_str(); char* end = nullptr;
       unsigned long v = strtoul(begin, &end, 10);
-      if(end == begin || v < 0 || v > 255) return false;
+      if(end == begin || v > 255) return false;
       out = static_cast<uint8_t>(v); return true;
     };
     EventLockState s{

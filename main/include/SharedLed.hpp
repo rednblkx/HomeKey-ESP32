@@ -1,6 +1,5 @@
 #pragma once
 #include "GPIOAllocator.hpp"
-#include "Blinker.h" // Blinkable interface for homeSpan.setStatusDevice()
 #include "esp_timer.h"
 #include "esp_log.h"
 
@@ -11,20 +10,20 @@
 /**
  * @brief Arbitrates a PinRole::Led pin shared by several drivers.
  *
- * Wraps a GPIOLease and implements HomeSpan's Blinkable interface so it can be
- * handed to homeSpan.setStatusDevice(). All writes go through the arbiter:
- * while the NFC feedback path holds a preemption, HomeSpan's writes are
- * swallowed, and when the preemption expires the pin returns to the HomeSpan
- * blinker's latest desired level (writes that arrived mid-preemption are
- * recorded, not lost). With a single driver attached the behavior is a plain
- * level write, identical to driving the lease directly.
+ * Wraps a GPIOLease and exposes on()/off()/getPin() (the same minimal status
+ * LED interface HomeSpan's Blinkable used, now owned by the app). All writes
+ * go through the arbiter: while the NFC feedback path holds a preemption,
+ * status writes are swallowed, and when the preemption expires the pin returns
+ * to the arbiter's latest desired level (writes that arrived mid-preemption
+ * are recorded, not lost). With a single driver attached the behavior is a
+ * plain level write, identical to driving the lease directly.
  *
  * Other components that share the pin (HardwareManager's SUCCESS/FAIL flash)
  * do not need this object: they call the static preempt_pin(), which resolves
  * the arbiter registered for the pin and returns false when the pin is not
  * shared, so the caller can fall back to its plain lease path.
  */
-class SharedLed : public Blinkable {
+class SharedLed {
 public:
   SharedLed(GPIOAllocator::GPIOLease lease, bool active_high = true)
       : m_lease(std::move(lease)), m_active_high(active_high) {
@@ -61,13 +60,13 @@ public:
   bool valid() const { return m_lease.valid(); }
   explicit operator bool() const { return valid(); }
 
-  // Optional hook run when a preemption ends (e.g. homeSpan.refreshStatusDevice()).
+  // Optional hook run when a preemption ends (e.g. re-apply status pattern).
   void set_restore_hook(std::function<void()> hook) { m_restore_hook = std::move(hook); }
 
-  // --- Blinkable interface (HomeSpan status driver) ---
-  void on() override { write_home_span(m_active_high); }
-  void off() override { write_home_span(!m_active_high); }
-  int getPin() override { return static_cast<int>(pin()); }
+  // --- Status LED driver interface (was HomeSpan's Blinkable) ---
+  void on() { write_status(m_active_high); }
+  void off() { write_status(!m_active_high); }
+  int getPin() const { return static_cast<int>(pin()); }
 
   void preempt(bool level, uint32_t duration_ms) {
     std::lock_guard lock(s_mutex);
@@ -108,7 +107,7 @@ private:
 
   bool off_level() const { return !m_active_high; }
 
-  void write_home_span(bool level) {
+  void write_status(bool level) {
     std::lock_guard lock(s_mutex);
     if (!m_lease.valid() || m_preempted) return; // swallowed while preempted
     gpio_set_level(pin(), level);

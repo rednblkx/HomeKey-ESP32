@@ -2,10 +2,6 @@
 	path = components/DigitalDoorKey
 	url = https://github.com/rednblkx/DigitalDoorKey.git
 	branch = main
-[submodule "HomeSpan"]
-	path = components/HomeSpan/upstream
-	url = https://github.com/HomeSpan/HomeSpan.git
-	branch = release-2.1.6
 [submodule "components/msgpack-c/upstream"]
 	path = components/msgpack-c/upstream
 	url = https://github.com/msgpack/msgpack-c.git
@@ -28,3 +24,9 @@
 [submodule "components/pn7160"]
 	path = components/pn7160
 	url = https://github.com/rednblkx/pn7160.git
+[submodule "components/yahap"]
+	path = components/yahap
+	url = https://github.com/rednblkx/YAHAP.git
+[submodule "components/yahap_pal"]
+	path = components/yahap_pal
+	url = https://github.com/rednblkx/esp32-yahap-pal.git

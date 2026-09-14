@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include "esp_netif_ip_addr.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -16,7 +18,7 @@ extern "C" {
 
 #define DNS_SERVER_CONFIG_SINGLE(queried_name, netif_key)  {        \
         .num_of_entries = 1,                                        \
-        .item = { { .name = queried_name, .if_key = netif_key } }   \
+        .item = { { .name = queried_name, .if_key = netif_key, .ip = {} } } \
         }
 
 /**

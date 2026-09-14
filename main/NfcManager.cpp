@@ -6,7 +6,7 @@
 #include "ddk/session/Session.h"
 #include "ddk/store/CredentialStore.h"
 #include "ddk/transport/NfcChannel.h"
-#include "esp32-hal.h"
+#include <esp_timer.h>
 #include "esp_log_buffer.h"
 #include "esp_log_level.h"
 #include "eventStructs.hpp"
@@ -196,8 +196,8 @@ bool NfcManager::begin() {
     ESP_LOGI(TAG, "Auth precompute %s.", m_hkAuthPrecomputeEnabled ? "enabled" : "disabled");
     ESP_LOGI(TAG, "NFC fast polling: %s", m_nfcFastPollingEnabled ? "enabled" : "disabled");
     ESP_LOGI(TAG, "Starting NFC polling task...");
-		BaseType_t ok = xTaskCreateUniversal(
-				pollingTaskEntry, "nfc_poll_task", 8192, this, 4, &m_pollingTaskHandle, 1);
+		BaseType_t ok = xTaskCreatePinnedToCore(
+				pollingTaskEntry, "nfc_poll_task", 8192, this, 4, &m_pollingTaskHandle, tskNO_AFFINITY);
 		if (ok != pdPASS || !m_pollingTaskHandle) {
 			ESP_LOGE(TAG, "Failed to create NFC polling task.");
 			return false;
