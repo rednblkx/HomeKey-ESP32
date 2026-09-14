@@ -58,7 +58,13 @@
           const baseline = $state.snapshot(misc);
           const current = $state.snapshot(miscConfig);
 
-          const result = await saveConfig("misc", diff(baseline, current));
+          let payload = diff(baseline, current);
+          if (current.nfcReaderType !== 1) {
+            delete payload.nfcIrqPin;
+            delete payload.nfcVenPin;
+          }
+
+          const result = await saveConfig("misc", payload);
           if (result.success) {
               // Update both states with decoupled snapshots from the server response
               misc = result.data;
@@ -82,8 +88,11 @@
           presetData.gpioPins[2],
           presetData.gpioPins[3],
         ];
-        miscConfig.nfcIrqPin = presetData.irqPin;
-        miscConfig.nfcVenPin = presetData.venPin;
+        // IRQ/VEN are only meaningful for the PN7161 reader
+        if (presetData.type === 1) {
+          miscConfig.nfcIrqPin = presetData.irqPin;
+          miscConfig.nfcVenPin = presetData.venPin;
+        }
       }
     } else if (preset === 255 && misc) {
       // Clone element-by-element to preserve the 4-element tuple structure
@@ -93,8 +102,10 @@
         misc.nfcGpioPins[2],
         misc.nfcGpioPins[3]
       ];
-      miscConfig.nfcIrqPin = misc.nfcIrqPin;
-      miscConfig.nfcVenPin = misc.nfcVenPin;
+      if (miscConfig.nfcReaderType === 1) {
+        miscConfig.nfcIrqPin = misc.nfcIrqPin;
+        miscConfig.nfcVenPin = misc.nfcVenPin;
+      }
     }
   };
 

@@ -86,8 +86,11 @@
 			const presetData = nfcPresets.presets[preset];
 			if (presetData) {
 				config.nfcGpioPins = [presetData.gpioPins[0], presetData.gpioPins[1], presetData.gpioPins[2], presetData.gpioPins[3]];
-				config.nfcIrqPin = presetData.irqPin;
-				config.nfcVenPin = presetData.venPin;
+				// IRQ/VEN are only meaningful for the PN7161 reader
+				if (presetData.type === 1) {
+					config.nfcIrqPin = presetData.irqPin;
+					config.nfcVenPin = presetData.venPin;
+				}
 			}
 		}
 	}
@@ -187,7 +190,13 @@
 		loading = true;
 		try {
 
-			const result = await saveCaptivePortalConfig(diff(config_initial, config));
+			let payload = diff(config_initial, config);
+			if (config.nfcReaderType !== 1) {
+				delete payload.nfcIrqPin;
+				delete payload.nfcVenPin;
+			}
+
+			const result = await saveCaptivePortalConfig(payload);
 			if (result.success) {
 				acquiredIP = result.data.ip_addr;
 				saved = true;

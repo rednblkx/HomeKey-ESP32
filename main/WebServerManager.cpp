@@ -1070,6 +1070,12 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData, cJS
     overrideStrapping = getInstance(req)->m_configManager.getConfig<espConfig::misc_config_t>().overrideStrappingRestriction;
   }
 
+  cJSON *readerTypeItem = cJSON_GetObjectItem(obj, "nfcReaderType");
+  const uint8_t effectiveReaderType =
+      (readerTypeItem && cJSON_IsNumber(readerTypeItem))
+          ? static_cast<uint8_t>(readerTypeItem->valueint)
+          : getInstance(req)->m_configManager.getConfig<espConfig::misc_config_t>().nfcReaderType;
+
   cJSON *it = obj->child;
   while (it) {
     std::string keyStr = it->string;
@@ -1133,6 +1139,14 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData, cJS
     }
     // Pin validation
     else if (str_ends_with(keyStr.c_str(), "Pin")) {
+      // IRQ/VEN only exist on the PN7161 reader; for other reader types the
+      // values are meaningless and must not fail validation.
+      const bool nfcReaderPins = keyStr == "nfcIrqPin" || keyStr == "nfcVenPin";
+      if (nfcReaderPins && effectiveReaderType != 1) {
+        it = it->next;
+        continue;
+      }
+
       // Reject anything outside uint8_t range BEFORE truncating, so a value
       // like 256 can't wrap to a valid-looking pin (0) and slip past both
       // the GPIO-validity check and the ownership check below.
