@@ -85,7 +85,7 @@ jobs:
               if (previousSha) {
                 const shortSha = previousSha.substring(0, 7);
                 const commitUrl = `${serverUrl}/${context.repo.owner}/${context.repo.repo}/commit/${previousSha}`;
-                body += `Attached are artifacts from the previous build ([${shortSha}])(${commitUrl})`;
+                body += `Attached are artifacts from the previous build ([${shortSha}](${commitUrl}))`;
               } else {
                 body += 'Attached are artifacts from the previous build';
               }
