@@ -24,10 +24,10 @@ inline constexpr uint8_t STRAPPING_PINS[] = {
 };
 #elifdef CONFIG_IDF_TARGET_ESP32
 inline constexpr uint8_t RESTRICTED_PINS[] = {
-  1, 3, 6, 7, 8, 9, 10, 11, 16, 17
+  1, 3, 6, 7, 8, 11, 16, 17
 };
 inline constexpr uint8_t STRAPPING_PINS[] = {
-  0, 2, 4, 5, 12, 15
+  0, 2, 4, 15
 };
 #elifdef CONFIG_IDF_TARGET_ESP32C3
 inline constexpr uint8_t RESTRICTED_PINS[] = {
