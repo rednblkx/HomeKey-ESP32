@@ -1322,7 +1322,7 @@ esp_err_t WebServerManager::handleStartConfigAP(httpd_req_t *req) {
   httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
   vTaskDelay(pdMS_TO_TICKS(1000));
   auto run = [](void* p){ homeSpan.processSerialCommand("A"); vTaskDelete(nullptr); };
-  xTaskCreate(run, "hs_cmd", 4096, NULL, 3, nullptr);
+  xTaskCreate(run, "hs_cmd", 4096, NULL, 5, nullptr);
   return ESP_OK;
 }
 
