@@ -134,6 +134,7 @@ private:
   static esp_err_t handleCertificateDelete(httpd_req_t *req);
 
   static void captivePortalSaveTask(void* pvParameters);
+  static void captivePortalEthSaveTask(void* pvParameters);
   static esp_err_t handleCaptivePortal(httpd_req_t *req);
   static esp_err_t handleGetCaptivePortalConfig(httpd_req_t *req);
   static esp_err_t handleSaveCaptivePortalConfig(httpd_req_t *req);

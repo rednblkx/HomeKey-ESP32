@@ -45,7 +45,6 @@ private:
     std::function<void(int)> &conn_cb;
 
     void initializeETH();
-    static void ethEventHandler(arduino_event_id_t event, arduino_event_info_t info);
 
     static void connectionEstablished(int status);
     static void apStarted();

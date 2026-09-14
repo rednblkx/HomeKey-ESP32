@@ -7,6 +7,8 @@
 #include "esp_ota_ops.h"
 #include "esp_system.h"
 #include "app_event_loop.hpp"
+#include "app_events.hpp"
+#include "EthernetDriver.hpp"
 #include "fmt/ranges.h"
 #include "WebServerManager.hpp"
 #include "ConfigManager.hpp"
@@ -1446,6 +1448,95 @@ struct WifiSaveParams {
     std::string cleaned_body_str;
 };
 
+struct EthSaveParams {
+    httpd_req_t* req;
+    WebServerManager* instance;
+    std::string setupCode;
+    bool hasSetupCode;
+    std::string cleaned_body_str;
+};
+
+static constexpr int ETH_IP_WAIT_MS = 3000;
+
+/**
+ * @brief Persist the captive-portal submission, start the ethernet driver, and
+ *        report whether it came up.
+ *
+ * Runs off the HTTPD task (the request is completed asynchronously). The
+ * ETH_GOT_IP subscription is registered before the driver starts so the event
+ * cannot be missed. Outcomes:
+ * - driver failed to start -> 400, error message; the portal lets the user fix
+ *   the ethernet settings and resubmit.
+ * - driver started + IP within ETH_IP_WAIT_MS -> success with the real IP.
+ * - driver started, no IP -> success with 0.0.0.0 and an explanatory message;
+ *   the device reports 0.0.0.0 until the link/DHCP comes up after reboot.
+ */
+void WebServerManager::captivePortalEthSaveTask(void *pvParameters) {
+  EthSaveParams *params = static_cast<EthSaveParams *>(pvParameters);
+
+  if (params->hasSetupCode) {
+    homeSpan.setPairingCode(params->setupCode.c_str(), false);
+  }
+
+  params->instance->m_configManager.updateFromJson<espConfig::misc_config_t>(
+      params->cleaned_body_str);
+  params->instance->m_configManager.saveConfig<espConfig::misc_config_t>();
+
+  EventGroupHandle_t ethEvents = xEventGroupCreate();
+  auto gotIpSub = AppEventLoop::subscribe(ETH_APP_EVENT, ETH_GOT_IP,
+      [ethEvents](const uint8_t* data, size_t size){
+        if (ethEvents) xEventGroupSetBits(ethEvents, BIT0);
+      });
+
+  const auto miscConfig =
+      params->instance->m_configManager.getConfig<espConfig::misc_config_t>();
+  const bool driverStarted = EthernetDriver::start(miscConfig);
+
+  bool gotIp = false;
+  std::string ipAddr = "0.0.0.0";
+  if (driverStarted) {
+    if (ethEvents && gotIpSub.is_valid()) {
+      gotIp = (xEventGroupWaitBits(ethEvents, BIT0, pdFALSE, pdFALSE,
+                                   pdMS_TO_TICKS(ETH_IP_WAIT_MS)) & BIT0) != 0;
+    }
+    if (gotIp) {
+      ipAddr = ETH.localIP().toString().c_str();
+    }
+  }
+
+  if (gotIpSub.is_valid()) gotIpSub.reset();
+  if (ethEvents) vEventGroupDelete(ethEvents);
+
+  httpd_resp_set_type(params->req, "application/json");
+  JsonBuilder res = JsonBuilder::object();
+  std::string message;
+  if (!driverStarted) {
+    httpd_resp_set_status(params->req, "400 Bad Request");
+    res.addBool("success", false);
+    message = "Ethernet driver failed to start. Please check your Ethernet "
+              "module settings and try again.";
+    res.addString("error", message.c_str());
+  } else {
+    res.addBool("success", true);
+    if (gotIp) {
+      message = "Configuration saved. Device will now reboot.";
+    } else {
+      message = "Configuration saved. The Ethernet driver started, but no IP "
+                "address was assigned within 3 seconds. Device will now reboot.";
+    }
+    res.withObject("data", [&](JsonBuilder &data) {
+      data.addString("ip_addr", ipAddr.c_str());
+    });
+    res.addString("message", message.c_str());
+  }
+
+  std::string response = res.toStringUnformatted();
+  httpd_resp_send(params->req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+  httpd_req_async_handler_complete(params->req);
+  delete params;
+  vTaskDelete(NULL);
+}
+
 void WebServerManager::captivePortalSaveTask(void *pvParameters) {
   WifiSaveParams *params = static_cast<WifiSaveParams *>(pvParameters);
 
@@ -1656,12 +1747,35 @@ BaseType_t task;
     return ESP_OK;
   }
 
-  if (hasSetupCode) {
-    homeSpan.setPairingCode(setupCode.c_str(), false);
-  }
+  if (ethernetEnabled) {
+    httpd_req_t* reqCopy = nullptr;
+    if (httpd_req_async_handler_begin(req, &reqCopy) != ESP_OK) {
+      return sendJsonError(req, "Failed to start save operation");
+    }
 
-  instance->m_configManager.updateFromJson<espConfig::misc_config_t>(cleaned_body_str);
-  instance->m_configManager.saveConfig<espConfig::misc_config_t>();
+    EthSaveParams* params = new EthSaveParams{
+      .req = reqCopy,
+      .instance = instance,
+      .setupCode = setupCode,
+      .hasSetupCode = hasSetupCode,
+      .cleaned_body_str = cleaned_body_str
+    };
+
+    BaseType_t task;
+#ifndef CONFIG_FREERTOS_UNICORE
+    task = xTaskCreatePinnedToCore(captivePortalEthSaveTask, "eth_save_task", 8192, params, 5, nullptr, 1);
+#else
+    task = xTaskCreate(captivePortalEthSaveTask, "eth_save_task", 8192, params, 5, nullptr);
+#endif
+    if (task != pdPASS) {
+      ESP_LOGE(TAG, "Failed to create Ethernet save task");
+      delete params;
+      httpd_req_async_handler_complete(reqCopy);
+      return sendJsonError(req, "Failed to create save task");
+    }
+
+    return ESP_OK;
+  }
 
   httpd_resp_set_type(req, "application/json");
   std::string response = JsonBuilder::object()

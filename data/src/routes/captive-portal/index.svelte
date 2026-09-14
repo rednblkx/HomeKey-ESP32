@@ -42,6 +42,7 @@
 	let showNetworkList = $state(false);
 	let activeTab = $state<'wifi' | 'hardware' | 'network'>('wifi');
 	let acquiredIP = $state("");
+	let saveMessage = $state("");
 
 	// Derived values for NFC/Ethernet presets
 	let nfcPresets : NfcGpioPinsPreset = $derived(route.meta.captivePortalData?.nfcPresets ?? { presets: [] });
@@ -199,6 +200,7 @@
 			const result = await saveCaptivePortalConfig(payload);
 			if (result.success) {
 				acquiredIP = result.data.ip_addr;
+				saveMessage = result.message;
 				saved = true;
 				// Trigger reboot after short delay
 				setTimeout(async () => {
@@ -223,9 +225,11 @@
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
 			</svg>
 			<div>
-				<span class="font-bold">WiFi connection successful!</span>
+				<span class="font-bold">{config.ethernetEnabled ? 'Ethernet' : 'WiFi'} connection successful!</span>
         <div class="font-bold">IP Address: {acquiredIP}</div>
-				<div class="text-sm">Configuration saved. The device is now rebooting and will connect to your network...</div>
+				{#if saveMessage}
+				<div class="text-sm">{saveMessage}</div>
+				{/if}
 			</div>
 		</div>
 		{:else}
