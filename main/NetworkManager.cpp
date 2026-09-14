@@ -83,28 +83,52 @@ void NetworkManager::begin() {
   }
 
   const auto &miscConfig = m_configManager.getConfig<espConfig::misc_config_t>();
-  if (miscConfig.ethernetEnabled) {
-    startEthernet(miscConfig);
-  }
 
-  initWifi();
-
+  // Uplink policy, in order of precedence:
+  //   1. Ethernet, when enabled and working
+  //   2. WiFi, when ETH is disabled, or ETH fails to acquire an IP within
+  //      kEthUplinkWaitMs of boot.
+  //   3. AP config mode, only when neither can provide a connection.
+  const bool ethEnabled = miscConfig.ethernetEnabled;
   WifiCreds creds{};
-  if (loadCreds(creds) && creds.ssid[0] != '\0') {
+  const bool hasWifiCreds = loadCreds(creds) && creds.ssid[0] != '\0';
+  if (hasWifiCreds) {
     m_staSsid = creds.ssid;
-    startSta();
-  } else {
-    ESP_LOGW(TAG, "No WiFi credentials stored, starting AP config mode");
-    startApMode();
   }
+
+  if (ethEnabled) {
+    startEthernet(miscConfig);
+    initWifi();
+
+    if (!m_ethUp) {
+      ESP_LOGI(TAG, "Waiting up to %d ms for Ethernet to acquire an IP...",
+               kEthUplinkWaitMs);
+      for (int elapsed = 0; elapsed < kEthUplinkWaitMs && !m_ethUp; elapsed += 100) {
+        vTaskDelay(pdMS_TO_TICKS(100));
+      }
+    }
+    if (m_ethUp) {
+      ESP_LOGI(TAG, "Using Ethernet uplink");
+      return; // WiFi STA stays down; ETH is the uplink, period.
+    }
+    ESP_LOGW(TAG, "Ethernet did not acquire an IP in time, falling back to WiFi");
+  } else {
+    initWifi();
+  }
+
+  if (hasWifiCreds) {
+    startSta();
+    return; // STA connects asynchronously; Got IP fires the callback.
+  }
+
+  ESP_LOGW(TAG, "No uplink available (ETH: %s, WiFi: no credentials) — starting AP config mode",
+           ethEnabled ? "enabled, no IP" : "disabled");
+  startApMode();
 }
 
 void NetworkManager::initWifi() {
   m_wifiEvents = xEventGroupCreate();
 
-  // Only the STA netif is created up front. The AP netif is created lazily
-  // in startAp() — the access point must never come up just because the
-  // driver supports it.
   esp_netif_create_default_wifi_sta();
 
   wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -141,17 +165,12 @@ void NetworkManager::startSta() {
           sizeof(wifi_config.sta.ssid) - 1);
   strncpy(reinterpret_cast<char *>(wifi_config.sta.password), creds.pwd,
           sizeof(wifi_config.sta.password) - 1);
-  // WPA3 must stay on; PMF required for it (matches previous WPA2/WPA3 setup).
   wifi_config.sta.pmf_cfg.capable = true;
   wifi_config.sta.pmf_cfg.required = false;
 
   m_retryCount = 0;
   ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
   ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
-  // The driver was already started in initWifi() (WIFI_MODE_NULL); switching
-  // mode on a started driver is legal, but calling esp_wifi_start() again is
-  // not (ESP_ERR_INVALID_STATE). Kick the connection explicitly — the STA
-  // does not auto-connect just because a config is set.
   esp_wifi_connect();
   m_staStarted = true;
 }
@@ -161,43 +180,101 @@ void NetworkManager::handleStaGotIp(esp_event_base_t, int32_t, void *data) {
   char ip[16];
   inet_ntoa_r(event->ip_info.ip, ip, sizeof(ip));
   ESP_LOGI(TAG, "Got IP: %s", ip);
-  m_anyUp = true;
   m_retryCount = 0;
   if (m_wifiEvents) xEventGroupSetBits(m_wifiEvents, BIT0);
   if (m_testInProgress) return; // commitConnection() fires the callback later
-  if (m_conn_cb) m_conn_cb(1);
+  handleUplinkUp();
 }
 
 void NetworkManager::commitConnection() {
   m_testInProgress = false;
-  m_apMode = false;
-  // Drop the AP: the save flow only keeps it alive long enough to deliver
-  // the HTTP response over the portal association. Connected operation is
-  // STA-only.
-  esp_wifi_set_mode(WIFI_MODE_STA);
+  handleUplinkUp();
+}
+
+/**
+ * @brief Single-shot connected transition.
+ *
+ * A device may have several uplinks (WiFi + Ethernet); "we are online" is a
+ * device-level state, not a per-interface event. The first interface to get
+ * an IP fires the connected callback once; later uplinks are additive and
+ * must NOT restart the web/MQTT stack (each transition kills every client
+ * connection and rebinds the server).
+ */
+void NetworkManager::handleUplinkUp() {
+  if (m_anyUp) {
+    return; // already connected via some interface — nothing to transition
+  }
+  m_anyUp = true;
+  tearDownAp();
   if (m_conn_cb) m_conn_cb(1);
+}
+
+void NetworkManager::tearDownAp() {
+  if (!m_apMode) return;
+  m_apMode = false;
+  if (m_ethUp && m_staSsid.empty()) {
+    esp_wifi_set_mode(WIFI_MODE_NULL);
+  } else {
+    esp_wifi_set_mode(WIFI_MODE_STA);
+  }
+  ESP_LOGI(TAG, "SoftAP torn down (uplink: %s)", m_ethUp ? "ETH" : "STA");
+}
+
+/**
+ * @brief Ethernet link lost. If WiFi credentials exist, bring the STA up as
+ *        the fallback uplink. Without credentials there is nothing to fail
+ *        over to — the connected flow just keeps running on a dead netif
+ *        until the link returns (the callback model has no "offline" state).
+ */
+void NetworkManager::onEthDown() {
+  if (m_staStarted) {
+    return; // WiFi STA already running — nothing to fail over to
+  }
+  WifiCreds creds{};
+  if (loadCreds(creds) && creds.ssid[0] != '\0') {
+    m_staSsid = creds.ssid;
+    ESP_LOGI(TAG, "ETH lost — attempting WiFi connection");
+    startSta();
+  }
+}
+
+/**
+ * @brief Ethernet link (re)established and has an IP. Per policy, Ethernet
+ *        is the preferred uplink: if WiFi STA is connected, disconnect it.
+ */
+void NetworkManager::onEthUp() {
+  if (m_staStarted) {
+    ESP_LOGI(TAG, "Ethernet up — disconnecting WiFi STA");
+    m_staStarted = false;
+    esp_wifi_disconnect();
+    esp_wifi_set_mode(WIFI_MODE_NULL);
+  }
 }
 
 void NetworkManager::handleStaDisconnected(esp_event_base_t, int32_t, void *) {
   if (!m_staStarted) return;
   if (m_apMode) return; // AP config mode owns the radio now
+  if (m_ethUp) {
+    // Ethernet is the uplink; the STA should not even be running. This
+    // disconnect is likely onEthUp() shutting WiFi down — nothing to do.
+    return;
+  }
 
   int retries = ++m_retryCount;
   if (retries <= kMaxRetry) {
     ESP_LOGW(TAG, "WiFi lost connection, retry %d/%d", retries, kMaxRetry);
     esp_wifi_connect();
-  } else {
-    ESP_LOGE(TAG, "WiFi connect failed after %d retries, starting AP config mode",
-             kMaxRetry);
-    startApMode();
+    return;
   }
+  ESP_LOGE(TAG, "WiFi connect failed after %d retries, no other uplink — starting AP config mode",
+           kMaxRetry);
+  startApMode();
 }
 
 void NetworkManager::startAp(bool dualMode) {
   const auto &miscConfig = m_configManager.getConfig<espConfig::misc_config_t>();
   const std::string ssid = apSsid();
 
-  // The AP netif must exist before the driver is switched into an AP mode.
   if (!m_apNetifCreated) {
     esp_netif_create_default_wifi_ap();
     m_apNetifCreated = true;
@@ -217,9 +294,6 @@ void NetworkManager::startAp(bool dualMode) {
   ap_config.ap.pmf_cfg.capable = true;
   ap_config.ap.pmf_cfg.required = true;
 
-  // Always APSTA: the STA interface exists (idle) so a later testConnect()
-  // can associate WITHOUT any mode transition — switching a live AP-only
-  // interface to APSTA restarts the AP and kicks every client.
   ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
   ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap_config));
   m_apMode = true;
@@ -228,9 +302,6 @@ void NetworkManager::startAp(bool dualMode) {
 
 void NetworkManager::startApMode() {
   m_staStarted = false;
-  // Switch the radio to AP mode BEFORE firing the callback: the web server
-  // checks esp_wifi_get_mode() to decide between the regular UI and the
-  // captive-portal routes, so the mode must already be AP when it starts.
   startAp(false);
   if (m_conn_cb) m_conn_cb(0);
 }
@@ -268,10 +339,6 @@ bool NetworkManager::testConnect(const std::string &ssid,
 
   m_testInProgress = true;
 
-  // The AP is already in APSTA mode (startAp guarantees it), so this is just
-  // a STA connect — no mode transition, no AP reconfiguration. The driver
-  // moves the softAP to the STA's channel with a CSA announcement when the
-  // association completes; portal clients follow it and stay associated.
   xEventGroupClearBits(m_wifiEvents, BIT0);
   esp_wifi_disconnect();
   ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
@@ -283,15 +350,12 @@ bool NetworkManager::testConnect(const std::string &ssid,
 
   if (connected) {
     ESP_LOGI(TAG, "Connected to %s, RSSI: %d", ssid.c_str(), rssi());
-    // Keep the STA association; commitConnection() switches to STA-only
-    // after the HTTP response has been delivered over the (still-up) AP.
     return true;
   }
 
   ESP_LOGE(TAG, "Connection timeout after %d ms", timeoutMs);
   esp_wifi_disconnect();
   m_testInProgress = false;
-  // AP untouched — the portal client never noticed anything.
   return false;
 }
 
@@ -345,6 +409,7 @@ void NetworkManager::ethEventCb(void *arg, esp_event_base_t base, int32_t id,
       ESP_LOGI(TAG, "ETH Disconnected");
       self->m_ethUp = false;
       AppEventLoop::publish(ETH_APP_EVENT, ETH_DISCONNECTED, nullptr, 0);
+      self->onEthDown();
       break;
     case ETHERNET_EVENT_START:
       ESP_LOGI(TAG, "ETH Started");
@@ -364,9 +429,9 @@ void NetworkManager::ethEventCb(void *arg, esp_event_base_t base, int32_t id,
     inet_ntoa_r(event->ip_info.ip, ip, sizeof(ip));
     ESP_LOGI(TAG, "ETH Got IP: %s", ip);
     self->m_ethUp = true;
-    self->m_anyUp = true;
+    self->onEthUp();
     AppEventLoop::publish(ETH_APP_EVENT, ETH_GOT_IP, ip, strlen(ip));
-    if (self->m_conn_cb) self->m_conn_cb(1);
+    self->handleUplinkUp();
   }
 }
 

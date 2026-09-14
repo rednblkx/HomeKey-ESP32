@@ -62,6 +62,18 @@ public:
    */
   void commitConnection();
 
+  /** Stop serving the softAP/captive portal once a real uplink exists. */
+  void tearDownAp();
+
+  /** Single-shot connected transition: fires the callback on the first
+   *  uplink only; later uplinks are additive and change nothing. */
+  void handleUplinkUp();
+
+  /** Ethernet failover hooks: start WiFi when ETH drops; drop WiFi when
+   *  ETH (re)connects — Ethernet is the preferred uplink. */
+  void onEthDown();
+  void onEthUp();
+
   /** Status queries for the web UI (old WiFi.RSSI()/SSID()/isConnected()). */
   bool isConnected() const;
   std::string ssid() const;
@@ -102,6 +114,7 @@ private:
   std::atomic<bool> m_testInProgress{false};
   std::string m_staSsid;
   static constexpr int kMaxRetry = 8;
+  static constexpr int kEthUplinkWaitMs = 10000;
 
   // AP netif is created lazily on first startAp() (see initWifi comment).
   bool m_apNetifCreated = false;
