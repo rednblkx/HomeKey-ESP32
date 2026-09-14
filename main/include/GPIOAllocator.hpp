@@ -27,14 +27,14 @@ inline constexpr uint8_t RESTRICTED_PINS[] = {
   1, 3, 6, 7, 8, 11, 16, 17
 };
 inline constexpr uint8_t STRAPPING_PINS[] = {
-  0, 2, 4, 15
+  0, 2
 };
 #elifdef CONFIG_IDF_TARGET_ESP32C3
 inline constexpr uint8_t RESTRICTED_PINS[] = {
   12, 13, 14, 15, 16, 17, 18, 19
 };
 inline constexpr uint8_t STRAPPING_PINS[] = {
-  2, 4, 5, 6, 7, 8, 9, 20, 21
+  2, 8, 9, 20, 21
 };
 #elifdef CONFIG_IDF_TARGET_ESP32S3
 #if defined(CONFIG_ESPTOOLPY_OCT_FLASH) || defined(CONFIG_SPIRAM_MODE_OCT)
