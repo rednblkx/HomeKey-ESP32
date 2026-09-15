@@ -16,6 +16,7 @@ This section provides an overview of the public APIs implemented in the HomeKey-
 *   **[NfcManager](NfcManager):** Multi-reader NFC driver (PN532 SPI, PN7161 SPI and ST25R3916 I2C), ECP frame broadcasting, and DigitalDoorKey integration.
 *   **[ReaderDataManager](ReaderDataManager):** Storage for Apple HomeKey reader keys and issuer endpoint data.
 *   **[WebServerManager](WebServerManager):** Async HTTP/HTTPS web server, Svelte 5 WebUI with `sv-router`, WebSockets, and certificate management.
+*   **[EthernetDriver](EthernetDriver):** Dedicated module for Ethernet initialization, GPIO pin leasing, and lifecycle event handling (start, link, IP assignment) over the `AppEventLoop`.
 
 ## Event System (AppEventLoop)
 The project uses the `AppEventLoop` system for internal communication between components. This is a modern C++ wrapper around ESP-IDF's native event loop. See [AppEventLoop](AppEventLoop) for details.
