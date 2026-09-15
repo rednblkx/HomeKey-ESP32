@@ -27,12 +27,12 @@ Constructs a new `WebServerManager` instance. The constructor initializes refere
 
 **Signature:**
 ```cpp
-WebServerManager(ConfigManager& configManager, ReaderDataManager& readerDataManager);
+WebServerManager(ConfigManager& configManager, NvsCredentialStore& readerDataManager);
 ```
 
 **Parameters:**
 *   `configManager`: A reference to the `ConfigManager` for accessing and modifying device configurations.
-*   `readerDataManager`: A reference to the `ReaderDataManager` for retrieving HomeKey-related information.
+*   `readerDataManager`: A reference to the `NvsCredentialStore` for retrieving HomeKey-related information.
 
 ### ~WebServerManager()
 
@@ -68,11 +68,11 @@ void end();
 
 ## API Endpoints (Routes)
 
-The server exposes the following categories of endpoints. All are subject to Basic HTTP Authentication if enabled.
+The server exposes the following categories of endpoints. All are subject to Basic HTTP Authentication if enabled — except the static/asset routes and the captive-portal endpoints, which are intentionally unauthenticated (the WebSocket uses session-based authentication instead).
 
 ### Static Content
 
-*   `GET /static/*`, `GET /_app/*`, `GET /*`: Serves static files for the web UI from the LittleFS filesystem. It automatically handles content types and serves pre-compressed `.gz` files to capable browsers.
+*   `GET /static/*`, `GET /assets/*`, `GET /*`: Serves static files for the web UI from the LittleFS filesystem. It automatically handles content types and serves pre-compressed `.gz` files to capable browsers.
 
 ### Configuration Management
 
@@ -100,16 +100,18 @@ These endpoints are available when the device is in Access Point configuration m
 
 ### Over-the-Air (OTA) Updates
 
-*   `POST /ota/firmware`: Initiates an asynchronous firmware update. The binary firmware file should be the request body. An optional `?skipReboot=true` query parameter can be used to prevent an automatic reboot after a successful update.
-*   `POST /ota/littlefs`: Initiates an asynchronous update of the LittleFS filesystem. The filesystem image should be the request body.
+Both OTA uploads share a single `POST /ota/*` route; the last URI segment selects the upload type:
+
+*   `POST /ota/upload?skipReboot=<bool>`: Initiates an asynchronous firmware update. The binary firmware file should be the request body. The optional `skipReboot=true` query parameter prevents the automatic reboot after a successful update.
+*   `POST /ota/littlefs?skipReboot=<bool>`: Initiates an asynchronous update of the LittleFS filesystem. The filesystem image should be the request body.
 
 ### Certificate Management
 
-*   `POST /certificates/upload?type=<type>`: Uploads a new SSL/TLS certificate. The certificate content is the request body.
-    *   **MQTT SSL/TLS types:** `ca`, `client`, `privateKey`
-    *   **HTTPS types:** `serverCert`, `serverKey`, `serverCa` (optional for client cert validation)
-*   `GET /certificates/status`: Returns the status of all stored certificates, including issuer, subject, expiration, fingerprint, and validity period. Includes both MQTT and HTTPS certificates.
-*   `DELETE /certificates/<type>`: Deletes the specified certificate `type`.
+All certificate operations share a single `/certificates` path; the HTTP method distinguishes the action and the numeric `type` query parameter selects the certificate (matching the `espConfig::CertType` enum: `0` = MQTT CA, `1` = MQTT client, `2` = MQTT private key, `3` = HTTPS server cert, `4` = HTTPS private key, `5` = HTTPS CA):
+
+*   `POST /certificates?type=<type>`: Uploads a new SSL/TLS certificate. The PEM content is the request body (maximum 8 KB).
+*   `GET /certificates`: Returns the status of all stored certificates, including issuer, subject, expiration, SHA1 fingerprint, serial number, and key-match status. Includes both MQTT and HTTPS certificates.
+*   `DELETE /certificates?type=<type>`: Deletes the specified certificate `type`.
 
 ## WebSocket Interface
 
@@ -141,9 +143,9 @@ The server pushes the following JSON messages to all connected clients:
 
 ### Client-to-Server Messages
 
-Clients can send JSON messages to request information:
+Clients can send JSON messages to request information or adjust runtime settings:
 
-*   **Ping**: The server will respond with a `pong` message.
+*   **Ping**: The server will respond with a `pong` message carrying a `timestamp` (milliseconds).
     ```json
     {"type":"ping"}
     ```
@@ -155,3 +157,20 @@ Clients can send JSON messages to request information:
     ```json
     {"type":"sysinfo"}
     ```
+*   **Request OTA Info**: The server will respond with the current `ota_status`.
+    ```json
+    {"type":"ota_info"}
+    ```
+*   **Set Log Level**: Sets the global log level (0–5; `ERROR`=1, `WARN`=2, `INFO`=3, `DEBUG`=4, `VERBOSE`=5) at runtime and persists it to NVS. The server responds with the updated `sysinfo`.
+    ```json
+    {"type":"set_log_level","data":3}
+    ```
+*   **Set Log Backlog Size**: Sets the maximum number of log entries buffered for WebSocket broadcast (0–65535) and persists it to NVS. The server responds with the updated `sysinfo`.
+    ```json
+    {"type":"set_backlog_max_size","data":100}
+    ```
+
+Unknown message types receive an `error` response echoing the received type:
+```json
+{"type":"error","message":"Unknown message type","received_type":"..."}
+```

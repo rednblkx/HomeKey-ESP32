@@ -10,7 +10,7 @@ The class operates on an event-driven, asynchronous model. It subscribes to high
 
 #### Key System Features & Improvements
 
-*   **GPIO Allocator & Pin Safety (`GpioAllocator`):** Centralized, thread-safe GPIO allocation tracking system. Pin allocations across all hardware modules (NFC readers, Ethernet PHYs, Relays, Status LEDs, Buzzers, and HomeSpan pins) are leased via RAII `GpioLease` instances.
+*   **GPIO Allocator & Pin Safety (`GPIOAllocator`):** Centralized, thread-safe GPIO allocation tracking system. Pin allocations across all hardware modules (NFC readers, Ethernet PHYs, Relays, Status LEDs, and HomeSpan pins) are leased via RAII `GPIOLease` instances.
     *   **Target-Specific Strapping Pin Protection:** Validates requested GPIO pins against chip-specific boot strapping pin lists (ESP32, ESP32-S3, ESP32-C3, ESP32-C6).
     *   **SPI Bus Intersection Checks:** Validates SPI bus sharing between NFC controllers and SPI Ethernet modules, preventing pin ownership conflicts.
     *   **Strapping Override Option:** Supports `overrideStrappingRestriction` for custom hardware designs.
@@ -35,23 +35,27 @@ The class operates on an event-driven, asynchronous model. It subscribes to high
 
 ---
 
-## 2. Public API & GpioAllocator
+## 2. Public API & GPIOAllocator
 
-### `GpioAllocator` Subsystem
+### `GPIOAllocator` Subsystem
 
-The `GpioAllocator` namespace provides thread-safe GPIO allocation tracking:
+The `GPIOAllocator` class provides thread-safe GPIO allocation tracking. Pins are leased via RAII `GPIOLease` instances obtained from the singleton; a `PinRole` describes what the pin is used for (SPI/I2C bus pins are shareable as passive roles, LEDs are arbitrated, plain GPIOs are exclusive) and a `PinConsumer` identifies the subsystem (e.g., `Nfc`, `Eth`, `HomeKit`, `Hardware`):
 
 ```cpp
-// Example: Acquire a lease for a relay output pin
-auto lease = GpioAllocator::acquire(gpio_num, Owner::LOCK_ACTION);
-if (!lease.isValid()) {
-    // Pin conflict or invalid pin assignment
+// Example: Acquire a lease for a lock action output pin
+auto lease = GPIOAllocator::instance().acquire(
+    static_cast<gpio_num_t>(pin), GPIO_MODE_OUTPUT,
+    GPIOAllocator::PinRole::GpioOut,
+    GPIOAllocator::PinConsumer::Hardware, "LOCK_ACTION");
+if (!lease.has_value()) {
+    // Pin conflict, restricted/strapping pin, or invalid pin assignment
 }
 ```
 
-*   `acquire(int gpio_num, Owner owner)`: Acquires a GPIO pin lease. Validates against target strapping pins and active leases. Returns a `GpioLease`.
-*   `release(int gpio_num, Owner owner)`: Explicitly releases an acquired pin lease.
-*   `checkStrappingPins(int gpio_num)`: Returns `true` if the requested pin is a boot strapping pin for the target ESP32 chip family.
+*   `acquire(gpio_num_t pin, gpio_mode_t mode, PinRole role, PinConsumer consumer, const char* tag)`: Acquires a GPIO pin lease. Validates against target-specific restricted and strapping pins (with the `overrideStrappingRestriction` downgrade option for strapping pins) and active leases. Returns `std::expected<GPIOLease, GPIOAllocatorError>`.
+*   A lease acquired for `PIN_UNSET` (255) is an empty lease whose accessors safely no-op, so unset configuration values don't need special-casing at call sites.
+*   Leases are released automatically when the `GPIOLease` goes out of scope (RAII).
+*   Shared roles: passive bus pins (SPI SCK/MISO/MOSI, I2C SDA/SCL) may be co-held by multiple consumers (e.g., NFC reader + SPI Ethernet on the same bus); `PinRole::Led` pins are shareable and arbitrated via `SharedLed` (HomeSpan `Blinkable`).
 
 ### Constructor
 
@@ -79,7 +83,7 @@ HardwareManager(const espConfig::actions_config_t& miscConfig);
 
 #### `begin()`
 
-Initializes all hardware resources via `GpioAllocator` and starts background tasks. This method must be called after the constructor and before any other methods.
+Initializes all hardware resources via `GPIOAllocator` and starts background tasks. This method must be called after the constructor and before any other methods.
 
 **It performs the following actions:**
 *   Configures GPIO pins for feedback (success/fail LEDs), the lock action, and the alternate action mechanism.

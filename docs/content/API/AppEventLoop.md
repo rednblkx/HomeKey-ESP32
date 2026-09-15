@@ -28,6 +28,10 @@ The event system defines several event bases, each with its own set of event IDs
 | `HK_EVENT` | HomeKit internal events | `HK_INTERNAL_EVENT` |
 | `HW_EVENT` | Hardware actions | `HW_ACTION`, `HW_ALT_ACTION`, `HW_CONFIG_CHANGED` |
 | `MQTT_EVENT` | MQTT connection status | `MQTT_STATUS_CHANGED` |
+| `ETH_APP_EVENT` | Ethernet lifecycle | `ETH_STARTED`, `ETH_GOT_IP`, `ETH_LOST_IP`, `ETH_DISCONNECTED`, `ETH_STOPPED` |
+
+> [!NOTE]
+> The `HK_EVENT` base carries a single event ID (`HK_INTERNAL_EVENT`), but the payload is a `HomekitEvent` struct whose `type` field further distinguishes the sub-events: `SETUP_CODE_CHANGED`, `BTR_PROP_CHANGED`, `ACCESSDATA_CHANGED`, and `DEBUG_AUTH_FLOW`. Subscribers should deserialize the payload and switch on this type.
 
 ## Public API
 
@@ -60,8 +64,10 @@ auto subscription = AppEventLoop::subscribe(
     LOCK_EVENT,
     LOCK_STATE_CHANGED,
     [](const uint8_t* data, size_t size) {
-        EventLockState event;
-        // Deserialize data into event struct
+        std::span<const uint8_t> payload(data, size);
+        std::error_code ec;
+        EventLockState s = alpaca::deserialize<EventLockState>(payload, ec);
+        if (ec) return; // handle deserialization failure
         // Handle the lock state change
     }
 );
@@ -91,11 +97,15 @@ EventLockState lockState;
 lockState.currentState = LOCKED;
 lockState.targetState = LOCKED;
 
+// Serialize the payload before publishing — all subscribers deserialize with alpaca
+std::vector<uint8_t> d;
+size_t d_len = alpaca::serialize(lockState, d);
+
 esp_err_t err = AppEventLoop::publish(
     LOCK_EVENT,
     LOCK_STATE_CHANGED,
-    &lockState,
-    sizeof(lockState)
+    d.data(),
+    d_len
 );
 ```
 
@@ -123,66 +133,81 @@ void reset();
 
 ## Data Structures
 
+All event payloads are defined in `main/include/eventStructs.hpp` and serialized with [alpaca](https://github.com/p-ranav/alpaca) before publishing. The structs below reflect the current definitions.
+
 ### EventLockState
 
-Published on `LOCK_EVENT` (`LOCK_STATE_CHANGED`).
+The payload for **all** lock events: `LOCK_EVENT` (`LOCK_STATE_CHANGED`, `LOCK_UPDATE_STATE`, `LOCK_TARGET_STATE_CHANGED`, and `LOCK_OVERRIDE_STATE`).
 
 ```cpp
 struct EventLockState {
-    uint8_t currentState = 255;
-    uint8_t targetState = 255;
-    uint8_t source;
+  uint8_t currentState = 255;
+  uint8_t targetState = 255;
+  uint8_t source = 0;
 };
 ```
 
-### EventLockTargetState
+The `source` field carries a `LockManager::Source` value (`INTERNAL`, `HOMEKIT`, `NFC`, `MQTT`) describing the origin of the state change.
 
-Published on `LOCK_EVENT` (`LOCK_TARGET_STATE_CHANGED`).
-
-```cpp
-struct EventLockTargetState {
-    uint8_t state;
-    uint8_t source;
-};
-```
-
-### EventLockOverrideState
-
-Published on `LOCK_EVENT` (`LOCK_OVERRIDE_STATE`).
-
-```cpp
-struct EventLockOverrideState {
-    uint8_t currentState;
-    uint8_t targetState;
-};
-```
-
-### EventHomeKeyTap
+### EventHKTap
 
 Published on `NFC_EVENT` (`NFC_TAP_EVENT`) for HomeKey authentications.
 
 ```cpp
-struct EventHomeKeyTap {
-    std::string issuerId;
-    std::string endpointId;
+struct EventHKTap {
+  bool status;                        // true = successful authentication
+  std::vector<uint8_t> issuerId;      // empty on failure
+  std::vector<uint8_t> endpointId;    // empty on failure
+  std::vector<uint8_t> readerId;      // the reader's sub-identifier
 };
 ```
 
-### EventUidTap
+### EventTagTap
 
 Published on `NFC_EVENT` (`NFC_TAP_EVENT`) for generic NFC tag scans.
 
 ```cpp
-struct EventUidTap {
-    std::string uid;
-    std::string atqa;
-    std::string sak;
+struct EventTagTap {
+  std::vector<uint8_t> uid;
+  std::array<uint8_t,2> atqa;
+  uint8_t sak;
 };
 ```
 
-### EventMqttStatus
+### EventValueChanged
 
-Published on `MQTT_EVENT` (`MQTT_STATUS_CHANGED`).
+Published on `HK_EVENT` (`HK_INTERNAL_EVENT`, wrapped in a `HomekitEvent`) and `HW_EVENT` (`HW_CONFIG_CHANGED`) when a configuration value changes.
+
+```cpp
+struct EventValueChanged {
+  std::string name = "";
+  uint8_t oldValue = 255;
+  uint8_t newValue = 255;
+  std::string str = "";
+};
+```
+
+### HomekitEvent
+
+The envelope published on `HK_EVENT` (`HK_INTERNAL_EVENT`). Its `type` field discriminates the sub-events; the `data` member holds the serialized payload (commonly an `EventValueChanged`).
+
+```cpp
+enum HomekitEventType : uint8_t {
+    SETUP_CODE_CHANGED,
+    BTR_PROP_CHANGED,
+    ACCESSDATA_CHANGED,
+    DEBUG_AUTH_FLOW
+};
+
+struct HomekitEvent {
+    HomekitEventType type;
+    std::vector<uint8_t> data;
+};
+```
+
+### EventMqttStatus, EventNfcStatus, EventBinaryStatus
+
+Declared in `eventStructs.hpp` (with the `MqttErrorCode` enum) but currently **unused** — MQTT status is polled via `MqttManager` getters and NFC status via `NfcManager::isConnected()` rather than delivered as events.
 
 ```cpp
 enum class MqttErrorCode : uint8_t {
@@ -194,37 +219,11 @@ enum class MqttErrorCode : uint8_t {
     TIMEOUT = 5,
     UNKNOWN = 255
 };
-
-struct EventMqttStatus {
-    bool connected;
-    MqttErrorCode errorCode;
-    std::string errorMessage;
-};
-```
-
-### EventNfcStatus
-
-Published on `NFC_EVENT` (`NFC_STATUS_CHANGED`).
-
-```cpp
-struct EventNfcStatus {
-    bool connected;
-    uint8_t firmwareVersionMajor;
-    uint8_t firmwareVersionMinor;
-};
 ```
 
 ## Migration from event_bus
 
-The `AppEventLoop` replaces the previous custom `event_bus` implementation. Key differences:
-
-| Aspect | Old (event_bus) | New (AppEventLoop) |
-|--------|-----------------|-------------------|
-| Topic strings | String-based topics (`"lock/stateChanged"`) | Typed event bases and IDs (`LOCK_EVENT`, `LOCK_STATE_CHANGED`) |
-| Subscription | `EventBus::Bus::instance().subscribe()` | `AppEventLoop::subscribe()` |
-| Publishing | `EventBus::Bus::instance().publish()` | `AppEventLoop::publish()` |
-| Event data | `std::vector<uint8_t>` serialization | Raw pointers with size |
-| Thread safety | Custom implementation | ESP-IDF native |
+The `AppEventLoop` replaced the previous custom `event_bus` implementation (removed in this release). The key difference: string-based topics (`"lock/stateChanged"`) were replaced by typed event bases and IDs (`LOCK_EVENT`, `LOCK_STATE_CHANGED`), and event payloads are now alpaca-serialized structs posted to ESP-IDF's native, thread-safe event loop.
 
 ## Internal Workings
 
@@ -262,4 +261,4 @@ When a `SubscriptionHandle` is destroyed or `reset()` is called:
 
 4. **Check is_valid():** Before manually calling `reset()` on a handle, check `is_valid()` to avoid unnecessary operations.
 
-5. **Event Serialization:** Use consistent serialization methods (e.g., MessagePack, Protocol Buffers) when passing complex data structures through events.
+5. **Event Serialization:** Serialize complex payloads with alpaca (`alpaca::serialize` / `alpaca::deserialize`) before publishing and inside callbacks — this is the wire format every subscriber in the codebase expects.

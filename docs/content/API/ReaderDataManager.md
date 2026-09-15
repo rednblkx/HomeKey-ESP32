@@ -4,41 +4,40 @@ title: "ReaderDataManager"
 
 ## Overview
 
-The `ReaderDataManager` class is a specialized data management component responsible for the persistence of all data related to the NFC reader's identity and its trusted HomeKey issuers. It provides a crucial service by storing, retrieving, and managing the complex data structures required for HomeKey authentication, ensuring this data survives device reboots.
+The reader data storage component is implemented by the `NvsCredentialStore` class (header: `main/include/ReaderDataManager.hpp`), which implements the `ddk::CredentialStore` interface from the DigitalDoorKey (DDK) component. It is the persistent store for the reader's cryptographic identity and the list of trusted HomeKey issuers and their endpoints.
 
-The class uses the ESP-IDF's Non-volatile Storage (NVS) system as its backend and employs the MessagePack binary serialization format for efficient storage of the nested data structures, which include cryptographic keys, identifiers, and lists of trusted issuers and their associated endpoints.
+All data is serialized with MessagePack and persisted to a single NVS blob under the `"SAVED_DATA"` namespace. A mutex protects the in-memory state so UI/telemetry readers cannot race with authentication-path mutations.
 
 ## Key Responsibilities
 
-*   **Data Persistence:** Manages the loading and saving of the `readerData_t` structure to and from NVS.
-*   **In-Memory Cache:** Holds the authoritative `readerData_t` object in memory for fast access by other components like the `NfcManager`.
-*   **Data Integrity:** Provides methods to safely update, add to, or delete the stored data.
-*   **Serialization:** Handles the serialization (packing) and deserialization (unpacking) of the complex, nested `readerData_t` struct into the MessagePack format.
-*   **Issuer Management:** Includes logic to add new HomeKey issuers to the trusted list, avoiding duplicates.
+*   **Identity Storage:** Holds the reader's `ddk::ReaderIdentity` (private key, public key, public key X, group identifier, sub/unique identifier, and an optional certificate reserved for future Aliro support).
+*   **Issuer Management:** Maintains the list of `ddk::Issuer` entries, each with its ID and enrolled endpoints.
+*   **Persistence:** Loads on `begin()` and writes back on `save()`, using MessagePack with the DDK map keys (`reader_private_key`, `reader_public_key`, `reader_key_x`, `group_identifier`, `unique_identifier`, `issuers`).
+*   **Credential Store Contract:** Provides the identity, issuer list, and provisioning hooks that the DDK authentication flow consumes.
 
 ## Public API
 
-### ReaderDataManager()
+### NvsCredentialStore()
 
-Constructs a new `ReaderDataManager` instance. The constructor initializes the manager in an uninitialized state.
+Constructs the store. No NVS access happens until `begin()` is called.
 
 **Signature:**
 ```cpp
-ReaderDataManager();
+NvsCredentialStore();
 ```
 
-### ~ReaderDataManager()
+### ~NvsCredentialStore()
 
-Destructor for the `ReaderDataManager`. It ensures that if an NVS handle was opened, it is properly closed to release system resources.
+Closes the NVS handle if one was opened.
 
 **Signature:**
 ```cpp
-~ReaderDataManager();
+~NvsCredentialStore() override;
 ```
 
 ### begin()
 
-Initializes the manager by opening a handle to the NVS namespace. It must be called before any other methods. Upon successful initialization, it automatically calls `load()` to populate the in-memory data from NVS.
+Opens the `"SAVED_DATA"` NVS namespace and calls `load()` to populate the in-memory identity and issuer list from NVS. Must be called before any other method.
 
 **Signature:**
 ```cpp
@@ -48,76 +47,65 @@ bool begin();
 **Returns:**
 *   `bool`: `true` if the NVS handle was opened successfully, `false` otherwise.
 
-### getReaderData()
+### reader_identity()
 
-Provides read-only access to the entire in-memory `readerData_t` structure.
-
-**Signature:**
-```cpp
-const readerData_t& getReaderData() const;
-```
-
-**Returns:**
-*   `const readerData_t&`: A constant reference to the cached reader data.
-
-### getReaderGid()
-
-A convenience method to get the reader's Group Identifier (GID).
+Returns a constant reference to the reader's identity (implements `ddk::CredentialStore`).
 
 **Signature:**
 ```cpp
-const std::vector<uint8_t>& getReaderGid() const;
+const ddk::ReaderIdentity& reader_identity() const override;
 ```
 
 **Returns:**
-*   `const std::vector<uint8_t>&`: A constant reference to the reader GID byte vector.
+*   `const ddk::ReaderIdentity&`: The reader identity. Notable members:
+    *   `private_key` (`"reader_private_key"`)
+    *   `public_key` (`"reader_public_key"`, derived at provisioning)
+    *   `public_key_x` (`"reader_key_x"`, derived at provisioning)
+    *   `group_identifier` — the Reader GID (8 bytes when provisioned)
+    *   `sub_identifier` — the reader's unique identifier ("Reader ID" in the WebUI)
 
-### getReaderId()
+### provision_identity()
 
-A convenience method to get the reader's Unique Identifier.
+Replaces the stored reader identity (implements `ddk::CredentialStore`). Does not save by itself; call `save()` to persist.
 
 **Signature:**
 ```cpp
-const std::vector<uint8_t>& getReaderId() const;
+void provision_identity(const ddk::ReaderIdentity& identity) override;
 ```
 
-**Returns:**
-*   `const std::vector<uint8_t>&`: A constant reference to the reader ID byte vector.
+### issuers()
 
-### saveData()
-
-Serializes the current in-memory `readerData_t` structure to MessagePack and writes the resulting binary blob to NVS. This is the primary method for persisting any changes made to the reader data.
+Returns a mutable span over the stored issuer list (implements `ddk::CredentialStore`).
 
 **Signature:**
 ```cpp
-const readerData_t* saveData();
+ddk::span<ddk::Issuer> issuers() override;
 ```
 
-**Returns:**
-*   `const readerData_t*`: A pointer to the current in-memory data on success, or `nullptr` if the save operation fails.
+### save()
 
-**Note:**
-This function persists a snapshot of the in-memory data to NVS. The returned pointer refers to the manager's current
-in-memory state, which may change concurrently. If you need a consistent snapshot, call `getReaderDataCopy()`.
-
-### updateReaderData()
-
-Replaces the entire in-memory `readerData_t` object with a new one and then calls `saveData()` to persist the change.
+Serializes the current in-memory state (identity + issuers) to MessagePack and writes it to the NVS blob.
 
 **Signature:**
 ```cpp
-const readerData_t* updateReaderData(const readerData_t& newData);
+void save() override;
 ```
 
-**Parameters:**
-*   `newData`: The new `readerData_t` object to store.
+### snapshot()
+
+Returns a consistent, mutex-protected copy of everything, for UI/telemetry tasks that must not race with authentication-path mutations.
+
+**Signature:**
+```cpp
+Snapshot snapshot() const;
+```
 
 **Returns:**
-*   `const readerData_t*`: A pointer to the updated in-memory data on success, or `nullptr` on failure.
+*   `Snapshot`: A struct containing a `ddk::ReaderIdentity identity` and a `std::vector<ddk::Issuer> issuers` copy.
 
 ### eraseReaderKey()
 
-Clears the reader's own cryptographic key material (private key, public key, GID, etc.) from the in-memory data and then saves this cleared state to NVS. The list of issuers is preserved.
+Clears the reader's own key material. Does not touch the issuer list.
 
 **Signature:**
 ```cpp
@@ -125,11 +113,11 @@ bool eraseReaderKey();
 ```
 
 **Returns:**
-*   `bool`: `true` if the key was cleared and the save was attempted, `false` if the manager was not initialized.
+*   `bool`: `true` on success, `false` if the store is not initialized.
 
 ### deleteAllReaderData()
 
-Completely wipes all reader data. It clears the in-memory `readerData_t` object and erases the corresponding key from NVS, effectively performing a factory reset of the reader's data.
+Erases everything (identity and issuers) and publishes an `HK_EVENT` / `HK_INTERNAL_EVENT` carrying `HomekitEventType::ACCESSDATA_CHANGED` so subscribers re-synchronize.
 
 **Signature:**
 ```cpp
@@ -137,30 +125,39 @@ bool deleteAllReaderData();
 ```
 
 **Returns:**
-*   `bool`: `true` if the data was cleared from memory and NVS successfully, `false` otherwise.
+*   `bool`: `true` on success, `false` if the store is not initialized.
 
 ### addIssuerIfNotExists()
 
-Adds a new issuer to the in-memory list of trusted issuers. It checks for duplicates based on the `issuerId` to prevent adding the same issuer multiple times. Note that this method only modifies the in-memory data; `saveData()` must be called separately to persist the new issuer.
+Adds a new issuer if absent (matched by issuer ID). **Does not save** — the caller must call `save()` to persist.
 
 **Signature:**
 ```cpp
-bool addIssuerIfNotExists(const std::vector<uint8_t>& issuerId, const uint8_t* publicKey);
+bool addIssuerIfNotExists(const std::vector<uint8_t>& issuerId,
+                          const uint8_t* publicKey);
 ```
 
 **Parameters:**
 *   `issuerId`: The unique identifier for the new issuer.
-*   `publicKey`: A pointer to the issuer's public key.
+*   `publicKey`: A pointer to the issuer's long-term public key (LTPK).
 
 **Returns:**
 *   `bool`: `true` if a new issuer was added, `false` if an issuer with that ID already existed.
+
+### removeIssuerIfExists()
+
+Removes an issuer if present (matched by issuer ID). **Does not save** — the caller must call `save()` to persist. This is invoked when an Apple Home administrator unpairs a controller.
+
+**Signature:**
+```cpp
+bool removeIssuerIfExists(const std::vector<uint8_t>& issuerId);
+```
+
+**Returns:**
+*   `bool`: `true` if an issuer was removed, `false` if none matched.
 
 ## Internal Methods
 
 ### load()
 
-This private method is called by `begin()`. It reads the MessagePack blob from NVS, deserializes it using the `unpack_readerData_t` helper, and populates the in-memory `m_readerData` object. If no data is found in NVS, it initializes with a default, empty state.
-
-### Serialization and Deserialization
-
-The class contains a set of `pack_*` and `unpack_*` static helper functions. These functions are responsible for the detailed work of converting the nested `readerData_t`, `hkIssuer_t`, and `hkEndpoint_t` structs to and from the MessagePack format. They handle the mapping of struct members to map keys and correctly serialize different data types (integers, byte vectors, and nested objects).
+Private method called by `begin()`. It reads the MessagePack blob from NVS, deserializes it via the `unpack_bytes`-based helpers into the in-memory `identity_` and `issuers_`, and initializes with an empty state if no data is found.

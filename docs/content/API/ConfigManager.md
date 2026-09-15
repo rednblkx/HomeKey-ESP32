@@ -197,25 +197,28 @@ bool deserializeFromJson(const std::string& json_string);
 
 ### Certificate Management
 
+Certificates are identified by the `espConfig::CertType` enum (defined in `config.hpp`):
+
+| CertType | Purpose |
+|----------|---------|
+| `MQTT_CA` | CA certificate for MQTT broker verification |
+| `MQTT_CLIENT` | Client certificate for mutual TLS authentication |
+| `MQTT_PRIVATE_KEY` | Client private key |
+| `HTTPS_SERVER_CERT` | Server certificate for the HTTPS web interface |
+| `HTTPS_PRIVATE_KEY` | Server private key for HTTPS |
+| `HTTPS_CA_CERT` | (Optional) CA certificate for client certificate validation (mTLS) |
+
 #### `saveCertificate()`
 
 Validates and saves a PEM-formatted certificate or private key to NVS.
 
 **Signature:**
 ```cpp
-bool saveCertificate(const std::string& certType, const std::string& certContent);
+bool saveCertificate(espConfig::CertType certType, const std::string& certContent);
 ```
 
 **Parameters:**
-*   `certType`: The type of certificate to save. Must be one of:
-    *   **MQTT SSL/TLS types:**
-        *   `"ca"`: CA Certificate for MQTT broker verification
-        *   `"client"`: Client Certificate for mutual TLS authentication
-        *   `"privateKey"`: Client Private Key
-    *   **HTTPS types:**
-        *   `"serverCert"`: Server Certificate for HTTPS web interface
-        *   `"serverKey"`: Server Private Key for HTTPS
-        *   `"serverCa"`: (Optional) CA Certificate for client certificate validation
+*   `certType`: The type of certificate to save (see table above).
 *   `certContent`: A `std::string` containing the full PEM-formatted content.
 
 **Returns:**
@@ -227,11 +230,11 @@ Loads a previously saved certificate or private key from NVS.
 
 **Signature:**
 ```cpp
-std::string loadCertificate(const std::string& certType);
+std::string loadCertificate(espConfig::CertType certType);
 ```
 
 **Parameters:**
-*   `certType`: The type of certificate to load. MQTT types: `"ca"`, `"client"`, `"privateKey"`. HTTPS types: `"serverCert"`, `"serverKey"`, `"serverCa"`.
+*   `certType`: The type of certificate to load (see table above).
 
 **Returns:**
 *   `std::string`: The PEM-formatted certificate content, or an empty string if not found or if the manager is uninitialized.
@@ -242,32 +245,20 @@ Deletes a certificate or private key from NVS.
 
 **Signature:**
 ```cpp
-bool deleteCertificate(const std::string& certType);
+bool deleteCertificate(espConfig::CertType certType);
 ```
 
 **Parameters:**
-*   `certType`: The type of certificate to delete. MQTT types: `"ca"`, `"client"`, `"privateKey"`. HTTPS types: `"serverCert"`, `"serverKey"`, `"serverCa"`.
+*   `certType`: The type of certificate to delete (see table above).
 
 **Returns:**
 *   `bool`: `true` on successful deletion, `false` otherwise.
 
-### Certificate Validation & Status
-
-#### `validatePrivateKeyMatchesCertificate()`
-
-Performs a cryptographic check to ensure that the currently stored client certificate and private key are a valid pair.
-
-**Signature:**
-```cpp
-bool validatePrivateKeyMatchesCertificate();
-```
-
-**Returns:**
-*   `bool`: `true` if the private key and certificate match, `false` if they do not, if one is missing, or if parsing fails.
+### Certificate Status
 
 #### `getCertificatesStatus()`
 
-Retrieves the status of all stored certificates (CA and client) and the private key. For certificates, it provides details like issuer, subject, and validity period.
+Retrieves the status of all stored certificates and private keys. For certificates, it provides details like issuer, subject, and validity period.
 
 **Signature:**
 ```cpp
@@ -276,10 +267,11 @@ std::vector<CertificateStatus> getCertificatesStatus();
 
 **Returns:**
 *   `std::vector<CertificateStatus>`: A vector of `CertificateStatus` structs. Each struct contains:
-    *   `type` (string): "ca", "client", "privateKey", "serverCert", "serverKey", or "serverCa".
+    *   `type` (`espConfig::CertType`): The certificate type.
     *   `issuer` (string): The certificate issuer's distinguished name (DN).
     *   `subject` (string): The certificate subject's DN.
-    *   `fingerprint` (string): SHA256 fingerprint of the certificate.
     *   `serial` (string): Certificate serial number.
-    *   `validity` (struct): Contains `from` and `to` date strings.
-    *   `keyMatch` (bool): For client/server certificates, indicates if it matches the corresponding private key.
+    *   `fingerprint` (string): SHA1 fingerprint of the certificate (colon-separated hex).
+    *   `expiration` (struct): Contains `from` and `to` date strings.
+    *   `keyMatchesCert` (bool): For certificate/key pairs, indicates if the stored private key matches the certificate.
+    *   `keyType` (string): The mbedTLS key algorithm name (e.g., `"RSA"` or `"EC"`).

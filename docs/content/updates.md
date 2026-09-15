@@ -46,7 +46,7 @@ If everything went smoothly, you should see the "Current Version" and "Running P
 *   The `*-firmware.bin` file for your ESP32 chip (e.g., `esp32-firmware.bin`, `esp32c3-firmware.bin`, or `esp32s3-firmware.bin`) from the [GitHub Releases page](https://github.com/rednblkx/HomeKey-ESP32/releases).
 *   The `littlefs.bin` file from the [GitHub Releases page](https://github.com/rednblkx/HomeKey-ESP32/releases).
 *   The IP address of your HomeKey-ESP32 device.
-*   (Optional) The OTA password, if you've set one in the [Configuration Guide](../configuration#homespan).
+*   (Optional) The OTA password, if you've set one in the [Configuration Guide](../configuration#524-homespan-settings).
     *   The default OTA password is `homespan-ota`
 
 ### 1.2.2. Update

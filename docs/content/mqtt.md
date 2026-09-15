@@ -25,7 +25,7 @@ The `UNLOCKING` and `LOCKING` states are used to indicate that the lock is in th
 
 ## 2. Core MQTT Topics: The Main Conversation
 
-Your HomeKey-ESP32 communicates its status and listens for commands on these core MQTT topics. Remember, you can customize these topics in the device's [Web Interface Configuration](../configuration#core-topics)!
+Your HomeKey-ESP32 communicates its status and listens for commands on these core MQTT topics. Remember, you can customize these topics in the device's [Web Interface Configuration](../configuration#321-core-topics)!
 
 | Topic | Description | Payload Examples |
 | :---- | :---------- | :--------------- |
@@ -34,10 +34,10 @@ Your HomeKey-ESP32 communicates its status and listens for commands on these cor
 | `<CLIENT_ID>/homekit/set_current_state` | **Subscribes** to this topic to set the current state of the lock. Useful for external systems to update the device's perceived state. | `0` (UNLOCKED), `1` (LOCKED), `2` (JAMMED), `3` (UNKNOWN) |
 | `<CLIENT_ID>/homekit/set_target_state` | **Subscribes** to this topic to set the target state of the lock. | To unlock: `0` To lock: `1` |
 | `<CLIENT_ID>/homekit/set_battery_lvl` | **Subscribes** to this topic to set the battery level to be shown in HomeKit. This is used if "Proxy Battery Enabled" is active in the WebUI. | `85` (for 85% battery) |
-| `<CLIENT_ID>/alt_action` | **Publishes** the status of the Alternate Action. | (Specific payload depends on configuration) |
+| `<CLIENT_ID>/alt_action` | **Publishes** the status of the Alternate Action. | `1` (sent when the alternate action is triggered) |
 
 > [!NOTE]
-> You will notice all topics set by default are prefixed by the client id, this was done so the topics are nicely organized under a unique identifier, however, you can set the topics to whatever you wish from the [WebUI](../configuration#core-topics)
+> You will notice all topics set by default are prefixed by the client id, this was done so the topics are nicely organized under a unique identifier, however, you can set the topics to whatever you wish from the [WebUI](../configuration#321-core-topics)
 
 **Example: Manually Locking Your Door via MQTT**
 
@@ -82,14 +82,14 @@ To monitor MQTT connection health programmatically, check the WebSocket interfac
 
 The project supports custom states, allowing you to map the lock's internal states to values that might be more familiar to your specific MQTT-based lock or system. This is super handy for seamless integration!
 
-*   **`<CLIENT_ID>/homekit/custom_state`**: **Publishes** the custom lock state. When custom states are enabled, this topic automatically receives updates whenever the lock state changes (e.g., via HomeKey tap, Home app control, or MQTT command).
-*   **`<CLIENT_ID>/homekit/set_custom_state`**: **Subscribes** to this topic to set the custom lock state.
+*   **`<CLIENT_ID>/homekit/custom_state`**: **Publishes** the custom lock action. When custom states are enabled, this topic receives an update whenever the lock reaches a final state — it publishes the configured `Unlock` action value when the target state becomes `UNLOCKED`, and the configured `Lock` action value when the target state becomes `LOCKED` (e.g., after a HomeKey tap, Home app control, or MQTT command). Transitional states (`UNLOCKING`/`LOCKING`) are not published to this topic.
+*   **`<CLIENT_ID>/homekit/set_custom_state`**: **Subscribes** to this topic to set the custom lock state. Accepts the configured numeric values for `Unlocking`, `Locking`, `Unlocked`, `Locked`, `Jammed`, and `Unknown`.
 
-You can enable and configure custom states, including defining your own custom lock actions and states, in the [Web Interface Configuration](../configuration/#322-custom-lock-states-actions) under the "Custom Lock States & Actions" section.
+You can enable and configure custom states, including defining your own custom lock actions and states, in the [Web Interface Configuration](../configuration/#322-custom-lock-states--actions) under the "Custom Lock States & Actions" section.
 
 ## 4. NFC Data: Who Just Tapped? 🕵️‍♀️
 
-When a HomeKey is used to authenticate, or a generic NFC tag is scanned, the device publishes data to the `homekey/auth` topic in a neat JSON format.
+When a HomeKey is used to authenticate, or a generic NFC tag is scanned, the device publishes data to the `<CLIENT_ID>/homekey/auth` topic in a neat JSON format.
 
 ### 4.1. HomeKey Authentication Data
 
@@ -135,9 +135,14 @@ This project plays nicely with Home Assistant, allowing you to manage your lock 
 
 Home Assistant has a feature called [MQTT Discovery](https://www.home-assistant.io/integrations/mqtt/) used to automatically configure a component.
 
-If **HASS MQTT Discovery** is enabled in your device's [MQTT Configuration](../configuration#mqtt-settings), the project will automatically publish the necessary configuration for Home Assistant to discover and control the lock. No manual YAML configuration needed – Home Assistant will just *find* it!
+If **HASS MQTT Discovery** is enabled in your device's [MQTT Configuration](../configuration#3-mqtt), the project will automatically publish the necessary configuration for Home Assistant to discover and control the lock. No manual YAML configuration needed – Home Assistant will just *find* it!
 
-*   **Important:** MQTT Discovery is enabled by default. You can disable it in the device's WebUI configuration if you don't want the lock and tags to be auto-discovered.
+*   **Important:** MQTT Discovery is enabled by default. You can disable it in the device's WebUI configuration if you don't want the entities to be auto-discovered.
+*   The following entities are published:
+    *   A **Lock** entity for controlling the lock.
+    *   A **HomeKey Issuer** tag (triggered by the `issuerId` in the auth payload).
+    *   A **HomeKey Endpoint** tag (triggered by the `endpointId` in the auth payload).
+    *   An **NFC Tag** entity (triggered by the `uid` in the auth payload), published only when generic NFC tag publishing is not disabled.
 *   The lock's online/offline status is published to `<MQTT_CLIENTID>/status` via MQTT Last Will and Testament (LWT). This helps Home Assistant know if your device is alive and kicking.
 
 ### 5.2. Lock Control
