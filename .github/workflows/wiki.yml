@@ -59,7 +59,11 @@ jobs:
             git cat-file -e "${tag}:docs" 2>/dev/null && echo "${tag}"
           done | sort -V)"
           latest="$(echo "${docs_tags}" | tail -n 1)"
-          echo "docs_tags=${docs_tags}" >> "$GITHUB_OUTPUT"
+          {
+            echo "docs_tags<<EOF"
+            echo "${docs_tags}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
           echo "latest=${latest}" >> "$GITHUB_OUTPUT"
 
       - name: Build default branch
