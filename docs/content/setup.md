@@ -129,7 +129,7 @@ After flashing, your HomeKey-ESP32 is ready for initial configuration.
 
 1. **Connect to Wi-Fi Access Point:** On first boot (or when no Wi-Fi credentials are saved), the device hosts an access point:
     * **SSID:** `HK_{XXXXXX}`
-    * **Password:** `HomeKey$123$` (or your custom configured AP password)
+    * **Password:** `HomeKey$123$` (this can be changed from the configuration page)
 2. **Access the Captive Portal:** If the operating system doesn't automatically open the captive portal, navigate to `http://192.168.4.1` in your web browser.
 3. **Configure Options:**
     * **Wi-Fi & HomeKit:** Scan and select Wi-Fi network, enter password, set 8-digit HomeKit pairing code, select HomeKey pass color (Tan, Gold, Silver, Black), and configure AP Access Point Password (`accessPointPassword`).
