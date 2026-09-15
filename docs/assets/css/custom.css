@@ -1,0 +1,37 @@
+/* Paint the html element with the same background as the body so that areas
+   outside the body (e.g. when the page is shorter than the viewport) don't
+   render as a white strip in dark mode. */
+html {
+  background-color: #fff;
+}
+html.dark {
+  background-color: #111;
+}
+
+/* Badges for the documentation version switcher. Styled here rather than with
+   Tailwind utilities because the theme ships a precompiled stylesheet that
+   only contains the utilities it uses itself. */
+.hextra-version-badge {
+  border-radius: 0.25rem;
+  padding: 0 0.3rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  line-height: 1.4;
+  vertical-align: middle;
+}
+.hextra-version-badge-latest {
+  background-color: #f3f4f6;
+  color: #6b7280;
+}
+.hextra-version-badge-bleeding {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+.dark .hextra-version-badge-latest {
+  background-color: #262626;
+  color: #a3a3a3;
+}
+.dark .hextra-version-badge-bleeding {
+  background-color: #451a03;
+  color: #fcd34d;
+}
