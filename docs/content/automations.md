@@ -40,7 +40,7 @@ action:
         then:
           - action: lock.lock
             metadata: {}
-             data: {}
+            data: {}
             target:
               entity_id: lock.l600137
 mode: single
@@ -110,7 +110,7 @@ action:
         target:
           entity_id: lock.l600137
     else:
-      - action: lock.unlock
+      - action: lock.lock
         metadata: {}
         data: {}
         target:
@@ -139,7 +139,7 @@ action:
         target:
           entity_id: lock.l600137
     else:
-      - action: lock.unlock
+      - action: lock.lock
         metadata: {}
         data: {}
         target:

@@ -85,7 +85,7 @@ The project supports custom states, allowing you to map the lock's internal stat
 *   **`<CLIENT_ID>/homekit/custom_state`**: **Publishes** the custom lock state. When custom states are enabled, this topic automatically receives updates whenever the lock state changes (e.g., via HomeKey tap, Home app control, or MQTT command).
 *   **`<CLIENT_ID>/homekit/set_custom_state`**: **Subscribes** to this topic to set the custom lock state.
 
-You can enable and configure custom states, including defining your own custom lock actions and states, in the [Web Interface Configuration](../configuration/#322-custom-topics) under the "Custom Topics" section.
+You can enable and configure custom states, including defining your own custom lock actions and states, in the [Web Interface Configuration](../configuration/#322-custom-lock-states-actions) under the "Custom Lock States & Actions" section.
 
 ## 4. NFC Data: Who Just Tapped? 🕵️‍♀️
 
@@ -99,12 +99,14 @@ If a HomeKey is used:
 {
   "endpointId": "000000000000",
   "homekey": true,
-  "issuerId": "0000000000000000"
+  "issuerId": "0000000000000000",
+  "readerId": "0000000000000000"
 }
 ```
 
 *   `endpointId`: A unique identifier for the Apple device (iPhone, Apple Watch) that was used to authenticate.
 *   `issuerId`: A unique identifier for the Apple ID of the user who authenticated.
+*   `readerId`: The unique identifier of the HomeKey reader that processed the authentication.
 
 ### 4.2. Generic NFC Tag Data
 
@@ -115,13 +117,15 @@ If a generic NFC tag (not a HomeKey) is scanned:
   "atqa": "0004",
   "homekey": false,
   "sak": "08",
-  "uid": "00000000"
+  "uid": "00000000",
+  "readerId": "A1B2C3D4E5F6"
 }
 ```
 
 *   `atqa`: The ATQA of the NFC tag.
 *   `sak`: The SAK of the NFC tag.
 *   `uid`: The UID of the NFC tag.
+*   `readerId`: The HomeKey reader's accessory ID (a 12-character hex string, unique per device and persisted in NVS).
 
 ## 5. Home Assistant Integration: Making Friends with Your Hub
 
@@ -133,7 +137,7 @@ Home Assistant has a feature called [MQTT Discovery](https://www.home-assistant.
 
 If **HASS MQTT Discovery** is enabled in your device's [MQTT Configuration](../configuration#mqtt-settings), the project will automatically publish the necessary configuration for Home Assistant to discover and control the lock. No manual YAML configuration needed – Home Assistant will just *find* it!
 
-*   **Important:** MQTT Discovery is disabled by default. Make sure to enable it in the device's WebUI configuration.
+*   **Important:** MQTT Discovery is enabled by default. You can disable it in the device's WebUI configuration if you don't want the lock and tags to be auto-discovered.
 *   The lock's online/offline status is published to `<MQTT_CLIENTID>/status` via MQTT Last Will and Testament (LWT). This helps Home Assistant know if your device is alive and kicking.
 
 ### 5.2. Lock Control

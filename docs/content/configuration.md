@@ -57,7 +57,7 @@ This section allows you to configure how your HomeKey-ESP32 device communicates 
 *   **Address:** Hostname or IP address of your MQTT broker (e.g., `192.168.1.100`).
 *   **Port:** Broker port number (default: `1883`, or `8883` for TLS).
 *   **Client ID:** Unique MQTT client identifier (automatically generated if left blank).
-*   **LWT Topic:** Last Will and Testament topic (`tele/LWT`). Publishes `online` / `offline`.
+*   **LWT Topic:** Last Will and Testament topic (`status` by default, published as `<CLIENT_ID>/status`). Publishes `online` / `offline`.
 *   **Username / Password:** Credentials for authenticating with your MQTT broker.
 *   **HASS MQTT Discovery:** Enables Home Assistant MQTT auto-discovery for locks and NFC tags.
 *   **Enable SSL/TLS:** Enables TLS encryption for MQTT connections.
@@ -103,7 +103,7 @@ Configures hardware feedback (Relays, LEDs, NeoPixels) triggered by HomeKey even
 
 ## 5. System Settings
 
-The **System** page (`/system`) provides device management tools, HomeKit settings, hardware pin configurations, and security settings.
+The **System** page (`/misc`) provides device management tools, HomeKit settings, hardware pin configurations, and security settings.
 
 At the top of the page, the **Quick Actions** toolbar provides immediate device management buttons:
 *   **Reboot:** Reboots the device immediately.
@@ -139,8 +139,8 @@ Configure GPIO pin allocations for the NFC reader, Ethernet, and HomeSpan status
     > Using strapping pins can disrupt normal ESP32 boot behavior if not handled carefully with external pull-up/pull-down resistors.
 
 #### 5.2.2. NFC Reader Configuration
-*   **Reader Type:** Select your NFC reader hardware (**PN532** over SPI, or **PN7161** over SPI).
-*   **Preset:** Select predefined hardware board presets (@lollokara, CASmo-NFC, PN7161 presets, or `Custom`).
+*   **Reader Type:** Select your NFC reader hardware (**PN532** over SPI, **PN7161** over SPI, or **ST25R3916** over I2C).
+*   **Preset:** Select predefined hardware board presets (@lollokara, CASmo-NFC, CASmo-NFC-MB-ETH, PN7161 presets, or `Custom`).
 *   **Pin Assignments:**
     *   **PN532 (SPI):** Assign `SS Pin`, `SCK Pin`, `MISO Pin`, and `MOSI Pin`.
     *   **PN7161 (SPI):** Assign SPI bus pins (SCK, MOSI, MISO, SS) alongside dedicated `IRQ Pin` and `VEN Pin` (Hardware Enable/Reset).
@@ -149,7 +149,7 @@ Configure GPIO pin allocations for the NFC reader, Ethernet, and HomeSpan status
 
 #### 5.2.3. Ethernet Configuration
 *   **Enable Ethernet:** Enables wired Ethernet network connectivity instead of Wi-Fi.
-*   **Board Preset & PHY Type:** Select board preset or PHY chip type (e.g., `W5500`, `LAN8720`, `IP101`).
+*   **Board Preset & PHY Type:** Select board preset or PHY chip type (e.g., `W5500`, `LAN8720`, `TLK110`).
 *   **SPI Configuration:** When using SPI Ethernet modules (like W5500), configure `SPI Bus`, `Freq (MHz)`, `CS Pin`, `IRQ Pin`, `RST Pin`, `SCK Pin`, `MISO Pin`, and `MOSI Pin`.
     > [!NOTE]
     > When sharing an SPI bus between PN532/PN7161 and SPI Ethernet, ensure the SCK, MISO, and MOSI pins match.
