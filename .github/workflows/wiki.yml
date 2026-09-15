@@ -1,42 +1,44 @@
-# Sample workflow for building and deploying a Hugo site to GitHub Pages
+# Build and deploy the versioned wiki to GitHub Pages.
+#
+# The site root always hosts the docs from the default branch (bleeding edge).
+# Every tag that contains a docs/ directory is additionally built and published
+# under /vX.Y/ subpaths, so the version switcher's per-version links resolve.
 name: Deploy Wiki to Pages
 
 on:
   push:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
     tags:
       - 'v0.*'
 
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
   contents: read
   pages: write
   id-token: write
 
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
-# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
 concurrency:
   group: "pages"
   cancel-in-progress: false
 
-# Default to bash
 defaults:
   run:
     shell: bash
 
 jobs:
-  # Build job
   build:
     runs-on: ubuntu-latest
     env:
-      HUGO_VERSION: 0.160.1
+      HUGO_VERSION: 0.164.0
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          fetch-depth: 0  # fetch all history for .GitInfo and .Lastmod
+          fetch-depth: 0  # fetch all history for .GitInfo, .Lastmod and the tag builds
           submodules: recursive
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -49,21 +51,105 @@ jobs:
         run: |
           wget -O ${{ runner.temp }}/hugo.deb https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.deb \
           && sudo dpkg -i ${{ runner.temp }}/hugo.deb
-      - name: Build with Hugo
+
+      - name: Detect docs-bearing tags
+        id: tags
+        run: |
+          docs_tags="$(git tag -l 'v*' | while read -r tag; do
+            git cat-file -e "${tag}:docs" 2>/dev/null && echo "${tag}"
+          done | sort -V)"
+          latest="$(echo "${docs_tags}" | tail -n 1)"
+          echo "docs_tags=${docs_tags}" >> "$GITHUB_OUTPUT"
+          echo "latest=${latest}" >> "$GITHUB_OUTPUT"
+
+      - name: Build default branch
         env:
-          # For maximum backward compatibility with Hugo modules
           HUGO_ENVIRONMENT: production
           HUGO_ENV: production
+          HUGO_PARAMS_VERSION_LATEST: ${{ steps.tags.outputs.latest }}
         run: |
           hugo \
             --gc -s docs --minify \
+            --destination "${{ runner.temp }}/site" \
             --baseURL "${{ steps.pages.outputs.base_url }}/"
+
+      - name: Build tagged versions
+        env:
+          HUGO_ENVIRONMENT: production
+          HUGO_ENV: production
+          BASE_URL: ${{ steps.pages.outputs.base_url }}
+          DOCS_TAGS: ${{ steps.tags.outputs.docs_tags }}
+          LATEST_TAG: ${{ steps.tags.outputs.latest }}
+        run: |
+          base_url="${BASE_URL%/}"
+          mkdir -p "${{ runner.temp }}/site"
+          while read -r tag; do
+            [ -z "${tag}" ] && continue
+            echo "Building ${tag} ..."
+            git worktree add "${{ runner.temp }}/${tag}" "refs/tags/${tag}"
+
+            # The version switcher's partials and badge styles only exist on the
+            # default branch; older tags predate them. Copy them into the tag
+            # worktree so its navbar can render the switcher.
+            mkdir -p "${{ runner.temp }}/${tag}/docs/layouts/_partials" \
+                     "${{ runner.temp }}/${tag}/docs/assets/css"
+            cp docs/layouts/_partials/versions.html \
+               docs/layouts/_partials/navbar.html \
+               "${{ runner.temp }}/${tag}/docs/layouts/_partials/"
+            cp docs/assets/css/custom.css \
+               "${{ runner.temp }}/${tag}/docs/assets/css/"
+
+            # Version switcher params, shared by all tag builds.
+            cat > "${{ runner.temp }}/${tag}/override.yaml" <<EOF
+          params:
+            version:
+              latest: "${LATEST_TAG}"
+            versions:
+              - name: main
+                url: ${base_url}/
+          EOF
+            # One entry per docs-bearing tag, newest first.
+            echo "${DOCS_TAGS}" | sort -Vr | while read -r t; do
+              [ -z "${t}" ] && continue
+              cat >> "${{ runner.temp }}/${tag}/override.yaml" <<EOF
+              - name: ${t}
+                url: ${base_url}/${t}/
+          EOF
+            done
+
+            # Add the switcher menu entry to the tag's own hugo.yaml, right
+            # before the top-level params: key (which every tag config has).
+            python3 - "${{ runner.temp }}/${tag}/docs/hugo.yaml" <<'PYEOF'
+          import re
+          import sys
+          path = sys.argv[1]
+          with open(path) as f:
+              text = f.read()
+          entry = (
+              "    - name: Version\n"
+              "      weight: 4\n"
+              "      params:\n"
+              "        type: version-switcher\n"
+          )
+          match = re.search(r'^params:', text, re.MULTILINE)
+          with open(path, "w") as f:
+              f.write(text[:match.start()] + entry + text[match.start():])
+          PYEOF
+
+            (cd "${{ runner.temp }}/${tag}/docs" && hugo mod get github.com/imfing/hextra@v0.12.2)
+            hugo \
+              --gc -s "${{ runner.temp }}/${tag}/docs" --minify \
+              --config hugo.yaml,../override.yaml \
+              --destination "${{ runner.temp }}/site/${tag}" \
+              --baseURL "${base_url}/${tag}/"
+            git worktree remove --force "${{ runner.temp }}/${tag}"
+          done <<< "${DOCS_TAGS}"
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5
         with:
-          path: ./docs/public
+          path: ${{ runner.temp }}/site
 
-  # Deployment job
   deploy:
     environment:
       name: github-pages
