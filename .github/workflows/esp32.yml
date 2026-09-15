@@ -14,6 +14,7 @@ on:
       - 'LICENSE'
       - '*.md'
       - 'docs/**'
+      - '.github/**'
 
 concurrency:
   group: "build"
