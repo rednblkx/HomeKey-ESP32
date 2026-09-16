@@ -13,8 +13,8 @@ This class acts as a translator, converting internal application events (like lo
 *   **MQTT Client Management:** Initializes, starts, and manages the lifecycle of the ESP-MQTT client.
 *   **Connection Handling:** Manages connection and disconnection events, including publishing a Last Will and Testament (LWT) for presence detection.
 *   **SSL/TLS Configuration:** Configures secure MQTT connections using certificates managed by the `ConfigManager`.
-*   **Event Bridging:** Subscribes to internal events (`lock/stateChanged`, `nfc/event`, etc.) and publishes corresponding data to MQTT topics.
-*   **Command Handling:** Subscribes to MQTT command topics and publishes internal events (`lock/targetStateChanged`, `lock/overrideState`, etc.) to control the device remotely.
+*   **Event Bridging:** Subscribes to internal events (`LOCK_EVENT`, `NFC_EVENT`, `HW_EVENT`) and publishes corresponding data to MQTT topics.
+*   **Command Handling:** Subscribes to MQTT command topics and publishes internal events (`LOCK_TARGET_STATE_CHANGED`, `LOCK_OVERRIDE_STATE`, etc.) to control the device remotely.
 *   **Home Assistant Discovery:** Publishes configuration payloads to Home Assistant's discovery topics, enabling seamless integration.
 *   **JsonGuard Integration:** The manager now uses `JsonBuilder` (part of the `JsonGuard` utility) for constructing JSON payloads. This provides RAII-based memory safety for cJSON objects and a cleaner, more readable fluent API for building JSON strings.
 *   **Data Formatting:** Formats event data (e.g., NFC tap details) into structured JSON payloads for easy consumption by external services.
@@ -131,7 +131,7 @@ const std::string& getLastErrorMessage() const;
 The `MqttManager` is primarily event-driven. The `mqttEventHandler` is a static callback registered with the ESP-MQTT library, which forwards all events to the instance's `onMqttEvent` method.
 
 *   **`onMqttEvent`**: This method acts as a dispatcher. It handles connection/disconnection logic, logs errors, updates the internal status (error code and message), and passes incoming message data to the `onData` method.
-*   **`onConnected`**: Called upon a successful connection, this method subscribes to all necessary command topics, publishes an `MQTT_STATUS_CHANGED` event to the `AppEventLoop`, and triggers the Home Assistant discovery process.
+*   **`onConnected`**: Called upon a successful connection, this method publishes the retained `online` presence message to the LWT topic, subscribes to all necessary command topics, and triggers the Home Assistant discovery process.
 *   **`onData`**: This is the core of the command handling logic. It parses the topic and payload of an incoming message and translates it into an appropriate internal event using the `AppEventLoop` system. For example, a message on the `lockTStateCmd` topic will be converted into a `LOCK_TARGET_STATE_CHANGED` event.
 
 ### Event System Integration
@@ -143,7 +143,10 @@ The `MqttManager` uses the `AppEventLoop` system (ESP-IDF's native event loop) f
     *   `HW_EVENT` (`HW_ALT_ACTION`): Publishes alternate action events
     *   `NFC_EVENT` (`NFC_TAP_EVENT`): Publishes NFC/HomeKey tap data
 *   **Publishes:**
-    *   `MQTT_EVENT` (`MQTT_STATUS_CHANGED`): Notifies other components of MQTT connection status changes
+    *   `LOCK_EVENT` (`LOCK_TARGET_STATE_CHANGED` / `LOCK_OVERRIDE_STATE` / `LOCK_UPDATE_STATE`): Translates incoming MQTT lock commands into internal lock events
+
+> [!NOTE]
+> The `MQTT_EVENT` base (`MQTT_STATUS_CHANGED`) is declared in `app_events.hpp` but is currently **not published** by any component. MQTT connection status does not flow through the event loop: `publishMqttStatus()` only updates internal state, and consumers (like the WebUI) poll `isConnected()`, `getLastErrorCode()`, and `getLastErrorMessage()` instead.
 
 ### Data Publishing
 
@@ -151,7 +154,7 @@ The manager subscribes to internal events via the `AppEventLoop` to publish data
 
 *   **`publishLockState`**: Listens for `LOCK_STATE_CHANGED` events and publishes the lock's status to the configured state topic. It correctly represents transitional states like "locking" or "unlocking."
 *   **`publishHomeKeyTap` / `publishUidTap`**: Listen for `NFC_TAP_EVENT` notifications and publish detailed, JSON-formatted information about the NFC tap to the `hkTopic`.
-*   **`publishMqttStatus`**: Updates internal MQTT connection status (error code and message) and publishes an `MQTT_STATUS_CHANGED` event to the `AppEventLoop` for internal components (like the WebUI) to consume. Does **not** publish to an MQTT topic.
+*   **`publishMqttStatus`**: Updates the internal MQTT connection status (error code and message) retrievable via `getLastErrorCode()` / `getLastErrorMessage()`. Does **not** publish to an MQTT topic and does **not** emit an event-loop event; consumers poll these getters (e.g., the WebUI includes the values in its periodic `metrics` WebSocket message).
 *   **Home Assistant Discovery**: The `publishHassDiscovery` method constructs detailed JSON configuration payloads that describe the lock and NFC tag sensor entities to Home Assistant, allowing for zero-config integration.
 
 ### SSL/TLS Configuration

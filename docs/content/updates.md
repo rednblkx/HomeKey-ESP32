@@ -46,7 +46,7 @@ If everything went smoothly, you should see the "Current Version" and "Running P
 *   The `*-firmware.bin` file for your ESP32 chip (e.g., `esp32-firmware.bin`, `esp32c3-firmware.bin`, or `esp32s3-firmware.bin`) from the [GitHub Releases page](https://github.com/rednblkx/HomeKey-ESP32/releases).
 *   The `littlefs.bin` file from the [GitHub Releases page](https://github.com/rednblkx/HomeKey-ESP32/releases).
 *   The IP address of your HomeKey-ESP32 device.
-*   (Optional) The OTA password, if you've set one in the [Configuration Guide](../configuration#homespan).
+*   (Optional) The OTA password, if you've set one in the [Configuration Guide](../configuration#524-homespan-settings).
     *   The default OTA password is `homespan-ota`
 
 ### 1.2.2. Update
@@ -82,13 +82,13 @@ If OTA updates aren't working, or if you prefer a wired connection, you can alwa
 
 *   Your HomeKey-ESP32 device.
 *   A USB cable to connect your ESP32 to your computer.
-*   `esptool.py` installed on your computer (see [Prerequisites Guide](../prerequisites#option-1-command-line-flashing-with-esptoolpy-recommended-for-advanced-users)).
+*   `esptool.py` installed on your computer (see [Prerequisites Guide](../prerequisites/#1-essential-software)).
 *   The `esp32XX-firmware.bin` and `littlefs.bin` files.
 
 ### 2.2. Update
 
 1.  **Connect ESP32:** Connect your ESP32 development board to your computer using a USB cable.
-2.  **Identify Serial Port:** Find the serial port your ESP32 is connected to (refer to [Setup Guide](../setup#option-a-flashing-with-esptoolpy-command-line) for details).
+2.  **Identify Serial Port:** Find the serial port your ESP32 is connected to (refer to [Setup Guide](../setup#3-flash-the-firmware) for details).
 3.  **Open Terminal/Command Prompt:** Navigate to the directory where you downloaded the `esptool.py` script and your firmware files.
 
 4.  **Flash Firmware and LittleFS Separately (Advanced):**
@@ -100,7 +100,7 @@ If OTA updates aren't working, or if you prefer a wired connection, you can alwa
     *   Replace `<firmware.bin>` and `<littlefs.bin>` with the paths to your respective files.
     *   Replace `YOUR_PORT` with your serial port assigned to your ESP32.
 
-5.  **Initiate Flash Mode:** If the flashing doesn't start automatically, you might need to manually put your ESP32 into flash mode (refer to [Setup Guide](../setup#option-a-flashing-with-esptoolpy-command-line) for details).
+5.  **Initiate Flash Mode:** If the flashing doesn't start automatically, you might need to manually put your ESP32 into flash mode (refer to [Setup Guide](../setup#3-flash-the-firmware) for details).
 6.  **Wait for Completion:** The flashing process will take a few moments. Once complete, you'll see a "Hash of data verified" message.
 7.  **Reboot:** Disconnect and reconnect your ESP32 from USB to reboot the device.
 

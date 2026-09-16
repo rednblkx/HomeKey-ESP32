@@ -57,7 +57,7 @@ This section allows you to configure how your HomeKey-ESP32 device communicates 
 *   **Address:** Hostname or IP address of your MQTT broker (e.g., `192.168.1.100`).
 *   **Port:** Broker port number (default: `1883`, or `8883` for TLS).
 *   **Client ID:** Unique MQTT client identifier (automatically generated if left blank).
-*   **LWT Topic:** Last Will and Testament topic (`tele/LWT`). Publishes `online` / `offline`.
+*   **LWT Topic:** Last Will and Testament topic (`status` by default, published as `<CLIENT_ID>/status`). Publishes `online` / `offline`.
 *   **Username / Password:** Credentials for authenticating with your MQTT broker.
 *   **HASS MQTT Discovery:** Enables Home Assistant MQTT auto-discovery for locks and NFC tags.
 *   **Enable SSL/TLS:** Enables TLS encryption for MQTT connections.
@@ -74,9 +74,9 @@ The MQTT interface displays real-time connection status labels:
 
 #### 3.2.1. Core Topics
 
-*   **NFC/HK Topic:** Topic where HomeKey authentication data or generic NFC tag UIDs are published.
+*   **HomeKey Topic:** Topic where HomeKey authentication data or generic NFC tag UIDs are published.
 *   **Ignore NFC Tags:** Option to suppress publishing non-HomeKey generic NFC tags.
-*   **Lock Control Topics:** `Lock State Topic`, `Lock State Cmd Topic`, `Lock Current State Cmd Topic`, `Lock Target State Cmd Topic`, `SmartLock battery level Cmd Topic`.
+*   **Lock Control Topics:** `Lock State Topic`, `Lock State Command`, `Lock Current State Command`, `Lock Target State Command`, `Battery Level Topic`, and `Alt Action Topic`.
 
 #### 3.2.2. Custom Lock States & Actions
 
@@ -92,22 +92,22 @@ Configures hardware feedback (Relays, LEDs, NeoPixels) triggered by HomeKey even
 ### 4.1. NFC Triggers
 
 *   **Neopixel:** GPIO pin, pixel type (WS2812B GRB, etc.), timeout settings, RGB colors for Auth Success, Auth Failure, and Generic Tag Scans.
-*   **Simple GPIO:** Configurable GPIO pins, pulse timeouts, and electrical states (`HIGH`/`LOW`) for Auth Success, Auth Failure, and Alternate Action Initiator.
+*   **Simple GPIO:** Configurable GPIO pins, pulse timeouts, and electrical states (`HIGH`/`LOW`) for Auth Success, Auth Failure, Tag Event, and the Alternate Action initiator/feedback LED.
 
 ### 4.2. State Triggers
 
-*   **Simple GPIO:** Primary relay action pin for lock/unlock state transitions, initial state behavior, and momentary pulse timeouts.
+*   **Simple GPIO:** Primary relay action pin for lock/unlock state transitions with configurable HIGH/LOW levels per state, momentary pulse timeouts, and a toggle for whether HomeKey taps may control the pin.
 *   **Dummy Mode:** "Dumb Switch" HomeKit mode with configurable momentary timeouts.
 
 ---
 
 ## 5. System Settings
 
-The **System** page (`/system`) provides device management tools, HomeKit settings, hardware pin configurations, and security settings.
+The **System** page (`/misc`) provides device management tools, HomeKit settings, hardware pin configurations, and security settings.
 
 At the top of the page, the **Quick Actions** toolbar provides immediate device management buttons:
 *   **Reboot:** Reboots the device immediately.
-*   **Start AP:** Manually starts the Wi-Fi setup Access Point (`HomeKey-ESP32`).
+*   **Start AP:** Manually starts the Wi-Fi setup Access Point (`HK_` followed by the device's MAC address suffix, e.g. `HK_A1B2C3D4`, using the configured AP password).
 *   **Reset HomeKit:** Clears HomeKit pairing database (requires re-pairing with the Home app).
 *   **Reset WiFi:** Erases saved Wi-Fi network credentials and restarts in AP mode.
 
@@ -120,7 +120,7 @@ Below Quick Actions, settings are structured into three intuitive tabs: **HomeKi
 Configure HomeKit device identity and authentication behavior.
 
 *   **Device Name:** Name of your HomeKit accessory as seen in the Apple Home app (e.g., `HK`).
-*   **Setup Code:** 8-digit HomeKit pairing setup code (e.g., `15935728`).
+*   **Setup Code:** 8-digit HomeKit pairing setup code (default: `46637726`).
 *   **Always Lock on HomeKey:** Forces the device into a Locked state whenever a valid HomeKey is tapped, regardless of its current lock state.
 *   **Always Unlock on HomeKey:** Forces the device into an Unlocked state whenever a valid HomeKey is tapped, regardless of its current lock state.
 *   **SmartLock Battery Reporting:** Enables battery percentage reporting to HomeKit (configurable via MQTT).
@@ -134,13 +134,13 @@ Configure HomeKit device identity and authentication behavior.
 Configure GPIO pin allocations for the NFC reader, Ethernet, and HomeSpan status controls.
 
 #### 5.2.1. GPIO Allocation & Safety
-*   **Override strapping pins restriction:** Toggles off safety warnings for boot strapping pins (e.g., GPIO 0, 2, 12, 15).
+*   **Override strapping pins restriction:** Assigning a strapping pin (chip-specific; e.g., GPIO 0 and 2 on standard ESP32, GPIO 0/3/45–48 on ESP32-S3) is rejected with an error and the configuration cannot be saved while this is off. Enabling this option lifts the restriction and allows strapping pin assignments.
     > [!CAUTION]
     > Using strapping pins can disrupt normal ESP32 boot behavior if not handled carefully with external pull-up/pull-down resistors.
 
 #### 5.2.2. NFC Reader Configuration
-*   **Reader Type:** Select your NFC reader hardware (**PN532** over SPI, or **PN7161** over SPI).
-*   **Preset:** Select predefined hardware board presets (@lollokara, CASmo-NFC, PN7161 presets, or `Custom`).
+*   **Reader Type:** Select your NFC reader hardware (**PN532** over SPI, **PN7161** over SPI, or **ST25R3916** over I2C).
+*   **Preset:** Select predefined hardware board presets (@lollokara, CASmo-NFC, CASmo-NFC-MB-ETH, PN7161 presets, or `Custom`).
 *   **Pin Assignments:**
     *   **PN532 (SPI):** Assign `SS Pin`, `SCK Pin`, `MISO Pin`, and `MOSI Pin`.
     *   **PN7161 (SPI):** Assign SPI bus pins (SCK, MOSI, MISO, SS) alongside dedicated `IRQ Pin` and `VEN Pin` (Hardware Enable/Reset).
@@ -149,7 +149,7 @@ Configure GPIO pin allocations for the NFC reader, Ethernet, and HomeSpan status
 
 #### 5.2.3. Ethernet Configuration
 *   **Enable Ethernet:** Enables wired Ethernet network connectivity instead of Wi-Fi.
-*   **Board Preset & PHY Type:** Select board preset or PHY chip type (e.g., `W5500`, `LAN8720`, `IP101`).
+*   **Board Preset & PHY Type:** Select board preset or PHY chip type (e.g., `W5500`, `LAN8720`, `TLK110`).
 *   **SPI Configuration:** When using SPI Ethernet modules (like W5500), configure `SPI Bus`, `Freq (MHz)`, `CS Pin`, `IRQ Pin`, `RST Pin`, `SCK Pin`, `MISO Pin`, and `MOSI Pin`.
     > [!NOTE]
     > When sharing an SPI bus between PN532/PN7161 and SPI Ethernet, ensure the SCK, MISO, and MOSI pins match.

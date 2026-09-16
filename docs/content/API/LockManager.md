@@ -30,7 +30,7 @@ LockManager(const espConfig::misc_config_t& miscConfig, const espConfig::actions
 
 ### begin()
 
-Performs post-construction initialization. Its primary role is to publish the lock's initial state to the `lock/action` event channel. This ensures that all other components, particularly the `HardwareManager`, can synchronize with the lock's state as soon as the system starts.
+Performs post-construction initialization. It registers the event subscribers that drive the state machine — most importantly the `NFC_EVENT` (`NFC_TAP_EVENT`) subscription that applies the "always unlock"/"always lock"/standard tap behavior — and publishes the lock's initial state to the `HW_EVENT` (`HW_ACTION`) channel. This ensures that all other components, particularly the `HardwareManager`, can synchronize with the lock's state as soon as the system starts.
 
 **Signature:**
 ```cpp
@@ -86,12 +86,13 @@ Forcibly sets the lock's internal current and target states. This method is used
 
 **Signature:**
 ```cpp
-void overrideState(uint8_t c_state, uint8_t t_state);
+void overrideState(uint8_t c_state, uint8_t t_state, Source source);
 ```
 
 **Parameters:**
-*   `c_state`: The new current state to apply. Use `255` to leave the current state unchanged.
-*   `t_state`: The new target state to apply. Use `255` to leave the target state unchanged.
+*   `c_state`: The new current state to apply. Use `LockManager::MAX` (6) to leave the current state unchanged.
+*   `t_state`: The new target state to apply. Use `LockManager::MAX` (6) to leave the target state unchanged.
+*   `source`: The origin of the override. Used to decide whether the momentary timer should be (re)started after the override — e.g., an MQTT override while unlocked restarts the momentary timer.
 
 ## Internal Methods
 

@@ -69,7 +69,7 @@ PN7161 NFC controller communicate over SPI and require two additional control pi
 | Configurable (e.g. GPIO16)| VEN |
 
 
-#### 2.1.2. ST25R3916 Wiring (I2C)
+#### 2.1.3. ST25R3916 Wiring (I2C)
 
 Default pinout table for ESP32 with ST25R3916 over I2C:
 
@@ -77,11 +77,11 @@ Default pinout table for ESP32 with ST25R3916 over I2C:
 | :-------- | :---------------- |
 | VCC/3V3   | VCC               |
 | GND       | GND               |
-| GPIO18    | SDA               |
-| GPIO5     | SCL                |
+| GPIO5     | SDA               |
+| GPIO18    | SCL               |
 
 
-#### 2.1.3. Integrated PCB Board Presets
+#### 2.1.4. Integrated PCB Board Presets
 
 When using an Integrated PCB or predefined layout, select the hardware preset in the Captive Portal or WebUI:
 
@@ -129,11 +129,11 @@ After flashing, your HomeKey-ESP32 is ready for initial configuration.
 
 1. **Connect to Wi-Fi Access Point:** On first boot (or when no Wi-Fi credentials are saved), the device hosts an access point:
     * **SSID:** `HK_{XXXXXX}`
-    * **Password:** `HomeKey$123$` (or your custom configured AP password)
+    * **Password:** `HomeKey$123$` (this can be changed from the configuration page)
 2. **Access the Captive Portal:** If the operating system doesn't automatically open the captive portal, navigate to `http://192.168.4.1` in your web browser.
 3. **Configure Options:**
     * **Wi-Fi & HomeKit:** Scan and select Wi-Fi network, enter password, set 8-digit HomeKit pairing code, select HomeKey pass color (Tan, Gold, Silver, Black), and configure AP Access Point Password (`accessPointPassword`).
-    * **Hardware Tab:** Select NFC reader type (PN532, PN7161 or ST25R3916) and presets, assign custom NFC GPIO pins (including IRQ and VEN for PN7161), configure Ethernet settings, and view strapping pin safety warnings. Override strapping pin restrictions if required by custom hardware (`overrideStrappingRestriction`).
+    * **Hardware Tab:** Select NFC reader type (PN532, PN7161 or ST25R3916) and presets, assign custom NFC GPIO pins (including IRQ and VEN for PN7161), configure Ethernet settings, and see strapping pin restrictions on conflicting assignments. Override strapping pin restrictions if required by custom hardware (`overrideStrappingRestriction`).
 4. **Save & Connect:** Upon clicking "Save", the captive portal submits configuration diffs and connects to your Wi-Fi network. On successful connection, the interface displays the assigned network IP address before closing.
 
 ## 5. HomeKit Pairing
@@ -144,5 +144,5 @@ The default HomeKit pairing code is `466-37-726`. Once connected to your Wi-Fi n
 
 * **Failed to connect during flashing:** Put board into bootloader mode manually (hold BOOT, tap RESET, release BOOT).
 * **NFC Reader Not Detected:** Verify power connections and ensure DIP switch is set to SPI mode for PN532, or IRQ/VEN pins are correctly mapped for PN7161.
-* **Strapping Pin Warnings:** If assigning GPIOs 0, 2, 12, or 15 triggers a strapping pin conflict warning in the WebUI, verify pin usage or check `overrideStrappingRestriction` if using dedicated custom hardware.
+* **Strapping Pin Errors:** Assigning a strapping pin in the WebUI (chip-specific; e.g., GPIO 0 and 2 on standard ESP32) is rejected with an error unless `overrideStrappingRestriction` is enabled — use it only if your custom hardware requires it.
 

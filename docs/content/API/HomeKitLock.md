@@ -6,7 +6,7 @@ title: "HomeKitLock"
 
 The `HomeKitLock` class serves as the central bridge between the application's core logic and the Apple HomeKit ecosystem, facilitated by the HomeSpan library. It is designed as a singleton and is responsible for initializing the HomeKit accessory, defining its services and characteristics, managing the network connection (Wi-Fi or Ethernet), and synchronizing the lock's state with HomeKit.
 
-A critical function of this class is managing the lifecycle of HomeKey issuers. It listens for changes in paired HomeKit controllers and automatically updates the `ReaderDataManager` with the necessary cryptographic keys (LTPK), ensuring that newly paired devices can use HomeKey.
+A critical function of this class is managing the lifecycle of HomeKey issuers. It listens for changes in paired HomeKit controllers and automatically updates the `NvsCredentialStore` with the necessary cryptographic keys (LTPK), ensuring that newly paired devices can use HomeKey.
 
 ### Key Responsibilities:
 
@@ -31,7 +31,7 @@ HomeKitLock(
     std::function<void(int)> &conn_cb,
     LockManager& lockManager,
     ConfigManager& configManager,
-    ReaderDataManager& readerDataManager
+    NvsCredentialStore& readerDataManager
 );
 ```
 
@@ -39,7 +39,7 @@ HomeKitLock(
 *   `conn_cb`: A callback function (`std::function<void(int)>`) that will be invoked with a status code whenever the HomeKit connection state changes.
 *   `lockManager`: A reference to the `LockManager` instance, used to interact with the lock's logic.
 *   `configManager`: A reference to the `ConfigManager` instance, used to retrieve device settings.
-*   `readerDataManager`: A reference to the `ReaderDataManager`, used to manage HomeKey issuer data.
+*   `readerDataManager`: A reference to the `NvsCredentialStore`, used to manage HomeKey issuer data.
 
 ### Initialization
 
@@ -92,20 +92,11 @@ void updateBatteryStatus(uint8_t batteryLevel, bool isLow);
 
 #### `initializeETH()`
 
-Initializes the Ethernet hardware based on settings stored in `ConfigManager`. If Ethernet is disabled, this method does nothing, allowing HomeSpan to manage the Wi-Fi connection instead. It supports both predefined board presets and custom pin configurations for various Ethernet PHYs.
+Delegates Ethernet initialization to the `EthernetDriver` module, passing the miscellaneous configuration. If Ethernet is disabled, `EthernetDriver::start()` is a no-op, allowing HomeSpan to manage the Wi-Fi connection instead. All pin leasing, preset/custom configuration handling, and lifecycle event broadcasting live in `EthernetDriver` (see [EthernetDriver](../ethernetdriver/)).
 
 **Signature:**
 ```cpp
 void initializeETH();
-```
-
-#### `ethEventHandler()`
-
-A static event handler that processes network events from the underlying framework (e.g., `ARDUINO_EVENT_ETH_START`, `ARDUINO_EVENT_ETH_GOT_IP`). It is responsible for setting the device hostname based on its MAC address and logging network status changes.
-
-**Signature:**
-```cpp
-void ethEventHandler(arduino_event_id_t event, arduino_event_info_t info);
 ```
 
 ## 4. Core Logic & Callbacks
@@ -115,9 +106,10 @@ These methods are central to the class's operation but are typically invoked by 
 #### `controllerCallback()`
 
 This callback is triggered by HomeSpan whenever a HomeKit controller is paired or unpaired. It contains the critical logic for managing HomeKey issuers:
-*   When a new admin controller is paired, its Long-Term Public Key (LTPK) is used to generate a unique issuer ID. This issuer is then added to the `ReaderDataManager`.
 *   When the last admin controller is unpaired, all HomeKey issuer and reader data is wiped to ensure security.
-*   Any changes to the issuer list are automatically saved to NVS.
+*   For each currently paired admin controller, its Long-Term Public Key (LTPK) is hashed to derive a unique issuer ID, and the issuer is added to the `NvsCredentialStore` if absent.
+*   Issuers whose controller is no longer paired are automatically removed from the store (this keeps the issuer list in sync with unpaired controllers).
+*   Any changes to the issuer list are saved to NVS, and an `ACCESSDATA_CHANGED` event is published so other components (e.g., the NFC ECP data) re-synchronize.
 
 #### `setupDebugCommands()`
 
