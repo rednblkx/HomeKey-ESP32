@@ -2211,6 +2211,12 @@ std::string WebServerManager::getDeviceInfo() {
 
 void WebServerManager::statusTimerCallback(void *arg) {
   WebServerManager *instance = static_cast<WebServerManager *>(arg);
+  const uint64_t dropped = instance->getWsFrameDropCount();
+  if (dropped > instance->m_lastReportedWsFrameDropped) {
+    ESP_LOGW(TAG, "Dropped %llu WebSocket frames (send queue full)",
+             dropped - instance->m_lastReportedWsFrameDropped);
+    instance->m_lastReportedWsFrameDropped = dropped;
+  }
   auto metrics = instance->getDeviceMetrics();
   instance->broadcastWs((const uint8_t *)(metrics.c_str()), metrics.size(),
                         HTTPD_WS_TYPE_TEXT);

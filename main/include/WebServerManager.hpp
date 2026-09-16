@@ -209,6 +209,7 @@ private:
   std::deque<std::vector<uint8_t>> m_wsBroadcastBuffer;
   std::atomic<uint16_t> wsBacklogSize{0};
   std::atomic<uint64_t> m_wsFrameDropped{0};
+  uint64_t m_lastReportedWsFrameDropped{0};
   std::atomic<bool> m_otaInProgress{false};
   bool m_isInitialized{false};
 };
