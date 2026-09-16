@@ -298,7 +298,7 @@ void WebServerManager::begin() {
       return;
     }
   }
-  m_wsQueue = xQueueCreate(20, sizeof(WsFrame *));
+  m_wsQueue = xQueueCreate(64, sizeof(WsFrame *));
   if (!m_wsQueue) {
     ESP_LOGE(TAG, "Failed to create WebSocket queue");
     httpd_stop(m_server);
@@ -2048,7 +2048,10 @@ void WebServerManager::queue_ws_frame(int fd, const uint8_t *payload,
     memcpy(frame->payload, payload, len);
   }
 
-  if (xQueueSend(m_wsQueue, &frame, pdMS_TO_TICKS(100)) != pdTRUE) {
+  // Never block the caller (this runs on the log sink task): drop and count
+  // instead. A blocked enqueue here would stall all log dispatch.
+  if (xQueueSend(m_wsQueue, &frame, 0) != pdTRUE) {
+    m_wsFrameDropped.fetch_add(1, std::memory_order_relaxed);
     if (frame->payload != frame->inlinePayload)
       delete[] frame->payload;
     delete frame;
@@ -2060,11 +2063,16 @@ void WebServerManager::ws_send_task(void *arg) {
   WsFrame *raw_frame = nullptr;
 
   while (true) {
-    if (xQueueReceive(instance->m_wsQueue, &raw_frame, portMAX_DELAY) ==
+    if (xQueueReceive(instance->m_wsQueue, &raw_frame, portMAX_DELAY) !=
         pdPASS) {
-      if (!raw_frame)
-        continue;
+      continue;
+    }
+    if (!raw_frame)
+      continue;
 
+    // Drain everything already queued before waiting again so a burst of
+    // frames costs one wake-up instead of one per frame.
+    do {
       WsFramePtr frame(raw_frame);
 
       int target_fd = -1;
@@ -2099,7 +2107,8 @@ void WebServerManager::ws_send_task(void *arg) {
           }
         }
       }
-    }
+    } while (xQueueReceive(instance->m_wsQueue, &raw_frame, 0) == pdPASS &&
+             raw_frame != nullptr);
   }
 }
 
@@ -2178,6 +2187,7 @@ std::string WebServerManager::getDeviceMetrics() {
   status.addNumber("nfc_reader_type", m_configManager.getConfig<espConfig::misc_config_t>().nfcReaderType);
   status.addBool("mqtt_connected", m_mqttManager ? m_mqttManager->isConnected() : false);
   status.addNumber("mqtt_error_code", m_mqttManager ? static_cast<uint8_t>(m_mqttManager->getLastErrorCode()) : 0);
+  status.addNumber("ws_frames_dropped", static_cast<uint64_t>(getWsFrameDropCount()));
   if (m_mqttManager && !m_mqttManager->getLastErrorMessage().empty()) {
     status.addString("mqtt_error_message", m_mqttManager->getLastErrorMessage().c_str());
   }

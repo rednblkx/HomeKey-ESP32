@@ -18,6 +18,22 @@
 
   const isCaptivePortal = $derived(route.pathname.startsWith('/captive-portal'));
 
+  /** Validate and append a single log entry from the WebSocket stream. */
+  function pushLog(data: any) {
+    const log: LogEntry = {
+      id: Date.now() + logIdIncrement(),
+      localts: new Date().toISOString(),
+      expanded: false,
+      ...data
+    };
+
+    if (log.msg && log.level) {
+      logs.push(log);
+    } else {
+      console.warn('Invalid log message structure:', data);
+    }
+  }
+
 	onMount(() => {
     initTheme();
 
@@ -32,19 +48,15 @@
 					if (data.type === 'sysinfo' || data.type === 'metrics') {
 						updateSystemInfo(data);
 					}
-          if (data.type === 'log') {
-						const log : LogEntry = {
-							id: Date.now() + logIdIncrement(),
-							localts: new Date().toISOString(),
-							expanded: false,
-							...data
-						};
-
-						if (log.msg && log.level) {
-							logs.push(log);
-						} else {
-							console.warn('Invalid log message structure:', data);
-						}
+          if (data.type === 'logs' && Array.isArray(data.entries)) {
+            // Batched frame: one WS frame carrying multiple log entries.
+            for (const entry of data.entries) {
+              if (entry.type === 'log') {
+                pushLog(entry);
+              }
+            }
+          } else if (data.type === 'log') {
+            pushLog(data);
           }
 				}
       });

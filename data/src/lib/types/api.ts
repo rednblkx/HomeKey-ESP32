@@ -492,6 +492,15 @@ export interface LogMessage {
 }
 
 /**
+ * Batched log frame: multiple log entries packed into one WebSocket frame
+ * by WebSocketLogSinker::consume_batch during log bursts.
+ */
+export interface LogBatchMessage {
+  type: 'logs';
+  entries: LogMessage[];
+}
+
+/**
  * Extended log entry for component use
  * Includes additional fields added by the LogViewer component
  * @type {LogEntry}

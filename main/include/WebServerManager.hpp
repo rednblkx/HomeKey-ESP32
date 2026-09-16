@@ -72,6 +72,16 @@ public:
   void broadcastWs(const uint8_t *payload, size_t len, httpd_ws_type_t type);
   void setWSBackLogSize(const uint16_t size);
 
+  /**
+   * @brief Number of WebSocket frames dropped because the send queue was full.
+   *
+   * Frames are dropped without blocking when the queue is full; this counter
+   * makes that backpressure observable (e.g. in the metrics broadcast).
+   */
+  [[nodiscard]] uint64_t getWsFrameDropCount() const {
+    return m_wsFrameDropped.load(std::memory_order_relaxed);
+  }
+
 private:
   // ------------------------------------------------------------------------
   // Internal Types & Enums
@@ -198,6 +208,7 @@ private:
   esp_timer_handle_t m_statusTimer;
   std::deque<std::vector<uint8_t>> m_wsBroadcastBuffer;
   std::atomic<uint16_t> wsBacklogSize{0};
+  std::atomic<uint64_t> m_wsFrameDropped{0};
   std::atomic<bool> m_otaInProgress{false};
   bool m_isInitialized{false};
 };
