@@ -118,7 +118,11 @@ jobs:
                docs/layouts/_partials/navbar.html \
                docs/layouts/_partials/banner.html \
                docs/layouts/_partials/version-list.html \
+               docs/layouts/_partials/sidebar.html \
                "${{ runner.temp }}/${tag}/docs/layouts/_partials/"
+            mkdir -p "${{ runner.temp }}/${tag}/docs/assets/js/core"
+            cp docs/assets/js/core/banner.js \
+               "${{ runner.temp }}/${tag}/docs/assets/js/core/"
             cp docs/assets/css/custom.css \
                "${{ runner.temp }}/${tag}/docs/assets/css/"
 
