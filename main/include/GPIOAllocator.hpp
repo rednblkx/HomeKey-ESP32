@@ -94,6 +94,7 @@ public:
     PinConsumer consumer;
     PinRole role;
     const char* tag;
+    uint32_t claim_id;
   };
 
   struct PinStatus {
@@ -112,6 +113,11 @@ public:
     PinControl(gpio_num_t pin, gpio_mode_t mode) : pin_(pin), mode_(mode) { gpio_set_direction(pin_, mode_); }
     gpio_num_t pin_;
     gpio_mode_t mode_;
+  };
+
+  struct Claim {
+    gpio_num_t pin;
+    uint32_t id;
   };
 
   class GPIOLease {
@@ -146,8 +152,10 @@ public:
 
   private:
     friend class GPIOAllocator;
-    explicit GPIOLease(std::shared_ptr<PinControl> control) : control_(std::move(control)) {}
+    explicit GPIOLease(std::shared_ptr<PinControl> control, std::shared_ptr<Claim> claim)
+      : control_(std::move(control)), claim_(std::move(claim)) {}
     std::shared_ptr<PinControl> control_;
+    std::shared_ptr<Claim> claim_;
   };
 
   std::expected<GPIOLease, GPIOAllocatorError> acquire(gpio_num_t pin, gpio_mode_t mode,
@@ -175,8 +183,13 @@ public:
       control = std::shared_ptr<PinControl>(new PinControl(pin, mode));
       entry.control = control;
     }
-    entry.holders.push_back({consumer, role, tag});
-    return GPIOLease(std::move(control));
+    uint32_t claim_id = next_claim_id_++;
+    entry.holders.push_back({consumer, role, tag, claim_id});
+    auto claim = std::shared_ptr<Claim>(new Claim{pin, claim_id}, [](Claim* c) {
+      GPIOAllocator::instance().release_claim(c);
+      delete c;
+    });
+    return GPIOLease(std::move(control), std::move(claim));
   }
 
   std::expected<void, GPIOAllocatorError> validate(gpio_num_t pin, gpio_mode_t mode,
@@ -252,6 +265,13 @@ private:
   GPIOAllocator(GPIOAllocator&&) = delete;
   GPIOAllocator& operator=(GPIOAllocator&&) = delete;
 
+  void release_claim(const Claim* claim) {
+    std::lock_guard lock(mutex_);
+    if ((uint8_t)claim->pin >= entries_.size()) return;
+    auto& holders = entries_[static_cast<size_t>(claim->pin)].holders;
+    std::erase_if(holders, [&](const PinHolder& h) { return h.claim_id == claim->id; });
+  }
+
   struct PinEntry {
     std::vector<PinHolder> holders;
     std::weak_ptr<PinControl> control;
@@ -313,4 +333,5 @@ private:
 
   static std::mutex mutex_;
   static std::array<PinEntry, GPIO_NUM_MAX> entries_;
+  uint32_t next_claim_id_ = 0;
 };
