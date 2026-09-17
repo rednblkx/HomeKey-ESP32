@@ -32,18 +32,6 @@ menu:
         type: version-switcher
 
 params:
-  version:
-    latest: "v0.8"
-  versions:
-    - name: main
-      url: /
-    - name: v0.8
-      url: https://rednblkx.github.io/HomeKey-ESP32/v0.8/
-    - name: v0.7.1
-      url: https://rednblkx.github.io/HomeKey-ESP32/v0.7.1/
-    - name: v0.7
-      url: https://rednblkx.github.io/HomeKey-ESP32/v0.7/
-
   navbar:
     displayTitle: true
     displayLogo: true
@@ -54,7 +42,6 @@ params:
       height: 20
     width: 'full'
   banner:
-    message: "⚠️ This wiki is versioned — you are currently viewing the docs for the bleeding edge (main), not the latest release."
     versionWarning: "⚠️ This wiki is versioned — you are currently viewing the docs for the bleeding edge (main), not the latest release."
   description: "Documentation for HomeKey-ESP32"
   page:

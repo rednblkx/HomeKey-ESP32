@@ -15,19 +15,22 @@ Configured via site params:
 {{- $class := .class | default "hx:h-7 hx:px-2 hx:text-xs hx:text-gray-600 hx:transition-colors hx:dark:text-gray-400 hx:hover:bg-gray-100 hx:hover:text-gray-900 hx:dark:hover:bg-primary-100/5 hx:dark:hover:text-gray-50" -}}
 {{- $hideLabel := .hideLabel | default false -}}
 
-{{- $versions := site.Params.versions -}}
+{{- $versions := partial "version-list.html" . -}}
 {{- $latest := site.Params.version.latest -}}
 {{- $isBleedingEdge := false -}}
 {{- with $versions -}}
   {{- $default := index . 0 -}}
   {{- $current := $default.name -}}
-  {{- /* Match the current page against the version roots, longest prefix wins. */ -}}
+  {{- /* Match the current page against the version roots, longest prefix wins.
+      The default entry (index 0) is skipped: its URL path may equal the site's
+      own path prefix and would match every page. */ -}}
   {{- $rel := $page.RelPermalink -}}
-  {{- range . -}}
-    {{- /* Version URLs may be absolute; match on the path portion only. */ -}}
-    {{- $vPath := (urls.Parse .url).Path -}}
-    {{- if and (ne $vPath "/") (strings.HasPrefix $rel $vPath) -}}
-      {{- $current = .name -}}
+  {{- range $i, $v := . -}}
+    {{- if gt $i 0 -}}
+      {{- $vPath := (urls.Parse $v.url).Path -}}
+      {{- if and (ne $vPath "/") (strings.HasPrefix $rel $vPath) -}}
+        {{- $current = $v.name -}}
+      {{- end -}}
     {{- end -}}
   {{- end -}}
   {{- if eq $current $default.name -}}

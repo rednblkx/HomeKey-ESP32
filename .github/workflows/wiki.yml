@@ -66,11 +66,29 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "latest=${latest}" >> "$GITHUB_OUTPUT"
 
+          versions_json="$(python3 - "${{ steps.pages.outputs.base_url }}" "${docs_tags}" <<'PYEOF'
+          import json
+          import sys
+          base_url = sys.argv[1].rstrip("/")
+          docs_tags = sys.argv[2].split()
+          versions = [{"name": "main", "url": f"{base_url}/"}]
+          for tag in sorted(docs_tags, reverse=True):
+              versions.append({"name": tag, "url": f"{base_url}/{tag}/"})
+          print(json.dumps(versions))
+          PYEOF
+          )"
+          {
+            echo "versions_json<<EOF"
+            echo "${versions_json}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build default branch
         env:
           HUGO_ENVIRONMENT: production
           HUGO_ENV: production
           HUGO_PARAMS_VERSION_LATEST: ${{ steps.tags.outputs.latest }}
+          HUGO_PARAMS_VERSIONS: ${{ steps.tags.outputs.versions_json }}
         run: |
           hugo \
             --gc -s docs --minify \
@@ -82,8 +100,7 @@ jobs:
           HUGO_ENVIRONMENT: production
           HUGO_ENV: production
           BASE_URL: ${{ steps.pages.outputs.base_url }}
-          DOCS_TAGS: ${{ steps.tags.outputs.docs_tags }}
-          LATEST_TAG: ${{ steps.tags.outputs.latest }}
+          VERSIONS_JSON: ${{ steps.tags.outputs.versions_json }}
         run: |
           base_url="${BASE_URL%/}"
           mkdir -p "${{ runner.temp }}/site"
@@ -99,27 +116,19 @@ jobs:
                      "${{ runner.temp }}/${tag}/docs/assets/css"
             cp docs/layouts/_partials/versions.html \
                docs/layouts/_partials/navbar.html \
+               docs/layouts/_partials/banner.html \
+               docs/layouts/_partials/version-list.html \
                "${{ runner.temp }}/${tag}/docs/layouts/_partials/"
             cp docs/assets/css/custom.css \
                "${{ runner.temp }}/${tag}/docs/assets/css/"
 
-            # Version switcher params, shared by all tag builds.
             cat > "${{ runner.temp }}/${tag}/override.yaml" <<EOF
           params:
             version:
-              latest: "${LATEST_TAG}"
-            versions:
-              - name: main
-                url: ${base_url}/
+              latest: "$(echo "${VERSIONS_JSON}" | python3 -c 'import json,sys; print([v["name"] for v in json.load(sys.stdin) if v["name"] != "main"][0])')"
+            versions: ${VERSIONS_JSON}
+            banner: null
           EOF
-            # One entry per docs-bearing tag, newest first.
-            echo "${DOCS_TAGS}" | sort -Vr | while read -r t; do
-              [ -z "${t}" ] && continue
-              cat >> "${{ runner.temp }}/${tag}/override.yaml" <<EOF
-              - name: ${t}
-                url: ${base_url}/${t}/
-          EOF
-            done
 
             # Add the switcher menu entry to the tag's own hugo.yaml, right
             # before the top-level params: key (which every tag config has).
@@ -147,7 +156,7 @@ jobs:
               --destination "${{ runner.temp }}/site/${tag}" \
               --baseURL "${base_url}/${tag}/"
             git worktree remove --force "${{ runner.temp }}/${tag}"
-          done <<< "${DOCS_TAGS}"
+          done <<< "$(echo "${VERSIONS_JSON}" | python3 -c 'import json,sys; print("\n".join(v["name"] for v in json.load(sys.stdin) if v["name"] != "main"))')"
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5
