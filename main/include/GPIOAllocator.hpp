@@ -133,20 +133,20 @@ public:
     gpio_num_t get_pin() const { return control_ ? control_->pin_ : GPIO_NUM_NC; }
     gpio_mode_t get_mode() const { return control_ ? control_->mode_ : GPIO_MODE_DISABLE; }
     void set_level(bool level) {
-      if (!control_) { ESP_LOGW("GPIOLease", "set_level on unconfigured/released lease"); return; }
+      if (!control_) { ESP_LOGD("GPIOLease", "set_level on unconfigured/released lease"); return; }
       gpio_set_level(control_->pin_, level);
     }
     bool get_level() const { return control_ ? gpio_get_level(control_->pin_) : 0; }
     void set_direction(gpio_mode_t mode) {
-      if (!control_) { ESP_LOGW("GPIOLease", "set_direction on unconfigured/released lease"); return; }
+      if (!control_) { ESP_LOGD("GPIOLease", "set_direction on unconfigured/released lease"); return; }
       gpio_set_direction(control_->pin_, mode);
     }
     void set_pullup(bool val) {
-      if (!control_) { ESP_LOGW("GPIOLease", "set_pullup on unconfigured/released lease"); return; }
+      if (!control_) { ESP_LOGD("GPIOLease", "set_pullup on unconfigured/released lease"); return; }
       val ? gpio_pullup_en(control_->pin_) : gpio_pullup_dis(control_->pin_);
     }
     void set_pulldown(bool val) {
-      if (!control_) { ESP_LOGW("GPIOLease", "set_pulldown on unconfigured/released lease"); return; }
+      if (!control_) { ESP_LOGD("GPIOLease", "set_pulldown on unconfigured/released lease"); return; }
       val ? gpio_pulldown_en(control_->pin_) : gpio_pulldown_dis(control_->pin_);
     }
 
