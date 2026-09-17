@@ -60,7 +60,7 @@
         {{- end -}}
         {{- $sidebarVersions := partial "version-list.html" (dict "context" $context) -}}
         {{- with $sidebarVersions -}}
-          <div class="hx:flex hx:grow hx:flex-col hx:md:hidden">{{ partial "versions.html" (dict "context" $context "iconHeight" 12 "location" "bottom" "class" "hx:h-7 hx:px-2 hx:text-xs hx:text-gray-600 hx:transition-colors hx:dark:text-gray-400 hx:hover:bg-gray-100 hx:hover:text-gray-900 hx:dark:hover:bg-primary-100/5 hx:dark:hover:text-gray-50 hx:grow") }}</div>
+          <div class="hx:flex hx:flex-col hx:md:hidden">{{ partial "versions.html" (dict "context" $context "iconHeight" 12 "location" "bottom" "class" "hx:h-7 hx:px-2 hx:text-xs hx:text-gray-600 hx:transition-colors hx:dark:text-gray-400 hx:hover:bg-gray-100 hx:hover:text-gray-900 hx:dark:hover:bg-primary-100/5 hx:dark:hover:text-gray-50 hx:grow") }}</div>
         {{- end -}}
       {{- end -}}
     </div>
