@@ -174,7 +174,7 @@ public:
     }
     ESP_LOGD("GPIOAllocator", "Allocating GPIO Pin %d for '%s'", pin, tag);
     if (std::find_if(std::begin(STRAPPING_PINS), std::end(STRAPPING_PINS), [&](auto e){ return e == pin;}) != std::end(STRAPPING_PINS)) {
-      ESP_LOGW("GPIOAllocator", "GPIO Pin %d is a strapping pin, using it may have unexpected consequences!", pin);
+      ESP_LOGW("GPIOAllocator", "GPIO Pin %d is a strapping pin!", pin);
     }
 
     auto& entry = entries_[static_cast<size_t>(pin)];
