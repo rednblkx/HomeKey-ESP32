@@ -158,7 +158,18 @@ namespace espConfig
 
   struct misc_config_t
   {
-    std::string deviceName = DEVICE_NAME;
+    misc_config_t() {
+      std::string name = DEVICE_NAME;
+      if (name.ends_with("{MAC}")) {
+        name.resize(name.size() - 5);
+        uint8_t mac[6];
+        esp_read_mac(mac, ESP_MAC_BT);
+        const std::string macStr = fmt::format("{:02X}{:02X}{:02X}{:02X}", mac[2], mac[3], mac[4], mac[5]);
+        name.append(macStr);
+      }
+      deviceName = name;
+    }
+    std::string deviceName;
     std::string otaPasswd = OTA_PWD;
     uint8_t hk_key_color = HOMEKEY_COLOR;
     std::string setupCode = SETUP_CODE;
