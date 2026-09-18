@@ -208,9 +208,10 @@ private:
   std::mutex m_wsClientsMutex;
   esp_timer_handle_t m_statusTimer;
   std::deque<std::vector<uint8_t>> m_wsBroadcastBuffer;
+  std::mutex m_wsBroadcastMutex;
   static constexpr size_t kMaxBacklogBytes = 16 * 1024;
   static constexpr uint16_t kMaxBacklogFrames = 100;
-  std::atomic<size_t> m_wsBroadcastBytes{0};
+  size_t m_wsBroadcastBytes{0};
   std::atomic<uint16_t> wsBacklogSize{0};
   std::atomic<uint64_t> m_wsFrameDropped{0};
   uint64_t m_lastReportedWsFrameDropped{0};

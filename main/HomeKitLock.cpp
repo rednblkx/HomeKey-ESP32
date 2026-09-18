@@ -63,9 +63,9 @@ HomeKitLock::HomeKitLock(std::function<void(int)> &conn_cb, LockManager& lockMan
               EventValueChanged s = alpaca::deserialize<EventValueChanged>(hk_event.data, ec);
               if(ec) { ESP_LOGE(TAG, "Failed to deserialize EventValueChanged event: %s", ec.message().c_str()); return; }
               if(s.name == "btrLevel") {
-                  updateBatteryStatus(s.newValue, m_statusLowBattery->getVal());
+                  if (m_statusLowBattery) updateBatteryStatus(s.newValue, m_statusLowBattery->getVal());
               } else if(s.name == "btrLowThreshold"){
-                  updateBatteryStatus(m_batteryLevel->getVal(), s.newValue);
+                  if (m_batteryLevel) updateBatteryStatus(m_batteryLevel->getVal(), s.newValue);
               }
           }
           break;

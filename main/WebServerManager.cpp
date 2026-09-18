@@ -356,7 +356,17 @@ void WebServerManager::end() {
   }
 
   if (m_wsTaskHandle) {
-    vTaskDelete(m_wsTaskHandle);
+    WsFrame *sentinel = new WsFrame{};
+    sentinel->fd = -1;
+    if (xQueueSend(m_wsQueue, &sentinel, pdMS_TO_TICKS(100)) == pdTRUE) {
+      if (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(1000)) == 0) {
+        ESP_LOGW(TAG, "ws_send_task did not exit in time; forcing deletion");
+        vTaskDelete(m_wsTaskHandle);
+      }
+    } else {
+      ESP_LOGW(TAG, "Failed to enqueue shutdown sentinel; forcing deletion");
+      vTaskDelete(m_wsTaskHandle);
+    }
     m_wsTaskHandle = nullptr;
   }
 
@@ -435,11 +445,17 @@ esp_err_t WebServerManager::ws_post_handshake_cb(httpd_req_t *req) {
   }
 
   if(!instance->m_wsBroadcastBuffer.empty()){
-    for (auto &v : instance->m_wsBroadcastBuffer) {
+    std::vector<std::vector<uint8_t>> backlog;
+    {
+      std::scoped_lock lock(instance->m_wsBroadcastMutex);
+      backlog.assign(std::make_move_iterator(instance->m_wsBroadcastBuffer.begin()),
+                     std::make_move_iterator(instance->m_wsBroadcastBuffer.end()));
+      instance->m_wsBroadcastBuffer.clear();
+      instance->m_wsBroadcastBytes = 0;
+    }
+    for (auto &v : backlog) {
       instance->queue_ws_frame(sockfd, v.data(), v.size(), HTTPD_WS_TYPE_TEXT);
     }
-    instance->m_wsBroadcastBuffer.clear();
-    instance->m_wsBroadcastBytes.store(0, std::memory_order_relaxed);
   }
 
   return ESP_OK;
@@ -673,14 +689,14 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
  */
 esp_err_t WebServerManager::handleRootOrHash(httpd_req_t *req) {
   WebServerManager* instance = getInstance(req);
-  char sessionId[65];
+  char sessionId[65] = {};
   size_t sessionIdLen = sizeof(sessionId);
   esp_err_t err = httpd_req_get_cookie_val(req, "sessionId", sessionId, &sessionIdLen);
   if(!instance->basicAuth(req)){
     return sendAuthFailure(req);
   }
   std::string sessionCookie;
-  if(instance->m_sessionId.compare(sessionId) != 0 || err != ESP_OK){
+  if(err != ESP_OK || instance->m_sessionId.compare(sessionId) != 0){
     sessionCookie = fmt::format("sessionId={};", instance->m_sessionId);
     httpd_resp_set_hdr(req, "Set-Cookie", sessionCookie.c_str());
   }
@@ -1902,7 +1918,7 @@ esp_err_t WebServerManager::handleWebSocket(httpd_req_t *req) {
     return ESP_FAIL;
 
   if (req->method == HTTP_GET) {
-    char sessionId[65];
+    char sessionId[65] = {};
     size_t sessionIdLen = sizeof(sessionId);
     esp_err_t err = httpd_req_get_cookie_val(req, "sessionId", sessionId, &sessionIdLen);
     if(!instance->basicAuth(req) && (err != ESP_OK || strncmp(sessionId, instance->m_sessionId.c_str(), sessionIdLen) != 0)){
@@ -2019,13 +2035,14 @@ void WebServerManager::broadcastWs(const uint8_t *payload, size_t len,
     if (len > kMaxBacklogBytes) {
       return;
     }
+    std::scoped_lock lock(m_wsBroadcastMutex);
     while (!m_wsBroadcastBuffer.empty() &&
            (m_wsBroadcastBuffer.size() >= wsBacklogSize ||
-            m_wsBroadcastBytes.load(std::memory_order_relaxed) + len > kMaxBacklogBytes)) {
-      m_wsBroadcastBytes.fetch_sub(m_wsBroadcastBuffer.front().size(), std::memory_order_relaxed);
+            m_wsBroadcastBytes + len > kMaxBacklogBytes)) {
+      m_wsBroadcastBytes -= m_wsBroadcastBuffer.front().size();
       m_wsBroadcastBuffer.pop_front();
     }
-    m_wsBroadcastBytes.fetch_add(len, std::memory_order_relaxed);
+    m_wsBroadcastBytes += len;
     m_wsBroadcastBuffer.emplace_back(payload, payload + len);
     return;
   }
@@ -2079,6 +2096,13 @@ void WebServerManager::ws_send_task(void *arg) {
     if (!raw_frame)
       continue;
 
+    if (raw_frame->fd == -1) {
+      delete raw_frame;
+      xTaskNotifyGive(instance->m_wsTaskHandle);
+      vTaskDelete(NULL);
+      return;
+    }
+
     // Drain everything already queued before waiting again so a burst of
     // frames costs one wake-up instead of one per frame.
     do {
@@ -2117,7 +2141,7 @@ void WebServerManager::ws_send_task(void *arg) {
         }
       }
     } while (xQueueReceive(instance->m_wsQueue, &raw_frame, 0) == pdPASS &&
-             raw_frame != nullptr);
+             raw_frame != nullptr && raw_frame->fd != -1);
   }
 }
 
@@ -2270,13 +2294,23 @@ esp_err_t WebServerManager::handleOTAUpload(httpd_req_t *req) {
     return ESP_OK;
   }
   auto fs_part = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_SPIFFS, "spiffs");
-  if (uploadType == OTAUploadType::LITTLEFS && req->content_len > fs_part->size) {
-    ESP_LOGE(TAG, "OTA size %zu > max %zu", req->content_len, fs_part->size);
-    instance->m_otaInProgress = false;
-    httpd_resp_set_status(req, "413 Payload Too Large");
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_sendstr(req, "{\"success\":false,\"error\":\"LittleFS too large\"}");
-    return ESP_OK;
+  if (uploadType == OTAUploadType::LITTLEFS) {
+    if (!fs_part) {
+      ESP_LOGE(TAG, "No LittleFS (spiffs) partition found");
+      instance->m_otaInProgress = false;
+      httpd_resp_set_status(req, "500 Internal Server Error");
+      httpd_resp_set_type(req, "application/json");
+      httpd_resp_sendstr(req, "{\"success\":false,\"error\":\"No LittleFS partition\"}");
+      return ESP_OK;
+    }
+    if (req->content_len > fs_part->size) {
+      ESP_LOGE(TAG, "OTA size %zu > max %zu", req->content_len, fs_part->size);
+      instance->m_otaInProgress = false;
+      httpd_resp_set_status(req, "413 Payload Too Large");
+      httpd_resp_set_type(req, "application/json");
+      httpd_resp_sendstr(req, "{\"success\":false,\"error\":\"LittleFS too large\"}");
+      return ESP_OK;
+    }
   }
 
   bool skipReboot = false;

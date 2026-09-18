@@ -566,7 +566,9 @@ void ConfigManager::deserialize(msgpack_object obj, std::string type) {
                 });
               } else if constexpr (std::is_same_v<PointeeType, std::map<std::string, uint8_t>>) {
                 std::ranges::for_each(msgpack_elements, [&](const msgpack_object& o) {
-                    if (o.type == MSGPACK_OBJECT_ARRAY && o.via.array.size >= 2) {
+                    if (o.type == MSGPACK_OBJECT_ARRAY && o.via.array.size >= 2 &&
+                        o.via.array.ptr[0].type == MSGPACK_OBJECT_STR &&
+                        o.via.array.ptr[1].type == MSGPACK_OBJECT_POSITIVE_INTEGER) {
                         const msgpack_object* inner_array_ptr = o.via.array.ptr;
                         std::string key_str(inner_array_ptr[0].via.str.ptr, inner_array_ptr[0].via.str.size);
                         uint64_t value_val = inner_array_ptr[1].via.u64;
