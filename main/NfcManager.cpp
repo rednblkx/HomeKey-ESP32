@@ -264,6 +264,7 @@ void NfcManager::pollingTask() {
     const uint16_t passiveTargetTimeoutMs = 500;
     const TickType_t pollDelayTicks =
         pdMS_TO_TICKS(m_nfcFastPollingEnabled ? 5 : 100);
+    std::vector<uint8_t> uid;
 
     ESP_LOGI(TAG,
              "NFC poll tuning active: delay=%lu ms, passiveTimeout=%u ms",
@@ -317,7 +318,6 @@ void NfcManager::pollingTask() {
 					continue;
         }
 
-        std::vector<uint8_t> uid;
         std::array<uint8_t,2> atqa;
         uint8_t sak;
         if (m_reader->pollForTag(uid, atqa, sak, passiveTargetTimeoutMs)) {

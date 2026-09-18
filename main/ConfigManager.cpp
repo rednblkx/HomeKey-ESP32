@@ -19,6 +19,7 @@
 #include "nvs.h"
 #include <mbedtls/entropy.h>
 #include <mbedtls/ctr_drbg.h>
+#include <mutex>
 #include <mbedtls/x509_crt.h>
 #include <mbedtls/pk.h>
 #include <mbedtls/error.h>
@@ -485,13 +486,16 @@ bool ConfigManager::saveConfigToNvs(const char *key) {
  */
 void ConfigManager::deserialize(msgpack_object obj, std::string type) {
   if (obj.type == MSGPACK_OBJECT_MAP) {
+    auto sectionIt = m_configMap.find(type);
+    if (sectionIt == m_configMap.end()) return;
     msgpack_object_kv *map = obj.via.map.ptr;
     msgpack_object_kv *const end = obj.via.map.ptr + obj.via.map.size;
     std::span range(map, end);
     for (auto v : range) {
       if (v.key.type == MSGPACK_OBJECT_STR) {
         std::string key(v.key.via.str.ptr, v.key.via.str.size);
-        if (!m_configMap.contains(type) || !m_configMap[type].contains(key))
+        auto entryIt = sectionIt->second.find(key);
+        if (entryIt == sectionIt->second.end())
           continue;
 
         std::visit([&](auto&& arg) {
@@ -585,7 +589,7 @@ void ConfigManager::deserialize(msgpack_object obj, std::string type) {
               ESP_LOGW(TAG, "DON'T KNOW THIS ONE! - %s (%d) = %d", key.c_str(), v.val.type, v.val.via.u64);
             }
           }
-        }, m_configMap[type][key]);
+        }, entryIt->second);
       }
     }
   } else {
@@ -609,23 +613,27 @@ std::vector<uint8_t> ConfigManager::serialize() {
   msgpack_sbuffer_init(&sbuf);
   msgpack_packer pk;
   msgpack_packer_init(&pk, &sbuf, msgpack_sbuffer_write);
-  ConfigMapType configMap;
+  const ConfigMapType* primary = nullptr;
+  const ConfigMapType* secondary = nullptr;
   if constexpr (std::is_same_v<espConfig::misc_config_t, ConfigType>){
-    configMap = m_configMap["misc"];
-    configMap.insert(m_configMap["actions"].begin(), m_configMap["actions"].end());
+    primary = &m_configMap.at("misc");
+    secondary = &m_configMap.at("actions");
   } else if constexpr (std::is_same_v<espConfig::actions_config_t, ConfigType>){
-    configMap = m_configMap["actions"];
-    configMap.insert(m_configMap["misc"].begin(), m_configMap["misc"].end());
+    primary = &m_configMap.at("actions");
+    secondary = &m_configMap.at("misc");
   } else if constexpr (std::is_same_v<espConfig::mqtt_ssl_t, ConfigType>){
-    configMap = m_configMap["ssl"];
+    primary = &m_configMap.at("ssl");
   } else if constexpr (std::is_same_v<espConfig::mqttConfig_t, ConfigType>){
-    configMap = m_configMap["mqtt"];
+    primary = &m_configMap.at("mqtt");
   } else if constexpr (std::is_same_v<espConfig::https_certs_t, ConfigType>){
-    configMap = m_configMap["https"];
+    primary = &m_configMap.at("https");
   }
-  msgpack_pack_map(&pk, configMap.size()); // Pack the map size
+  size_t mapSize = primary->size() + (secondary ? secondary->size() : 0);
+  msgpack_pack_map(&pk, mapSize); // Pack the map size
 
-  for (const auto &pair : configMap) {
+  for (auto section : {primary, secondary}) {
+    if (!section) continue;
+    for (const auto &pair : *section) {
     msgpack_pack_str(&pk, pair.first.size()); // Pack the key (string) size
     msgpack_pack_str_body(&pk, pair.first.data(), pair.first.size()); // Pack the key (string) body
 
@@ -675,9 +683,11 @@ std::vector<uint8_t> ConfigManager::serialize() {
             msgpack_pack_str(&pk, map_pair.first.size());
             msgpack_pack_str_body(&pk, map_pair.first.data(), map_pair.first.size());
             msgpack_pack_unsigned_char(&pk, map_pair.second);
-          }     }
+          }
+        }
       }
     }, pair.second);
+    }
   }
 
   std::vector<uint8_t> serialized_data(reinterpret_cast<uint8_t*>(sbuf.data), reinterpret_cast<uint8_t*>(sbuf.data) + sbuf.size);
@@ -852,15 +862,15 @@ std::string ConfigManager::serializeToJson() {
       return ""; // Error creating JSON object
   }
 
-  ConfigMapType configMap;
+  const ConfigMapType* configMapPtr = nullptr;
   if constexpr (std::is_same_v<espConfig::misc_config_t, ConfigType>){
-    configMap = m_configMap["misc"];
+    configMapPtr = &m_configMap.at("misc");
   } else if constexpr (std::is_same_v<espConfig::actions_config_t, ConfigType>){
-    configMap = m_configMap["actions"];
+    configMapPtr = &m_configMap.at("actions");
   } else if constexpr (std::is_same_v<espConfig::mqttConfig_t, ConfigType>){
-    configMap = m_configMap["mqtt"];
+    configMapPtr = &m_configMap.at("mqtt");
   }
-    for (const auto &pair : configMap) {
+    for (const auto &pair : *configMapPtr) {
         const std::string& key = pair.first;
         std::visit([&](auto&& arg) {
             using T = std::decay_t<decltype(arg)>;
@@ -956,13 +966,13 @@ bool ConfigManager::deserializeFromJson(const std::string& json_string) {
         return false;
     }
 
-    ConfigMapType configMap;
+    const ConfigMapType* configMapPtr = nullptr;
     if constexpr (std::is_same_v<ConfigType, espConfig::misc_config_t>){
-      configMap = m_configMap["misc"];
+      configMapPtr = &m_configMap.at("misc");
     } else if constexpr (std::is_same_v<ConfigType, espConfig::actions_config_t>){
-      configMap = m_configMap["actions"];
+      configMapPtr = &m_configMap.at("actions");
     } else if constexpr (std::is_same_v<ConfigType, espConfig::mqttConfig_t>){
-      configMap = m_configMap["mqtt"];
+      configMapPtr = &m_configMap.at("mqtt");
     } else {
       static_assert(std::is_void_v<ConfigType> && false, "Unsupported ConfigType for deserializeFromJson");
     }
@@ -970,7 +980,7 @@ bool ConfigManager::deserializeFromJson(const std::string& json_string) {
     cJSON *item = root.get()->child;
     while (item) {
         std::string key = item->string;
-        if (configMap.contains(key)) {
+        if (configMapPtr->contains(key)) {
             std::visit([&](auto&& arg) {
                 using T = std::decay_t<decltype(arg)>;
                 if constexpr (std::is_pointer_v<T>) {
@@ -1088,7 +1098,7 @@ bool ConfigManager::deserializeFromJson(const std::string& json_string) {
                         }
                     }
                 }
-            }, configMap.at(key));
+            }, configMapPtr->at(key));
         } else ESP_LOGW(TAG, "Key '%s' could not be found!", key.c_str());
         item = item->next;
     }
@@ -1162,45 +1172,54 @@ bool ConfigManager::saveCertificate(espConfig::CertType certType, const std::str
     }
 }
 
-std::string ConfigManager::loadCertificate(espConfig::CertType certType) {
+void ConfigManager::loadCertificateInto(espConfig::CertType certType, std::string& out) {
+    out.clear();
     if (!m_isInitialized) {
         ESP_LOGE(TAG, "Cannot load certificate, ConfigManager not initialized.");
-        return "";
+        return;
     }
 
-    std::string content;
+    const std::string* content = nullptr;
     const char* typeStr = "";
 
     switch(certType) {
         case espConfig::CertType::MQTT_CA:
-            content = m_mqttSslConfig.caCert;
+            content = &m_mqttSslConfig.caCert;
             typeStr = "CA";
             break;
         case espConfig::CertType::MQTT_CLIENT:
-            content = m_mqttSslConfig.clientCert;
+            content = &m_mqttSslConfig.clientCert;
             typeStr = "Client";
             break;
         case espConfig::CertType::MQTT_PRIVATE_KEY:
-            content = m_mqttSslConfig.clientKey;
+            content = &m_mqttSslConfig.clientKey;
             typeStr = "Private Key";
             break;
         case espConfig::CertType::HTTPS_SERVER_CERT:
-            content = m_httpsCertsConfig.serverCert;
+            content = &m_httpsCertsConfig.serverCert;
             typeStr = "HTTPS Server";
             break;
         case espConfig::CertType::HTTPS_PRIVATE_KEY:
-            content = m_httpsCertsConfig.privateKey;
+            content = &m_httpsCertsConfig.privateKey;
             typeStr = "HTTPS Private Key";
             break;
         case espConfig::CertType::HTTPS_CA_CERT:
-            content = m_httpsCertsConfig.caCert;
+            content = &m_httpsCertsConfig.caCert;
             typeStr = "HTTPS CA";
             break;
         default:
-    		break;
+            break;
     }
 
-    ESP_LOGD(TAG, "%s loaded successfully (size: %zu bytes)", typeStr, content.length());
+    if (content) {
+        out = *content;
+    }
+    ESP_LOGD(TAG, "%s loaded successfully (size: %zu bytes)", typeStr, out.length());
+}
+
+std::string ConfigManager::loadCertificate(espConfig::CertType certType) {
+    std::string content;
+    loadCertificateInto(certType, content);
     return content;
 }
 
@@ -1378,18 +1397,18 @@ bool ConfigManager::validateKeyCertPair(const std::string& privateKey, const std
         return false;
     }
 
-    ScopedEntropy entropy;
-    ScopedCtrDrbg ctr_drbg;
-
-    int ret = mbedtls_ctr_drbg_seed(ctr_drbg.get(), mbedtls_entropy_func, entropy.get(),
-                                  nullptr, 0);
-    if (ret != 0) {
-        ESP_LOGE("ConfigManager", "mbedtls_ctr_drbg_seed: %d", ret);
-        return false;
-    }
+    static ScopedEntropy entropy;
+    static ScopedCtrDrbg ctr_drbg;
+    static std::once_flag drbg_seeded;
+    std::call_once(drbg_seeded, [] {
+        if (mbedtls_ctr_drbg_seed(ctr_drbg.get(), mbedtls_entropy_func, entropy.get(),
+                                  nullptr, 0) != 0) {
+            ESP_LOGE("ConfigManager", "mbedtls_ctr_drbg_seed failed");
+        }
+    });
 
     ScopedPk pk;
-    ret = mbedtls_pk_parse_key(pk.get(), reinterpret_cast<const unsigned char*>(privateKey.c_str()), privateKey.length() + 1, nullptr, 0, mbedtls_ctr_drbg_random, ctr_drbg.get());
+    int ret = mbedtls_pk_parse_key(pk.get(), reinterpret_cast<const unsigned char*>(privateKey.c_str()), privateKey.length() + 1, nullptr, 0, mbedtls_ctr_drbg_random, ctr_drbg.get());
     if (ret != 0) {
         char error_buf[100];
         mbedtls_strerror(ret, error_buf, sizeof(error_buf));
@@ -1461,7 +1480,7 @@ std::vector<CertificateStatus> ConfigManager::getCertificatesStatus(){
   std::string certStr;
   for (auto certType : types) {
     ScopedX509Crt cert;
-    certStr = loadCertificate(certType);
+    loadCertificateInto(certType, certStr);
     const char* typeStr = "";
     switch(certType) {
         case espConfig::CertType::MQTT_CA: typeStr = "ca"; break;
@@ -1483,7 +1502,7 @@ std::vector<CertificateStatus> ConfigManager::getCertificatesStatus(){
         ESP_LOGE(TAG, "Unable to parse '%s' certificate: %d", typeStr, ret);
         continue;
       }
-      char subject[256], issuer[256], serial[256];
+      char subject[128], issuer[128], serial[128];
       ret = mbedtls_x509_dn_gets(subject, sizeof(subject), &cert.get()->subject);
       if(ret < 0){
         ESP_LOGE(TAG, "Unable to retrieve subject DN for '%s' certificate: %d", typeStr, ret);

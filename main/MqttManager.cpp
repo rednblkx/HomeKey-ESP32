@@ -152,6 +152,8 @@ bool MqttManager::begin(std::string deviceID) {
     mqtt_cfg.session.last_will.msg_len = 7;
     mqtt_cfg.session.last_will.retain = true;
     mqtt_cfg.session.last_will.qos = 1;
+    mqtt_cfg.buffer.size = 512;
+    mqtt_cfg.outbox.limit = 2048;
 
     m_client = esp_mqtt_client_init(&mqtt_cfg);
     if (!m_client) {
@@ -563,7 +565,7 @@ void MqttManager::publishHassDiscovery() {
 
         fillPayload(payload);
 
-        std::string payloadStr = payload.toStringFormatted();
+        std::string payloadStr = payload.toStringUnformatted();
         std::string topic = "homeassistant/" + topicSuffix;
         publish(topic, payloadStr, 1, true);
     };

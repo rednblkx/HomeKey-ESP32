@@ -68,7 +68,7 @@ struct nfcGpioPins_t {
 #endif
 };
 
-static const std::array<nfcGpioPins_t,5> nfcGpioPinsPresets = {
+inline const std::array<nfcGpioPins_t,5> nfcGpioPinsPresets = {
     {
       // PN532
     {"Default", 0, {SS_PIN, SCK_PIN, MISO_PIN, MOSI_PIN}},

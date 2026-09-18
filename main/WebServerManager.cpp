@@ -52,7 +52,7 @@
 // ============================================================================
 
 const char *WebServerManager::TAG = "WebServerManager";
-const size_t MAX_WS_PAYLOAD = 8192;
+const size_t MAX_WS_PAYLOAD = 1024;
 const size_t HEAP_UPPER_THRESHOLD = 70 * 1000;
 const size_t HEAP_LOWER_THRESHOLD = 50 * 1000;
 
@@ -258,7 +258,7 @@ void WebServerManager::begin() {
   httpd_ssl_config_t ssl_config = HTTPD_SSL_CONFIG_DEFAULT();
   ssl_config.httpd.max_uri_handlers = 22;
   ssl_config.httpd.max_open_sockets = 4;
-  ssl_config.httpd.stack_size = 6144;
+  ssl_config.httpd.stack_size = 8192;
   ssl_config.httpd.uri_match_fn = httpd_uri_match_wildcard;
   ssl_config.httpd.lru_purge_enable = true;
   ssl_config.httpd.backlog_conn = 4;
@@ -363,12 +363,7 @@ void WebServerManager::end() {
   if (m_wsQueue) {
     WsFrame* frame = nullptr;
     while (xQueueReceive(m_wsQueue, &frame, 0) == pdPASS) {
-      if (frame) {
-        if (frame->payload != frame->inlinePayload) {
-          delete[] frame->payload;
-        }
-        delete frame;
-      }
+      delete frame; // payload lifetime is managed by sharedData/inline buffer
     }
     vQueueDelete(m_wsQueue);
     m_wsQueue = nullptr;
@@ -397,13 +392,20 @@ bool WebServerManager::basicAuth(httpd_req_t* req){
     ESP_LOGD(TAG, "Invalid HTTP Header, authorization failed");
     return false;
   }
-  const std::string cred = fmt::format("{}:{}", m_configManager.getConfig<espConfig::misc_config_t>().webUsername, m_configManager.getConfig<espConfig::misc_config_t>().webPassword);
-  size_t n = 0;
-  esp_crypto_base64_encode(NULL, 0, &n, (const uint8_t*)cred.c_str(), cred.size());
-  std::string digest = "Basic ";
-  digest.resize(6+n);
-  esp_crypto_base64_encode((uint8_t *)digest.data() + 6, digest.size(), &n, (const uint8_t *)cred.c_str(), cred.size());
-  return authReq == digest;
+  const auto& cred = m_configManager.getConfig<espConfig::misc_config_t>();
+  std::scoped_lock lock(m_authDigestMutex);
+  if (!m_authDigestValid || m_authDigestUser != cred.webUsername || m_authDigestPass != cred.webPassword) {
+    const std::string userpass = fmt::format("{}:{}", cred.webUsername, cred.webPassword);
+    size_t n = 0;
+    esp_crypto_base64_encode(NULL, 0, &n, (const uint8_t*)userpass.c_str(), userpass.size());
+    m_authDigest = "Basic ";
+    m_authDigest.resize(6+n);
+    esp_crypto_base64_encode((uint8_t *)m_authDigest.data() + 6, m_authDigest.size(), &n, (const uint8_t *)userpass.c_str(), userpass.size());
+    m_authDigestUser = cred.webUsername;
+    m_authDigestPass = cred.webPassword;
+    m_authDigestValid = true;
+  }
+  return authReq == m_authDigest;
 }
 
 // ============================================================================
@@ -437,6 +439,7 @@ esp_err_t WebServerManager::ws_post_handshake_cb(httpd_req_t *req) {
       instance->queue_ws_frame(sockfd, v.data(), v.size(), HTTPD_WS_TYPE_TEXT);
     }
     instance->m_wsBroadcastBuffer.clear();
+    instance->m_wsBroadcastBytes.store(0, std::memory_order_relaxed);
   }
 
   return ESP_OK;
@@ -641,21 +644,16 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
   if (use_compressed)
     httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
 
-  char *buffer = (char*)malloc(4096); 
-  if (!buffer) {
-      file.close();
-      return ESP_ERR_NO_MEM;
-  }
+  char buffer[4096];
 
   size_t bytes_read;
   esp_err_t err = ESP_OK;
-  while ((bytes_read = file.read((uint8_t*)buffer, 4096)) > 0) {
+  while ((bytes_read = file.read((uint8_t*)buffer, sizeof(buffer))) > 0) {
       err = httpd_resp_send_chunk(req, buffer, bytes_read);
       vTaskDelay(pdMS_TO_TICKS(5));
       if (err != ESP_OK) break;
   }
 
-  free(buffer);
   file.close();
   if (err != ESP_OK) {
       httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "TLS send error");
@@ -1904,14 +1902,12 @@ esp_err_t WebServerManager::handleWebSocket(httpd_req_t *req) {
     return ESP_FAIL;
 
   if (req->method == HTTP_GET) {
-    char *sessionId = new char[65];
-    size_t sessionIdLen = 65;
+    char sessionId[65];
+    size_t sessionIdLen = sizeof(sessionId);
     esp_err_t err = httpd_req_get_cookie_val(req, "sessionId", sessionId, &sessionIdLen);
     if(!instance->basicAuth(req) && (err != ESP_OK || strncmp(sessionId, instance->m_sessionId.c_str(), sessionIdLen) != 0)){
-      delete[] sessionId;
       return sendAuthFailure(req);
     }
-    delete[] sessionId;
 
     // Handshake check succeeded. Returning ESP_OK completes the handshake.
     // The server will invoke WebServerManager::ws_post_handshake_cb immediately after.
@@ -2007,7 +2003,7 @@ void WebServerManager::removeWebSocketClient(int fd) {
 }
 
 void WebServerManager::setWSBackLogSize(const uint16_t size){
-  wsBacklogSize = size;
+  wsBacklogSize = size > kMaxBacklogFrames ? kMaxBacklogFrames : size;
 }
 
 void WebServerManager::broadcastWs(const uint8_t *payload, size_t len,
@@ -2020,19 +2016,31 @@ void WebServerManager::broadcastWs(const uint8_t *payload, size_t len,
       fds.push_back(c->fd);
   }
   if (fds.empty() && wsBacklogSize > 0) {
-    if(m_wsBroadcastBuffer.size() >= wsBacklogSize){
+    if (len > kMaxBacklogBytes) {
+      return;
+    }
+    while (!m_wsBroadcastBuffer.empty() &&
+           (m_wsBroadcastBuffer.size() >= wsBacklogSize ||
+            m_wsBroadcastBytes.load(std::memory_order_relaxed) + len > kMaxBacklogBytes)) {
+      m_wsBroadcastBytes.fetch_sub(m_wsBroadcastBuffer.front().size(), std::memory_order_relaxed);
       m_wsBroadcastBuffer.pop_front();
     }
+    m_wsBroadcastBytes.fetch_add(len, std::memory_order_relaxed);
     m_wsBroadcastBuffer.emplace_back(payload, payload + len);
     return;
   }
+  std::shared_ptr<std::vector<uint8_t>> shared;
+  if (len > WsFrame::INLINE_SIZE) {
+    shared = std::make_shared<std::vector<uint8_t>>(payload, payload + len);
+  }
   for (int fd : fds){
-    queue_ws_frame(fd, payload, len, type);
+    queue_ws_frame(fd, payload, len, type, shared);
   }
 }
 
 void WebServerManager::queue_ws_frame(int fd, const uint8_t *payload,
-                                      size_t len, httpd_ws_type_t type) {
+                                      size_t len, httpd_ws_type_t type,
+                                      const std::shared_ptr<std::vector<uint8_t>>& shared) {
   WsFrame *frame = new WsFrame;
   if (!frame)
     return;
@@ -2043,17 +2051,18 @@ void WebServerManager::queue_ws_frame(int fd, const uint8_t *payload,
   if (len <= WsFrame::INLINE_SIZE) {
     memcpy(frame->inlinePayload, payload, len);
     frame->payload = frame->inlinePayload;
+  } else if (shared) {
+    frame->payload = shared->data();
+    frame->sharedData = std::move(shared);
   } else {
-    frame->payload = new uint8_t[len];
-    memcpy(frame->payload, payload, len);
+    frame->sharedData = std::make_shared<std::vector<uint8_t>>(payload, payload + len);
+    frame->payload = frame->sharedData->data();
   }
 
   // Never block the caller (this runs on the log sink task): drop and count
   // instead. A blocked enqueue here would stall all log dispatch.
   if (xQueueSend(m_wsQueue, &frame, 0) != pdTRUE) {
     m_wsFrameDropped.fetch_add(1, std::memory_order_relaxed);
-    if (frame->payload != frame->inlinePayload)
-      delete[] frame->payload;
     delete frame;
   }
 }
@@ -2093,7 +2102,7 @@ void WebServerManager::ws_send_task(void *arg) {
         ws_pkt.fragmented = false;
         ws_pkt.type = frame->type;
         ws_pkt.len = frame->len;
-        ws_pkt.payload = frame->payload;
+        ws_pkt.payload = const_cast<uint8_t*>(frame->payload);
 
         esp_err_t send_ret = httpd_ws_send_frame_async(instance->m_server, target_fd, &ws_pkt);
         if (send_ret != ESP_OK) {
@@ -2155,7 +2164,7 @@ esp_err_t WebServerManager::handleWebSocketMessage(httpd_req_t *req, const std::
   } else if (msg_type == "set_backlog_max_size") {
     cJSON *item = cJSON_GetObjectItem(json.get(), "data");
     if(item && cJSON_IsNumber(item)) {
-      if(item->valueint >= 0 && item->valueint <= 65535){
+      if(item->valueint >= 0 && item->valueint <= kMaxBacklogFrames){
         wsBacklogSize = item->valueint;
         m_configManager.setBacklogMaxSize(item->valueint);
       } else ESP_LOGE(TAG, "Number outside of range for 'set_backlog_max_size'");

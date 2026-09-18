@@ -56,5 +56,8 @@ private:
     uint8_t m_fwMajor = 0;
     uint8_t m_fwMinor = 0;
 
+    std::vector<uint8_t> m_pollRes;
+    std::vector<uint8_t> m_pollUid;
+
     static constexpr const char* TAG = "Pn532Reader";
 };

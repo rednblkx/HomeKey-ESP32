@@ -60,6 +60,7 @@ public:
     bool saveCertificate(espConfig::CertType certType, const std::string& certContent);
     bool deleteCertificate(espConfig::CertType certType);
     std::string loadCertificate(espConfig::CertType certType);
+    void loadCertificateInto(espConfig::CertType certType, std::string& out);
     
     std::vector<CertificateStatus> getCertificatesStatus();
     const espConfig::mqtt_ssl_t& getMqttSslConfig() const {

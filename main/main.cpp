@@ -103,9 +103,10 @@ bool initLogging(){
   Sinker::instance().add_sinker(std::make_shared<loggable::ConsoleLogSinker>(), console_cfg);
   SinkConfig ws_cfg{};
   ws_cfg.delivery = SinkConfig::Delivery::Async;
-  ws_cfg.queue_capacity = 256;
-  ws_cfg.max_batch = 16;
+  ws_cfg.queue_capacity = 32;
+  ws_cfg.max_batch = 8;
   ws_cfg.name = "log_ws";
+  ws_cfg.task.task_stack_size = 3072;
   Sinker::instance().add_sinker(std::make_shared<loggable::WebSocketLogSinker>(webServerManager), ws_cfg);
   return true;
 }
