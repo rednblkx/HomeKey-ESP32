@@ -6,7 +6,7 @@ namespace loggable {
 
 void ConsoleLogSinker::consume(const LogMessage& message) {
     fmt::detail::color_type c = fmt::color::white;
-    std::string level = "NONE";
+    const char *level = "NONE";
     switch (message.get_level()) {
         case LogLevel::Error:
             c = fmt::color::crimson;
