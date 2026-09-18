@@ -134,12 +134,16 @@ namespace espConfig
     std::map<std::string, uint8_t> customLockActions = { {"UNLOCK", C_UNLOCK}, {"LOCK", C_LOCK} };
   };
 
+  /* MQTT TLS material is stored in DER (binary) form to reduce resident heap;
+     PEM is accepted at upload time and converted by ConfigManager. The fields
+     are only resident in RAM while MQTT TLS is enabled. */
   struct mqtt_ssl_t {
     std::string caCert = MQTT_CA_CERT;
     std::string clientCert = MQTT_CLIENT_CERT;
     std::string clientKey = MQTT_CLIENT_KEY;
   };
 
+  /* HTTPS certs stay in PEM because esp_https_server consumes PEM directly. */
   struct https_certs_t {
     std::string serverCert = "";
     std::string privateKey = "";

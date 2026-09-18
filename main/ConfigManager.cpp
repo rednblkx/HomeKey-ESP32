@@ -23,6 +23,7 @@
 #include <mbedtls/x509_crt.h>
 #include <mbedtls/pk.h>
 #include <mbedtls/error.h>
+#include <mbedtls/pem.h>
 
 
 const char* ConfigManager::TAG = "ConfigManager";
@@ -200,7 +201,9 @@ bool ConfigManager::begin() {
 
   ESP_LOGI(TAG, "Loading configurations from NVS...");
   loadConfigFromNvs("MQTTDATA");
-  loadConfigFromNvs("MQTTSSLDATA");
+  if (m_mqttConfig.useSSL) {
+    loadConfigFromNvs("MQTTSSLDATA");
+  }
   loadConfigFromNvs("MISCDATA");
   loadConfigFromNvs("HTTPSDATA");
 
@@ -261,8 +264,10 @@ bool ConfigManager::deleteConfig() {
   }
 
   if constexpr (std::is_same_v<ConfigType, espConfig::mqttConfig_t>){
-    m_mqttConfig = {}; 
-    
+    m_mqttConfig = {};
+    ensureMqttSslLoaded();
+    m_mqttSslConfig = {};
+
     esp_err_t err_mqtt = nvs_erase_key(m_nvsHandle, "MQTTDATA");
     esp_err_t err_ssl = nvs_erase_key(m_nvsHandle, "MQTTSSLDATA");
 
@@ -411,6 +416,7 @@ void ConfigManager::loadConfigFromNvs(const char *key) {
       deserialize(obj, "mqtt");
     } else if(!strcmp(key, "MQTTSSLDATA")){
       deserialize(obj, "ssl");
+      migrateMqttSslPemToDer();
     } else if(!strcmp(key, "MISCDATA")){
       deserialize(obj, "misc");
       deserialize(obj, "actions");
@@ -1110,6 +1116,83 @@ template bool ConfigManager::deserializeFromJson<espConfig::actions_config_t>(co
 template bool ConfigManager::deserializeFromJson<espConfig::mqttConfig_t>(const std::string& json_string);
 
 // Certificate storage implementation
+
+std::string ConfigManager::pemToDer(const std::string& pem) {
+  constexpr const char* kBegin = "-----BEGIN ";
+  if (pem.compare(0, strlen(kBegin), kBegin) != 0) {
+    return pem;
+  }
+
+  size_t headerEnd = pem.find("-----", strlen(kBegin));
+  size_t footerStart = pem.rfind("-----END ");
+  size_t footerEnd = (footerStart == std::string::npos)
+      ? std::string::npos : pem.find("-----", footerStart + strlen("-----END "));
+  if (headerEnd == std::string::npos || footerStart == std::string::npos ||
+      footerEnd == std::string::npos) {
+    ESP_LOGW(TAG, "Malformed PEM envelope, storing content as-is");
+    return pem;
+  }
+
+  const std::string header = pem.substr(0, headerEnd + strlen("-----"));
+  const std::string footer = pem.substr(footerStart, footerEnd + strlen("-----") - footerStart);
+
+  mbedtls_pem_context pemCtx;
+  mbedtls_pem_init(&pemCtx);
+  size_t useLen = 0;
+  int ret = mbedtls_pem_read_buffer(&pemCtx, header.c_str(), footer.c_str(),
+                                    reinterpret_cast<const unsigned char*>(pem.data()),
+                                    nullptr, 0, &useLen);
+  std::string der;
+  size_t derLen = 0;
+  const unsigned char* derBuf = mbedtls_pem_get_buffer(&pemCtx, &derLen);
+  if (ret == 0 && derBuf && derLen > 0) {
+    der.assign(reinterpret_cast<const char*>(derBuf), derLen);
+  } else {
+    ESP_LOGW(TAG, "PEM decode failed (-0x%04X), storing content as-is", -ret);
+  }
+  mbedtls_pem_free(&pemCtx);
+  return der.empty() ? pem : der;
+}
+
+size_t ConfigManager::mbedtlsParseLen(const std::string& content) {
+  if (!content.empty() && content.compare(0, 11, "-----BEGIN ") == 0) {
+    return content.length() + 1;
+  }
+  return content.length();
+}
+
+void ConfigManager::ensureMqttSslLoaded() {
+  static bool loaded = false;
+  if (!loaded) {
+    loadConfigFromNvs("MQTTSSLDATA");
+    loaded = true;
+  }
+}
+
+void ConfigManager::migrateMqttSslPemToDer() {
+  auto isPem = [](const std::string& s) {
+    return !s.empty() && s.compare(0, 11, "-----BEGIN ") == 0;
+  };
+  bool needsMigration = isPem(m_mqttSslConfig.caCert) || isPem(m_mqttSslConfig.clientCert) ||
+                        isPem(m_mqttSslConfig.clientKey);
+  if (!needsMigration) {
+    return;
+  }
+  std::string ca = pemToDer(m_mqttSslConfig.caCert);
+  std::string client = pemToDer(m_mqttSslConfig.clientCert);
+  std::string key = pemToDer(m_mqttSslConfig.clientKey);
+  if (ca.empty() || client.empty() || key.empty()) {
+    ESP_LOGE(TAG, "MQTT SSL PEM->DER migration failed, keeping PEM blob");
+    return;
+  }
+  m_mqttSslConfig.caCert = std::move(ca);
+  m_mqttSslConfig.clientCert = std::move(client);
+  m_mqttSslConfig.clientKey = std::move(key);
+  if (saveConfigToNvs("MQTTSSLDATA")) {
+    ESP_LOGI(TAG, "Migrated MQTT SSL certificates from PEM to DER");
+  }
+}
+
 bool ConfigManager::saveCertificate(espConfig::CertType certType, const std::string& certContent) {
     if (!m_isInitialized) {
         ESP_LOGE(TAG, "Cannot save certificate, ConfigManager not initialized.");
@@ -1123,8 +1206,17 @@ bool ConfigManager::saveCertificate(espConfig::CertType certType, const std::str
         return false;
     }
 
-    if(!validateCertificateContent(certContent, certType)) { 
+    if(!validateCertificateContent(certContent, certType)) {
         ESP_LOGE(TAG, "Unable to validate certificate");
+        return false;
+    }
+
+    const std::string& stored = (certType == espConfig::CertType::MQTT_CA ||
+                                 certType == espConfig::CertType::MQTT_CLIENT ||
+                                 certType == espConfig::CertType::MQTT_PRIVATE_KEY)
+        ? pemToDer(certContent) : certContent;
+    if (stored.empty()) {
+        ESP_LOGE(TAG, "PEM to DER conversion produced no data");
         return false;
     }
 
@@ -1133,15 +1225,18 @@ bool ConfigManager::saveCertificate(espConfig::CertType certType, const std::str
 
     switch(certType) {
         case espConfig::CertType::MQTT_CA:
-            m_mqttSslConfig.caCert = certContent;
+            ensureMqttSslLoaded();
+            m_mqttSslConfig.caCert = stored;
             typeStr = "CA certificate";
             break;
         case espConfig::CertType::MQTT_CLIENT:
-            m_mqttSslConfig.clientCert = certContent;
+            ensureMqttSslLoaded();
+            m_mqttSslConfig.clientCert = stored;
             typeStr = "Client certificate";
             break;
         case espConfig::CertType::MQTT_PRIVATE_KEY:
-            m_mqttSslConfig.clientKey = certContent;
+            ensureMqttSslLoaded();
+            m_mqttSslConfig.clientKey = stored;
             typeStr = "Private key";
             break;
         case espConfig::CertType::HTTPS_SERVER_CERT:
@@ -1217,12 +1312,6 @@ void ConfigManager::loadCertificateInto(espConfig::CertType certType, std::strin
     ESP_LOGD(TAG, "%s loaded successfully (size: %zu bytes)", typeStr, out.length());
 }
 
-std::string ConfigManager::loadCertificate(espConfig::CertType certType) {
-    std::string content;
-    loadCertificateInto(certType, content);
-    return content;
-}
-
 bool ConfigManager::deleteCertificate(espConfig::CertType certType) {
     if (!m_isInitialized) {
         ESP_LOGE(TAG, "Cannot delete certificate, ConfigManager not initialized.");
@@ -1234,14 +1323,17 @@ bool ConfigManager::deleteCertificate(espConfig::CertType certType) {
 
     switch(certType) {
         case espConfig::CertType::MQTT_CA:
+            ensureMqttSslLoaded();
             m_mqttSslConfig.caCert.clear();
             typeStr = "CA";
             break;
         case espConfig::CertType::MQTT_CLIENT:
+            ensureMqttSslLoaded();
             m_mqttSslConfig.clientCert.clear();
             typeStr = "Client";
             break;
         case espConfig::CertType::MQTT_PRIVATE_KEY:
+            ensureMqttSslLoaded();
             m_mqttSslConfig.clientKey.clear();
             typeStr = "Private Key";
             break;
@@ -1292,7 +1384,7 @@ bool ConfigManager::validateCertificateContent(const std::string& certContent, e
 bool ConfigManager::validateCertificateWithMbedTLS(const std::string& certContent, espConfig::CertType certType) {
     ScopedX509Crt cert;
 
-    int ret = mbedtls_x509_crt_parse(cert.get(), reinterpret_cast<const unsigned char*>(certContent.c_str()), certContent.length() + 1);
+    int ret = mbedtls_x509_crt_parse(cert.get(), reinterpret_cast<const unsigned char*>(certContent.c_str()), mbedtlsParseLen(certContent));
 
     if (ret != 0) {
         char error_buf[100];
@@ -1355,7 +1447,7 @@ bool ConfigManager::validateCertificateWithMbedTLS(const std::string& certConten
 bool ConfigManager::validatePrivateKeyContent(const std::string& keyContent) {
     ScopedPk pk;
 
-    int ret = mbedtls_pk_parse_key(pk.get(), reinterpret_cast<const unsigned char*>(keyContent.c_str()), keyContent.length() + 1, nullptr, 0, nullptr, nullptr);
+    int ret = mbedtls_pk_parse_key(pk.get(), reinterpret_cast<const unsigned char*>(keyContent.c_str()), mbedtlsParseLen(keyContent), nullptr, 0, nullptr, nullptr);
 
     if (ret != 0) {
         char error_buf[100];
@@ -1408,7 +1500,7 @@ bool ConfigManager::validateKeyCertPair(const std::string& privateKey, const std
     });
 
     ScopedPk pk;
-    int ret = mbedtls_pk_parse_key(pk.get(), reinterpret_cast<const unsigned char*>(privateKey.c_str()), privateKey.length() + 1, nullptr, 0, mbedtls_ctr_drbg_random, ctr_drbg.get());
+    int ret = mbedtls_pk_parse_key(pk.get(), reinterpret_cast<const unsigned char*>(privateKey.c_str()), mbedtlsParseLen(privateKey), nullptr, 0, mbedtls_ctr_drbg_random, ctr_drbg.get());
     if (ret != 0) {
         char error_buf[100];
         mbedtls_strerror(ret, error_buf, sizeof(error_buf));
@@ -1417,7 +1509,7 @@ bool ConfigManager::validateKeyCertPair(const std::string& privateKey, const std
     }
 
     ScopedX509Crt cert;
-    ret = mbedtls_x509_crt_parse(cert.get(), reinterpret_cast<const unsigned char*>(certificate.c_str()), certificate.length() + 1);
+    ret = mbedtls_x509_crt_parse(cert.get(), reinterpret_cast<const unsigned char*>(certificate.c_str()), mbedtlsParseLen(certificate));
     if (ret != 0) {
         char error_buf[100];
         mbedtls_strerror(ret, error_buf, sizeof(error_buf));
@@ -1469,6 +1561,7 @@ bool ConfigManager::validateKeyCertPair(const std::string& privateKey, const std
 
 std::vector<CertificateStatus> ConfigManager::getCertificatesStatus(){
   std::vector<CertificateStatus> certificates;
+  ensureMqttSslLoaded();
   std::array<espConfig::CertType, 6> types{
     espConfig::CertType::MQTT_CA,
     espConfig::CertType::MQTT_CLIENT,
@@ -1497,7 +1590,7 @@ std::vector<CertificateStatus> ConfigManager::getCertificatesStatus(){
 
     if(!certStr.empty() && !isPrivateKey){
 
-      int ret = mbedtls_x509_crt_parse(cert.get(), reinterpret_cast<const unsigned char*>(certStr.c_str()), certStr.length() + 1);
+      int ret = mbedtls_x509_crt_parse(cert.get(), reinterpret_cast<const unsigned char*>(certStr.c_str()), mbedtlsParseLen(certStr));
       if(ret){
         ESP_LOGE(TAG, "Unable to parse '%s' certificate: %d", typeStr, ret);
         continue;
@@ -1544,7 +1637,7 @@ std::vector<CertificateStatus> ConfigManager::getCertificatesStatus(){
     } else if(not certStr.empty() && isPrivateKey){
       ScopedPk pk;
 
-      int ret = mbedtls_pk_parse_key(pk.get(), reinterpret_cast<const unsigned char*>(certStr.c_str()), certStr.length() + 1, nullptr, 0, nullptr, nullptr);
+      int ret = mbedtls_pk_parse_key(pk.get(), reinterpret_cast<const unsigned char*>(certStr.c_str()), mbedtlsParseLen(certStr), nullptr, 0, nullptr, nullptr);
 
       if (ret != 0) {
           char error_buf[100];
