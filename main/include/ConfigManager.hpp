@@ -58,8 +58,7 @@ public:
 
     bool saveCertificate(espConfig::CertType certType, const std::string& certContent);
     bool deleteCertificate(espConfig::CertType certType);
-    std::string loadCertificate(espConfig::CertType certType);
-    
+
     std::vector<CertificateStatus> getCertificatesStatus();
     const espConfig::mqtt_ssl_t& getMqttSslConfig() const {
       return m_mqttSslConfig;
@@ -88,6 +87,11 @@ public:
 
     void loadConfigFromNvs(const char* key);
     bool saveConfigToNvs(const char* key);
+    static std::string pemToDer(const std::string& pem);
+    static size_t mbedtlsParseLen(const std::string& content);
+    void ensureMqttSslLoaded();
+    void migrateMqttSslPemToDer();
+    void loadCertificateInto(espConfig::CertType certType, std::string& out);
     bool validateCertificateWithMbedTLS(const std::string& certContent, espConfig::CertType certType);
     bool validateCertificateContent(const std::string& certContent, espConfig::CertType certType);
     bool validatePrivateKeyContent(const std::string& keyContent);

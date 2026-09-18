@@ -1,0 +1,12 @@
+{{- /*
+Normalizes params.versions into a list of {name, url} maps.
+
+Hugo config files supply it as a YAML list, but env overrides such as
+HUGO_PARAMS_VERSIONS arrive as a raw JSON string. Detect the string case and
+decode it so callers can always range over the result.
+*/ -}}
+{{- $versions := site.Params.versions -}}
+{{- if eq (printf "%T" $versions) "string" -}}
+  {{- $versions = transform.Unmarshal $versions -}}
+{{- end -}}
+{{- return $versions -}}

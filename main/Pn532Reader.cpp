@@ -90,8 +90,9 @@ bool Pn532Reader::pollForTag(std::vector<uint8_t>& uid,
                              uint32_t timeoutMs) {
     if (!m_frontend) return false;
     uint8_t sel_res = 0;
-    std::vector<uint8_t> res;
-    (void)m_frontend->InCommunicateThru(m_ecpData, res, 50);
+    m_pollRes.clear();
+    (void)m_frontend->InCommunicateThru(m_ecpData, m_pollRes, 50);
+    uid.clear();
     const pn532::Status status = m_frontend->InListPassiveTarget(
         0x0, uid, atqa, sel_res, timeoutMs);
     sak = sel_res;
@@ -101,10 +102,10 @@ bool Pn532Reader::pollForTag(std::vector<uint8_t>& uid,
 bool Pn532Reader::isTagStillPresent() {
     if (!m_frontend) return false;
     releaseTag();
-    std::vector<uint8_t> uid;
+    m_pollUid.clear();
     std::array<uint8_t, 2> atqa;
     uint8_t sak;
-    pn532::Status status = m_frontend->InListPassiveTarget(0x00, uid, atqa, sak);
+    pn532::Status status = m_frontend->InListPassiveTarget(0x00, m_pollUid, atqa, sak);
     return status == pn532::Status::SUCCESS;
 }
 

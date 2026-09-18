@@ -8,7 +8,7 @@ cascade:
 {{< callout type="warning" >}}
 This wiki is **versioned** — the version selector in the top bar lets you switch between released versions and the development docs.
 
-You are currently viewing the documentation for the **bleeding edge** (`main` branch), which may describe features and behavior that are not yet available in the latest release. If you are running a released firmware version, pick that version from the selector to see the docs matching your installation.
+By default you are viewing the documentation for the latest git commit, which may describe features and behavior that are not yet available in the latest release. If you are running a released firmware version, pick that version from the selector to see the docs matching your installation.
 {{< /callout >}}
 
 Welcome to the HomeKey-ESP32 documentation! This is your one-stop shop for everything you need to know about setting up, configuring, and using your HomeKey-ESP32 device. Whether you're a seasoned ESP32 developer or just starting your smart home journey, we've got you covered.

@@ -68,7 +68,7 @@ struct nfcGpioPins_t {
 #endif
 };
 
-static const std::array<nfcGpioPins_t,5> nfcGpioPinsPresets = {
+inline const std::array<nfcGpioPins_t,5> nfcGpioPinsPresets = {
     {
       // PN532
     {"Default", 0, {SS_PIN, SCK_PIN, MISO_PIN, MOSI_PIN}},
@@ -134,12 +134,16 @@ namespace espConfig
     std::map<std::string, uint8_t> customLockActions = { {"UNLOCK", C_UNLOCK}, {"LOCK", C_LOCK} };
   };
 
+  /* MQTT TLS material is stored in DER (binary) form to reduce resident heap;
+     PEM is accepted at upload time and converted by ConfigManager. The fields
+     are only resident in RAM while MQTT TLS is enabled. */
   struct mqtt_ssl_t {
     std::string caCert = MQTT_CA_CERT;
     std::string clientCert = MQTT_CLIENT_CERT;
     std::string clientKey = MQTT_CLIENT_KEY;
   };
 
+  /* HTTPS certs stay in PEM because esp_https_server consumes PEM directly. */
   struct https_certs_t {
     std::string serverCert = "";
     std::string privateKey = "";
@@ -158,7 +162,18 @@ namespace espConfig
 
   struct misc_config_t
   {
-    std::string deviceName = DEVICE_NAME;
+    misc_config_t() {
+      std::string name = DEVICE_NAME;
+      if (name.ends_with("{MAC}")) {
+        name.resize(name.size() - 5);
+        uint8_t mac[6];
+        esp_read_mac(mac, ESP_MAC_BT);
+        const std::string macStr = fmt::format("{:02X}{:02X}{:02X}{:02X}", mac[2], mac[3], mac[4], mac[5]);
+        name.append(macStr);
+      }
+      deviceName = name;
+    }
+    std::string deviceName;
     std::string otaPasswd = OTA_PWD;
     uint8_t hk_key_color = HOMEKEY_COLOR;
     std::string setupCode = SETUP_CODE;

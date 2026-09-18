@@ -94,6 +94,7 @@ public:
     PinConsumer consumer;
     PinRole role;
     const char* tag;
+    uint32_t claim_id;
   };
 
   struct PinStatus {
@@ -114,6 +115,11 @@ public:
     gpio_mode_t mode_;
   };
 
+  struct Claim {
+    gpio_num_t pin;
+    uint32_t id;
+  };
+
   class GPIOLease {
   public:
     GPIOLease() = default;
@@ -127,27 +133,29 @@ public:
     gpio_num_t get_pin() const { return control_ ? control_->pin_ : GPIO_NUM_NC; }
     gpio_mode_t get_mode() const { return control_ ? control_->mode_ : GPIO_MODE_DISABLE; }
     void set_level(bool level) {
-      if (!control_) { ESP_LOGW("GPIOLease", "set_level on unconfigured/released lease"); return; }
+      if (!control_) { ESP_LOGD("GPIOLease", "set_level on unconfigured/released lease"); return; }
       gpio_set_level(control_->pin_, level);
     }
     bool get_level() const { return control_ ? gpio_get_level(control_->pin_) : 0; }
     void set_direction(gpio_mode_t mode) {
-      if (!control_) { ESP_LOGW("GPIOLease", "set_direction on unconfigured/released lease"); return; }
+      if (!control_) { ESP_LOGD("GPIOLease", "set_direction on unconfigured/released lease"); return; }
       gpio_set_direction(control_->pin_, mode);
     }
     void set_pullup(bool val) {
-      if (!control_) { ESP_LOGW("GPIOLease", "set_pullup on unconfigured/released lease"); return; }
+      if (!control_) { ESP_LOGD("GPIOLease", "set_pullup on unconfigured/released lease"); return; }
       val ? gpio_pullup_en(control_->pin_) : gpio_pullup_dis(control_->pin_);
     }
     void set_pulldown(bool val) {
-      if (!control_) { ESP_LOGW("GPIOLease", "set_pulldown on unconfigured/released lease"); return; }
+      if (!control_) { ESP_LOGD("GPIOLease", "set_pulldown on unconfigured/released lease"); return; }
       val ? gpio_pulldown_en(control_->pin_) : gpio_pulldown_dis(control_->pin_);
     }
 
   private:
     friend class GPIOAllocator;
-    explicit GPIOLease(std::shared_ptr<PinControl> control) : control_(std::move(control)) {}
+    explicit GPIOLease(std::shared_ptr<PinControl> control, std::shared_ptr<Claim> claim)
+      : control_(std::move(control)), claim_(std::move(claim)) {}
     std::shared_ptr<PinControl> control_;
+    std::shared_ptr<Claim> claim_;
   };
 
   std::expected<GPIOLease, GPIOAllocatorError> acquire(gpio_num_t pin, gpio_mode_t mode,
@@ -166,7 +174,7 @@ public:
     }
     ESP_LOGD("GPIOAllocator", "Allocating GPIO Pin %d for '%s'", pin, tag);
     if (std::find_if(std::begin(STRAPPING_PINS), std::end(STRAPPING_PINS), [&](auto e){ return e == pin;}) != std::end(STRAPPING_PINS)) {
-      ESP_LOGW("GPIOAllocator", "GPIO Pin %d is a strapping pin, using it may have unexpected consequences!", pin);
+      ESP_LOGW("GPIOAllocator", "GPIO Pin %d is a strapping pin!", pin);
     }
 
     auto& entry = entries_[static_cast<size_t>(pin)];
@@ -175,8 +183,13 @@ public:
       control = std::shared_ptr<PinControl>(new PinControl(pin, mode));
       entry.control = control;
     }
-    entry.holders.push_back({consumer, role, tag});
-    return GPIOLease(std::move(control));
+    uint32_t claim_id = next_claim_id_++;
+    entry.holders.push_back({consumer, role, tag, claim_id});
+    auto claim = std::shared_ptr<Claim>(new Claim{pin, claim_id}, [](Claim* c) {
+      GPIOAllocator::instance().release_claim(c);
+      delete c;
+    });
+    return GPIOLease(std::move(control), std::move(claim));
   }
 
   std::expected<void, GPIOAllocatorError> validate(gpio_num_t pin, gpio_mode_t mode,
@@ -252,6 +265,13 @@ private:
   GPIOAllocator(GPIOAllocator&&) = delete;
   GPIOAllocator& operator=(GPIOAllocator&&) = delete;
 
+  void release_claim(const Claim* claim) {
+    std::lock_guard lock(mutex_);
+    if ((uint8_t)claim->pin >= entries_.size()) return;
+    auto& holders = entries_[static_cast<size_t>(claim->pin)].holders;
+    std::erase_if(holders, [&](const PinHolder& h) { return h.claim_id == claim->id; });
+  }
+
   struct PinEntry {
     std::vector<PinHolder> holders;
     std::weak_ptr<PinControl> control;
@@ -313,4 +333,5 @@ private:
 
   static std::mutex mutex_;
   static std::array<PinEntry, GPIO_NUM_MAX> entries_;
+  uint32_t next_claim_id_ = 0;
 };

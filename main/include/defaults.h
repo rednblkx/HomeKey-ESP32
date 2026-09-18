@@ -20,9 +20,9 @@
 
 //MQTT SSL/TLS Settings
 #define MQTT_USE_SSL false // Enable/disable SSL/TLS for MQTT connection
-#define MQTT_CA_CERT "" // CA certificate for server validation (PEM format)
-#define MQTT_CLIENT_CERT "" // Client certificate for mutual authentication (PEM format)
-#define MQTT_CLIENT_KEY "" // Client private key for mutual authentication (PEM format)
+#define MQTT_CA_CERT "" // CA certificate for server validation (stored as DER after upload; PEM accepted at upload)
+#define MQTT_CLIENT_CERT "" // Client certificate for mutual authentication (stored as DER after upload; PEM accepted at upload)
+#define MQTT_CLIENT_KEY "" // Client private key for mutual authentication (stored as DER after upload; PEM accepted at upload)
 #define MQTT_ALLOW_INSECURE false // Allow connections without proper certificate validation (INSECURE - use only for testing)
 
 // MQTT Topics
@@ -51,7 +51,7 @@
 #define HOMEKEY_COLOR TAN
 #define SETUP_CODE "46637726"  // HomeKit Setup Code (only for reference, has to be changed during WiFi Configuration or from WebUI)
 #define OTA_PWD "homespan-ota" //custom password for ota
-#define DEVICE_NAME "HK" //Device name
+#define DEVICE_NAME "HK-{MAC}" //Device name
 #define HOMEKEY_ALWAYS_UNLOCK 0 // Flag indicating if a successful Homekey authentication should always set and publish the unlock state
 #define HOMEKEY_ALWAYS_LOCK 0  // Flag indicating if a successful Homekey authentication should always set and publish the lock state
 #ifdef CONFIG_IDF_TARGET_ESP32

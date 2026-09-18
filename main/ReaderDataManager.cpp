@@ -228,18 +228,14 @@ void NvsCredentialStore::save() {
         return;
     }
 
-    Snapshot snap;
-    {
-        std::lock_guard<std::mutex> lock(mutex_);
-        snap.identity = identity_;
-        snap.issuers = issuers_;
-    }
-
     msgpack_sbuffer sbuf;
     msgpack_packer pk;
     msgpack_sbuffer_init(&sbuf);
     msgpack_packer_init(&pk, &sbuf, msgpack_sbuffer_write);
-    pack_all(&pk, snap.identity, snap.issuers);
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        pack_all(&pk, identity_, issuers_);
+    }
 
     esp_err_t set_err = nvs_set_blob(handle_, NVS_KEY, sbuf.data, sbuf.size);
     msgpack_sbuffer_destroy(&sbuf);

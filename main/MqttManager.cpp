@@ -152,6 +152,8 @@ bool MqttManager::begin(std::string deviceID) {
     mqtt_cfg.session.last_will.msg_len = 7;
     mqtt_cfg.session.last_will.retain = true;
     mqtt_cfg.session.last_will.qos = 1;
+    mqtt_cfg.buffer.size = 512;
+    mqtt_cfg.outbox.limit = 2048;
 
     m_client = esp_mqtt_client_init(&mqtt_cfg);
     if (!m_client) {
@@ -563,7 +565,7 @@ void MqttManager::publishHassDiscovery() {
 
         fillPayload(payload);
 
-        std::string payloadStr = payload.toStringFormatted();
+        std::string payloadStr = payload.toStringUnformatted();
         std::string topic = "homeassistant/" + topicSuffix;
         publish(topic, payloadStr, 1, true);
     };
@@ -620,6 +622,7 @@ bool MqttManager::configureSSL(esp_mqtt_client_config_t& mqtt_cfg) {
     mqtt_cfg.broker.verification.use_global_ca_store = false;
     if (!m_mqttSslConfig.caCert.empty()) {
         mqtt_cfg.broker.verification.certificate = m_mqttSslConfig.caCert.c_str();
+        mqtt_cfg.broker.verification.certificate_len = m_mqttSslConfig.caCert.size();
         mqtt_cfg.broker.verification.skip_cert_common_name_check = m_mqttConfig.allowInsecure;
         ESP_LOGI(TAG, "MQTT TLS: Certificate validation mode = %s", m_mqttConfig.allowInsecure ? "SKIP_COMMON_NAME" : "FULL_VALIDATION");
     } else {
@@ -629,7 +632,9 @@ bool MqttManager::configureSSL(esp_mqtt_client_config_t& mqtt_cfg) {
 
     if (!m_mqttSslConfig.clientCert.empty() && !m_mqttSslConfig.clientKey.empty()) {
         mqtt_cfg.credentials.authentication.certificate = m_mqttSslConfig.clientCert.c_str();
+        mqtt_cfg.credentials.authentication.certificate_len = m_mqttSslConfig.clientCert.size();
         mqtt_cfg.credentials.authentication.key = m_mqttSslConfig.clientKey.c_str();
+        mqtt_cfg.credentials.authentication.key_len = m_mqttSslConfig.clientKey.size();
         ESP_LOGI(TAG, "MQTT TLS: TLS client authentication configured");
     } else {
         ESP_LOGI(TAG, "MQTT TLS: No client certificate configured - using server-only authentication");

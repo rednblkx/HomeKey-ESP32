@@ -8,12 +8,6 @@ namespace AppEventLoop {
 
 static const char* TAG = "AppEventLoop";
 
-using CallbackFunc = std::function<void(const uint8_t*, size_t)>;
-
-struct HandlerContext {
-    CallbackFunc callback;
-};
-
 static void event_handler(void* handler_arg, esp_event_base_t base, int32_t id, void* event_data) {
     (void)base;
     (void)id;
@@ -41,8 +35,7 @@ SubscriptionHandle subscribe(esp_event_base_t base, int32_t id,
         return SubscriptionHandle{};
     }
 
-    [[maybe_unused]] auto* raw = ctx.release(); // ownership transferred to the event loop via handler_arg
-    return SubscriptionHandle(base, id, instance);
+    return SubscriptionHandle(base, id, instance, ctx.release());
 }
 
 esp_err_t publish(esp_event_base_t base, int32_t id, const void* data, size_t size) {
@@ -52,14 +45,14 @@ esp_err_t publish(esp_event_base_t base, int32_t id, const void* data, size_t si
         size = MAX_PAYLOAD;
     }
 
-    std::vector<uint8_t> buffer(sizeof(uint16_t) + size);
+    uint8_t buffer[sizeof(uint16_t) + MAX_PAYLOAD];
     uint16_t len = static_cast<uint16_t>(size);
-    std::memcpy(buffer.data(), &len, sizeof(len));
+    std::memcpy(buffer, &len, sizeof(len));
     if (data && size > 0) {
-        std::memcpy(buffer.data() + sizeof(len), data, size);
+        std::memcpy(buffer + sizeof(len), data, size);
     }
 
-    return esp_event_post(base, id, buffer.data(), buffer.size(), portMAX_DELAY);
+    return esp_event_post(base, id, buffer, sizeof(len) + size, portMAX_DELAY);
 }
 
 } // namespace AppEventLoop

@@ -1,11 +1,30 @@
 {{- /*
-Override of the theme's banner that shows a version warning when the site is
-being viewed at the default (bleeding edge) version root.
+Override of the theme's banner that renders only when the site is being viewed
+at the default (bleeding edge) version root, i.e. on a page that is not under
+any non-default version's URL path.
 
 Configured via site params:
-  params.banner.message - message shown when viewing the bleeding edge docs
+  params.banner.message         - message shown when viewing the default version
+  params.banner.versionWarning  - message shown when the default version is the
+                                  development docs (main)
 */ -}}
-{{- if site.Params.banner }}
+{{- $versions := partial "version-list.html" . -}}
+{{- if and site.Params.banner $versions }}
+  {{- $page := . -}}
+  {{- $isDefault := true -}}
+  {{- with $versions -}}
+    {{- $rel := $page.RelPermalink -}}
+    {{- /* Skip the default entry (index 0): its URL path may equal the site's
+        own path prefix and would match every page. Only a page living under a
+        non-default version's path takes us off the default root. */ -}}
+    {{- range $i, $v := . -}}
+      {{- if gt $i 0 -}}
+        {{- $vPath := (urls.Parse $v.url).Path -}}
+        {{- if and (ne $vPath "/") (strings.HasPrefix $rel $vPath) -}}{{- $isDefault = false -}}{{- end -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+  {{- if $isDefault }}
 <div class="hextra-banner hx:max-md:sticky hx:top-0 hx:z-20 hx:px-6 hx:text-center hx:text-slate-50 hx:dark:text-white hx:bg-neutral-900 hx:dark:bg-neutral-800 hx:print:[display:none]">
   <div class="hx:relative hx:flex hx:items-center hx:justify-center hx:font-medium hx:text-sm hx:py-2.5">
     {{- with partial "custom/banner.html" . -}}
@@ -13,16 +32,9 @@ Configured via site params:
     {{- else -}}
       <div style="white-space: pre-wrap" class="hx:px-8">
         {{- $msg := site.Params.banner.message | default "🎉 Welcome! This is a banner message." -}}
-        {{- $versions := site.Params.versions -}}
         {{- if and $versions site.Params.banner.versionWarning -}}
           {{- $default := index $versions 0 -}}
-          {{- $rel := .RelPermalink -}}
-          {{- $isDefault := true -}}
-          {{- range $versions -}}
-            {{- $vPath := (urls.Parse .url).Path -}}
-            {{- if and (ne $vPath "/") (strings.HasPrefix $rel $vPath) -}}{{- $isDefault = false -}}{{- end -}}
-          {{- end -}}
-          {{- if $isDefault -}}
+          {{- if eq $default.name "main" -}}
             {{- $msg = site.Params.banner.versionWarning -}}
           {{- end -}}
         {{- end -}}
@@ -37,4 +49,5 @@ Configured via site params:
     </button>
   </div>
 </div>
+  {{- end -}}
 {{- end -}}
