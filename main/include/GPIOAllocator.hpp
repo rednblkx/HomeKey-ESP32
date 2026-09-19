@@ -43,7 +43,7 @@ inline constexpr uint8_t RESTRICTED_PINS[] = {
 };
 #else
 inline constexpr uint8_t RESTRICTED_PINS[] = {
-  9, 19, 20, 26, 27, 28, 29, 30, 31, 32, 38, 39, 43, 44
+  9, 19, 20, 26, 27, 28, 29, 30, 31, 32, 38, 43, 44
 };
 #endif
 inline constexpr uint8_t STRAPPING_PINS[] = {
