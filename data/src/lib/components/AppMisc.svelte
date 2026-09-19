@@ -551,6 +551,34 @@
 									<div class="form-control">
 										<!-- svelte-ignore a11y_label_has_associated_control -->
 										<label class="label">
+											<span class="label-text text-xs">Layout</span>
+										</label>
+										<select bind:value={miscConfig.keypadLayout} class="select select-sm select-bordered w-full">
+											<option value={0}>5x3 with doorbell row</option>
+											<option value={1}>4x4 (A-D)</option>
+										</select>
+									</div>
+									<div class="form-control">
+										<!-- svelte-ignore a11y_label_has_associated_control -->
+										<label class="label">
+											<span class="label-text text-xs">Doorbell Key</span>
+										</label>
+										<select bind:value={miscConfig.keypadDoorbellKey} class="select select-sm select-bordered w-full">
+											{#if miscConfig.keypadLayout === 1}
+												<option value={0}>Default (A)</option>
+												<option value={65}>A</option>
+												<option value={66}>B</option>
+												<option value={67}>C</option>
+												<option value={68}>D</option>
+											{:else}
+												<option value={0}>Default (&)</option>
+											{/if}
+											<option value={255}>Disabled</option>
+										</select>
+									</div>
+									<div class="form-control">
+										<!-- svelte-ignore a11y_label_has_associated_control -->
+										<label class="label">
 											<span class="label-text text-xs">Row GPIO Pins</span>
 										</label>
 										<input
@@ -576,17 +604,17 @@
 										</label>
 										<input
 											type="text"
-											value={(miscConfig.keypadColumnPins ?? [46, 47, 48]).join(', ')}
+											value={(miscConfig.keypadColumnPins ?? [46, 47, 48, 255]).join(', ')}
 											oninput={(e) => {
 												const pins = e.currentTarget.value.split(',').map((v) => parseInt(v.trim(), 10));
-												if (pins.length === 3 && pins.every((p) => !isNaN(p) && p >= 0 && p <= 255)) {
-													miscConfig.keypadColumnPins = [pins[0], pins[1], pins[2]];
+												if (pins.length === 4 && pins.every((p) => !isNaN(p) && p >= 0 && p <= 255)) {
+													miscConfig.keypadColumnPins = [pins[0], pins[1], pins[2], pins[3]];
 													e.currentTarget.setCustomValidity('');
 												} else {
-													e.currentTarget.setCustomValidity('Enter exactly 3 comma-separated pin numbers');
+													e.currentTarget.setCustomValidity('Enter exactly 4 comma-separated pin numbers (255 for unused)');
 												}
 											}}
-											placeholder="46, 47, 48"
+											placeholder="46, 47, 48, 255"
 											class="input input-sm input-bordered w-full"
 										/>
 									</div>

@@ -203,10 +203,12 @@ namespace espConfig
     bool overrideStrappingRestriction = false;
     std::string accessPointPassword = AP_PASSWORD;
     bool keypadEnabled = KEYPAD_ENABLED;
+    uint8_t keypadLayout = KEYPAD_LAYOUT; // 0 = 5x3 with doorbell row, 1 = 4x4
     std::array<uint8_t, 5> keypadRowPins = KEYPAD_OUTPUT_GPIOS;
-    std::array<uint8_t, 3> keypadColumnPins = KEYPAD_INPUT_GPIOS;
+    std::array<uint8_t, 4> keypadColumnPins = KEYPAD_INPUT_GPIOS;
     uint8_t keypadActiveLevel = KEYPAD_ACTIVE_LEVEL;
     uint8_t keypadDebounceTicks = KEYPAD_DEBOUNCE_TICKS;
+    uint8_t keypadDoorbellKey = KEYPAD_DOORBELL_KEY; // 0 = layout default, 'A'-'D' on 4x4, 255 = disabled
     uint8_t keypadMinCodeLength = KEYPAD_MIN_CODE_LENGTH;
     uint8_t keypadMaxCodeLength = KEYPAD_MAX_CODE_LENGTH;
     uint8_t keypadMaxCodes = KEYPAD_MAX_CODES;

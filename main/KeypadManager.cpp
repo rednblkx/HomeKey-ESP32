@@ -2,8 +2,16 @@
 #include "GPIOAllocator.hpp"
 #include "esp_log.h"
 
-const char KeypadManager::keymaps[5][3] = {
-    {'1', '2', '3'}, {'4', '5', '6'}, {'7', '8', '9'}, {KEY_CLEAR, '0', KEY_ENTER}, {'\0', '&', '\0'} // Using \0 for unused keys
+// 5 rows x 3 columns with a dedicated doorbell row. '\0' marks unused keys.
+const char KeypadManager::keymap_5x3[5][3] = {
+    {'1', '2', '3'}, {'4', '5', '6'}, {'7', '8', '9'}, {KEY_CLEAR, '0', KEY_ENTER}, {'\0', KEY_DB, '\0'}
+};
+
+// 4 rows x 4 columns with A-D. The doorbell key defaults to 'A' but can be
+// remapped to any of A-D via keypadDoorbellKey; a remapped key keeps its
+// position here and is routed to the doorbell callback at press time.
+const char KeypadManager::keymap_4x4[4][4] = {
+    {'1', '2', '3', 'A'}, {'4', '5', '6', 'B'}, {'7', '8', '9', 'C'}, {KEY_CLEAR, '0', KEY_ENTER, 'D'}
 };
 
 KeypadManager::~KeypadManager() {
@@ -19,11 +27,42 @@ bool KeypadManager::begin(const espConfig::misc_config_t& config) {
         return true;
     }
 
-    for (auto pin : config.keypadRowPins) {
-        out_gpios.push_back(pin);
+    if (config.keypadLayout == LAYOUT_4X4) {
+        active_keymap = &keymap_4x4[0][0];
+        keymap_rows = 4;
+        keymap_cols = 4;
+        doorbell_key = config.keypadDoorbellKey == 0 ? 'A' : (char)config.keypadDoorbellKey;
+    } else {
+        active_keymap = &keymap_5x3[0][0];
+        keymap_rows = 5;
+        keymap_cols = 3;
+        doorbell_key = config.keypadDoorbellKey == 255 ? '\0' : KEY_DB;
     }
-    for (auto pin : config.keypadColumnPins) {
-        in_gpios.push_back(pin);
+    if (doorbell_key != '\0' && config.keypadLayout == LAYOUT_4X4) {
+        bool present = false;
+        for (uint8_t r = 0; r < keymap_rows && !present; r++) {
+            for (uint8_t c = 0; c < keymap_cols; c++) {
+                if (active_keymap[r * keymap_cols + c] == doorbell_key) { present = true; break; }
+            }
+        }
+        if (!present) {
+            ESP_LOGW(TAG, "Doorbell key '%c' not present on 4x4 layout, disabling doorbell.", doorbell_key);
+            doorbell_key = '\0';
+        }
+    }
+
+    // 255 marks an unused pin slot; skip those so only wired pins are claimed
+    // and scanned. The 5x3 layout consumes all 5 row / 3 column pins, the 4x4
+    // layout the first 4 of each.
+    uint8_t row_count = config.keypadLayout == LAYOUT_4X4 ? 4 : 5;
+    uint8_t col_count = config.keypadLayout == LAYOUT_4X4 ? 4 : 3;
+    for (uint8_t i = 0; i < row_count; i++) {
+        if (config.keypadRowPins[i] == 255) continue;
+        out_gpios.push_back(config.keypadRowPins[i]);
+    }
+    for (uint8_t i = 0; i < col_count; i++) {
+        if (config.keypadColumnPins[i] == 255) continue;
+        in_gpios.push_back(config.keypadColumnPins[i]);
     }
 
     for (auto pin : out_gpios) {
@@ -79,7 +118,8 @@ bool KeypadManager::begin(const espConfig::misc_config_t& config) {
         ESP_ERROR_CHECK(esp_timer_create(&timer_args, &entry_timer));
     }
 
-    ESP_LOGI(TAG, "Keypad initialized with %d output and %d input pins.", out_gpios.size(), in_gpios.size());
+    ESP_LOGI(TAG, "Keypad initialized: %ux%u layout, %d output and %d input pins, doorbell key '%c'.",
+             keymap_cols, keymap_rows, out_gpios.size(), in_gpios.size(), doorbell_key ? doorbell_key : '-');
     return true;
 }
 
@@ -120,6 +160,13 @@ void KeypadManager::handle_key_press(char key) {
     esp_timer_stop(entry_timer);
     esp_timer_start_once(entry_timer, CODE_ENTRY_TIMEOUT_US);
 
+    if (key == doorbell_key) {
+        ESP_LOGI(TAG, "DB key pressed.");
+        if (on_db_pressed)
+            on_db_pressed();
+        return;
+    }
+
     switch (key) {
         case KEY_CLEAR:
             ESP_LOGI(TAG, "Clear key pressed.");
@@ -132,11 +179,6 @@ void KeypadManager::handle_key_press(char key) {
                 on_code_entered(code_buffer);
             }
             clear_buffer(); // Clear buffer after submitting
-            break;
-        case KEY_DB:
-            ESP_LOGI(TAG, "DB key pressed.");
-            if(on_db_pressed)
-              on_db_pressed();
             break;
 
         default: // A number was pressed
@@ -163,7 +205,10 @@ void KeypadManager::keyboard_cb_wrapper(keyboard_btn_handle_t handle, keyboard_b
 
     uint8_t out_idx = report.key_data[0].output_index;
     uint8_t in_idx = report.key_data[0].input_index;
-    char key_pressed = instance->keymaps[out_idx][in_idx];
+    if (out_idx >= instance->keymap_rows || in_idx >= instance->keymap_cols) {
+        return;
+    }
+    char key_pressed = instance->active_keymap[out_idx * instance->keymap_cols + in_idx];
 
     instance->handle_key_press(key_pressed);
 }

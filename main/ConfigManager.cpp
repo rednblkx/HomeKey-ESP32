@@ -117,10 +117,12 @@ ConfigManager::ConfigManager() : m_isInitialized(false) {
       {"overrideStrappingRestriction", &m_miscConfig.overrideStrappingRestriction},
       {"accessPointPassword", &m_miscConfig.accessPointPassword},
       {"keypadEnabled", &m_miscConfig.keypadEnabled},
+      {"keypadLayout", &m_miscConfig.keypadLayout},
       {"keypadRowPins", &m_miscConfig.keypadRowPins},
       {"keypadColumnPins", &m_miscConfig.keypadColumnPins},
       {"keypadActiveLevel", &m_miscConfig.keypadActiveLevel},
       {"keypadDebounceTicks", &m_miscConfig.keypadDebounceTicks},
+      {"keypadDoorbellKey", &m_miscConfig.keypadDoorbellKey},
       {"keypadMinCodeLength", &m_miscConfig.keypadMinCodeLength},
       {"keypadMaxCodeLength", &m_miscConfig.keypadMaxCodeLength},
       {"keypadMaxCodes", &m_miscConfig.keypadMaxCodes}

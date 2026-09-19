@@ -189,14 +189,18 @@ export interface MiscConfig {
   overrideStrappingRestriction: boolean;
   /** Enable the matrix keypad and the HomeKit Access Code service */
   keypadEnabled: boolean;
+  /** Keypad keymap layout: 0 = 5x3 with doorbell row, 1 = 4x4 */
+  keypadLayout: number;
   /** Keypad matrix row pins [row1, row2, row3, row4, row5] */
   keypadRowPins: [number, number, number, number, number];
-  /** Keypad matrix column pins [col1, col2, col3] */
-  keypadColumnPins: [number, number, number];
+  /** Keypad matrix column pins [col1, col2, col3, col4?] (255 = unused) */
+  keypadColumnPins: [number, number, number, number];
   /** Active level of the keypad input pins */
   keypadActiveLevel: number;
   /** Keypad debounce time in scan ticks */
   keypadDebounceTicks: number;
+  /** Doorbell key: 0 = layout default ('&' on 5x3, 'A' on 4x4), 'A'-'D' char code on 4x4, 255 = disabled */
+  keypadDoorbellKey: number;
   /** Minimum access code length accepted by the Access Code service */
   keypadMinCodeLength: number;
   /** Maximum access code length accepted by the Access Code service */
