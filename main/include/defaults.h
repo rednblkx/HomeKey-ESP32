@@ -134,3 +134,13 @@
 #define WEB_AUTH_USERNAME "admin"
 #define WEB_AUTH_PASSWORD "password"
 #define NFC_ACTIVE_PRESET 255 // NFC preset index (255 for custom pins)
+
+// Keypad
+#define KEYPAD_ENABLED false // Enable the matrix keypad and the HomeKit Access Code service
+#define KEYPAD_OUTPUT_GPIOS {39, 40, 41, 42, 45} // Keypad matrix output (row) pins
+#define KEYPAD_INPUT_GPIOS {46, 47, 48} // Keypad matrix input (column) pins
+#define KEYPAD_ACTIVE_LEVEL 1 // Active level of the keypad input pins
+#define KEYPAD_DEBOUNCE_TICKS 8 // Keypad debounce time in scan ticks
+#define KEYPAD_MIN_CODE_LENGTH 4 // Minimum access code length (1-16 digits)
+#define KEYPAD_MAX_CODE_LENGTH 16 // Maximum access code length (min-16 digits)
+#define KEYPAD_MAX_CODES 8 // Maximum number of stored access codes (1-255)

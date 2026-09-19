@@ -4,3 +4,4 @@ dependencies:
   espressif/arduino-esp32: ==3.3.11
   joltwallet/littlefs: ^1.20.1
   espp/serialization: ^1.0.22
+  espressif/keyboard_button: ^1.0.0

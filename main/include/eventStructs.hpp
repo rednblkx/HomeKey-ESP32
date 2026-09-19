@@ -86,3 +86,7 @@ struct EventNfcStatus {
     uint8_t firmwareVersionMajor;
     uint8_t firmwareVersionMinor;
 };
+
+struct EventKeypadCode {
+    std::string code;
+};

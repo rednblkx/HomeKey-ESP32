@@ -187,6 +187,22 @@ export interface MiscConfig {
   ethSpiConfig: [number, number, number, number, number, number, number];
   /** Override Strapping GPIO Pin restriction */
   overrideStrappingRestriction: boolean;
+  /** Enable the matrix keypad and the HomeKit Access Code service */
+  keypadEnabled: boolean;
+  /** Keypad matrix row pins [row1, row2, row3, row4, row5] */
+  keypadRowPins: [number, number, number, number, number];
+  /** Keypad matrix column pins [col1, col2, col3] */
+  keypadColumnPins: [number, number, number];
+  /** Active level of the keypad input pins */
+  keypadActiveLevel: number;
+  /** Keypad debounce time in scan ticks */
+  keypadDebounceTicks: number;
+  /** Minimum access code length accepted by the Access Code service */
+  keypadMinCodeLength: number;
+  /** Maximum access code length accepted by the Access Code service */
+  keypadMaxCodeLength: number;
+  /** Maximum number of stored access codes */
+  keypadMaxCodes: number;
 }
 
 /**

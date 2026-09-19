@@ -115,7 +115,15 @@ ConfigManager::ConfigManager() : m_isInitialized(false) {
       {"ethRmiiConfig", &m_miscConfig.ethRmiiConfig},
       {"ethSpiConfig", &m_miscConfig.ethSpiConfig},
       {"overrideStrappingRestriction", &m_miscConfig.overrideStrappingRestriction},
-      {"accessPointPassword", &m_miscConfig.accessPointPassword}
+      {"accessPointPassword", &m_miscConfig.accessPointPassword},
+      {"keypadEnabled", &m_miscConfig.keypadEnabled},
+      {"keypadRowPins", &m_miscConfig.keypadRowPins},
+      {"keypadColumnPins", &m_miscConfig.keypadColumnPins},
+      {"keypadActiveLevel", &m_miscConfig.keypadActiveLevel},
+      {"keypadDebounceTicks", &m_miscConfig.keypadDebounceTicks},
+      {"keypadMinCodeLength", &m_miscConfig.keypadMinCodeLength},
+      {"keypadMaxCodeLength", &m_miscConfig.keypadMaxCodeLength},
+      {"keypadMaxCodes", &m_miscConfig.keypadMaxCodes}
     }
     },
     {
@@ -537,7 +545,13 @@ void ConfigManager::deserialize(msgpack_object obj, std::string type) {
               auto msgpack_elements = std::ranges::subrange(v.val.via.array.ptr, v.val.via.array.ptr + v.val.via.array.size);
               auto integer_view = msgpack_elements | std::ranges::views::transform([](const msgpack_object& o){return o.via.u64;});
 
-              if constexpr (std::is_same_v<PointeeType, std::array<uint8_t, 4>>) {
+              if constexpr (std::is_same_v<PointeeType, std::array<uint8_t, 3>>) {
+                if (msgpack_elements.size() != 3) {
+                  ESP_LOGW(TAG, "Validation failed for '%s': array size is not 3.", key.c_str());
+                  break;
+                }
+                std::ranges::copy(integer_view, arg->begin());
+              } else if constexpr (std::is_same_v<PointeeType, std::array<uint8_t, 4>>) {
                 if (msgpack_elements.size() != 4) {
                   ESP_LOGW(TAG, "Validation failed for '%s': array size is not 4.", key.c_str());
                   break;
@@ -663,9 +677,14 @@ std::vector<uint8_t> ConfigManager::serialize() {
           msgpack_pack_unsigned_char(&pk, *arg);
         } else if constexpr (std::is_same_v<PointeeType, uint16_t>) {
           msgpack_pack_unsigned_short(&pk, *arg);
+        } else if constexpr (std::is_same_v<PointeeType, std::array<uint8_t, 3>>) {
+          msgpack_pack_array(&pk, arg->size());
+          for (auto& val : *arg) {
+            msgpack_pack_unsigned_char(&pk, val);
+          }
         } else if constexpr (std::is_same_v<PointeeType, std::array<uint8_t, 4>>) {
           msgpack_pack_array(&pk, arg->size());
-          for (const auto& val : *arg) {
+          for (auto& val : *arg) {
             msgpack_pack_unsigned_char(&pk, val);
           }
         } else if constexpr (std::is_same_v<PointeeType, std::array<uint8_t, 5>>) {
@@ -771,7 +790,8 @@ std::string ConfigManager::updateFromJson(const std::string& json_string) {
             } else {
               ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected number.", keyStr.c_str());
             }
-          } else if constexpr (std::is_same_v<PointeeType, std::array<uint8_t, 4>> ||
+          } else if constexpr (std::is_same_v<PointeeType, std::array<uint8_t, 3>> ||
+                               std::is_same_v<PointeeType, std::array<uint8_t, 4>> ||
                                std::is_same_v<PointeeType, std::array<uint8_t, 5>> ||
                                std::is_same_v<PointeeType, std::array<uint8_t, 7>>) {
             if (cJSON_IsArray(it)) {
@@ -895,7 +915,8 @@ std::string ConfigManager::serializeToJson() {
                     cJSON_AddBoolToObject(root.get(), key.c_str(), *arg);
                 } else if constexpr (std::is_same_v<PointeeType, uint8_t> || std::is_same_v<PointeeType, uint16_t>) {
                     cJSON_AddNumberToObject(root.get(), key.c_str(), static_cast<double>(*arg));
-                } else if constexpr (std::is_same_v<PointeeType, std::array<uint8_t, 4>> ||
+                } else if constexpr (std::is_same_v<PointeeType, std::array<uint8_t, 3>> ||
+                                     std::is_same_v<PointeeType, std::array<uint8_t, 4>> ||
                                      std::is_same_v<PointeeType, std::array<uint8_t, 5>> ||
                                      std::is_same_v<PointeeType, std::array<uint8_t, 7>>) {
                     cJSON *array = cJSON_CreateArray();

@@ -15,6 +15,8 @@
 #include "LockManager.hpp"
 #include "ConfigManager.hpp"
 #include "ReaderDataManager.hpp"
+#include "AccessCodeManager.hpp"
+#include "KeypadManager.hpp"
 #include "esp_mac.h"
 #include "hal/spi_types.h"
 #include "utils.hpp"
@@ -69,10 +71,62 @@ HomeKitLock::HomeKitLock(std::function<void(int)> &conn_cb, LockManager& lockMan
               }
           }
           break;
-          default:
-          break;
+      default:
+      break;
       }
   });
+}
+
+/**
+ * @brief Construct the keypad/access-code sub-system for the lock.
+ *
+ * When the keypad feature is enabled in configuration, loads stored access codes,
+ * initializes the matrix keypad, and subscribes to keypad events so entered codes
+ * are validated against the stored access codes and, on a match, trigger an
+ * unlock through the internal lock-state event.
+ */
+void HomeKitLock::initKeypad() {
+    const auto& miscConfig = m_configManager.getConfig<espConfig::misc_config_t>();
+    if (!miscConfig.keypadEnabled) {
+        return;
+    }
+    m_accessCodeManager = std::make_unique<AccessCodeManager>(miscConfig.keypadMinCodeLength,
+                                                              miscConfig.keypadMaxCodeLength,
+                                                              miscConfig.keypadMaxCodes);
+    m_accessCodeManager->init();
+    m_keypad = std::make_unique<KeypadManager>();
+    m_keypad_event = AppEventLoop::subscribe(KEYPAD_EVENT, KEYPAD_CODE_ENTERED, [&](const uint8_t* data, size_t size){
+        if(size == 0 || data == nullptr) return;
+        std::span<const uint8_t> payload(data, size);
+        std::error_code ec;
+        EventKeypadCode s = alpaca::deserialize<EventKeypadCode>(payload, ec);
+        if(ec) { ESP_LOGE(TAG, "Failed to deserialize keypad event: %s", ec.message().c_str()); return; }
+        if (m_accessCodeManager->validateCode(s.code)) {
+            ESP_LOGI(TAG, "Access code accepted, unlocking.");
+            EventLockState ls{
+              .currentState = static_cast<uint8_t>(m_lockManager.getTargetState()),
+              .targetState = static_cast<uint8_t>(LockManager::lockStates::UNLOCKED),
+              .source = LockManager::HOMEKIT
+            };
+            std::vector<uint8_t> d;
+            alpaca::serialize(ls, d);
+            AppEventLoop::publish(LOCK_EVENT, LOCK_TARGET_STATE_CHANGED, d.data(), d.size());
+        }
+    });
+    m_keypad->registerCodeEnteredCallback([](const std::string& code){
+        EventKeypadCode s{.code = code};
+        std::vector<uint8_t> d;
+        alpaca::serialize(s, d);
+        AppEventLoop::publish(KEYPAD_EVENT, KEYPAD_CODE_ENTERED, d.data(), d.size());
+    });
+    m_keypad->registerDoorbellCallback([](){
+        AppEventLoop::publish(KEYPAD_EVENT, KEYPAD_DOORBELL, nullptr, 0);
+    });
+    if (!m_keypad->begin(miscConfig)) {
+        ESP_LOGE(TAG, "Failed to initialize keypad hardware.");
+        m_keypad.reset();
+        m_accessCodeManager.reset();
+    }
 }
 
 /**
@@ -92,6 +146,7 @@ void HomeKitLock::initializeETH() {
  * Configures HomeSpan using settings from ConfigManager (pins, OTA password, port, host name suffix), initializes reader data handling, creates the lock accessory and its services/characteristics (including lock mechanism, management, NFC access, protocol/version, and optional physical battery service), installs developer debug commands, and registers controller and connection callbacks.
  */
 void HomeKitLock::begin() {
+    initKeypad();
     m_lock_state_changed = AppEventLoop::subscribe(LOCK_EVENT, LOCK_STATE_CHANGED, [&](const uint8_t* data, size_t size){
         if(size == 0 || data == nullptr) return;
         std::span<const uint8_t> payload(data, size);
@@ -156,6 +211,9 @@ void HomeKitLock::begin() {
       new LockManagementService();
       new LockMechanismService(*this, m_lockManager);
       new NFCAccessService(m_readerDataManager);
+      if(miscConfig.keypadEnabled && m_accessCodeManager) {
+          new AccessCodeService(*m_accessCodeManager);
+      }
       if(miscConfig.proxBatEnabled) {
           new PhysicalLockBatteryService(*this);
       }
@@ -368,6 +426,9 @@ void HomeKitLock::controllerCallback() {
     if (HAPClient::nAdminControllers() == 0) {
         ESP_LOGW(TAG, "Last controller unpaired. Wiping HomeKey data.");
         m_readerDataManager.deleteAllReaderData();
+        if (m_accessCodeManager) {
+            m_accessCodeManager->purge_codes();
+        }
         return;
     }
 

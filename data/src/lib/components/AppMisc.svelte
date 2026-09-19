@@ -33,7 +33,7 @@
 		error = $bindable() 
 	}: Props = $props();
 
-	let activeTab = $state<'homekit' | 'hardware' | 'network' | 'security'>('homekit');
+	let activeTab = $state<'homekit' | 'hardware' | 'keypad' | 'network' | 'security'>('homekit');
 
 	// svelte-ignore state_referenced_locally
 	let miscConfig = $state<MiscConfig>($state.snapshot(misc));
@@ -324,6 +324,17 @@
 				</button>
 				<button
 					type="button"
+					class="flex-1 tab flex-col py-2 rounded-lg transition-colors {activeTab === 'keypad' ? 'bg-base-100 text-primary font-medium shadow-sm' : 'text-base-content/60 hover:bg-base-200'}"
+					onclick={() => activeTab = 'keypad'}
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+						<rect x="3" y="5" width="18" height="14" rx="2"/>
+						<path d="M7 9h.01M11 9h.01M15 9h.01M17 9h.01M7 13h.01M11 13h.01M15 13h.01M17 13h.01M8 17h8" stroke-linecap="round"/>
+					</svg>
+					<span class="text-[10px] sm:text-xs mt-0.5">Keypad</span>
+				</button>
+				<button
+					type="button"
 					class="flex-1 tab flex-col py-2 rounded-lg transition-colors {activeTab === 'security' ? 'bg-base-100 text-primary font-medium shadow-sm' : 'text-base-content/60 hover:bg-base-200'}"
 					onclick={() => activeTab = 'security'}
 				>
@@ -513,6 +524,158 @@
 									</div>
 								</div>
 							</div>
+						</div>
+					{/if}
+
+					{#if activeTab === 'keypad'}
+						<div class="space-y-4">
+							<div>
+								<h3 class="text-sm font-semibold">Keypad Configuration</h3>
+								<p class="text-xs text-base-content/60">Configure a matrix keypad for access code entry. Access codes are managed from the Home app.</p>
+							</div>
+
+							<div class="flex items-center justify-between py-2 px-3 bg-base-100 rounded-lg">
+								<div>
+									<p class="text-sm font-medium">Enable Keypad</p>
+									<p class="text-xs text-base-content/60">Adds the HomeKit Access Code service and initializes the keypad hardware</p>
+								</div>
+								<input
+									type="checkbox"
+									bind:checked={miscConfig.keypadEnabled}
+									class="toggle toggle-primary toggle-sm"
+								/>
+							</div>
+
+							{#if miscConfig.keypadEnabled}
+								<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+									<div class="form-control">
+										<!-- svelte-ignore a11y_label_has_associated_control -->
+										<label class="label">
+											<span class="label-text text-xs">Row GPIO Pins</span>
+										</label>
+										<input
+											type="text"
+											value={(miscConfig.keypadRowPins ?? [39, 40, 41, 42, 45]).join(', ')}
+											oninput={(e) => {
+												const pins = e.currentTarget.value.split(',').map((v) => parseInt(v.trim(), 10));
+												if (pins.length === 5 && pins.every((p) => !isNaN(p) && p >= 0 && p <= 255)) {
+													miscConfig.keypadRowPins = [pins[0], pins[1], pins[2], pins[3], pins[4]];
+													e.currentTarget.setCustomValidity('');
+												} else {
+													e.currentTarget.setCustomValidity('Enter exactly 5 comma-separated pin numbers');
+												}
+											}}
+											placeholder="39, 40, 41, 42, 45"
+											class="input input-sm input-bordered w-full"
+										/>
+									</div>
+									<div class="form-control">
+										<!-- svelte-ignore a11y_label_has_associated_control -->
+										<label class="label">
+											<span class="label-text text-xs">Column GPIO Pins</span>
+										</label>
+										<input
+											type="text"
+											value={(miscConfig.keypadColumnPins ?? [46, 47, 48]).join(', ')}
+											oninput={(e) => {
+												const pins = e.currentTarget.value.split(',').map((v) => parseInt(v.trim(), 10));
+												if (pins.length === 3 && pins.every((p) => !isNaN(p) && p >= 0 && p <= 255)) {
+													miscConfig.keypadColumnPins = [pins[0], pins[1], pins[2]];
+													e.currentTarget.setCustomValidity('');
+												} else {
+													e.currentTarget.setCustomValidity('Enter exactly 3 comma-separated pin numbers');
+												}
+											}}
+											placeholder="46, 47, 48"
+											class="input input-sm input-bordered w-full"
+										/>
+									</div>
+									<div class="form-control">
+										<!-- svelte-ignore a11y_label_has_associated_control -->
+										<label class="label">
+											<span class="label-text text-xs">Input Active Level</span>
+										</label>
+										<select bind:value={miscConfig.keypadActiveLevel} class="select select-sm select-bordered w-full">
+											<option value={0}>Active Low</option>
+											<option value={1}>Active High</option>
+										</select>
+									</div>
+									<div class="form-control">
+										<!-- svelte-ignore a11y_label_has_associated_control -->
+										<label class="label">
+											<span class="label-text text-xs">Debounce Ticks</span>
+										</label>
+										<input
+											type="number"
+											min="1"
+											max="255"
+											bind:value={miscConfig.keypadDebounceTicks}
+											class="input input-sm input-bordered w-full"
+										/>
+									</div>
+									<div class="form-control">
+										<!-- svelte-ignore a11y_label_has_associated_control -->
+										<label class="label">
+											<span class="label-text text-xs">Min Code Length</span>
+										</label>
+										<input
+											type="number"
+											min="1"
+											max="16"
+											bind:value={miscConfig.keypadMinCodeLength}
+											onchange={() => {
+												const min = miscConfig.keypadMinCodeLength ?? 4;
+												const max = miscConfig.keypadMaxCodeLength ?? 16;
+												if (min > max) miscConfig.keypadMaxCodeLength = min;
+											}}
+											class="input input-sm input-bordered w-full"
+										/>
+									</div>
+									<div class="form-control">
+										<!-- svelte-ignore a11y_label_has_associated_control -->
+										<label class="label">
+											<span class="label-text text-xs">Max Code Length</span>
+										</label>
+										<input
+											type="number"
+											min="1"
+											max="16"
+											bind:value={miscConfig.keypadMaxCodeLength}
+											onchange={() => {
+												const min = miscConfig.keypadMinCodeLength ?? 4;
+												const max = miscConfig.keypadMaxCodeLength ?? 16;
+												if (max < min) miscConfig.keypadMinCodeLength = max;
+											}}
+											class="input input-sm input-bordered w-full"
+										/>
+									</div>
+									<div class="form-control">
+										<!-- svelte-ignore a11y_label_has_associated_control -->
+										<label class="label">
+											<span class="label-text text-xs">Max Stored Codes</span>
+										</label>
+										<input
+											type="number"
+											min="1"
+											max="255"
+											bind:value={miscConfig.keypadMaxCodes}
+											class="input input-sm input-bordered w-full"
+										/>
+									</div>
+								</div>
+
+								<div class="flex items-center justify-between py-2 px-3 bg-warning/10 rounded-lg">
+									<div class="flex items-start gap-2">
+										<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-warning mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+										</svg>
+										<div>
+											<p class="text-sm font-medium text-warning">Device Reboot Required</p>
+											<p class="text-xs text-base-content/60">Keypad settings require a device reboot to take effect.</p>
+										</div>
+									</div>
+								</div>
+							{/if}
 						</div>
 					{/if}
 

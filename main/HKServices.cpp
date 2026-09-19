@@ -3,6 +3,7 @@
 #include "HomeKitLock.hpp"
 #include "LockManager.hpp"
 #include "ReaderDataManager.hpp"
+#include "AccessCodeManager.hpp"
 #include "esp_mac.h"
 #include "HK_HomeKit.h"
 
@@ -14,6 +15,8 @@ CUSTOM_CHAR(HardwareFinish, 26C, PR, TLV_ENC, NULL_TLV, NULL_TLV, NULL_TLV, true
 CUSTOM_CHAR(NFCAccessControlPoint, 264, PR+PW+WR, TLV_ENC, NULL_TLV, NULL_TLV, NULL_TLV, true)
 CUSTOM_CHAR(NFCAccessSupportedConfiguration, 265, PR, TLV_ENC, NULL_TLV, NULL_TLV, NULL_TLV, true)
 CUSTOM_CHAR(LockControlPoint, 19, PW, TLV_ENC, NULL_TLV, NULL_TLV, NULL_TLV, true)
+CUSTOM_CHAR(AccessCodeSupportedConfiguration, 261, PR, TLV_ENC, NULL_TLV, NULL_TLV, NULL_TLV, true)
+CUSTOM_CHAR(AccessCodeControlPoint, 262, PR+PW+WR, TLV_ENC, NULL_TLV, NULL_TLV, NULL_TLV, true)
 
 /**
  * @brief Constructs a LockManagement service and registers required characteristics.
@@ -34,6 +37,11 @@ Service::NFCAccess::NFCAccess() : SpanService{ "266","NFCAccess",true } {
   req.push_back(&_CUSTOM_ConfigurationState);
   req.push_back(&_CUSTOM_NFCAccessControlPoint);
   req.push_back(&_CUSTOM_NFCAccessSupportedConfiguration);
+}
+
+Service::AccessCode::AccessCode() : SpanService{ "260","AccessCode",true } {
+  req.push_back(&_CUSTOM_AccessCodeSupportedConfiguration);
+  req.push_back(&_CUSTOM_AccessCodeControlPoint);
 }
 
 /**
@@ -197,4 +205,48 @@ HomeKitLock::PhysicalLockBatteryService::PhysicalLockBatteryService(HomeKitLock&
     ESP_LOGI(HomeKitLock::TAG, "Configuring PhysicalLockBattery");
     bridge.m_statusLowBattery = new Characteristic::StatusLowBattery(0, true);
     bridge.m_batteryLevel = new Characteristic::BatteryLevel(100, true);
+}
+
+/**
+ * @brief Initialize the AccessCode service and register its HomeKit characteristics.
+ *
+ * Creates the AccessCodeSupportedConfiguration characteristic pre-populated with the
+ * supported-conf TLV8 (tags 1-4, maximum code length 8) and the AccessCodeControlPoint
+ * characteristic used by controllers to manage access codes.
+ *
+ * @param accessCodeManager Reference to the AccessCodeManager backing the control point.
+ */
+HomeKitLock::AccessCodeService::AccessCodeService(AccessCodeManager& accessCodeManager) : m_accessCodeManager(accessCodeManager) {
+    ESP_LOGI(HomeKitLock::TAG, "Configuring AccessCode");
+    TLV8 conf(nullptr, 0);
+    conf.add(0x01, 1); // charset: arabic numerals
+    conf.add(0x02, accessCodeManager.minCodeLength());
+    conf.add(0x03, accessCodeManager.maxCodeLength());
+    conf.add(0x04, accessCodeManager.maxCodes());
+    new Characteristic::AccessCodeSupportedConfiguration(conf);
+    m_controlPoint = new Characteristic::AccessCodeControlPoint();
+}
+
+/**
+ * @brief Process an Access Code control-point write and apply the TLV8 response.
+ *
+ * Parses the written TLV8, hands it to the AccessCodeManager, and writes the
+ * returned response TLV back onto the control point characteristic.
+ *
+ * @return `true` always; failures are reflected in the response TLV status codes.
+ */
+boolean HomeKitLock::AccessCodeService::update() {
+    if (!m_controlPoint->updated()) return true;
+    TLV8 ctrlData(nullptr, 0);
+    m_controlPoint->getNewTLV(ctrlData);
+    if (ctrlData.empty()) return true;
+
+    std::vector<uint8_t> result = m_accessCodeManager.handle_write(ctrlData);
+
+    TLV8 res(NULL, 0);
+    if (!result.empty()) {
+        res.unpack(result.data(), result.size());
+    }
+    m_controlPoint->setTLV(res, false);
+    return true;
 }

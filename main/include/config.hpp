@@ -202,6 +202,14 @@ namespace espConfig
     std::array<uint8_t, 7> ethSpiConfig = {ETH_SPI_CONF_SPI_FREQ_MHZ, ETH_SPI_CONF_PIN_CS, ETH_SPI_CONF_PIN_IRQ, ETH_SPI_CONF_PIN_RST, ETH_SPI_CONF_PIN_SCK, ETH_SPI_CONF_PIN_MISO, ETH_SPI_CONF_PIN_MOSI};
     bool overrideStrappingRestriction = false;
     std::string accessPointPassword = AP_PASSWORD;
+    bool keypadEnabled = KEYPAD_ENABLED;
+    std::array<uint8_t, 5> keypadRowPins = KEYPAD_OUTPUT_GPIOS;
+    std::array<uint8_t, 3> keypadColumnPins = KEYPAD_INPUT_GPIOS;
+    uint8_t keypadActiveLevel = KEYPAD_ACTIVE_LEVEL;
+    uint8_t keypadDebounceTicks = KEYPAD_DEBOUNCE_TICKS;
+    uint8_t keypadMinCodeLength = KEYPAD_MIN_CODE_LENGTH;
+    uint8_t keypadMaxCodeLength = KEYPAD_MAX_CODE_LENGTH;
+    uint8_t keypadMaxCodes = KEYPAD_MAX_CODES;
   };
   struct actions_config_t {
     enum colorMap

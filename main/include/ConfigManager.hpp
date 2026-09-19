@@ -80,7 +80,7 @@ public:
                           std::map<std::string, uint8_t> *,
                           std::map<espConfig::actions_config_t::colorMap, uint8_t> *,
                           std::array<uint8_t, 4> *, std::array<uint8_t, 5> *,
-                          std::array<uint8_t, 7> *>>;
+                          std::array<uint8_t, 3> *, std::array<uint8_t, 7> *>>;
     void deserialize(msgpack_object obj, std::string key);
 
     template <typename ConfigType>
