@@ -99,4 +99,10 @@ private:
         AccessCodeService(AccessCodeManager& accessCodeManager);
         boolean update() override;
     };
+    struct DoorbellService : Service::Doorbell {
+        SpanCharacteristic* m_switchEvent;
+        DoorbellService();
+    };
+    DoorbellService* m_doorbell = nullptr;
+    AppEventLoop::SubscriptionHandle m_doorbell_event;
 };

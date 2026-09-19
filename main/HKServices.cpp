@@ -250,3 +250,16 @@ boolean HomeKitLock::AccessCodeService::update() {
     m_controlPoint->setTLV(res, false);
     return true;
 }
+
+/**
+ * @brief Initialize the Doorbell service and its ProgrammableSwitchEvent characteristic.
+ *
+ * The characteristic is not writable by controllers; it is fired by the firmware
+ * when the keypad doorbell key is pressed. ConfiguredName names the button in
+ * the Home app.
+ */
+HomeKitLock::DoorbellService::DoorbellService() {
+    ESP_LOGI(HomeKitLock::TAG, "Configuring Doorbell");
+    m_switchEvent = new Characteristic::ProgrammableSwitchEvent(0, false);
+    new Characteristic::ConfiguredName("Doorbell");
+}

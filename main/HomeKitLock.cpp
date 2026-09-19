@@ -213,6 +213,11 @@ void HomeKitLock::begin() {
       new NFCAccessService(m_readerDataManager);
       if(miscConfig.keypadEnabled && m_accessCodeManager) {
           new AccessCodeService(*m_accessCodeManager);
+          m_doorbell = new DoorbellService();
+          m_doorbell_event = AppEventLoop::subscribe(KEYPAD_EVENT, KEYPAD_DOORBELL, [&](const uint8_t* data, size_t size){
+              ESP_LOGI(TAG, "Doorbell pressed, notifying HomeKit controllers.");
+              m_doorbell->m_switchEvent->setVal(Characteristic::ProgrammableSwitchEvent::SINGLE_PRESS);
+          });
       }
       if(miscConfig.proxBatEnabled) {
           new PhysicalLockBatteryService(*this);
