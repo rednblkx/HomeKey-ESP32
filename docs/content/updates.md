@@ -14,7 +14,7 @@ This document outlines different methods for updating the firmware on your HomeK
 
 **Required Files for Updates:**
 
-*   `*.firmware.bin`: The main application firmware file.
+*   `*.firmware.ota.bin`: The main application firmware file.
 *   `littlefs.bin`: Contains the web interface files (LittleFS filesystem).
 
 ## 1. Over-The-Air (OTA) Updates
@@ -30,7 +30,7 @@ The easiest way to update your device is through the web interface. Simply navig
 
 1.  **Access the Web Interface:** Navigate to the device's IP address in your web browser.
 2.  **Navigate to OTA Update section:** Click the "OTA Update" button on the left-hand side of the page.
-3.  **Select Firmware File:** Select the `*-firmware.bin` file you downloaded earlier.
+3.  **Select Firmware File:** Select the `*.firmware.ota.bin` file you downloaded earlier.
 4.  **Select LittleFS File:** Select the `littlefs.bin` file you downloaded earlier.
 5.  **Flash Firmware and LittleFS:** Click the "Upload Both" button to initiate the update process.
 6.  **Reboot:** The device will automatically reboot after the OTA process is complete.
@@ -43,7 +43,7 @@ If everything went smoothly, you should see the "Current Version" and "Running P
 
 *   Your HomeKey-ESP32 device connected to your Wi-Fi network.
 *   `espota` tool (available as a Windows executable or a Python script for Linux/macOS, both available [here](https://github.com/espressif/arduino-esp32/tree/master/tools)).
-*   The `*-firmware.bin` file for your ESP32 chip (e.g., `esp32-firmware.bin`, `esp32c3-firmware.bin`, or `esp32s3-firmware.bin`) from the [GitHub Releases page](https://github.com/rednblkx/HomeKey-ESP32/releases).
+*   The `*.firmware.ota.bin` file for your ESP32 chip (e.g., `esp32.firmware.ota.bin`, `esp32c3.firmware.ota.bin`, or `esp32s3.firmware.ota.bin`) from the [GitHub Releases page](https://github.com/rednblkx/HomeKey-ESP32/releases).
 *   The `littlefs.bin` file from the [GitHub Releases page](https://github.com/rednblkx/HomeKey-ESP32/releases).
 *   The IP address of your HomeKey-ESP32 device.
 *   (Optional) The OTA password, if you've set one in the [Configuration Guide](../configuration#524-homespan-settings).
@@ -56,13 +56,13 @@ If everything went smoothly, you should see the "Current Version" and "Running P
 3.  **Flash Firmware:** Use the following command to flash the main firmware:
     *   **Windows:**
         ```bash
-        espota.exe -r -i <address_of_device> -a <ota_password> -f <esp32xx-firmware.bin>
+        espota.exe -r -i <address_of_device> -a <ota_password> -f <esp32xx.firmware.ota.bin>
         ```
     *   **Linux/macOS:**
         ```bash
-        python espota.py -r -i <address_of_device> -a <ota_password> -f <esp32xx-firmware.bin>
+        python espota.py -r -i <address_of_device> -a <ota_password> -f <esp32xx.firmware.ota.bin>
         ```
-    *   Replace `<address_of_device>` with your device's IP address, `<ota_password>` with your OTA password (if set), and `<esp32xx-firmware.bin>` with the path to your `*-firmware.bin` file.
+    *   Replace `<address_of_device>` with your device's IP address, `<ota_password>` with your OTA password (if set), and `<esp32xx.firmware.ota.bin>` with the path to your `*.firmware.ota.bin` file.
 4.  **Flash LittleFS:** After the firmware is flashed, you must flash the `littlefs.bin` file using a similar command, but with the `-s` flag added:
     *   **Windows:**
         ```bash
@@ -83,7 +83,7 @@ If OTA updates aren't working, or if you prefer a wired connection, you can alwa
 *   Your HomeKey-ESP32 device.
 *   A USB cable to connect your ESP32 to your computer.
 *   `esptool.py` installed on your computer (see [Prerequisites Guide](../prerequisites/#1-essential-software)).
-*   The `esp32XX-firmware.bin` and `littlefs.bin` files.
+*   The `esp32XX.firmware.ota.bin` and `littlefs.bin` files.
 
 ### 2.2. Update
 
@@ -95,9 +95,9 @@ If OTA updates aren't working, or if you prefer a wired connection, you can alwa
     If you need to flash the application and filesystem separately (e.g., for specific development or recovery scenarios), use the following command. **Note the different flash addresses.**
 
     ```bash
-    esptool.py --port YOUR_PORT write_flash 0x20000 <firmware.bin> 0x200000 <firmware.bin> 0x3e0000 <littlefs.bin>
+    esptool.py --port YOUR_PORT write_flash 0x20000 <.firmware.ota.bin> 0x200000 <.firmware.ota.bin> 0x3e0000 <littlefs.bin>
     ```
-    *   Replace `<firmware.bin>` and `<littlefs.bin>` with the paths to your respective files.
+    *   Replace `<.firmware.ota.bin>` and `<littlefs.bin>` with the paths to your respective files.
     *   Replace `YOUR_PORT` with your serial port assigned to your ESP32.
 
 5.  **Initiate Flash Mode:** If the flashing doesn't start automatically, you might need to manually put your ESP32 into flash mode (refer to [Setup Guide](../setup#3-flash-the-firmware) for details).

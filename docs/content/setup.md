@@ -15,7 +15,7 @@ First things first, let's get the brains of your HomeKey-ESP32 onto your compute
 2. **Download the Latest Release:** Look for the "Latest release" tag. Under the "Assets" section, you'll find several firmware files:
 
     * **`*.firmware.factory.bin`**: This is the file used to flash a new device for the first time. It contains the bootloader, application, and LittleFS filesystem all merged into one, ready to be flashed at address `0x0`.
-    * **`*.firmware.bin`**: This file contains only the application firmware and is primarily used for Over-The-Air (OTA) updates.
+    * **`*.firmware.ota.bin`**: This file contains only the application firmware and is primarily used for Over-The-Air (OTA) updates.
     * **`littlefs.bin`**: This file contains the web interface files and is also used for OTA updates of the filesystem.
 
     More details on OTA updates can be found in the [Updates Guide](../updates).
