@@ -17,37 +17,37 @@
 
 #ifdef CONFIG_IDF_TARGET_ESP32C6
 inline constexpr uint8_t RESTRICTED_PINS[] = {
-  12, 13, 24, 25, 26, 28, 29, 30
+  12, 13, 16, 17, 24, 25, 26, 27, 28, 29, 30
 };
 inline constexpr uint8_t STRAPPING_PINS[] = {
-  8, 9, 15,16, 17, 27
+  4, 5, 8, 9, 15
 };
 #elifdef CONFIG_IDF_TARGET_ESP32
 inline constexpr uint8_t RESTRICTED_PINS[] = {
-  1, 3, 6, 7, 8, 11, 16, 17
+  1, 3, 6, 7, 8, 9, 10, 11
 };
 inline constexpr uint8_t STRAPPING_PINS[] = {
-  0, 2
+  0, 2, 5, 12, 15, 16, 17
 };
 #elifdef CONFIG_IDF_TARGET_ESP32C3
 inline constexpr uint8_t RESTRICTED_PINS[] = {
-  12, 13, 14, 15, 16, 17, 18, 19
+  12, 13, 14, 15, 16, 17, 18, 19, 20, 21
 };
 inline constexpr uint8_t STRAPPING_PINS[] = {
-  2, 8, 9, 20, 21
+  2, 8, 9
 };
 #elifdef CONFIG_IDF_TARGET_ESP32S3
 #if defined(CONFIG_ESPTOOLPY_OCT_FLASH) || defined(CONFIG_SPIRAM_MODE_OCT)
 inline constexpr uint8_t RESTRICTED_PINS[] = {
-  9, 19, 20, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 43, 44
+  19, 20, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 43, 44
 };
 #else
 inline constexpr uint8_t RESTRICTED_PINS[] = {
-  9, 19, 20, 26, 27, 28, 29, 30, 31, 32, 38, 43, 44
+  19, 20, 26, 27, 28, 29, 30, 31, 32, 43, 44
 };
 #endif
 inline constexpr uint8_t STRAPPING_PINS[] = {
-  0, 3, 45, 46, 47, 48
+  0, 3, 45, 46
 };
 #else
 inline constexpr uint8_t RESTRICTED_PINS[] = {};
