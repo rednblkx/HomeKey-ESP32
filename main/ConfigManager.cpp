@@ -2,6 +2,8 @@
 #include "MbedtlsHelpers.hpp"
 #include "cJSON.h"
 #include "config.hpp"
+#include <cstddef>
+#include <cstring>
 #include <cstdint>
 #include <ranges>
 #include <string>
@@ -34,136 +36,204 @@ using crypto::ScopedPk;
 using crypto::ScopedX509Crt;
 
 /**
- * @brief Initialize ConfigManager and build the configuration key-to-field map.
+ * @brief Initialize ConfigManager.
  *
- * Constructs a ConfigManager instance, marks it uninitialized, and populates
- * the internal m_configMap with mappings from configuration keys (for the
- * "mqtt" and "misc" sections) to pointers of their corresponding in-memory
- * fields. The map enables unified serialization/deserialization and JSON
- * handling for both MQTT and miscellaneous settings.
+ * Field metadata now lives in the compile-time kConfigFields table (.rodata);
+ * the constructor only marks the manager uninitialized.
  */
 ConfigManager::ConfigManager() : m_isInitialized(false) {
-  m_configMap = { 
-    {"mqtt",{ 
-      // MQTT Config
-      {"mqttBroker", &m_mqttConfig.mqttBroker},
-      {"mqttPort", &m_mqttConfig.mqttPort},
-      {"mqttClientId", &m_mqttConfig.mqttClientId},
-      {"mqttUsername", &m_mqttConfig.mqttUsername},
-      {"mqttPassword", &m_mqttConfig.mqttPassword},
-      {"hassMqttDiscoveryEnabled",
-        &m_mqttConfig.hassMqttDiscoveryEnabled},
-      {"lwtTopic", &m_mqttConfig.lwtTopic},
-      {"hkTopic", &m_mqttConfig.hkTopic},
-      {"lockStateTopic", &m_mqttConfig.lockStateTopic},
-      {"lockStateCmd", &m_mqttConfig.lockStateCmd},
-      {"lockCStateCmd", &m_mqttConfig.lockCStateCmd},
-      {"lockTStateCmd", &m_mqttConfig.lockTStateCmd},
-      {"btrLvlCmdTopic", &m_mqttConfig.btrLvlCmdTopic},
-      {"hkAltActionTopic", &m_mqttConfig.hkAltActionTopic},
-      {"lockCustomStateTopic", &m_mqttConfig.lockCustomStateTopic},
-      {"lockCustomStateCmd", &m_mqttConfig.lockCustomStateCmd},
-      {"lockEnableCustomState", &m_mqttConfig.lockEnableCustomState},
-      {"nfcTagNoPublish", &m_mqttConfig.nfcTagNoPublish},
-      {"useSSL", &m_mqttConfig.useSSL},
-      {"allowInsecure", &m_mqttConfig.allowInsecure},
-      {"customLockStates", &m_mqttConfig.customLockStates},
-      {"customLockActions", &m_mqttConfig.customLockActions}
-      }
-    },
-{
-      "ssl", {
-        {"caCert", &m_mqttSslConfig.caCert},
-        {"clientCert", &m_mqttSslConfig.clientCert},
-        {"clientKey", &m_mqttSslConfig.clientKey},
-      }
-    },
-    {
-      "https", {
-        {"serverCert", &m_httpsCertsConfig.serverCert},
-        {"privateKey", &m_httpsCertsConfig.privateKey},
-        {"caCert", &m_httpsCertsConfig.caCert},
-      }
-    },
-    {"misc",{
-      // Miscellaneous Config
-      {"deviceName", &m_miscConfig.deviceName},
-      {"otaPasswd", &m_miscConfig.otaPasswd},
-      {"hk_key_color", &m_miscConfig.hk_key_color},
-      {"setupCode", &m_miscConfig.setupCode},
-      {"lockAlwaysUnlock", &m_miscConfig.lockAlwaysUnlock},
-      {"lockAlwaysLock", &m_miscConfig.lockAlwaysLock},
-      {"hkAuthPrecomputeEnabled", &m_miscConfig.hkAuthPrecomputeEnabled},
-      {"nfcFastPollingEnabled", &m_miscConfig.nfcFastPollingEnabled},
-      {"nfcReaderType", &m_miscConfig.nfcReaderType},
-      {"nfcIrqPin", &m_miscConfig.nfcIrqPin},
-      {"nfcVenPin", &m_miscConfig.nfcVenPin},
-      {"controlPin", &m_miscConfig.controlPin},
-      {"hsStatusPin", &m_miscConfig.hsStatusPin},
-      {"webAuthEnabled", &m_miscConfig.webAuthEnabled},
-      {"webUsername", &m_miscConfig.webUsername},
-      {"webPassword", &m_miscConfig.webPassword},
-      {"webHttpsEnabled", &m_miscConfig.webHttpsEnabled},
-      {"nfcGpioPins", &m_miscConfig.nfcGpioPins},
-      {"nfcPinsPreset", &m_miscConfig.nfcPinsPreset},
-      {"btrLowStatusThreshold", &m_miscConfig.btrLowStatusThreshold},
-      {"proxBatEnabled", &m_miscConfig.proxBatEnabled},
-      {"ethernetEnabled", &m_miscConfig.ethernetEnabled},
-      {"ethActivePreset", &m_miscConfig.ethActivePreset},
-      {"ethPhyType", &m_miscConfig.ethPhyType},
-      {"ethSpiBus", &m_miscConfig.ethSpiBus},
-      {"ethRmiiConfig", &m_miscConfig.ethRmiiConfig},
-      {"ethSpiConfig", &m_miscConfig.ethSpiConfig},
-      {"overrideStrappingRestriction", &m_miscConfig.overrideStrappingRestriction},
-      {"accessPointPassword", &m_miscConfig.accessPointPassword},
-      {"keypadEnabled", &m_miscConfig.keypadEnabled},
-      {"keypadLayout", &m_miscConfig.keypadLayout},
-      {"keypadRowPins", &m_miscConfig.keypadRowPins},
-      {"keypadColumnPins", &m_miscConfig.keypadColumnPins},
-      {"keypadActiveLevel", &m_miscConfig.keypadActiveLevel},
-      {"keypadDebounceTicks", &m_miscConfig.keypadDebounceTicks},
-      {"keypadDoorbellKey", &m_miscConfig.keypadDoorbellKey},
-      {"keypadMinCodeLength", &m_miscConfig.keypadMinCodeLength},
-      {"keypadMaxCodeLength", &m_miscConfig.keypadMaxCodeLength},
-      {"keypadMaxCodes", &m_miscConfig.keypadMaxCodes}
-    }
-    },
-    {
-      "actions", {
-        {"nfcNeopixelPin", &m_actionsConfig.nfcNeopixelPin},
-        {"neoPixelType", &m_actionsConfig.neoPixelType},
-        {"neopixelSuccessColor", &m_actionsConfig.neopixelSuccessColor},
-        {"neopixelFailureColor", &m_actionsConfig.neopixelFailureColor},
-        {"neopixelSuccessTime", &m_actionsConfig.neopixelSuccessTime},
-        {"neopixelFailTime", &m_actionsConfig.neopixelFailTime},
-        {"neopixelTagEventTime", &m_actionsConfig.neopixelTagEventTime},
-        {"neopixelTagEventColor", &m_actionsConfig.neopixelTagEventColor},
-        {"nfcSuccessPin", &m_actionsConfig.nfcSuccessPin},
-        {"nfcSuccessTime", &m_actionsConfig.nfcSuccessTime},
-        {"nfcSuccessHL", &m_actionsConfig.nfcSuccessHL},
-        {"nfcFailPin", &m_actionsConfig.nfcFailPin},
-        {"nfcFailTime", &m_actionsConfig.nfcFailTime},
-        {"nfcFailHL", &m_actionsConfig.nfcFailHL},
-        {"tagEventPin", &m_actionsConfig.tagEventPin},
-        {"tagEventTimeout", &m_actionsConfig.tagEventTimeout},
-        {"tagEventHL", &m_actionsConfig.tagEventHL},
-        {"gpioActionPin", &m_actionsConfig.gpioActionPin},
-        {"gpioActionLockState", &m_actionsConfig.gpioActionLockState},
-        {"gpioActionUnlockState", &m_actionsConfig.gpioActionUnlockState},
-        {"gpioActionMomentaryEnabled", &m_actionsConfig.gpioActionMomentaryEnabled},
-        {"hkGpioControlledState", &m_actionsConfig.hkGpioControlledState},
-        {"gpioActionMomentaryTimeout", &m_actionsConfig.gpioActionMomentaryTimeout},
-        {"hkDumbSwitchMode", &m_actionsConfig.hkDumbSwitchMode},
-        {"hkAltActionPin", &m_actionsConfig.hkAltActionPin},
-        {"hkAltActionTimeout", &m_actionsConfig.hkAltActionTimeout},
-        {"hkAltActionGpioState", &m_actionsConfig.hkAltActionGpioState},
-        {"hkAltActionInitPin", &m_actionsConfig.hkAltActionInitPin},
-        {"hkAltActionInitLedPin", &m_actionsConfig.hkAltActionInitLedPin},
-        {"hkAltActionInitTimeout", &m_actionsConfig.hkAltActionInitTimeout},
-      }
-    }
-  };
 }
+
+// ---------------------------------------------------------------------------
+// Static config field table
+//
+// Sections are laid out in this order; findField() and sectionRange() rely on
+// the contiguity of each section's entries. Offsets are byte offsets of the
+// field inside the owning section struct, resolved at first use via
+// sectionBase() — this keeps the whole table in .rodata with no heap or BSS.
+// Section names are the public API names ("mqtt", "ssl", "https", "misc",
+// "actions") used by every caller; the F() macro takes the struct type
+// separately. loadConfigFromNvs() dispatches with exactly these strings.
+// ---------------------------------------------------------------------------
+
+// GCC supports offsetof on these non-standard-layout structs (std::map
+// members); suppress the conditional-support warning for the table only.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Winvalid-offsetof"
+#define OFF(s, m) (offsetof(espConfig::s, m))
+#define F(str, s, m, type) { str, #m, uint16_t(OFF(s, m)), FieldType::type }
+
+const ConfigManager::ConfigField ConfigManager::kConfigFields[ConfigManager::kFieldCount] = {
+  // --- mqtt (22) ---
+  F("mqtt", mqttConfig_t, mqttBroker, Str),
+  F("mqtt", mqttConfig_t, mqttPort, U16),
+  F("mqtt", mqttConfig_t, mqttClientId, Str),
+  F("mqtt", mqttConfig_t, mqttUsername, Str),
+  F("mqtt", mqttConfig_t, mqttPassword, Str),
+  F("mqtt", mqttConfig_t, hassMqttDiscoveryEnabled, Bool),
+  F("mqtt", mqttConfig_t, lwtTopic, Str),
+  F("mqtt", mqttConfig_t, hkTopic, Str),
+  F("mqtt", mqttConfig_t, lockStateTopic, Str),
+  F("mqtt", mqttConfig_t, lockStateCmd, Str),
+  F("mqtt", mqttConfig_t, lockCStateCmd, Str),
+  F("mqtt", mqttConfig_t, lockTStateCmd, Str),
+  F("mqtt", mqttConfig_t, btrLvlCmdTopic, Str),
+  F("mqtt", mqttConfig_t, hkAltActionTopic, Str),
+  F("mqtt", mqttConfig_t, lockCustomStateTopic, Str),
+  F("mqtt", mqttConfig_t, lockCustomStateCmd, Str),
+  F("mqtt", mqttConfig_t, lockEnableCustomState, Bool),
+  F("mqtt", mqttConfig_t, nfcTagNoPublish, Bool),
+  F("mqtt", mqttConfig_t, useSSL, Bool),
+  F("mqtt", mqttConfig_t, allowInsecure, Bool),
+  F("mqtt", mqttConfig_t, customLockStates, U8Arr6),
+  F("mqtt", mqttConfig_t, customLockActions, U8Arr2),
+  // --- ssl (3) ---
+  F("ssl", mqtt_ssl_t, caCert, Str),
+  F("ssl", mqtt_ssl_t, clientCert, Str),
+  F("ssl", mqtt_ssl_t, clientKey, Str),
+  // --- https (3) ---
+  F("https", https_certs_t, serverCert, Str),
+  F("https", https_certs_t, privateKey, Str),
+  F("https", https_certs_t, caCert, Str),
+  // --- misc (39) ---
+  F("misc", misc_config_t, deviceName, Str),
+  F("misc", misc_config_t, otaPasswd, Str),
+  F("misc", misc_config_t, hk_key_color, U8),
+  F("misc", misc_config_t, setupCode, Str),
+  F("misc", misc_config_t, lockAlwaysUnlock, Bool),
+  F("misc", misc_config_t, lockAlwaysLock, Bool),
+  F("misc", misc_config_t, hkAuthPrecomputeEnabled, Bool),
+  F("misc", misc_config_t, nfcFastPollingEnabled, Bool),
+  F("misc", misc_config_t, nfcReaderType, U8),
+  F("misc", misc_config_t, nfcIrqPin, U8),
+  F("misc", misc_config_t, nfcVenPin, U8),
+  F("misc", misc_config_t, controlPin, U8),
+  F("misc", misc_config_t, hsStatusPin, U8),
+  F("misc", misc_config_t, webAuthEnabled, Bool),
+  F("misc", misc_config_t, webUsername, Str),
+  F("misc", misc_config_t, webPassword, Str),
+  F("misc", misc_config_t, webHttpsEnabled, Bool),
+  F("misc", misc_config_t, nfcGpioPins, Arr4),
+  F("misc", misc_config_t, nfcPinsPreset, U8),
+  F("misc", misc_config_t, btrLowStatusThreshold, U8),
+  F("misc", misc_config_t, proxBatEnabled, Bool),
+  F("misc", misc_config_t, ethernetEnabled, Bool),
+  F("misc", misc_config_t, ethActivePreset, U8),
+  F("misc", misc_config_t, ethPhyType, U8),
+  F("misc", misc_config_t, ethSpiBus, U8),
+  F("misc", misc_config_t, ethRmiiConfig, Arr5),
+  F("misc", misc_config_t, ethSpiConfig, Arr7),
+  F("misc", misc_config_t, overrideStrappingRestriction, Bool),
+  F("misc", misc_config_t, accessPointPassword, Str),
+  F("misc", misc_config_t, keypadEnabled, Bool),
+  F("misc", misc_config_t, keypadLayout, U8),
+  F("misc", misc_config_t, keypadRowPins, Arr5),
+  F("misc", misc_config_t, keypadColumnPins, Arr4),
+  F("misc", misc_config_t, keypadActiveLevel, U8),
+  F("misc", misc_config_t, keypadDebounceTicks, U8),
+  F("misc", misc_config_t, keypadDoorbellKey, U8),
+  F("misc", misc_config_t, keypadMinCodeLength, U8),
+  F("misc", misc_config_t, keypadMaxCodeLength, U8),
+  F("misc", misc_config_t, keypadMaxCodes, U8),
+  // --- actions (30) ---
+  F("actions", actions_config_t, nfcNeopixelPin, U8),
+  F("actions", actions_config_t, neoPixelType, U8),
+  F("actions", actions_config_t, neopixelSuccessColor, ColorMap),
+  F("actions", actions_config_t, neopixelFailureColor, ColorMap),
+  F("actions", actions_config_t, neopixelSuccessTime, U16),
+  F("actions", actions_config_t, neopixelFailTime, U16),
+  F("actions", actions_config_t, neopixelTagEventTime, U16),
+  F("actions", actions_config_t, neopixelTagEventColor, ColorMap),
+  F("actions", actions_config_t, nfcSuccessPin, U8),
+  F("actions", actions_config_t, nfcSuccessTime, U16),
+  F("actions", actions_config_t, nfcSuccessHL, Bool),
+  F("actions", actions_config_t, nfcFailPin, U8),
+  F("actions", actions_config_t, nfcFailTime, U16),
+  F("actions", actions_config_t, nfcFailHL, Bool),
+  F("actions", actions_config_t, tagEventPin, U8),
+  F("actions", actions_config_t, tagEventTimeout, U16),
+  F("actions", actions_config_t, tagEventHL, Bool),
+  F("actions", actions_config_t, gpioActionPin, U8),
+  F("actions", actions_config_t, gpioActionLockState, Bool),
+  F("actions", actions_config_t, gpioActionUnlockState, Bool),
+  F("actions", actions_config_t, gpioActionMomentaryEnabled, U8),
+  F("actions", actions_config_t, hkGpioControlledState, Bool),
+  F("actions", actions_config_t, gpioActionMomentaryTimeout, U16),
+  F("actions", actions_config_t, hkDumbSwitchMode, Bool),
+  F("actions", actions_config_t, hkAltActionPin, U8),
+  F("actions", actions_config_t, hkAltActionTimeout, U16),
+  F("actions", actions_config_t, hkAltActionGpioState, U8),
+  F("actions", actions_config_t, hkAltActionInitPin, U8),
+  F("actions", actions_config_t, hkAltActionInitLedPin, U8),
+  F("actions", actions_config_t, hkAltActionInitTimeout, U16),
+};
+
+void* ConfigManager::sectionBase(const char* section) {
+  if (!strcmp(section, "mqtt")) return &m_mqttConfig;
+  if (!strcmp(section, "ssl")) return &m_mqttSslConfig;
+  if (!strcmp(section, "https")) return &m_httpsCertsConfig;
+  if (!strcmp(section, "misc")) return &m_miscConfig;
+  if (!strcmp(section, "actions")) return &m_actionsConfig;
+  return nullptr;
+}
+
+ConfigManager::FieldRange ConfigManager::sectionRange(const char* section) {
+  // Table is ordered by section; locate the [first, last) span.
+  const ConfigField* first = nullptr;
+  const ConfigField* last = kConfigFields + kFieldCount;
+  for (size_t i = 0; i < kFieldCount; ++i) {
+    if (!strcmp(kConfigFields[i].section, section)) {
+      if (!first) first = &kConfigFields[i];
+    } else if (first) {
+      last = &kConfigFields[i];
+      break;
+    }
+  }
+  return {first, first ? last : first};
+}
+
+// Boot-time consistency guard: every entry's section must be resolvable by
+// sectionBase(), and every sectionBase() name must occur in the table. A
+// rename applied to one side only would otherwise surface as a null section
+// base and crash on first config load — the failure mode the first version
+// of this table shipped with.
+void ConfigManager::verifyFieldTable() {
+  static bool checked = false;
+  if (checked) return;
+  checked = true;
+  const char* known[] = {"mqtt", "ssl", "https", "misc", "actions"};
+  for (size_t i = 0; i < kFieldCount; ++i) {
+    if (sectionBase(kConfigFields[i].section) == nullptr) {
+      ESP_LOGE(TAG, "FATAL: field '%s' references unknown section '%s'",
+               kConfigFields[i].name, kConfigFields[i].section);
+      abort();
+    }
+  }
+  for (const char* s : known) {
+    bool found = false;
+    for (size_t i = 0; i < kFieldCount && !found; ++i) {
+      if (!strcmp(kConfigFields[i].section, s)) found = true;
+    }
+    if (!found) {
+      ESP_LOGE(TAG, "FATAL: section '%s' has no table entries", s);
+      abort();
+    }
+  }
+}
+
+const ConfigManager::ConfigField* ConfigManager::findField(
+    const char* section, const char* name, size_t nameLen) const {
+  for (const auto& f : kConfigFields) {
+    if (strcmp(f.section, section) == 0 && strlen(f.name) == nameLen &&
+        memcmp(f.name, name, nameLen) == 0) {
+      return &f;
+    }
+  }
+  return nullptr;
+}
+#undef F
+#undef OFF
+#pragma GCC diagnostic pop
 
 /**
  * @brief Releases resources held by ConfigManager.
@@ -193,6 +263,8 @@ bool ConfigManager::begin() {
   }
 
   ESP_LOGI(TAG, "Initializing...");
+
+  verifyFieldTable();
 
   if(!m_nvsHandle){
     esp_err_t err = nvs_open("SAVED_DATA", NVS_READWRITE, &m_nvsHandle);
@@ -484,7 +556,7 @@ bool ConfigManager::saveConfigToNvs(const char *key) {
  *
  * Deserializes a MessagePack map object into the ConfigManager's in-memory configuration
  * entries identified by the provided section name (`type`). For each string key found
- * in the MessagePack map that exists in the internal `m_configMap[type]`, the matching
+ * in the MessagePack map that exists in the internal field table for `type`, the matching
  * in-memory field is updated. Supported value types:
  * - string -> std::string
  * - boolean -> bool
@@ -498,127 +570,188 @@ bool ConfigManager::saveConfigToNvs(const char *key) {
  *
  * @param obj MessagePack object expected to be a map of configuration keys to values.
  * @param type Configuration section name (e.g., "mqtt" or "misc") used to look up the
- *             corresponding key → field mapping in `m_configMap`.
+ *             corresponding key → field mapping in the static field table.
  */
 void ConfigManager::deserialize(msgpack_object obj, std::string type) {
   if (obj.type == MSGPACK_OBJECT_MAP) {
-    auto sectionIt = m_configMap.find(type);
-    if (sectionIt == m_configMap.end()) return;
+    FieldRange range = sectionRange(type.c_str());
+    if (!range.first) return;
     msgpack_object_kv *map = obj.via.map.ptr;
     msgpack_object_kv *const end = obj.via.map.ptr + obj.via.map.size;
-    std::span range(map, end);
-    for (auto v : range) {
+    std::span range_kv(map, end);
+    for (auto v : range_kv) {
       if (v.key.type == MSGPACK_OBJECT_STR) {
-        std::string key(v.key.via.str.ptr, v.key.via.str.size);
-        auto entryIt = sectionIt->second.find(key);
-        if (entryIt == sectionIt->second.end())
-          continue;
+        const ConfigField* entry =
+            findField(type.c_str(), v.key.via.str.ptr, v.key.via.str.size);
+        if (!entry) continue;
+        const char* key = entry->name;
+        size_t keyLen = strlen(key);
 
-        std::visit([&](auto&& arg) {
-          using T = std::decay_t<decltype(arg)>;
-          if constexpr (std::is_pointer_v<T>) {
-            using PointeeType = std::remove_pointer_t<T>;
-
-            switch (v.val.type) {
-            case MSGPACK_OBJECT_STR: {
-              if constexpr (std::is_same_v<PointeeType, std::string>) {
-                arg->assign(std::string(v.val.via.str.ptr, v.val.via.str.size));
-              }
+        switch (entry->type) {
+        case FieldType::Str: {
+          if (v.val.type == MSGPACK_OBJECT_STR) {
+            fieldPtr<std::string>(*entry)->assign(v.val.via.str.ptr, v.val.via.str.size);
+          }
+          break;
+        }
+        case FieldType::Bool: {
+          if (v.val.type == MSGPACK_OBJECT_BOOLEAN) {
+            *fieldPtr<bool>(*entry) = v.val.via.boolean;
+          }
+          break;
+        }
+        case FieldType::U8:
+        case FieldType::U16: {
+          if (v.val.type == MSGPACK_OBJECT_POSITIVE_INTEGER) {
+            const size_t maxv = entry->type == FieldType::U8
+                                    ? std::numeric_limits<uint8_t>::max()
+                                    : std::numeric_limits<uint16_t>::max();
+            if (v.val.via.u64 > maxv) {
+              ESP_LOGW(TAG, "Value overflow for '%.*s': %llu exceeds max %u",
+                       int(keyLen), key, (unsigned long long)v.val.via.u64, unsigned(maxv));
               break;
             }
-            case MSGPACK_OBJECT_BOOLEAN: {
-              if constexpr (std::is_same_v<PointeeType, bool>) {
-                *arg = v.val.via.boolean;
-              }
-              break;
+            if (entry->type == FieldType::U8) {
+              *fieldPtr<uint8_t>(*entry) = static_cast<uint8_t>(v.val.via.u64);
+            } else {
+              *fieldPtr<uint16_t>(*entry) = static_cast<uint16_t>(v.val.via.u64);
             }
-            case MSGPACK_OBJECT_POSITIVE_INTEGER: {
-              if constexpr (std::is_same_v<PointeeType, uint8_t> || std::is_same_v<PointeeType, uint16_t>) {
-                if (v.val.via.u64 > std::numeric_limits<PointeeType>::max()) {
-                  ESP_LOGW(TAG, "Value overflow for '%s': %llu exceeds max %u", 
-                           key.c_str(), v.val.via.u64, std::numeric_limits<PointeeType>::max());
-                  break;
-                }
-                *arg = static_cast<PointeeType>(v.val.via.u64);
+          }
+          break;
+        }
+        case FieldType::Arr3:
+        case FieldType::Arr4:
+        case FieldType::Arr5:
+        case FieldType::Arr7: {
+          if (v.val.type != MSGPACK_OBJECT_ARRAY) break;
+          const size_t want = entry->type == FieldType::Arr3 ? 3
+                              : entry->type == FieldType::Arr4 ? 4
+                              : entry->type == FieldType::Arr5 ? 5 : 7;
+          if (v.val.via.array.size != want) {
+            ESP_LOGW(TAG, "Validation failed for '%.*s': array size is not %u.",
+                     int(keyLen), key, unsigned(want));
+            break;
+          }
+          uint8_t* dst = nullptr;
+          if (entry->type == FieldType::Arr3) dst = fieldPtr<std::array<uint8_t,3>>(*entry)->data();
+          else if (entry->type == FieldType::Arr4) dst = fieldPtr<std::array<uint8_t,4>>(*entry)->data();
+          else if (entry->type == FieldType::Arr5) dst = fieldPtr<std::array<uint8_t,5>>(*entry)->data();
+          else dst = fieldPtr<std::array<uint8_t,7>>(*entry)->data();
+          for (size_t i = 0; i < want; ++i) {
+            dst[i] = static_cast<uint8_t>(v.val.via.array.ptr[i].via.u64);
+          }
+          break;
+        }
+        case FieldType::ColorMap: {
+          auto* m = fieldPtr<std::map<espConfig::actions_config_t::colorMap, uint8_t>>(*entry);
+          if (v.val.type == MSGPACK_OBJECT_ARRAY) {
+            for (size_t i = 0; i < v.val.via.array.size; ++i) {
+              const msgpack_object& o = v.val.via.array.ptr[i];
+              if (o.type == MSGPACK_OBJECT_ARRAY && o.via.array.size == 2) {
+                (*m)[static_cast<espConfig::actions_config_t::colorMap>(o.via.array.ptr[0].via.u64)] =
+                    static_cast<uint8_t>(o.via.array.ptr[1].via.u64);
               }
-              break;
             }
-            case MSGPACK_OBJECT_ARRAY: {
-              auto msgpack_elements = std::ranges::subrange(v.val.via.array.ptr, v.val.via.array.ptr + v.val.via.array.size);
-              auto integer_view = msgpack_elements | std::ranges::views::transform([](const msgpack_object& o){return o.via.u64;});
-
-              if constexpr (std::is_same_v<PointeeType, std::array<uint8_t, 3>>) {
-                if (msgpack_elements.size() != 3) {
-                  ESP_LOGW(TAG, "Validation failed for '%s': array size is not 3.", key.c_str());
-                  break;
-                }
-                std::ranges::copy(integer_view, arg->begin());
-              } else if constexpr (std::is_same_v<PointeeType, std::array<uint8_t, 4>>) {
-                if (msgpack_elements.size() != 4) {
-                  ESP_LOGW(TAG, "Validation failed for '%s': array size is not 4.", key.c_str());
-                  break;
-                }
-                std::ranges::copy(integer_view, arg->begin());
-              } else if constexpr (std::is_same_v<PointeeType, std::array<uint8_t, 5>>) {
-                if (msgpack_elements.size() != 5) {
-                  ESP_LOGW(TAG, "Validation failed for '%s': array size is not 5.", key.c_str());
-                  break;
-                }
-                std::ranges::copy(integer_view, arg->begin());
-              } else if constexpr (std::is_same_v<PointeeType, std::array<uint8_t, 7>>) {
-                if (msgpack_elements.size() != 7) {
-                  ESP_LOGW(TAG, "Validation failed for '%s': array size is not 7.", key.c_str());
-                  break;
-                }
-                std::ranges::copy(integer_view, arg->begin());
-              } else if constexpr (std::is_same_v<PointeeType, std::map<espConfig::actions_config_t::colorMap, uint8_t>>) {
-                std::ranges::for_each(msgpack_elements, [&](const msgpack_object& o) {
-                    if (o.type == MSGPACK_OBJECT_ARRAY && o.via.array.size == 2) {
-                        const msgpack_object* inner_array_ptr = o.via.array.ptr;
-                        uint8_t key_val = inner_array_ptr[0].via.u64;
-                        uint8_t value_val = inner_array_ptr[1].via.u64;
-                        (*arg)[static_cast<espConfig::actions_config_t::colorMap>(key_val)] = static_cast<uint8_t>(value_val);
-                    }
-                });
-              } else if constexpr (std::is_same_v<PointeeType, std::map<std::string, uint8_t>>) {
-                std::ranges::for_each(msgpack_elements, [&](const msgpack_object& o) {
-                    if (o.type == MSGPACK_OBJECT_ARRAY && o.via.array.size >= 2 &&
-                        o.via.array.ptr[0].type == MSGPACK_OBJECT_STR &&
-                        o.via.array.ptr[1].type == MSGPACK_OBJECT_POSITIVE_INTEGER) {
-                        const msgpack_object* inner_array_ptr = o.via.array.ptr;
-                        std::string key_str(inner_array_ptr[0].via.str.ptr, inner_array_ptr[0].via.str.size);
-                        uint64_t value_val = inner_array_ptr[1].via.u64;
-                        (*arg)[key_str] = static_cast<uint8_t>(value_val);
-                    }
-                });
+          }
+          break;
+        }
+        case FieldType::StrMap: {
+          auto* m = fieldPtr<std::map<std::string, uint8_t>>(*entry);
+          if (v.val.type == MSGPACK_OBJECT_MAP) {
+            m->clear();
+            msgpack_object_kv *sub = v.val.via.map.ptr;
+            msgpack_object_kv *const subEnd = v.val.via.map.ptr + v.val.via.map.size;
+            for (; sub != subEnd; ++sub) {
+              if (sub->key.type == MSGPACK_OBJECT_STR && sub->val.type == MSGPACK_OBJECT_POSITIVE_INTEGER) {
+                m->emplace(std::string(sub->key.via.str.ptr, sub->key.via.str.size),
+                           static_cast<uint8_t>(sub->val.via.u64));
               }
-              break;
             }
-            case MSGPACK_OBJECT_MAP: {
-              if constexpr (std::is_same_v<PointeeType, std::map<std::string, uint8_t>>) {
-                arg->clear();
-                msgpack_object_kv *sub_map = v.val.via.map.ptr;
-                msgpack_object_kv *const sub_end = v.val.via.map.ptr + v.val.via.map.size;
-                for (; sub_map != sub_end; ++sub_map) {
-                  if (sub_map->key.type == MSGPACK_OBJECT_STR && sub_map->val.type == MSGPACK_OBJECT_POSITIVE_INTEGER) {
-                    std::string sub_key(sub_map->key.via.str.ptr, sub_map->key.via.str.size);
-                    uint8_t sub_value = static_cast<uint8_t>(sub_map->val.via.u64);
-                    arg->emplace(sub_key, sub_value);
+          } else if (v.val.type == MSGPACK_OBJECT_ARRAY) {
+            for (size_t i = 0; i < v.val.via.array.size; ++i) {
+              const msgpack_object& o = v.val.via.array.ptr[i];
+              if (o.type == MSGPACK_OBJECT_ARRAY && o.via.array.size >= 2 &&
+                  o.via.array.ptr[0].type == MSGPACK_OBJECT_STR &&
+                  o.via.array.ptr[1].type == MSGPACK_OBJECT_POSITIVE_INTEGER) {
+                (*m)[std::string(o.via.array.ptr[0].via.str.ptr, o.via.array.ptr[0].via.str.size)] =
+                    static_cast<uint8_t>(o.via.array.ptr[1].via.u64);
+              }
+            }
+          }
+          break;
+        }
+        case FieldType::U8Arr6:
+        case FieldType::U8Arr2: {
+          // Custom lock states/actions: array of [name, value] pairs or a
+          // name→value map. Values are positional; names are fixed.
+          uint8_t* const arr = entry->type == FieldType::U8Arr6
+                          ? fieldPtr<std::array<uint8_t,6>>(*entry)->data()
+                          : fieldPtr<std::array<uint8_t,2>>(*entry)->data();
+          const char* const* names = entry->type == FieldType::U8Arr6
+                          ? espConfig::mqttConfig_t::customLockStateNames
+                          : espConfig::mqttConfig_t::customLockActionNames;
+          const size_t n = entry->type == FieldType::U8Arr6 ? 6 : 2;
+          if (v.val.type == MSGPACK_OBJECT_MAP) {
+            msgpack_object_kv *sub = v.val.via.map.ptr;
+            msgpack_object_kv *const subEnd = v.val.via.map.ptr + v.val.via.map.size;
+            for (; sub != subEnd; ++sub) {
+              if (sub->key.type != MSGPACK_OBJECT_STR) continue;
+              for (size_t i = 0; i < n; ++i) {
+                size_t nl = strlen(names[i]);
+                if (sub->key.via.str.size == nl &&
+                    memcmp(names[i], sub->key.via.str.ptr, nl) == 0) {
+                  arr[i] = static_cast<uint8_t>(sub->val.via.u64);
+                  break;
+                }
+              }
+            }
+          } else if (v.val.type == MSGPACK_OBJECT_ARRAY) {
+            for (size_t i = 0; i < v.val.via.array.size; ++i) {
+              const msgpack_object& o = v.val.via.array.ptr[i];
+              if (o.type == MSGPACK_OBJECT_ARRAY && o.via.array.size >= 2 &&
+                  o.via.array.ptr[0].type == MSGPACK_OBJECT_STR) {
+                for (size_t j = 0; j < n; ++j) {
+                  size_t nl = strlen(names[j]);
+                  if (o.via.array.ptr[0].via.str.size == nl &&
+                      memcmp(names[j], o.via.array.ptr[0].via.str.ptr, nl) == 0) {
+                    arr[j] = static_cast<uint8_t>(o.via.array.ptr[1].via.u64);
+                    break;
                   }
                 }
               }
-              break;
-            }
-            default:
-              ESP_LOGW(TAG, "DON'T KNOW THIS ONE! - %s (%d) = %d", key.c_str(), v.val.type, v.val.via.u64);
             }
           }
-        }, entryIt->second);
+          break;
+        }
+        default:
+          ESP_LOGW(TAG, "DON'T KNOW THIS ONE! - %.*s (%d) = %d", int(keyLen), key, v.val.type, int(v.val.via.u64));
+        }
       }
     }
   } else {
     ESP_LOGE(TAG, "Error: Expected a MessagePack map object for deserialization.");
   }
+}
+
+// Write callback for the fixed serialize buffer: mirrors msgpack_sbuffer_write
+// but never reallocates. On overflow it reports failure so the caller can
+// abort the save instead of persisting a truncated blob.
+struct FixedSbuffer {
+  msgpack_sbuffer sbuf;
+  bool overflowed = false;
+};
+
+static int fixed_sbuffer_write(void* data, const char* buf, size_t len) {
+  auto* state = static_cast<FixedSbuffer*>(data);
+  msgpack_sbuffer* sbuf = &state->sbuf;
+  if (!buf) return 0;
+  if (sbuf->size + len > sbuf->alloc) {
+    state->overflowed = true; // caller aborts; never reallocates
+    return -1;
+  }
+  memcpy(sbuf->data + sbuf->size, buf, len);
+  sbuf->size += len;
+  return 0;
 }
 
 template <typename ConfigType>
@@ -630,97 +763,136 @@ template <typename ConfigType>
  * as arrays of key/value pairs; enum-keyed color maps are encoded as [enum, value] pairs and string-keyed maps as
  * [string, value] pairs.
  *
- * @return std::vector<uint8_t> Byte vector containing the MessagePack-encoded configuration. 
+ * @return std::vector<uint8_t> Byte vector containing the MessagePack-encoded configuration.
  */
 std::vector<uint8_t> ConfigManager::serialize() {
-  msgpack_sbuffer sbuf;
-  msgpack_sbuffer_init(&sbuf);
+  static constexpr size_t kSerializeBufSize = 2048;
+  uint8_t serialize_buf[kSerializeBufSize];
+
+  FixedSbuffer state;
+  state.sbuf.size = 0;
+  state.sbuf.alloc = kSerializeBufSize;
+  state.sbuf.data = reinterpret_cast<char*>(serialize_buf);
   msgpack_packer pk;
-  msgpack_packer_init(&pk, &sbuf, msgpack_sbuffer_write);
-  const ConfigMapType* primary = nullptr;
-  const ConfigMapType* secondary = nullptr;
+  msgpack_packer_init(&pk, &state, fixed_sbuffer_write);
+  FieldRange primary{}, secondary{};
   if constexpr (std::is_same_v<espConfig::misc_config_t, ConfigType>){
-    primary = &m_configMap.at("misc");
-    secondary = &m_configMap.at("actions");
+    primary = sectionRange("misc");
+    secondary = sectionRange("actions");
   } else if constexpr (std::is_same_v<espConfig::actions_config_t, ConfigType>){
-    primary = &m_configMap.at("actions");
-    secondary = &m_configMap.at("misc");
+    primary = sectionRange("actions");
+    secondary = sectionRange("misc");
   } else if constexpr (std::is_same_v<espConfig::mqtt_ssl_t, ConfigType>){
-    primary = &m_configMap.at("ssl");
+    primary = sectionRange("ssl");
   } else if constexpr (std::is_same_v<espConfig::mqttConfig_t, ConfigType>){
-    primary = &m_configMap.at("mqtt");
+    primary = sectionRange("mqtt");
   } else if constexpr (std::is_same_v<espConfig::https_certs_t, ConfigType>){
-    primary = &m_configMap.at("https");
+    primary = sectionRange("https");
   }
-  size_t mapSize = primary->size() + (secondary ? secondary->size() : 0);
+  const size_t mapSize = (primary.last - primary.first) + (secondary.last - secondary.first);
   msgpack_pack_map(&pk, mapSize); // Pack the map size
 
   for (auto section : {primary, secondary}) {
-    if (!section) continue;
-    for (const auto &pair : *section) {
-    msgpack_pack_str(&pk, pair.first.size()); // Pack the key (string) size
-    msgpack_pack_str_body(&pk, pair.first.data(), pair.first.size()); // Pack the key (string) body
+    for (const ConfigField* it = section.first; it != section.last; ++it) {
+      const ConfigField& f = *it;
+      const size_t keyLen = strlen(f.name);
+      msgpack_pack_str(&pk, keyLen); // Pack the key (string) size
+      msgpack_pack_str_body(&pk, f.name, keyLen); // Pack the key (string) body
 
-    std::visit([&](auto&& arg) {
-      using T = std::decay_t<decltype(arg)>;
-      if constexpr (std::is_pointer_v<T>) {
-        using PointeeType = std::remove_pointer_t<T>;
-
-        if constexpr (std::is_same_v<PointeeType, std::string>) {
-          msgpack_pack_str(&pk, arg->size());
-          msgpack_pack_str_body(&pk, arg->data(), arg->size());
-        } else if constexpr (std::is_same_v<PointeeType, bool>) {
-          if (*arg) {
-            msgpack_pack_true(&pk);
-          } else {
-            msgpack_pack_false(&pk);
-          }
-        } else if constexpr (std::is_same_v<PointeeType, uint8_t>) {
-          msgpack_pack_unsigned_char(&pk, *arg);
-        } else if constexpr (std::is_same_v<PointeeType, uint16_t>) {
-          msgpack_pack_unsigned_short(&pk, *arg);
-        } else if constexpr (std::is_same_v<PointeeType, std::array<uint8_t, 3>>) {
-          msgpack_pack_array(&pk, arg->size());
-          for (auto& val : *arg) {
-            msgpack_pack_unsigned_char(&pk, val);
-          }
-        } else if constexpr (std::is_same_v<PointeeType, std::array<uint8_t, 4>>) {
-          msgpack_pack_array(&pk, arg->size());
-          for (auto& val : *arg) {
-            msgpack_pack_unsigned_char(&pk, val);
-          }
-        } else if constexpr (std::is_same_v<PointeeType, std::array<uint8_t, 5>>) {
-          msgpack_pack_array(&pk, arg->size());
-          for (const auto& val : *arg) {
-            msgpack_pack_unsigned_char(&pk, val);
-          }
-        } else if constexpr (std::is_same_v<PointeeType, std::array<uint8_t, 7>>) {
-          msgpack_pack_array(&pk, arg->size());
-          for (const auto& val : *arg) {
-            msgpack_pack_unsigned_char(&pk, val);
-          }
-        } else if constexpr (std::is_same_v<PointeeType, std::map<espConfig::actions_config_t::colorMap, uint8_t>>) {
-          msgpack_pack_array(&pk, arg->size());
-          for (const auto& map_pair : *arg) {
-            msgpack_pack_array(&pk, 2);
-            msgpack_pack_unsigned_char(&pk, static_cast<uint8_t>(map_pair.first));
-            msgpack_pack_unsigned_char(&pk, map_pair.second);
-          }
-        } else if constexpr (std::is_same_v<PointeeType, std::map<std::string, uint8_t>>) {
-          msgpack_pack_map(&pk, arg->size());
-          for (const auto& map_pair : *arg) {
-            msgpack_pack_str(&pk, map_pair.first.size());
-            msgpack_pack_str_body(&pk, map_pair.first.data(), map_pair.first.size());
-            msgpack_pack_unsigned_char(&pk, map_pair.second);
-          }
-        }
+      switch (f.type) {
+      case FieldType::Str: {
+        const auto* s = fieldPtr<std::string>(f);
+        msgpack_pack_str(&pk, s->size());
+        msgpack_pack_str_body(&pk, s->data(), s->size());
+        break;
       }
-    }, pair.second);
+      case FieldType::Bool:
+        if (*fieldPtr<bool>(f)) {
+          msgpack_pack_true(&pk);
+        } else {
+          msgpack_pack_false(&pk);
+        }
+        break;
+      case FieldType::U8:
+        msgpack_pack_unsigned_char(&pk, *fieldPtr<uint8_t>(f));
+        break;
+      case FieldType::U16:
+        msgpack_pack_unsigned_short(&pk, *fieldPtr<uint16_t>(f));
+        break;
+      case FieldType::Arr3:
+      case FieldType::Arr4:
+      case FieldType::Arr5:
+      case FieldType::Arr7: {
+        const uint8_t* data = nullptr;
+        size_t n = 0;
+        if (f.type == FieldType::Arr3) { data = fieldPtr<std::array<uint8_t,3>>(f)->data(); n = 3; }
+        else if (f.type == FieldType::Arr4) { data = fieldPtr<std::array<uint8_t,4>>(f)->data(); n = 4; }
+        else if (f.type == FieldType::Arr5) { data = fieldPtr<std::array<uint8_t,5>>(f)->data(); n = 5; }
+        else { data = fieldPtr<std::array<uint8_t,7>>(f)->data(); n = 7; }
+        msgpack_pack_array(&pk, n);
+        for (size_t i = 0; i < n; ++i) {
+          msgpack_pack_unsigned_char(&pk, data[i]);
+        }
+        break;
+      }
+      case FieldType::ColorMap: {
+        const auto* m = fieldPtr<std::map<espConfig::actions_config_t::colorMap, uint8_t>>(f);
+        msgpack_pack_array(&pk, m->size());
+        for (const auto& map_pair : *m) {
+          msgpack_pack_array(&pk, 2);
+          msgpack_pack_unsigned_char(&pk, static_cast<uint8_t>(map_pair.first));
+          msgpack_pack_unsigned_char(&pk, map_pair.second);
+        }
+        break;
+      }
+      case FieldType::StrMap: {
+        const auto* m = fieldPtr<std::map<std::string, uint8_t>>(f);
+        msgpack_pack_map(&pk, m->size());
+        for (const auto& map_pair : *m) {
+          msgpack_pack_str(&pk, map_pair.first.size());
+          msgpack_pack_str_body(&pk, map_pair.first.data(), map_pair.first.size());
+          msgpack_pack_unsigned_char(&pk, map_pair.second);
+        }
+        break;
+      }
+      case FieldType::U8Arr6:
+      case FieldType::U8Arr2: {
+        // Encoded as an array of [name, value] pairs, matching the legacy
+        // [string, value] map encoding so NVS blobs stay compatible.
+        const uint8_t* vals = nullptr;
+        const char* const* names = nullptr;
+        size_t n = 0;
+        if (f.type == FieldType::U8Arr6) {
+          vals = fieldPtr<std::array<uint8_t,6>>(f)->data();
+          names = espConfig::mqttConfig_t::customLockStateNames;
+          n = 6;
+        } else {
+          vals = fieldPtr<std::array<uint8_t,2>>(f)->data();
+          names = espConfig::mqttConfig_t::customLockActionNames;
+          n = 2;
+        }
+        msgpack_pack_array(&pk, n);
+        for (size_t i = 0; i < n; ++i) {
+          msgpack_pack_array(&pk, 2);
+          const size_t nl = strlen(names[i]);
+          msgpack_pack_str(&pk, nl);
+          msgpack_pack_str_body(&pk, names[i], nl);
+          msgpack_pack_unsigned_char(&pk, vals[i]);
+        }
+        break;
+      }
+      }
     }
   }
 
-  std::vector<uint8_t> serialized_data(reinterpret_cast<uint8_t*>(sbuf.data), reinterpret_cast<uint8_t*>(sbuf.data) + sbuf.size);
-  msgpack_sbuffer_destroy(&sbuf);
+  std::vector<uint8_t> serialized_data;
+  if (state.overflowed) {
+    ESP_LOGE(TAG, "Config serialize overflow (> %zu bytes); NVS save aborted.", kSerializeBufSize);
+  } else if (state.sbuf.size > 0) {
+    serialized_data.assign(reinterpret_cast<uint8_t*>(state.sbuf.data), reinterpret_cast<uint8_t*>(state.sbuf.data) + state.sbuf.size);
+  } else {
+    ESP_LOGE(TAG, "Config serialization produced an empty blob; NVS save aborted.");
+  }
   return serialized_data;
 }
 
@@ -746,114 +918,160 @@ std::string ConfigManager::updateFromJson(const std::string& json_string) {
     return "";
   }
 
-  ConfigMapType* configMapPtr = nullptr;
+  const char* section = nullptr;
   if constexpr (std::is_same_v<ConfigType, espConfig::misc_config_t>) {
-    configMapPtr = &m_configMap["misc"];
+    section = "misc";
   } else if constexpr (std::is_same_v<ConfigType, espConfig::actions_config_t>) {
-    configMapPtr = &m_configMap["actions"];
+    section = "actions";
   } else if constexpr (std::is_same_v<ConfigType, espConfig::mqttConfig_t>) {
-    configMapPtr = &m_configMap["mqtt"];
+    section = "mqtt";
   } else {
     ESP_LOGE(TAG, "Invalid configuration type specified.");
     return "";
   }
-  
+
   for (cJSON *it = root.get()->child; it != NULL; it = it->next) {
-    std::string keyStr = it->string;
-    auto config_entry = configMapPtr->find(keyStr);
+    const char* keyStr = it->string;
+    const ConfigField* entry =
+        findField(section, keyStr, strlen(keyStr));
 
-    if (config_entry != configMapPtr->end()) {
-      std::visit([&](auto&& arg) {
-        using T = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_pointer_v<T>) {
-          using PointeeType = std::remove_pointer_t<T>;
-
-          if constexpr (std::is_same_v<PointeeType, std::string>) {
-            if (cJSON_IsString(it)) {
-              arg->assign(it->valuestring);
-            } else {
-              ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected string.", keyStr.c_str());
-            }
-          } else if constexpr (std::is_same_v<PointeeType, bool>) {
-            if (cJSON_IsBool(it)) {
-              *arg = cJSON_IsTrue(it);
-            } else if (cJSON_IsNumber(it)) {
-              *arg = (it->valueint != 0);
-            } else {
-              ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected boolean.", keyStr.c_str());
-            }
-          } else if constexpr (std::is_integral_v<PointeeType>) {
-            if (cJSON_IsNumber(it)) {
-              if (it->valueint < 0 || it->valueint > std::numeric_limits<PointeeType>::max()) {
-                ESP_LOGW(TAG, "Value out of range for '%s': %d", keyStr.c_str(), it->valueint);
+    if (entry) {
+      switch (entry->type) {
+      case FieldType::Str:
+        if (cJSON_IsString(it)) {
+          fieldPtr<std::string>(*entry)->assign(it->valuestring);
+        } else {
+          ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected string.", keyStr);
+        }
+        break;
+      case FieldType::Bool:
+        if (cJSON_IsBool(it)) {
+          *fieldPtr<bool>(*entry) = cJSON_IsTrue(it);
+        } else if (cJSON_IsNumber(it)) {
+          *fieldPtr<bool>(*entry) = (it->valueint != 0);
+        } else {
+          ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected boolean.", keyStr);
+        }
+        break;
+      case FieldType::U8:
+      case FieldType::U16:
+        if (cJSON_IsNumber(it)) {
+          const double maxv = entry->type == FieldType::U8
+                                  ? std::numeric_limits<uint8_t>::max()
+                                  : std::numeric_limits<uint16_t>::max();
+          if (it->valueint < 0 || it->valuedouble > maxv) {
+            ESP_LOGW(TAG, "Value out of range for '%s': %d", keyStr, it->valueint);
+          } else if (entry->type == FieldType::U8) {
+            *fieldPtr<uint8_t>(*entry) = static_cast<uint8_t>(it->valueint);
+          } else {
+            *fieldPtr<uint16_t>(*entry) = static_cast<uint16_t>(it->valueint);
+          }
+        } else {
+          ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected number.", keyStr);
+        }
+        break;
+      case FieldType::Arr3:
+      case FieldType::Arr4:
+      case FieldType::Arr5:
+      case FieldType::Arr7: {
+        if (cJSON_IsArray(it)) {
+          const size_t want = entry->type == FieldType::Arr3 ? 3
+                              : entry->type == FieldType::Arr4 ? 4
+                              : entry->type == FieldType::Arr5 ? 5 : 7;
+          int array_size = cJSON_GetArraySize(it);
+          if (array_size >= 0 && size_t(array_size) == want) {
+            uint8_t* dst = nullptr;
+            if (entry->type == FieldType::Arr3) dst = fieldPtr<std::array<uint8_t,3>>(*entry)->data();
+            else if (entry->type == FieldType::Arr4) dst = fieldPtr<std::array<uint8_t,4>>(*entry)->data();
+            else if (entry->type == FieldType::Arr5) dst = fieldPtr<std::array<uint8_t,5>>(*entry)->data();
+            else dst = fieldPtr<std::array<uint8_t,7>>(*entry)->data();
+            bool array_success = true;
+            for (int i = 0; i < array_size; ++i) {
+              cJSON *sub_item = cJSON_GetArrayItem(it, i);
+              if (cJSON_IsNumber(sub_item)) {
+                dst[i] = static_cast<uint8_t>(sub_item->valueint);
               } else {
-                *arg = static_cast<PointeeType>(it->valueint);
+                array_success = false;
+                break;
               }
-            } else {
-              ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected number.", keyStr.c_str());
             }
-          } else if constexpr (std::is_same_v<PointeeType, std::array<uint8_t, 3>> ||
-                               std::is_same_v<PointeeType, std::array<uint8_t, 4>> ||
-                               std::is_same_v<PointeeType, std::array<uint8_t, 5>> ||
-                               std::is_same_v<PointeeType, std::array<uint8_t, 7>>) {
-            if (cJSON_IsArray(it)) {
-              int array_size = cJSON_GetArraySize(it);
-              if (array_size == arg->size()) {
-                bool array_success = true;
-                for (int i = 0; i < array_size; ++i) {
-                  cJSON *sub_item = cJSON_GetArrayItem(it, i);
-                  if (cJSON_IsNumber(sub_item)) {
-                    (*arg)[i] = static_cast<uint8_t>(sub_item->valueint);
-                  } else {
-                    array_success = false;
-                    break;
-                  }
-                }
-                if (!array_success) {
-                  ESP_LOGW(TAG, "Validation failed for '%s': array contains non-numeric elements.", keyStr.c_str());
-                }
-              } else {
-                ESP_LOGW(TAG, "Validation failed for '%s': incorrect array size. Expected %zu, got %d.", keyStr.c_str(), arg->size(), array_size);
-              }
-            } else {
-              ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected array.", keyStr.c_str());
+            if (!array_success) {
+              ESP_LOGW(TAG, "Validation failed for '%s': array contains non-numeric elements.", keyStr);
             }
-          } else if constexpr (std::is_same_v<PointeeType, std::map<espConfig::actions_config_t::colorMap, uint8_t>>) {
-            if (cJSON_IsArray(it)) {
-              arg->clear();
-              cJSON *inner_array;
-              cJSON_ArrayForEach(inner_array, it) {
-                if (cJSON_IsArray(inner_array) && cJSON_GetArraySize(inner_array) == 2) {
-                  cJSON *key_json = cJSON_GetArrayItem(inner_array, 0);
-                  cJSON *value_json = cJSON_GetArrayItem(inner_array, 1);
-                  if (cJSON_IsNumber(key_json) && cJSON_IsNumber(value_json)) {
-                    arg->emplace(
-                        static_cast<espConfig::actions_config_t::colorMap>(key_json->valueint),
-                        static_cast<uint8_t>(value_json->valueint)
-                    );
-                  }
-                }
+          } else {
+            ESP_LOGW(TAG, "Validation failed for '%s': incorrect array size. Expected %zu, got %d.", keyStr, want, array_size);
+          }
+        } else {
+          ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected array.", keyStr);
+        }
+        break;
+      }
+      case FieldType::ColorMap: {
+        auto* m = fieldPtr<std::map<espConfig::actions_config_t::colorMap, uint8_t>>(*entry);
+        if (cJSON_IsArray(it)) {
+          m->clear();
+          cJSON *inner_array;
+          cJSON_ArrayForEach(inner_array, it) {
+            if (cJSON_IsArray(inner_array) && cJSON_GetArraySize(inner_array) == 2) {
+              cJSON *key_json = cJSON_GetArrayItem(inner_array, 0);
+              cJSON *value_json = cJSON_GetArrayItem(inner_array, 1);
+              if (cJSON_IsNumber(key_json) && cJSON_IsNumber(value_json)) {
+                m->emplace(
+                    static_cast<espConfig::actions_config_t::colorMap>(key_json->valueint),
+                    static_cast<uint8_t>(value_json->valueint)
+                );
               }
-            } else {
-              ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected an array of [key, value] pairs.", keyStr.c_str());
-            }
-          } else if constexpr (std::is_same_v<PointeeType, std::map<std::string, uint8_t>>) {
-            if (cJSON_IsObject(it)) {
-              arg->clear();
-              cJSON* sub_obj_item;
-              cJSON_ArrayForEach(sub_obj_item, it) {
-                if (cJSON_IsNumber(sub_obj_item)) {
-                  (*arg)[sub_obj_item->string] = static_cast<uint8_t>(sub_obj_item->valueint);
-                }
-              }
-            } else {
-              ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected an object.", keyStr.c_str());
             }
           }
+        } else {
+          ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected an array of [key, value] pairs.", keyStr);
         }
-      }, config_entry->second);
+        break;
+      }
+      case FieldType::StrMap: {
+        auto* m = fieldPtr<std::map<std::string, uint8_t>>(*entry);
+        if (cJSON_IsObject(it)) {
+          m->clear();
+          cJSON* sub_obj_item;
+          cJSON_ArrayForEach(sub_obj_item, it) {
+            if (cJSON_IsNumber(sub_obj_item)) {
+              (*m)[sub_obj_item->string] = static_cast<uint8_t>(sub_obj_item->valueint);
+            }
+          }
+        } else {
+          ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected an object.", keyStr);
+        }
+        break;
+      }
+      case FieldType::U8Arr6:
+      case FieldType::U8Arr2: {
+        uint8_t* const arr = entry->type == FieldType::U8Arr6
+                        ? fieldPtr<std::array<uint8_t,6>>(*entry)->data()
+                        : fieldPtr<std::array<uint8_t,2>>(*entry)->data();
+        const char* const* names = entry->type == FieldType::U8Arr6
+                        ? espConfig::mqttConfig_t::customLockStateNames
+                        : espConfig::mqttConfig_t::customLockActionNames;
+        const size_t n = entry->type == FieldType::U8Arr6 ? 6 : 2;
+        if (cJSON_IsObject(it)) {
+          cJSON* sub_obj_item;
+          cJSON_ArrayForEach(sub_obj_item, it) {
+            if (cJSON_IsNumber(sub_obj_item)) {
+              for (size_t i = 0; i < n; ++i) {
+                if (strcmp(names[i], sub_obj_item->string) == 0) {
+                  arr[i] = static_cast<uint8_t>(sub_obj_item->valueint);
+                  break;
+                }
+              }
+            }
+          }
+        } else {
+          ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected an object.", keyStr);
+        }
+        break;
+      }
+      }
     } else {
-      ESP_LOGW(TAG, "'%s' is not a valid configuration key and will be ignored.", keyStr.c_str());
+      ESP_LOGW(TAG, "'%s' is not a valid configuration key and will be ignored.", keyStr);
     }
   }
 
@@ -892,65 +1110,107 @@ std::string ConfigManager::serializeToJson() {
       return ""; // Error creating JSON object
   }
 
-  const ConfigMapType* configMapPtr = nullptr;
+  const char* section = nullptr;
   if constexpr (std::is_same_v<espConfig::misc_config_t, ConfigType>){
-    configMapPtr = &m_configMap.at("misc");
+    section = "misc";
   } else if constexpr (std::is_same_v<espConfig::actions_config_t, ConfigType>){
-    configMapPtr = &m_configMap.at("actions");
+    section = "actions";
   } else if constexpr (std::is_same_v<espConfig::mqttConfig_t, ConfigType>){
-    configMapPtr = &m_configMap.at("mqtt");
+    section = "mqtt";
   }
-    for (const auto &pair : *configMapPtr) {
-        const std::string& key = pair.first;
-        std::visit([&](auto&& arg) {
-            using T = std::decay_t<decltype(arg)>;
-            if constexpr (std::is_pointer_v<T>) {
-                using PointeeType = std::remove_pointer_t<T>;
+  if (!section) return "";
+  const FieldRange range = sectionRange(section);
 
-                if constexpr (std::is_same_v<PointeeType, std::string>) {
-                    if(key.contains("Password") || key.contains("Passwd")){
-                        cJSON_AddStringToObject(root.get(), key.c_str(), "********");
-                    } else {
-                        cJSON_AddStringToObject(root.get(), key.c_str(), arg->c_str());
-                    }
-                } else if constexpr (std::is_same_v<PointeeType, bool>) {
-                    cJSON_AddBoolToObject(root.get(), key.c_str(), *arg);
-                } else if constexpr (std::is_same_v<PointeeType, uint8_t> || std::is_same_v<PointeeType, uint16_t>) {
-                    cJSON_AddNumberToObject(root.get(), key.c_str(), static_cast<double>(*arg));
-                } else if constexpr (std::is_same_v<PointeeType, std::array<uint8_t, 3>> ||
-                                     std::is_same_v<PointeeType, std::array<uint8_t, 4>> ||
-                                     std::is_same_v<PointeeType, std::array<uint8_t, 5>> ||
-                                     std::is_same_v<PointeeType, std::array<uint8_t, 7>>) {
-                    cJSON *array = cJSON_CreateArray();
-                    if (array) {
-                        for (const auto& val : *arg) {
-                            cJSON_AddItemToArray(array, cJSON_CreateNumber(static_cast<double>(val)));
-                        }
-                        cJSON_AddItemToObject(root.get(), key.c_str(), array);
-                    }
-                } else if constexpr (std::is_same_v<PointeeType, std::map<espConfig::actions_config_t::colorMap, uint8_t>>) {
-                    cJSON *array_of_arrays = cJSON_CreateArray();
-                    if (array_of_arrays) {
-                        for (const auto& map_pair : *arg) {
-                            cJSON *inner_array = cJSON_CreateArray();
-                            cJSON_AddItemToArray(inner_array, cJSON_CreateNumber(static_cast<double>(map_pair.first))); // Enum key as integer
-                            cJSON_AddItemToArray(inner_array, cJSON_CreateNumber(static_cast<double>(map_pair.second)));
-                            cJSON_AddItemToArray(array_of_arrays, inner_array);
-                        }
-                        cJSON_AddItemToObject(root.get(), key.c_str(), array_of_arrays);
-                    }
-                } else if constexpr (std::is_same_v<PointeeType, std::map<std::string, uint8_t>>) {
-                    cJSON *map_obj = cJSON_CreateObject();
-                    if (map_obj) {
-                        for (const auto& map_pair : *arg) {
-                            cJSON_AddNumberToObject(map_obj, map_pair.first.c_str(), static_cast<double>(map_pair.second));
-                        }
-                        cJSON_AddItemToObject(root.get(), key.c_str(), map_obj);
-                    }
-                }
-            }
-        }, pair.second);
+  for (const ConfigField* it = range.first; it != range.last; ++it) {
+    const ConfigField& f = *it;
+    const char* key = f.name;
+    switch (f.type) {
+    case FieldType::Str: {
+      const auto* s = fieldPtr<std::string>(f);
+      if (strstr(key, "Password") || strstr(key, "Passwd")) {
+        cJSON_AddStringToObject(root.get(), key, "********");
+      } else {
+        cJSON_AddStringToObject(root.get(), key, s->c_str());
+      }
+      break;
     }
+    case FieldType::Bool:
+      cJSON_AddBoolToObject(root.get(), key, *fieldPtr<bool>(f));
+      break;
+    case FieldType::U8:
+    case FieldType::U16:
+      cJSON_AddNumberToObject(root.get(), key,
+          f.type == FieldType::U8 ? double(*fieldPtr<uint8_t>(f)) : double(*fieldPtr<uint16_t>(f)));
+      break;
+    case FieldType::Arr3:
+    case FieldType::Arr4:
+    case FieldType::Arr5:
+    case FieldType::Arr7: {
+      const uint8_t* data = nullptr;
+      size_t n = 0;
+      if (f.type == FieldType::Arr3) { data = fieldPtr<std::array<uint8_t,3>>(f)->data(); n = 3; }
+      else if (f.type == FieldType::Arr4) { data = fieldPtr<std::array<uint8_t,4>>(f)->data(); n = 4; }
+      else if (f.type == FieldType::Arr5) { data = fieldPtr<std::array<uint8_t,5>>(f)->data(); n = 5; }
+      else { data = fieldPtr<std::array<uint8_t,7>>(f)->data(); n = 7; }
+      cJSON *array = cJSON_CreateArray();
+      if (array) {
+        for (size_t i = 0; i < n; ++i) {
+          cJSON_AddItemToArray(array, cJSON_CreateNumber(static_cast<double>(data[i])));
+        }
+        cJSON_AddItemToObject(root.get(), key, array);
+      }
+      break;
+    }
+    case FieldType::ColorMap: {
+      const auto* m = fieldPtr<std::map<espConfig::actions_config_t::colorMap, uint8_t>>(f);
+      cJSON *array_of_arrays = cJSON_CreateArray();
+      if (array_of_arrays) {
+        for (const auto& map_pair : *m) {
+          cJSON *inner_array = cJSON_CreateArray();
+          cJSON_AddItemToArray(inner_array, cJSON_CreateNumber(static_cast<double>(map_pair.first))); // Enum key as integer
+          cJSON_AddItemToArray(inner_array, cJSON_CreateNumber(static_cast<double>(map_pair.second)));
+          cJSON_AddItemToArray(array_of_arrays, inner_array);
+        }
+        cJSON_AddItemToObject(root.get(), key, array_of_arrays);
+      }
+      break;
+    }
+    case FieldType::StrMap: {
+      const auto* m = fieldPtr<std::map<std::string, uint8_t>>(f);
+      cJSON *map_obj = cJSON_CreateObject();
+      if (map_obj) {
+        for (const auto& map_pair : *m) {
+          cJSON_AddNumberToObject(map_obj, map_pair.first.c_str(), static_cast<double>(map_pair.second));
+        }
+        cJSON_AddItemToObject(root.get(), key, map_obj);
+      }
+      break;
+    }
+    case FieldType::U8Arr6:
+    case FieldType::U8Arr2: {
+      const uint8_t* vals = nullptr;
+      const char* const* names = nullptr;
+      size_t n = 0;
+      if (f.type == FieldType::U8Arr6) {
+        vals = fieldPtr<std::array<uint8_t,6>>(f)->data();
+        names = espConfig::mqttConfig_t::customLockStateNames;
+        n = 6;
+      } else {
+        vals = fieldPtr<std::array<uint8_t,2>>(f)->data();
+        names = espConfig::mqttConfig_t::customLockActionNames;
+        n = 2;
+      }
+      cJSON *map_obj = cJSON_CreateObject();
+      if (map_obj) {
+        for (size_t i = 0; i < n; ++i) {
+          cJSON_AddNumberToObject(map_obj, names[i], static_cast<double>(vals[i]));
+        }
+        cJSON_AddItemToObject(root.get(), key, map_obj);
+      }
+      break;
+    }
+    }
+  }
 
     char *json_string = cJSON_PrintUnformatted(root.get());
     std::string result(json_string ? json_string : "");
@@ -997,140 +1257,187 @@ bool ConfigManager::deserializeFromJson(const std::string& json_string) {
         return false;
     }
 
-    const ConfigMapType* configMapPtr = nullptr;
+    const char* section = nullptr;
     if constexpr (std::is_same_v<ConfigType, espConfig::misc_config_t>){
-      configMapPtr = &m_configMap.at("misc");
+      section = "misc";
     } else if constexpr (std::is_same_v<ConfigType, espConfig::actions_config_t>){
-      configMapPtr = &m_configMap.at("actions");
+      section = "actions";
     } else if constexpr (std::is_same_v<ConfigType, espConfig::mqttConfig_t>){
-      configMapPtr = &m_configMap.at("mqtt");
+      section = "mqtt";
     } else {
       static_assert(std::is_void_v<ConfigType> && false, "Unsupported ConfigType for deserializeFromJson");
     }
     bool success = true;
     cJSON *item = root.get()->child;
     while (item) {
-        std::string key = item->string;
-        if (configMapPtr->contains(key)) {
-            std::visit([&](auto&& arg) {
-                using T = std::decay_t<decltype(arg)>;
-                if constexpr (std::is_pointer_v<T>) {
-                    using PointeeType = std::remove_pointer_t<T>;
-
-                    if constexpr (std::is_same_v<PointeeType, std::string>) {
-                        if (cJSON_IsString(item)) {
-                            arg->assign(item->valuestring);
-                        } else {
-                            ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected string.", key.c_str());
-                            success = false;
-                        }
-                    } else if constexpr (std::is_same_v<PointeeType, bool>) {
-                        if (cJSON_IsBool(item)) {
-                            *arg = cJSON_IsTrue(item);
-                        } else if(cJSON_IsNumber(item)) {
-                            *arg = static_cast<PointeeType>(item->valueint);
-                        } else {
-                            ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected boolean.", key.c_str());
-                            success = false;
-                        }
-                    } else if constexpr (std::is_same_v<PointeeType, uint8_t> || std::is_same_v<PointeeType, uint16_t>) {
-                        if (cJSON_IsNumber(item)) {
-                            if (item->valuedouble < 0 || item->valuedouble > std::numeric_limits<PointeeType>::max()) {
-                                ESP_LOGW(TAG, "Value out of range for '%s': %f", key.c_str(), item->valuedouble);
-                                success = false;
+        const char* key = item->string;
+        const ConfigField* entry = key ? findField(section, key, strlen(key)) : nullptr;
+        if (entry) {
+            switch (entry->type) {
+            case FieldType::Str:
+                if (cJSON_IsString(item)) {
+                    fieldPtr<std::string>(*entry)->assign(item->valuestring);
+                } else {
+                    ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected string.", key);
+                    success = false;
+                }
+                break;
+            case FieldType::Bool:
+                if (cJSON_IsBool(item)) {
+                    *fieldPtr<bool>(*entry) = cJSON_IsTrue(item);
+                } else if(cJSON_IsNumber(item)) {
+                    *fieldPtr<bool>(*entry) = item->valueint != 0;
+                } else {
+                    ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected boolean.", key);
+                    success = false;
+                }
+                break;
+            case FieldType::U8:
+            case FieldType::U16:
+                if (cJSON_IsNumber(item)) {
+                    const double maxv = entry->type == FieldType::U8
+                                            ? std::numeric_limits<uint8_t>::max()
+                                            : std::numeric_limits<uint16_t>::max();
+                    if (item->valuedouble < 0 || item->valuedouble > maxv) {
+                        ESP_LOGW(TAG, "Value out of range for '%s': %f", key, item->valuedouble);
+                        success = false;
+                    } else if (entry->type == FieldType::U8) {
+                        *fieldPtr<uint8_t>(*entry) = static_cast<uint8_t>(item->valuedouble);
+                    } else {
+                        *fieldPtr<uint16_t>(*entry) = static_cast<uint16_t>(item->valuedouble);
+                    }
+                } else {
+                    ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected number.", key);
+                    success = false;
+                }
+                break;
+            case FieldType::Arr3:
+            case FieldType::Arr4:
+            case FieldType::Arr5:
+            case FieldType::Arr7: {
+                if (cJSON_IsArray(item)) {
+                    const size_t want = entry->type == FieldType::Arr3 ? 3
+                                        : entry->type == FieldType::Arr4 ? 4
+                                        : entry->type == FieldType::Arr5 ? 5 : 7;
+                    int array_size = cJSON_GetArraySize(item);
+                    if (array_size >= 0 && size_t(array_size) == want) {
+                        uint8_t* dst = nullptr;
+                        if (entry->type == FieldType::Arr3) dst = fieldPtr<std::array<uint8_t,3>>(*entry)->data();
+                        else if (entry->type == FieldType::Arr4) dst = fieldPtr<std::array<uint8_t,4>>(*entry)->data();
+                        else if (entry->type == FieldType::Arr5) dst = fieldPtr<std::array<uint8_t,5>>(*entry)->data();
+                        else dst = fieldPtr<std::array<uint8_t,7>>(*entry)->data();
+                        bool array_success = true;
+                        for (int i = 0; i < array_size; ++i) {
+                            cJSON *sub_item = cJSON_GetArrayItem(item, i);
+                            if (cJSON_IsNumber(sub_item)) {
+                                dst[i] = static_cast<uint8_t>(sub_item->valuedouble);
                             } else {
-                                *arg = static_cast<PointeeType>(item->valuedouble);
+                                array_success = false;
+                                break;
                             }
-                        } else {
-                            ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected number.", key.c_str());
+                        }
+                        if (!array_success) {
+                            ESP_LOGW(TAG, "Validation failed for '%s': array contains non-numeric elements.", key);
                             success = false;
                         }
-                    } else if constexpr (std::is_same_v<PointeeType, std::array<uint8_t, 4>> ||
-                                      std::is_same_v<PointeeType, std::array<uint8_t, 5>> ||
-                                      std::is_same_v<PointeeType, std::array<uint8_t, 7>>) {
-                        if (cJSON_IsArray(item)) {
-                            int array_size = cJSON_GetArraySize(item);
-                            if (array_size == arg->size()) {
-                                bool array_success = true;
-                                for (int i = 0; i < array_size; ++i) {
-                                    cJSON *sub_item = cJSON_GetArrayItem(item, i);
-                                    if (cJSON_IsNumber(sub_item)) {
-                                        (*arg)[i] = static_cast<uint8_t>(sub_item->valuedouble);
-                                    } else {
-                                        array_success = false;
-                                        break;
-                                    }
-                                }
-                                if (!array_success) {
-                                    ESP_LOGW(TAG, "Validation failed for '%s': array contains non-numeric elements.", key.c_str());
-                                    success = false;
-                                }
+                    } else {
+                        ESP_LOGW(TAG, "Validation failed for '%s': incorrect array size. Expected %zu, got %d.", key, want, array_size);
+                        success = false;
+                    }
+                } else {
+                    ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected array.", key);
+                    success = false;
+                }
+                break;
+            }
+            case FieldType::ColorMap: {
+                auto* m = fieldPtr<std::map<espConfig::actions_config_t::colorMap, uint8_t>>(*entry);
+                if (cJSON_IsArray(item)) {
+                    m->clear();
+                    int array_size = cJSON_GetArraySize(item);
+                    bool map_success = true;
+                    for (int i = 0; i < array_size; ++i) {
+                        cJSON *inner_array = cJSON_GetArrayItem(item, i);
+                        if (cJSON_IsArray(inner_array) && cJSON_GetArraySize(inner_array) == 2) {
+                            cJSON *key_json = cJSON_GetArrayItem(inner_array, 0);
+                            cJSON *value_json = cJSON_GetArrayItem(inner_array, 1);
+                            if (cJSON_IsNumber(key_json) && cJSON_IsNumber(value_json)) {
+                                m->emplace(
+                                    static_cast<espConfig::actions_config_t::colorMap>(key_json->valuedouble),
+                                    static_cast<uint8_t>(value_json->valuedouble)
+                                );
                             } else {
-                                ESP_LOGW(TAG, "Validation failed for '%s': incorrect array size. Expected %zu, got %d.", key.c_str(), arg->size(), array_size);
-                                success = false;
+                                map_success = false; break;
                             }
                         } else {
-                            ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected array.", key.c_str());
-                            success = false;
-                        }
-                    } else if constexpr (std::is_same_v<PointeeType, std::map<espConfig::actions_config_t::colorMap, uint8_t>>) {
-                        if (cJSON_IsArray(item)) {
-                            arg->clear();
-                            int array_size = cJSON_GetArraySize(item);
-                            bool map_success = true;
-                            for (int i = 0; i < array_size; ++i) {
-                                cJSON *inner_array = cJSON_GetArrayItem(item, i);
-                                if (cJSON_IsArray(inner_array) && cJSON_GetArraySize(inner_array) == 2) {
-                                    cJSON *key_json = cJSON_GetArrayItem(inner_array, 0);
-                                    cJSON *value_json = cJSON_GetArrayItem(inner_array, 1);
-                                    if (cJSON_IsNumber(key_json) && cJSON_IsNumber(value_json)) {
-                                        uint64_t key_val = static_cast<uint64_t>(key_json->valuedouble);
-                                        uint64_t value_val = static_cast<uint64_t>(value_json->valuedouble);
-                                        arg->try_emplace(
-                                            static_cast<espConfig::actions_config_t::colorMap>(key_val),
-                                            static_cast<uint8_t>(value_val)
-                                        );
-                                    } else {
-                                        map_success = false; break;
-                                    }
-                                } else {
-                                    map_success = false; break;
-                                }
-                            }
-                            if (!map_success) {
-                                ESP_LOGW(TAG, "Validation failed for '%s': invalid map format.", key.c_str());
-                                success = false;
-                            }
-                        } else {
-                            ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected array for map.", key.c_str());
-                            success = false;
-                        }
-                    } else if constexpr (std::is_same_v<PointeeType, std::map<std::string, uint8_t>>) {
-                        if (cJSON_IsObject(item)) {
-                            arg->clear();
-                            cJSON *sub_obj_item = item->child;
-                            bool map_success = true;
-                            while(sub_obj_item) {
-                                if (cJSON_IsNumber(sub_obj_item)) {
-                                    arg->operator[](sub_obj_item->string) = static_cast<uint8_t>(sub_obj_item->valuedouble);
-                                } else {
-                                    map_success = false;
-                                    break;
-                                }
-                                sub_obj_item = sub_obj_item->next;
-                            }
-                            if (!map_success) {
-                                ESP_LOGW(TAG, "Validation failed for '%s': map contains non-numeric values.", key.c_str());
-                                success = false;
-                            }
-                        } else {
-                            ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected object for map.", key.c_str());
-                            success = false;
+                            map_success = false; break;
                         }
                     }
+                    if (!map_success) {
+                        ESP_LOGW(TAG, "Validation failed for '%s': invalid map format.", key);
+                        success = false;
+                    }
+                } else {
+                    ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected array for map.", key);
+                    success = false;
                 }
-            }, configMapPtr->at(key));
-        } else ESP_LOGW(TAG, "Key '%s' could not be found!", key.c_str());
+                break;
+            }
+            case FieldType::StrMap: {
+                auto* m = fieldPtr<std::map<std::string, uint8_t>>(*entry);
+                if (cJSON_IsObject(item)) {
+                    m->clear();
+                    cJSON *sub_obj_item = item->child;
+                    bool map_success = true;
+                    while(sub_obj_item) {
+                        if (cJSON_IsNumber(sub_obj_item)) {
+                            (*m)[sub_obj_item->string] = static_cast<uint8_t>(sub_obj_item->valuedouble);
+                        } else {
+                            map_success = false;
+                            break;
+                        }
+                        sub_obj_item = sub_obj_item->next;
+                    }
+                    if (!map_success) {
+                        ESP_LOGW(TAG, "Validation failed for '%s': map contains non-numeric values.", key);
+                        success = false;
+                    }
+                } else {
+                    ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected object for map.", key);
+                    success = false;
+                }
+                break;
+            }
+            case FieldType::U8Arr6:
+            case FieldType::U8Arr2: {
+                uint8_t* const arr = entry->type == FieldType::U8Arr6
+                                ? fieldPtr<std::array<uint8_t,6>>(*entry)->data()
+                                : fieldPtr<std::array<uint8_t,2>>(*entry)->data();
+                const char* const* names = entry->type == FieldType::U8Arr6
+                                ? espConfig::mqttConfig_t::customLockStateNames
+                                : espConfig::mqttConfig_t::customLockActionNames;
+                const size_t n = entry->type == FieldType::U8Arr6 ? 6 : 2;
+                if (cJSON_IsObject(item)) {
+                    cJSON *sub_obj_item = item->child;
+                    while(sub_obj_item) {
+                        if (cJSON_IsNumber(sub_obj_item)) {
+                            for (size_t i = 0; i < n; ++i) {
+                                if (strcmp(names[i], sub_obj_item->string) == 0) {
+                                    arr[i] = static_cast<uint8_t>(sub_obj_item->valuedouble);
+                                    break;
+                                }
+                            }
+                        }
+                        sub_obj_item = sub_obj_item->next;
+                    }
+                } else {
+                    ESP_LOGW(TAG, "Validation failed for '%s': type mismatch, expected object for map.", key);
+                    success = false;
+                }
+                break;
+            }
+            }
+        } else ESP_LOGW(TAG, "Key '%s' could not be found!", key ? key : "(null)");
         item = item->next;
     }
 

@@ -104,6 +104,11 @@ namespace espConfig
       lockCustomStateCmd.append(id).append("/" MQTT_CUSTOM_STATE_CTRL_TOPIC);
       btrLvlCmdTopic.append(id).append("/" MQTT_PROX_BAT_TOPIC);
       hkAltActionTopic.append(id).append("/" MQTT_HK_ALT_ACTION_TOPIC);
+      for (std::string* s : {&lwtTopic, &hkTopic, &lockStateTopic, &lockStateCmd,
+                             &lockCStateCmd, &lockTStateCmd, &lockCustomStateTopic,
+                             &lockCustomStateCmd, &btrLvlCmdTopic, &hkAltActionTopic}) {
+        s->shrink_to_fit();
+      }
     };
     /* MQTT Broker */
     std::string mqttBroker = MQTT_HOST;
@@ -130,8 +135,10 @@ namespace espConfig
     /* SSL/TLS Settings */
     bool useSSL = MQTT_USE_SSL;
     bool allowInsecure = MQTT_ALLOW_INSECURE;
-    std::map<std::string, uint8_t> customLockStates = { {"C_LOCKED", C_LOCKED}, {"C_UNLOCKING", C_UNLOCKING}, {"C_UNLOCKED", C_UNLOCKED}, {"C_LOCKING", C_LOCKING}, {"C_JAMMED", C_JAMMED}, {"C_UNKNOWN", C_UNKNOWN} };
-    std::map<std::string, uint8_t> customLockActions = { {"UNLOCK", C_UNLOCK}, {"LOCK", C_LOCK} };
+    std::array<uint8_t, 6> customLockStates = { C_LOCKED, C_UNLOCKING, C_UNLOCKED, C_LOCKING, C_JAMMED, C_UNKNOWN };
+    static constexpr const char* customLockStateNames[6] = {"C_LOCKED", "C_UNLOCKING", "C_UNLOCKED", "C_LOCKING", "C_JAMMED", "C_UNKNOWN"};
+    std::array<uint8_t, 2> customLockActions = { C_UNLOCK, C_LOCK };
+    static constexpr const char* customLockActionNames[2] = {"UNLOCK", "LOCK"};
   };
 
   /* MQTT TLS material is stored in DER (binary) form to reduce resident heap;

@@ -6,6 +6,7 @@ function(export)
     # This empty function will be called instead of the real 'export' command.
 endfunction()
 idf_component_register(INCLUDE_DIRS "upstream/include")
+add_compile_definitions(MSGPACK_ZONE_CHUNK_SIZE=1024)
 add_subdirectory(upstream)
 target_include_directories(${COMPONENT_LIB} INTERFACE "${CMAKE_CURRENT_BINARY_DIR}/upstream/include")
 target_include_directories(${COMPONENT_LIB} INTERFACE "${CMAKE_CURRENT_BINARY_DIR}/upstream/include/msgpack")

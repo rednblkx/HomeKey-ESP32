@@ -394,32 +394,34 @@ void MqttManager::onData(const std::string& topic, const std::string& data) {
     } else if (m_mqttConfig.lockEnableCustomState &&
                topic == m_mqttConfig.lockCustomStateCmd) {
       uint8_t v; if (!to_u8(data, v)) { ESP_LOGW(TAG, "Invalid lockCStateCmd payload: %s", data.c_str()); return; }
-      if (m_mqttConfig.customLockStates.at("C_UNLOCKING") == v) {
+      const auto& states = m_mqttConfig.customLockStates;
+      auto stateOf = [&](size_t i) { return states[i]; };
+      if (stateOf(1) == v) {        // C_UNLOCKING
         s.currentState = LockManager::MAX;
         s.targetState = LockManager::UNLOCKED;
         size_t d_len = alpaca::serialize(s, d);
         AppEventLoop::publish(LOCK_EVENT, LOCK_TARGET_STATE_CHANGED, d.data(), d_len);
-      } else if (m_mqttConfig.customLockStates.at("C_LOCKING") == v) {
+      } else if (stateOf(3) == v) { // C_LOCKING
         s.currentState = LockManager::MAX;
         s.targetState = LockManager::LOCKED;
         size_t d_len = alpaca::serialize(s, d);
         AppEventLoop::publish(LOCK_EVENT, LOCK_TARGET_STATE_CHANGED, d.data(), d_len);
-      } else if (m_mqttConfig.customLockStates.at("C_UNLOCKED") == v) {
+      } else if (stateOf(2) == v) { // C_UNLOCKED
         s.currentState = LockManager::UNLOCKED;
         s.targetState = LockManager::UNLOCKED;
         size_t d_len = alpaca::serialize(s, d);
         AppEventLoop::publish(LOCK_EVENT, LOCK_OVERRIDE_STATE, d.data(), d_len);
-      } else if (m_mqttConfig.customLockStates.at("C_LOCKED") == v) {
+      } else if (stateOf(0) == v) { // C_LOCKED
         s.currentState = LockManager::LOCKED;
         s.targetState = LockManager::LOCKED;
         size_t d_len = alpaca::serialize(s, d);
         AppEventLoop::publish(LOCK_EVENT, LOCK_OVERRIDE_STATE, d.data(), d_len);
-      } else if (m_mqttConfig.customLockStates.at("C_JAMMED") == v) {
+      } else if (stateOf(4) == v) { // C_JAMMED
         s.currentState = LockManager::JAMMED;
         s.targetState = LockManager::MAX;
         size_t d_len = alpaca::serialize(s, d);
         AppEventLoop::publish(LOCK_EVENT, LOCK_OVERRIDE_STATE, d.data(), d_len);
-      } else if (m_mqttConfig.customLockStates.at("C_UNKNOWN") == v) {
+      } else if (stateOf(5) == v) { // C_UNKNOWN
         s.currentState = LockManager::UNKNOWN;
         s.targetState = LockManager::MAX;
         size_t d_len = alpaca::serialize(s, d);
@@ -462,7 +464,7 @@ void MqttManager::publishLockState(const int currentState, const int targetState
     }
     publish(m_mqttConfig.lockStateTopic, stateStr, 0, true);
     if(m_mqttConfig.lockEnableCustomState){
-      publish(m_mqttConfig.lockCustomStateTopic, (targetState == LockManager::UNLOCKED) ? std::to_string(m_mqttConfig.customLockActions.at("UNLOCK")) : std::to_string(m_mqttConfig.customLockActions.at("LOCK")));
+      publish(m_mqttConfig.lockCustomStateTopic, (targetState == LockManager::UNLOCKED) ? std::to_string(m_mqttConfig.customLockActions[0]) : std::to_string(m_mqttConfig.customLockActions[1]));
     }
 }
 

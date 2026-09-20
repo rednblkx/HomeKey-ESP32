@@ -74,13 +74,34 @@ public:
     bool getBacklogMaxSize(uint16_t &size);
 
   private:
-    using ConfigMapType = std::map<std::string,
-                      std::variant<
-                          std::string *, uint16_t *, uint8_t *, bool *,
-                          std::map<std::string, uint8_t> *,
-                          std::map<espConfig::actions_config_t::colorMap, uint8_t> *,
-                          std::array<uint8_t, 4> *, std::array<uint8_t, 5> *,
-                          std::array<uint8_t, 3> *, std::array<uint8_t, 7> *>>;
+    enum class FieldType : uint8_t {
+      Str, Bool, U8, U16, Arr3, Arr4, Arr5, Arr7, ColorMap, StrMap, U8Arr6, U8Arr2
+    };
+    struct ConfigField {
+      const char* section;
+      const char* name;
+      uint16_t offset;
+      FieldType type;
+    };
+    static constexpr size_t kFieldCount = 97;
+    static const ConfigField kConfigFields[kFieldCount];
+
+    // Guards that table section names and sectionBase() agree; aborts at
+    // boot otherwise. Called from begin().
+    void verifyFieldTable();
+
+    // Field access: resolves a table entry to a typed pointer into the
+    // section struct owned by this instance.
+    void* sectionBase(const char* section);
+    template <typename T>
+    T* fieldPtr(const ConfigField& f) {
+      return reinterpret_cast<T*>(reinterpret_cast<char*>(sectionBase(f.section)) + f.offset);
+    }
+    const ConfigField* findField(const char* section, const char* name, size_t nameLen) const;
+    // Bounded [begin, end) range of the table entries belonging to one section.
+    struct FieldRange { const ConfigField* first; const ConfigField* last; };
+    static FieldRange sectionRange(const char* section);
+
     void deserialize(msgpack_object obj, std::string key);
 
     template <typename ConfigType>
@@ -98,7 +119,6 @@ public:
     bool validatePrivateKeyContent(const std::string& keyContent);
     bool validateKeyCertPair(const std::string& privateKey, const std::string& certificate, const char* context);
 
-    std::map<std::string, ConfigMapType> m_configMap;
     espConfig::mqttConfig_t m_mqttConfig;
     espConfig::mqtt_ssl_t m_mqttSslConfig;
     espConfig::https_certs_t m_httpsCertsConfig;
