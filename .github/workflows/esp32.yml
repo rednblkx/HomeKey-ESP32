@@ -200,13 +200,13 @@ jobs:
         run: sudo chown -R $USER:$USER build/ managed_components/ $HOME/.ccache
       - name: Organize Binaries
         run: |
-          mv build/HomeKey-ESP32.bin build/${{ matrix.target }}.firmware.bin
+          mv build/HomeKey-ESP32.bin build/${{ matrix.target }}.firmware.ota.bin
           mv build/merged-binary.bin build/${{ matrix.target }}.firmware.factory.bin
       - name: Archive firmware
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.target }}-firmware
-          path: build/${{ matrix.target }}.firmware.bin
+          path: build/${{ matrix.target }}.firmware.ota.bin
       - name: Archive merged binary
         uses: actions/upload-artifact@v7
         with:
@@ -294,13 +294,13 @@ jobs:
 
             const artifactsDir = 'artifacts';
             const files = [
-              'esp32.firmware.bin',
+              'esp32.firmware.ota.bin',
               'esp32.firmware.factory.bin',
-              'esp32c3.firmware.bin',
+              'esp32c3.firmware.ota.bin',
               'esp32c3.firmware.factory.bin',
-              'esp32c6.firmware.bin',
+              'esp32c6.firmware.ota.bin',
               'esp32c6.firmware.factory.bin',
-              'esp32s3.firmware.bin',
+              'esp32s3.firmware.ota.bin',
               'esp32s3.firmware.factory.bin',
               'littlefs.bin'
             ];
