@@ -71,25 +71,37 @@ inline std::optional<std::string> check_pin_reassignment(uint8_t incoming_pin,
                                                          uint8_t current_pin,
                                                          const std::string& key,
                                                          int array_index,
-                                                         bool override_strapping) {
+                                                         bool override_strapping,
+                                                         uint8_t nfcReaderType) {
     if (incoming_pin == current_pin || incoming_pin == 255) return std::nullopt;
 
     GPIOAllocator::PinRole role = GPIOAllocator::PinRole::GpioOut;
     GPIOAllocator::PinConsumer consumer = GPIOAllocator::PinConsumer::Hardware;
+    GPIOAllocator::PinConsumer ignore_consumer = GPIOAllocator::PinConsumer::None;
     bool output_capable = true;
     if (key == "nfcGpioPins") {
       consumer = GPIOAllocator::PinConsumer::Nfc;
-      switch (array_index) {
-        case 0: role = GPIOAllocator::PinRole::SpiCs;   break; // SS / SDA
-        case 1: role = GPIOAllocator::PinRole::SpiSck;  break; // SCK / SCL
-        case 2: role = GPIOAllocator::PinRole::SpiMiso; break;
-        case 3: role = GPIOAllocator::PinRole::SpiMosi; break;
+      ignore_consumer = GPIOAllocator::PinConsumer::Nfc;
+      if (nfcReaderType == 2) { // ST25R3916: I2C bus
+        switch (array_index) {
+          case 0: role = GPIOAllocator::PinRole::I2cSda; break;
+          case 1: role = GPIOAllocator::PinRole::I2cScl; break;
+        }
+      } else {
+        switch (array_index) {
+          case 0: role = GPIOAllocator::PinRole::SpiCs;   break; // SS / SDA
+          case 1: role = GPIOAllocator::PinRole::SpiSck;  break; // SCK / SCL
+          case 2: role = GPIOAllocator::PinRole::SpiMiso; break;
+          case 3: role = GPIOAllocator::PinRole::SpiMosi; break;
+        }
       }
     } else if (key == "nfcIrqPin") {
       consumer = GPIOAllocator::PinConsumer::Nfc;
+      ignore_consumer = GPIOAllocator::PinConsumer::Nfc;
       role = GPIOAllocator::PinRole::NfcIrq;
     } else if (key == "nfcVenPin") {
       consumer = GPIOAllocator::PinConsumer::Nfc;
+      ignore_consumer = GPIOAllocator::PinConsumer::Nfc;
       role = GPIOAllocator::PinRole::NfcVen;
     } else if (key == "ethSpiConfig") {
       consumer = GPIOAllocator::PinConsumer::Eth;
@@ -126,7 +138,7 @@ inline std::optional<std::string> check_pin_reassignment(uint8_t incoming_pin,
     auto verdict = GPIOAllocator::instance().validate(
         gpio_num_t(incoming_pin),
         output_capable ? GPIO_MODE_OUTPUT : GPIO_MODE_INPUT,
-        role, consumer);
+        role, consumer, ignore_consumer);
     if (verdict) return std::nullopt;
     return std::string(GPIOAllocator::error_str(verdict.error())) +
            " (currently held by: " +
@@ -1162,7 +1174,6 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData, cJS
         it = it->next;
         continue;
       }
-
       // Reject anything outside uint8_t range BEFORE truncating, so a value
       // like 256 can't wrap to a valid-looking pin (0) and slip past both
       // the GPIO-validity check and the ownership check below.
@@ -1184,12 +1195,30 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData, cJS
         return false;
       }
 
+      if (nfcReaderPins && effectiveReaderType == 1) {
+        cJSON *gpioPinsItem = cJSON_GetObjectItem(obj, "nfcGpioPins");
+        if (gpioPinsItem && cJSON_IsArray(gpioPinsItem)) {
+          bool dup = false;
+          cJSON *gp = NULL;
+          cJSON_ArrayForEach(gp, gpioPinsItem) {
+            if (cJSON_IsNumber(gp) && gp->valueint >= 0 && gp->valueint <= 255 &&
+                static_cast<uint8_t>(gp->valueint) == incomingPin) { dup = true; break; }
+          }
+          if (dup) {
+            std::string msg = std::to_string(incomingPin) + " for \"" + keyStr +
+                              "\" duplicates a pin in \"nfcGpioPins\".";
+            sendJsonError(req, msg);
+            return false;
+          }
+        }
+      }
+
       const uint8_t currentPin   = (cJSON_IsNumber(existingValue) &&
                                     existingValue->valueint >= 0 &&
                                     existingValue->valueint <= 255)
                                         ? static_cast<uint8_t>(existingValue->valueint)
                                         : uint8_t{255};
-      if (auto error = check_pin_reassignment(incomingPin, currentPin, keyStr, -1, overrideStrapping)) {
+      if (auto error = check_pin_reassignment(incomingPin, currentPin, keyStr, -1, overrideStrapping, effectiveReaderType)) {
         std::string msg = std::to_string(incomingPin) + " for \"" + keyStr + "\" " + *error + ".";
         sendJsonError(req, msg);
         return false;
@@ -1201,6 +1230,8 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData, cJS
         return false;
     } else if ((str_ends_with(keyStr.c_str(), "Pins") || str_ends_with(keyStr.c_str(), "SpiConfig")) && cJSON_IsArray(incomingValue)){
       cJSON *currentArr = cJSON_GetObjectItem(currentData, keyStr.c_str());
+      std::array<bool, 256> seenPins{};
+      bool checkDuplicates = keyStr == "nfcGpioPins";
       cJSON *el = NULL;
       int idx = 0;
       cJSON_ArrayForEach(el, incomingValue) {
@@ -1217,13 +1248,23 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData, cJS
           }
           const uint8_t elPin = static_cast<uint8_t>(el->valueint);
 
+          if (checkDuplicates) {
+            if (elPin != 255 && seenPins[elPin]) {
+              std::string msg = std::to_string(elPin) +
+                                " is assigned more than once in \"" + keyStr + "\".";
+              sendJsonError(req, msg);
+              return false;
+            }
+            seenPins[elPin] = true;
+          }
+
           uint8_t currentPin = 255;
           if (currentArr && cJSON_IsArray(currentArr)) {
             cJSON *ce = cJSON_GetArrayItem(currentArr, idx);
             if (ce && cJSON_IsNumber(ce) && ce->valueint >= 0 && ce->valueint <= 255)
               currentPin = static_cast<uint8_t>(ce->valueint);
           }
-          if (auto error = check_pin_reassignment(elPin, currentPin, keyStr, idx, overrideStrapping)) {
+          if (auto error = check_pin_reassignment(elPin, currentPin, keyStr, idx, overrideStrapping, effectiveReaderType)) {
             std::string msg = std::to_string(elPin) + " for \"" + keyStr + "\" " + *error + ".";
             sendJsonError(req, msg);
             return false;

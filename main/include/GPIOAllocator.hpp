@@ -193,12 +193,13 @@ public:
   }
 
   std::expected<void, GPIOAllocatorError> validate(gpio_num_t pin, gpio_mode_t mode,
-                                                   PinRole role, PinConsumer consumer) const {
+                                                   PinRole role, PinConsumer consumer,
+                                                   PinConsumer ignore_consumer = PinConsumer::None) const {
     std::lock_guard lock(mutex_);
     if ((uint8_t)pin == PIN_UNSET) {
       return {}; // "no pin" is always a valid configuration choice
     }
-    return validate_locked(pin, mode, role, consumer);
+    return validate_locked(pin, mode, role, consumer, ignore_consumer);
   }
 
   static constexpr const char* error_str(GPIOAllocatorError err) {
@@ -277,21 +278,23 @@ private:
     std::weak_ptr<PinControl> control;
   };
 
-  static bool shareable(PinRole role, PinConsumer consumer, const PinEntry& entry) {
+  static bool shareable(PinRole role, PinConsumer consumer, const PinEntry& entry,
+                        PinConsumer ignore_consumer = PinConsumer::None) {
     if (entry.holders.empty()) return true;
     if (role_is_passive(role)) {
       return std::all_of(entry.holders.begin(), entry.holders.end(),
-                         [&](const PinHolder& h) { return h.role == role; });
+                         [&](const PinHolder& h) { return h.role == role || h.consumer == ignore_consumer; });
     }
     if (role == PinRole::Led) {
       return std::all_of(entry.holders.begin(), entry.holders.end(),
-                         [&](const PinHolder& h) { return h.role == PinRole::Led; });
+                         [&](const PinHolder& h) { return h.role == PinRole::Led || h.consumer == ignore_consumer; });
     }
-    return false;
+    return entry.holders.size() == 1 && entry.holders[0].consumer == ignore_consumer;
   }
 
   std::expected<void, GPIOAllocatorError> validate_locked(gpio_num_t pin, gpio_mode_t mode,
-                                                          PinRole role, PinConsumer consumer) const {
+                                                          PinRole role, PinConsumer consumer,
+                                                          PinConsumer ignore_consumer = PinConsumer::None) const {
     if ((uint8_t)pin == (uint8_t)GPIO_NUM_NC || pin >= GPIO_NUM_MAX || !GPIO_IS_VALID_GPIO(pin)) {
       return std::unexpected<GPIOAllocatorError>(INVALID_GPIO_NUM);
     }
@@ -306,7 +309,7 @@ private:
       if (entry.control.expired()) {
         return std::expected<void, GPIOAllocatorError>{}; // racing release, pin is free
       }
-      if (!shareable(role, consumer, entry)) {
+      if (!shareable(role, consumer, entry, ignore_consumer)) {
         return std::unexpected<GPIOAllocatorError>(ALREADY_OWNED);
       }
     }
