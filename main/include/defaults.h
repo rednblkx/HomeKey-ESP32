@@ -54,10 +54,10 @@
 #define DEVICE_NAME "HK-{MAC}" //Device name
 #define HOMEKEY_ALWAYS_UNLOCK 0 // Flag indicating if a successful Homekey authentication should always set and publish the unlock state
 #define HOMEKEY_ALWAYS_LOCK 0  // Flag indicating if a successful Homekey authentication should always set and publish the lock state
-#ifdef CONFIG_IDF_TARGET_ESP32
-#define HK_AUTH_PRECOMPUTE_ENABLED true // Enable HomeKey auth precompute cache (faster taps, higher CPU/RAM)
+#ifdef CONFIG_IDF_TARGET_ESP32C6
+#define HK_AUTH_PRECOMPUTE_ENABLED false // Enable HomeKey auth precompute cache
 #else 
-#define HK_AUTH_PRECOMPUTE_ENABLED false // Enable HomeKey auth precompute cache (faster taps, higher CPU/RAM)
+#define HK_AUTH_PRECOMPUTE_ENABLED true // Enable HomeKey auth precompute cache
 #endif
 #define NFC_FAST_POLLING_ENABLED false // Poll the PN532 more aggressively for faster tag detection
 #define NFC_READER_TYPE 0 // 0 = PN532, 1 = PN7160
