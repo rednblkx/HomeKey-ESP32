@@ -310,7 +310,7 @@ void WebServerManager::begin() {
       return;
     }
   }
-  m_wsQueue = xQueueCreate(64, sizeof(WsFrame *));
+  m_wsQueue = xQueueCreate(128, sizeof(WsFrame *));
   if (!m_wsQueue) {
     ESP_LOGE(TAG, "Failed to create WebSocket queue");
     httpd_stop(m_server);
