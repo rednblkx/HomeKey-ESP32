@@ -230,7 +230,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.target }}-enc-firmware
-          path: build/${{ matrix.target }}.firmware.ota.bin
+          path: build-flash-encryption/${{ matrix.target }}.enc.firmware.ota.bin
       - name: Archive encrypted merged binary
         uses: actions/upload-artifact@v7
         with:
