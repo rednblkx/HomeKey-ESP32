@@ -195,7 +195,7 @@ jobs:
             -v ${{ github.workspace }}/managed_components:/project/managed_components
             -v $HOME/.ccache:/root/.ccache
             -e CCACHE_DIR=/root/.ccache
-          command: CI=true idf.py --ccache build && idf.py merge-bin
+          command: CI=true idf.py --ccache merge-bin
       - name: ESP-IDF Build (${{ matrix.target }}) - Flash Encryption
         uses: espressif/esp-idf-ci-action@v1
         with:
@@ -207,7 +207,7 @@ jobs:
             -v ${{ github.workspace }}/managed_components:/project/managed_components
             -v $HOME/.ccache:/root/.ccache
             -e CCACHE_DIR=/root/.ccache
-          command: CI=true idf.py --ccache -DSDKCONFIG="sdkconfig.encrypted" -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.encrypted" -B build-flash-encryption build && idf.py merge-bin
+          command: CI=true idf.py --ccache -DSDKCONFIG="sdkconfig.encrypted" -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.encrypted" -B build-flash-encryption merge-bin
       - name: Fix ownership post-build
         run: sudo chown -R $USER:$USER build/ build-flash-encryption/ managed_components/ $HOME/.ccache
       - name: Organize Binaries
@@ -319,13 +319,21 @@ jobs:
             const artifactsDir = 'artifacts';
             const files = [
               'esp32.firmware.ota.bin',
+              'esp32.enc.firmware.ota.bin',
               'esp32.firmware.factory.bin',
+              'esp32.enc.firmware.factory.bin',
               'esp32c3.firmware.ota.bin',
+              'esp32c3.enc.firmware.ota.bin',
               'esp32c3.firmware.factory.bin',
+              'esp32c3.enc.firmware.factory.bin',
               'esp32c6.firmware.ota.bin',
+              'esp32c6.enc.firmware.ota.bin',
               'esp32c6.firmware.factory.bin',
+              'esp32c6.enc.firmware.factory.bin',
               'esp32s3.firmware.ota.bin',
+              'esp32s3.enc.firmware.ota.bin',
               'esp32s3.firmware.factory.bin',
+              'esp32s3.enc.firmware.factory.bin',
               'littlefs.bin'
             ];
 
