@@ -17,37 +17,37 @@
 
 #ifdef CONFIG_IDF_TARGET_ESP32C6
 inline constexpr uint8_t RESTRICTED_PINS[] = {
-  12, 13, 24, 25, 26, 28, 29, 30
+  12, 13, 16, 17, 24, 25, 26, 27, 28, 29, 30
 };
 inline constexpr uint8_t STRAPPING_PINS[] = {
-  8, 9, 15,16, 17, 27
+  4, 5, 8, 9, 15
 };
 #elifdef CONFIG_IDF_TARGET_ESP32
 inline constexpr uint8_t RESTRICTED_PINS[] = {
-  1, 3, 6, 7, 8, 11, 16, 17
+  1, 3, 6, 7, 8, 9, 10, 11
 };
 inline constexpr uint8_t STRAPPING_PINS[] = {
-  0, 2
+  0, 2, 5, 12, 15, 16, 17
 };
 #elifdef CONFIG_IDF_TARGET_ESP32C3
 inline constexpr uint8_t RESTRICTED_PINS[] = {
-  12, 13, 14, 15, 16, 17, 18, 19
+  12, 13, 14, 15, 16, 17, 18, 19, 20, 21
 };
 inline constexpr uint8_t STRAPPING_PINS[] = {
-  2, 8, 9, 20, 21
+  2, 8, 9
 };
 #elifdef CONFIG_IDF_TARGET_ESP32S3
 #if defined(CONFIG_ESPTOOLPY_OCT_FLASH) || defined(CONFIG_SPIRAM_MODE_OCT)
 inline constexpr uint8_t RESTRICTED_PINS[] = {
-  9, 19, 20, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 43, 44
+  19, 20, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 43, 44
 };
 #else
 inline constexpr uint8_t RESTRICTED_PINS[] = {
-  9, 19, 20, 26, 27, 28, 29, 30, 31, 32, 38, 39, 43, 44
+  19, 20, 26, 27, 28, 29, 30, 31, 32, 43, 44
 };
 #endif
 inline constexpr uint8_t STRAPPING_PINS[] = {
-  0, 3, 45, 46, 47, 48
+  0, 3, 45, 46
 };
 #else
 inline constexpr uint8_t RESTRICTED_PINS[] = {};
@@ -193,12 +193,13 @@ public:
   }
 
   std::expected<void, GPIOAllocatorError> validate(gpio_num_t pin, gpio_mode_t mode,
-                                                   PinRole role, PinConsumer consumer) const {
+                                                   PinRole role, PinConsumer consumer,
+                                                   PinConsumer ignore_consumer = PinConsumer::None) const {
     std::lock_guard lock(mutex_);
     if ((uint8_t)pin == PIN_UNSET) {
       return {}; // "no pin" is always a valid configuration choice
     }
-    return validate_locked(pin, mode, role, consumer);
+    return validate_locked(pin, mode, role, consumer, ignore_consumer);
   }
 
   static constexpr const char* error_str(GPIOAllocatorError err) {
@@ -277,21 +278,23 @@ private:
     std::weak_ptr<PinControl> control;
   };
 
-  static bool shareable(PinRole role, PinConsumer consumer, const PinEntry& entry) {
+  static bool shareable(PinRole role, PinConsumer consumer, const PinEntry& entry,
+                        PinConsumer ignore_consumer = PinConsumer::None) {
     if (entry.holders.empty()) return true;
     if (role_is_passive(role)) {
       return std::all_of(entry.holders.begin(), entry.holders.end(),
-                         [&](const PinHolder& h) { return h.role == role; });
+                         [&](const PinHolder& h) { return h.role == role || h.consumer == ignore_consumer; });
     }
     if (role == PinRole::Led) {
       return std::all_of(entry.holders.begin(), entry.holders.end(),
-                         [&](const PinHolder& h) { return h.role == PinRole::Led; });
+                         [&](const PinHolder& h) { return h.role == PinRole::Led || h.consumer == ignore_consumer; });
     }
-    return false;
+    return entry.holders.size() == 1 && entry.holders[0].consumer == ignore_consumer;
   }
 
   std::expected<void, GPIOAllocatorError> validate_locked(gpio_num_t pin, gpio_mode_t mode,
-                                                          PinRole role, PinConsumer consumer) const {
+                                                          PinRole role, PinConsumer consumer,
+                                                          PinConsumer ignore_consumer = PinConsumer::None) const {
     if ((uint8_t)pin == (uint8_t)GPIO_NUM_NC || pin >= GPIO_NUM_MAX || !GPIO_IS_VALID_GPIO(pin)) {
       return std::unexpected<GPIOAllocatorError>(INVALID_GPIO_NUM);
     }
@@ -306,7 +309,7 @@ private:
       if (entry.control.expired()) {
         return std::expected<void, GPIOAllocatorError>{}; // racing release, pin is free
       }
-      if (!shareable(role, consumer, entry)) {
+      if (!shareable(role, consumer, entry, ignore_consumer)) {
         return std::unexpected<GPIOAllocatorError>(ALREADY_OWNED);
       }
     }

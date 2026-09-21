@@ -104,6 +104,11 @@ namespace espConfig
       lockCustomStateCmd.append(id).append("/" MQTT_CUSTOM_STATE_CTRL_TOPIC);
       btrLvlCmdTopic.append(id).append("/" MQTT_PROX_BAT_TOPIC);
       hkAltActionTopic.append(id).append("/" MQTT_HK_ALT_ACTION_TOPIC);
+      for (std::string* s : {&lwtTopic, &hkTopic, &lockStateTopic, &lockStateCmd,
+                             &lockCStateCmd, &lockTStateCmd, &lockCustomStateTopic,
+                             &lockCustomStateCmd, &btrLvlCmdTopic, &hkAltActionTopic}) {
+        s->shrink_to_fit();
+      }
     };
     /* MQTT Broker */
     std::string mqttBroker = MQTT_HOST;
@@ -130,8 +135,10 @@ namespace espConfig
     /* SSL/TLS Settings */
     bool useSSL = MQTT_USE_SSL;
     bool allowInsecure = MQTT_ALLOW_INSECURE;
-    std::map<std::string, uint8_t> customLockStates = { {"C_LOCKED", C_LOCKED}, {"C_UNLOCKING", C_UNLOCKING}, {"C_UNLOCKED", C_UNLOCKED}, {"C_LOCKING", C_LOCKING}, {"C_JAMMED", C_JAMMED}, {"C_UNKNOWN", C_UNKNOWN} };
-    std::map<std::string, uint8_t> customLockActions = { {"UNLOCK", C_UNLOCK}, {"LOCK", C_LOCK} };
+    std::array<uint8_t, 6> customLockStates = { C_LOCKED, C_UNLOCKING, C_UNLOCKED, C_LOCKING, C_JAMMED, C_UNKNOWN };
+    static constexpr const char* customLockStateNames[6] = {"C_LOCKED", "C_UNLOCKING", "C_UNLOCKED", "C_LOCKING", "C_JAMMED", "C_UNKNOWN"};
+    std::array<uint8_t, 2> customLockActions = { C_UNLOCK, C_LOCK };
+    static constexpr const char* customLockActionNames[2] = {"UNLOCK", "LOCK"};
   };
 
   /* MQTT TLS material is stored in DER (binary) form to reduce resident heap;
@@ -202,6 +209,16 @@ namespace espConfig
     std::array<uint8_t, 7> ethSpiConfig = {ETH_SPI_CONF_SPI_FREQ_MHZ, ETH_SPI_CONF_PIN_CS, ETH_SPI_CONF_PIN_IRQ, ETH_SPI_CONF_PIN_RST, ETH_SPI_CONF_PIN_SCK, ETH_SPI_CONF_PIN_MISO, ETH_SPI_CONF_PIN_MOSI};
     bool overrideStrappingRestriction = false;
     std::string accessPointPassword = AP_PASSWORD;
+    bool keypadEnabled = KEYPAD_ENABLED;
+    uint8_t keypadLayout = KEYPAD_LAYOUT; // 0 = 5x3 with doorbell row, 1 = 4x4
+    std::array<uint8_t, 5> keypadRowPins = KEYPAD_OUTPUT_GPIOS;
+    std::array<uint8_t, 4> keypadColumnPins = KEYPAD_INPUT_GPIOS;
+    uint8_t keypadActiveLevel = KEYPAD_ACTIVE_LEVEL;
+    uint8_t keypadDebounceTicks = KEYPAD_DEBOUNCE_TICKS;
+    uint8_t keypadDoorbellKey = KEYPAD_DOORBELL_KEY; // 0 = layout default, 'A'-'D' on 4x4, 255 = disabled
+    uint8_t keypadMinCodeLength = KEYPAD_MIN_CODE_LENGTH;
+    uint8_t keypadMaxCodeLength = KEYPAD_MAX_CODE_LENGTH;
+    uint8_t keypadMaxCodes = KEYPAD_MAX_CODES;
   };
   struct actions_config_t {
     enum colorMap

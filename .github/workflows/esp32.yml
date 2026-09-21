@@ -195,23 +195,47 @@ jobs:
             -v ${{ github.workspace }}/managed_components:/project/managed_components
             -v $HOME/.ccache:/root/.ccache
             -e CCACHE_DIR=/root/.ccache
-          command: CI=true idf.py --ccache build && idf.py merge-bin
+          command: CI=true idf.py --ccache merge-bin
+      - name: ESP-IDF Build (${{ matrix.target }}) - Flash Encryption
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.5.5
+          target: ${{ matrix.target }}
+          path: '.'
+          extra_docker_args: >-
+            -v ${{ github.workspace }}/build-flash-encryption:/project/build-flash-encryption
+            -v ${{ github.workspace }}/managed_components:/project/managed_components
+            -v $HOME/.ccache:/root/.ccache
+            -e CCACHE_DIR=/root/.ccache
+          command: CI=true idf.py --ccache -DSDKCONFIG="sdkconfig.encrypted" -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.encrypted" -B build-flash-encryption merge-bin
       - name: Fix ownership post-build
-        run: sudo chown -R $USER:$USER build/ managed_components/ $HOME/.ccache
+        run: sudo chown -R $USER:$USER build/ build-flash-encryption/ managed_components/ $HOME/.ccache
       - name: Organize Binaries
         run: |
-          mv build/HomeKey-ESP32.bin build/${{ matrix.target }}.firmware.bin
+          mv build/HomeKey-ESP32.bin build/${{ matrix.target }}.firmware.ota.bin
           mv build/merged-binary.bin build/${{ matrix.target }}.firmware.factory.bin
+          mv build-flash-encryption/HomeKey-ESP32.bin build-flash-encryption/${{ matrix.target }}.enc.firmware.ota.bin
+          mv build-flash-encryption/merged-binary.bin build-flash-encryption/${{ matrix.target }}.enc.firmware.factory.bin
       - name: Archive firmware
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.target }}-firmware
-          path: build/${{ matrix.target }}.firmware.bin
+          path: build/${{ matrix.target }}.firmware.ota.bin
       - name: Archive merged binary
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.target }}-firmware-factory
           path: build/${{ matrix.target }}.firmware.factory.bin
+      - name: Archive encrypted firmware
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.target }}-enc-firmware
+          path: build-flash-encryption/${{ matrix.target }}.enc.firmware.ota.bin
+      - name: Archive encrypted merged binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.target }}-enc-firmware-factory
+          path: build-flash-encryption/${{ matrix.target }}.enc.firmware.factory.bin
 
   pre-release:
     runs-on: ubuntu-latest
@@ -294,14 +318,22 @@ jobs:
 
             const artifactsDir = 'artifacts';
             const files = [
-              'esp32.firmware.bin',
+              'esp32.firmware.ota.bin',
+              'esp32.enc.firmware.ota.bin',
               'esp32.firmware.factory.bin',
-              'esp32c3.firmware.bin',
+              'esp32.enc.firmware.factory.bin',
+              'esp32c3.firmware.ota.bin',
+              'esp32c3.enc.firmware.ota.bin',
               'esp32c3.firmware.factory.bin',
-              'esp32c6.firmware.bin',
+              'esp32c3.enc.firmware.factory.bin',
+              'esp32c6.firmware.ota.bin',
+              'esp32c6.enc.firmware.ota.bin',
               'esp32c6.firmware.factory.bin',
-              'esp32s3.firmware.bin',
+              'esp32c6.enc.firmware.factory.bin',
+              'esp32s3.firmware.ota.bin',
+              'esp32s3.enc.firmware.ota.bin',
               'esp32s3.firmware.factory.bin',
+              'esp32s3.enc.firmware.factory.bin',
               'littlefs.bin'
             ];
 

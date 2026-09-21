@@ -1,6 +1,5 @@
 #pragma once
 
-#include "cJSON.h"
 #include "loggable.hpp"
 
 class WebServerManager;
@@ -41,25 +40,11 @@ public:
 private:
     WebServerManager& m_webServerManager;
     /**
-     * Convert a LogLevel value to its null-terminated string representation.
-     * @param level Log level to convert.
-     * @returns C-string name corresponding to `level`.
+     * Broadcast log entries as one {"type":"logs"} frame.
+     * @param messages Array of log entries.
+     * @param count Number of entries.
      */
-    static const char* level_to_string(LogLevel level);
-
-    /**
-     * Serialize one message into a JSON object and append it to an array.
-     * @param message Log message to serialize.
-     * @param entries JSON array the new object is appended to.
-     * @returns true if the object was created and appended.
-     */
-    static bool append_entry(const LogMessage& message, cJSON* entries);
-
-    /**
-     * Broadcast a JSON array of log entries as one {"type":"logs"} frame.
-     * @param entries JSON array of log entry objects.
-     */
-    void broadcast_entries(cJSON* entries);
+    void broadcast_entries(const LogMessage* messages, size_t count);
 };
 
 } // namespace loggable

@@ -54,10 +54,10 @@
 #define DEVICE_NAME "HK-{MAC}" //Device name
 #define HOMEKEY_ALWAYS_UNLOCK 0 // Flag indicating if a successful Homekey authentication should always set and publish the unlock state
 #define HOMEKEY_ALWAYS_LOCK 0  // Flag indicating if a successful Homekey authentication should always set and publish the lock state
-#ifdef CONFIG_IDF_TARGET_ESP32
-#define HK_AUTH_PRECOMPUTE_ENABLED true // Enable HomeKey auth precompute cache (faster taps, higher CPU/RAM)
+#ifdef CONFIG_IDF_TARGET_ESP32C6
+#define HK_AUTH_PRECOMPUTE_ENABLED false // Enable HomeKey auth precompute cache
 #else 
-#define HK_AUTH_PRECOMPUTE_ENABLED false // Enable HomeKey auth precompute cache (faster taps, higher CPU/RAM)
+#define HK_AUTH_PRECOMPUTE_ENABLED true // Enable HomeKey auth precompute cache
 #endif
 #define NFC_FAST_POLLING_ENABLED false // Poll the PN532 more aggressively for faster tag detection
 #define NFC_READER_TYPE 0 // 0 = PN532, 1 = PN7160
@@ -134,3 +134,15 @@
 #define WEB_AUTH_USERNAME "admin"
 #define WEB_AUTH_PASSWORD "password"
 #define NFC_ACTIVE_PRESET 255 // NFC preset index (255 for custom pins)
+
+// Keypad
+#define KEYPAD_ENABLED false // Enable the matrix keypad and the HomeKit Access Code service
+#define KEYPAD_LAYOUT 0 // Keymap layout: 0 = 5x3 (1-9, *, 0, # + doorbell row), 1 = 4x4 (1-9, *, 0, #, A-D)
+#define KEYPAD_OUTPUT_GPIOS {39, 40, 41, 42, 45} // Keypad matrix output (row) pins
+#define KEYPAD_INPUT_GPIOS {46, 47, 48, 255} // Keypad matrix input (column) pins (255 = unused)
+#define KEYPAD_ACTIVE_LEVEL 1 // Active level of the keypad input pins
+#define KEYPAD_DEBOUNCE_TICKS 8 // Keypad debounce time in scan ticks
+#define KEYPAD_DOORBELL_KEY 0 // Doorbell key: 0 = layout default ('&' on 5x3, 'A' on 4x4), 'A'-'D' on 4x4, 255 = disabled
+#define KEYPAD_MIN_CODE_LENGTH 4 // Minimum access code length (1-16 digits)
+#define KEYPAD_MAX_CODE_LENGTH 16 // Maximum access code length (min-16 digits)
+#define KEYPAD_MAX_CODES 8 // Maximum number of stored access codes (1-255)

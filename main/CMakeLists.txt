@@ -1,11 +1,16 @@
 idf_component_register(SRCS "main.cpp" "app_events.cpp" "app_event_loop.cpp" "ConfigManager.cpp" "ReaderDataManager.cpp"
                     "HardwareManager.cpp" "HomeKitService.cpp" "HapMigration.cpp" "NetworkManager.cpp" "LockManager.cpp"
                     "MqttManager.cpp" "NfcManager.cpp" "Pn532Reader.cpp" "Pn7160Reader.cpp" "St25r3916Reader.cpp" "WebServerManager.cpp" "WebSocketLogSinker.cpp"
-                    "ConsoleLogSinker.cpp" "GPIOAllocator.cpp" "WebFs.cpp"
+                    "ConsoleLogSinker.cpp" "GPIOAllocator.cpp" "WebFs.cpp" "KeypadManager.cpp" "AccessCodeManager.cpp"
+                    "NvsSecEarlyInit.cpp"
                     INCLUDE_DIRS "include"
                     PRIV_REQUIRES yahap yahap_pal pn532_hal pn7160 DigitalDoorKey esp_https_server mqtt libsodium
                     msgpack-c cjson loggable loggable_espidf esp_wifi dns_server esp_timer esp_netif esp_eth esp_event nvs_flash
-                    esp_driver_rmt esp_partition vfs app_update esp_app_format mdns)
+                    esp_driver_rmt esp_partition vfs app_update esp_app_format mdns esp_driver_gpio nvs_sec_provider)
+
+if(CONFIG_NVS_SEC_KEY_PROTECT_USING_FLASH_ENC)
+    target_link_libraries(${COMPONENT_LIB} PRIVATE "-u nvs_sec_early_init")
+endif()
 
 include(FetchContent)
 
@@ -19,10 +24,10 @@ target_compile_definitions(fmt PUBLIC "-DFMT_USE_LOCALE=0")
 target_compile_definitions(fmt PRIVATE "-DFMT_OS=0")
 target_link_libraries(${COMPONENT_LIB} PRIVATE fmt::fmt)
 if(NOT DEFINED ENV{CI})
-  add_custom_target(webui 
-    WORKING_DIRECTORY ${COMPONENT_DIR}/../data 
+  add_custom_target(webui
+    WORKING_DIRECTORY ${COMPONENT_DIR}/../data
     COMMAND bun install
-    COMMAND bun run build 
+    COMMAND bun run build
     COMMAND sh -c "find dist \\( -name '*.css' -o -name '*.js' \\) -delete"
     VERBATIM
   )
@@ -31,3 +36,4 @@ else()
   littlefs_create_partition_image(spiffs ../data/dist FLASH_IN_PROJECT)
 endif()
 target_compile_definitions(${COMPONENT_LIB} PRIVATE "-DLOG_LOCAL_LEVEL=ESP_LOG_VERBOSE")
+target_compile_definitions(${COMPONENT_LIB} PRIVATE "-DMSGPACK_ZONE_CHUNK_SIZE=1024")

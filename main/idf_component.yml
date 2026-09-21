@@ -5,6 +5,7 @@ dependencies:
   espp/serialization: ^1.0.22
   espressif/mqtt: "*"
   espressif/cjson: "*"
+  espressif/keyboard_button: ^1.0.0
   # SPI Ethernet MAC+PHY drivers (IDF 6 moved them out of tree)
   espressif/w5500: "^2.0.0"
   espressif/dm9051: "^1.1.1"

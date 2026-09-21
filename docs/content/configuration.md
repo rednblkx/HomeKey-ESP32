@@ -186,7 +186,7 @@ Configure WebUI authentication, HTTPS SSL/TLS encryption, and certificates.
 
 ## 6. OTA Update
 
-Upload pre-compiled application binaries (`*.firmware.bin`) or web filesystem images (`littlefs.bin`) for seamless Over-The-Air upgrades.
+Upload pre-compiled application binaries (`*.firmware.ota.bin`) or web filesystem images (`littlefs.bin`) for seamless Over-The-Air upgrades.
 
 ---
 

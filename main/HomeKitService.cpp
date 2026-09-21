@@ -1,7 +1,9 @@
 #include "HomeKitService.hpp"
+#include "AccessCodeManager.hpp"
 #include "ConfigManager.hpp"
 #include "GPIOAllocator.hpp"
 #include "HapMigration.hpp"
+#include "KeypadManager.hpp"
 #include "LockManager.hpp"
 #include "ReaderDataManager.hpp"
 #include "SharedLed.hpp"
@@ -9,6 +11,7 @@
 #include "eventStructs.hpp"
 #include "utils.hpp"
 #include "HK_HomeKit.h"
+#include "hap/core/HAPStatus.hpp"
 
 #include "Esp32Crypto.hpp"
 #include "Esp32Network.hpp"
@@ -146,12 +149,71 @@ HomeKitService::HomeKitService(LockManager& lockManager,
           break;
         }
       });
+
+  m_doorbell_event = AppEventLoop::subscribe(
+      KEYPAD_EVENT, KEYPAD_DOORBELL, [this](const uint8_t* data, size_t size) {
+        (void)data;
+        (void)size;
+        ESP_LOGI(TAG, "Doorbell pressed, notifying HomeKit controllers.");
+        if (m_doorbellSwitchEvent) {
+          postToHapTask([this] {
+            m_doorbellSwitchEvent->set_value(1, hap::core::EventSource{});
+          });
+        }
+      });
 }
 
 HomeKitService::~HomeKitService() {
   if (m_hapTask) vTaskDelete(m_hapTask);
   if (m_workQueue) vQueueDelete(m_workQueue);
   s_instance = nullptr;
+}
+
+void HomeKitService::initKeypad() {
+  const auto& miscConfig = m_configManager.getConfig<espConfig::misc_config_t>();
+  if (!miscConfig.keypadEnabled) {
+    return;
+  }
+  m_accessCodeManager = std::make_unique<AccessCodeManager>(miscConfig.keypadMinCodeLength,
+                                                            miscConfig.keypadMaxCodeLength,
+                                                            miscConfig.keypadMaxCodes);
+  m_accessCodeManager->init();
+  m_keypad = std::make_unique<KeypadManager>();
+  m_keypad_event = AppEventLoop::subscribe(
+      KEYPAD_EVENT, KEYPAD_CODE_ENTERED, [&](const uint8_t* data, size_t size) {
+        if (size == 0 || data == nullptr) return;
+        std::span<const uint8_t> payload(data, size);
+        std::error_code ec;
+        EventKeypadCode s = alpaca::deserialize<EventKeypadCode>(payload, ec);
+        if (ec) {
+          ESP_LOGE(TAG, "Failed to deserialize keypad event: %s", ec.message().c_str());
+          return;
+        }
+        if (m_accessCodeManager->validateCode(s.code)) {
+          ESP_LOGI(TAG, "Access code accepted, unlocking.");
+          EventLockState ls{
+              .currentState = static_cast<uint8_t>(m_lockManager.getTargetState()),
+              .targetState = static_cast<uint8_t>(LockManager::lockStates::UNLOCKED),
+              .source = LockManager::HOMEKIT};
+          std::vector<uint8_t> d;
+          alpaca::serialize(ls, d);
+          AppEventLoop::publish(LOCK_EVENT, LOCK_TARGET_STATE_CHANGED, d.data(), d.size());
+        }
+      });
+  m_keypad->registerCodeEnteredCallback([](const std::string& code) {
+    EventKeypadCode s{.code = code};
+    std::vector<uint8_t> d;
+    alpaca::serialize(s, d);
+    AppEventLoop::publish(KEYPAD_EVENT, KEYPAD_CODE_ENTERED, d.data(), d.size());
+  });
+  m_keypad->registerDoorbellCallback([]() {
+    AppEventLoop::publish(KEYPAD_EVENT, KEYPAD_DOORBELL, nullptr, 0);
+  });
+  if (!m_keypad->begin(miscConfig)) {
+    ESP_LOGE(TAG, "Failed to initialize keypad hardware.");
+    m_keypad.reset();
+    m_accessCodeManager.reset();
+  }
 }
 
 void HomeKitService::buildAccessoryTree(hap::core::Accessory& accessory) {
@@ -295,10 +357,71 @@ void HomeKitService::buildAccessoryTree(hap::core::Accessory& accessory) {
                                       static_cast<uint8_t>(0)).get();
     accessory.add_service(builder->build());
   }
+
+  // --- Access Code + Doorbell (optional, keypad feature) ---
+  if (miscConfig.keypadEnabled && m_accessCodeManager) {
+    // AccessCode service (type 0x260) with custom characteristics 0x261/0x262.
+    // These aren't in YAHAP's catalog, so build raw Service/Characteristic
+    // objects; IIDs are assigned by the database on add_accessory.
+    auto accessCodeService =
+        std::make_unique<hap::core::Service>(0x260, "Access Code", true);
+    {
+      // Supported configuration TLV8: charset (arabic numerals), length and
+      // count limits, mirroring the old HomeSpan implementation.
+      std::vector<uint8_t> conf = hap::core::TLV8::encode(
+          {{0x01, static_cast<uint8_t>(1)},
+           {0x02, m_accessCodeManager->minCodeLength()},
+           {0x03, m_accessCodeManager->maxCodeLength()},
+           {0x04, m_accessCodeManager->maxCodes()}});
+      auto supported = std::make_unique<hap::core::Characteristic>(
+          0x261, hap::core::Format::TLV8,
+          hap::core::Permissions{hap::core::Permission::PairedRead,
+                                 hap::core::Permission::Notify});
+      supported->set_value(conf);
+      accessCodeService->add_characteristic(std::move(supported));
+
+      auto controlPoint = std::make_unique<hap::core::Characteristic>(
+          0x262, hap::core::Format::TLV8,
+          hap::core::Permissions{hap::core::Permission::PairedRead,
+                                 hap::core::Permission::PairedWrite,
+                                 hap::core::Permission::Notify,
+                                 hap::core::Permission::WriteResponse});
+      auto* cp = controlPoint.get();
+      cp->set_write_response_callback(
+          [this](const hap::core::Value& v) -> hap::core::HAPResponse<hap::core::Value> {
+            if (!std::holds_alternative<std::vector<uint8_t>>(v)) {
+              return hap::core::HAPStatus::InvalidValueInRequest;
+            }
+            const auto& request = std::get<std::vector<uint8_t>>(v);
+            std::vector<uint8_t> result = m_accessCodeManager->handle_write(request);
+            if (result.empty()) return hap::core::HAPStatus::InvalidValueInRequest;
+            return hap::core::Value(result);
+          });
+      m_accessCodeControlPoint = cp;
+      accessCodeService->add_characteristic(std::move(controlPoint));
+    }
+    accessory.add_service(std::move(accessCodeService));
+
+    // Doorbell service: ProgrammableSwitchEvent is fired by the firmware when
+    // the keypad doorbell key is pressed, not writable by controllers.
+    auto doorbellService =
+        std::make_unique<hap::core::Service>(svc::kType_Doorbell, "Doorbell", true);
+    auto switchEvent = std::make_unique<hap::core::Characteristic>(
+        chr::kType_ProgrammableSwitchEvent, hap::core::Format::UInt8,
+        hap::core::Permissions{hap::core::Permission::PairedRead,
+                               hap::core::Permission::Notify});
+    switchEvent->set_value(static_cast<uint8_t>(0));
+    m_doorbellSwitchEvent = switchEvent.release();
+    doorbellService->add_characteristic(
+        std::unique_ptr<hap::core::Characteristic>(m_doorbellSwitchEvent));
+    accessory.add_service(std::move(doorbellService));
+  }
 }
 
 void HomeKitService::begin() {
   const auto& miscConfig = m_configManager.getConfig<espConfig::misc_config_t>();
+
+  initKeypad();
 
   // Optional status LED through the shared-pin arbiter.
   if (miscConfig.hsStatusPin != 255) {
@@ -418,6 +541,9 @@ void HomeKitService::reconcileIssuers() {
   if (!isPaired()) {
     ESP_LOGW(TAG, "Last controller unpaired. Wiping HomeKey data.");
     m_readerDataManager.deleteAllReaderData();
+    if (m_accessCodeManager) {
+      m_accessCodeManager->purge_codes();
+    }
     return;
   }
 

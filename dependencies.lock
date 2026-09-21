@@ -29,6 +29,16 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 1.7.19~2
+  espressif/cmake_utilities:
+    component_hash: 351350613ceafba240b761b4ea991e0f231ac7a9f59a9ee901f751bddc0bb18f
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.1'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 0.5.3
   espressif/dm9051:
     component_hash: 52d13af7181a1d7cc2ca2958e640e395a1c825a8d6467540a526b8b7f115bdb4
     dependencies:
@@ -39,6 +49,20 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 1.1.1
+  espressif/keyboard_button:
+    component_hash: 279c39638441e56fc4822fa09e77514632dc0f61044aa6acee6cf8e2047ad8dd
+    dependencies:
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.0.2
   espressif/ksz8851snl:
     component_hash: 248c4eafb0359941810a304f197ec9c3a5a898a89d18a12dae29343ad869f6bd
     dependencies:
@@ -122,6 +146,7 @@ direct_dependencies:
 - espressif/cbor
 - espressif/cjson
 - espressif/dm9051
+- espressif/keyboard_button
 - espressif/ksz8851snl
 - espressif/libsodium
 - espressif/mdns
@@ -129,6 +154,6 @@ direct_dependencies:
 - espressif/w5500
 - idf
 - joltwallet/littlefs
-manifest_hash: 5f53302bd258c00ff04a373edcf033217980927214008619913d8d2ab21c7547
+manifest_hash: cfb5c9d1388da89b4828e7dfc0dff00aa3d8d1c38c86798de13675e1eb4c7b0c
 target: esp32c6
 version: 3.0.0

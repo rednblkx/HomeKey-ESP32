@@ -19,6 +19,8 @@ class ConfigManager;
 class NvsCredentialStore;
 class GPIOAllocator;
 class GPIOAllocatorGPIOLease;
+class AccessCodeManager;
+class KeypadManager;
 namespace espConfig { struct misc_config_t; }
 
 /**
@@ -61,6 +63,7 @@ public:
 
 private:
     void buildAccessoryTree(hap::core::Accessory& accessory);
+    void initKeypad();
     void hapTaskLoop();
     void postToHapTask(std::function<void()> work);
     void onPairingsChanged(const hap::PairingEvent& event);
@@ -86,9 +89,16 @@ private:
     hap::core::Characteristic* m_statusLowBattery = nullptr;
     hap::core::Characteristic* m_batteryLevel = nullptr;
     hap::core::Characteristic* m_nfcControlPoint = nullptr;
+    hap::core::Characteristic* m_accessCodeControlPoint = nullptr;
+    hap::core::Characteristic* m_doorbellSwitchEvent = nullptr;
+
+    std::unique_ptr<AccessCodeManager> m_accessCodeManager;
+    std::unique_ptr<KeypadManager> m_keypad;
 
     AppEventLoop::SubscriptionHandle m_lock_state_changed;
     AppEventLoop::SubscriptionHandle m_hk_event;
+    AppEventLoop::SubscriptionHandle m_keypad_event;
+    AppEventLoop::SubscriptionHandle m_doorbell_event;
 
     static const char* TAG;
     static HomeKitService* s_instance;
