@@ -19,13 +19,14 @@ The project aims to be the easy DIY solution for using Apple's HomeKey feature w
 **No proprietary hardware required** – just an ESP32 and one of the supported NFC modules
 
 > [!WARNING]
-> The flash memory is not encrypted as this kinda started as a pet project of mine but a lot of people started using
-> so unfortunately it's stuck like this because migration would be painful and i don't want to be telling people to
-> reconfigure their device if they want to update.
+> `enc.firmware.ota.bin` and `enc.firmware.factory.bin` release artifacts have Flash Encryption enabled and **disables** UART and USB/JTAG download
+> Flashing this variant will render tools like `esptool` useless and any future updates will only be done through the project's OTA implementation
+> 
+> You have been warned. Also DO NOT attempt to update from a unencrypted version due to bootloader and partition table being different.
 >
-> If you care about this, i'm working on a new project implementing the new Aliro standard and flash will be
-> encrypted first thing, however, honestly don't know when that will be public, you can join the Discord server
-> if you want to know as soon as it is available.
+> Additionally, the flash encryption is provided as is and DOES NOT provide any guarantee of a bulletproof solution against attacks, but attempts
+> to diminish the attack surface.
+
 
 ## Getting Started
 
