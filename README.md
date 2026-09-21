@@ -20,6 +20,7 @@ The project aims to be the easy DIY solution for using Apple's HomeKey feature w
 
 > [!WARNING]
 > `enc.firmware.ota.bin` and `enc.firmware.factory.bin` release artifacts have Flash Encryption enabled and **disables** UART and USB/JTAG download
+>
 > Flashing this variant will render tools like `esptool` useless and any future updates will only be done through the project's OTA implementation
 > 
 > You have been warned. Also DO NOT attempt to update from a unencrypted version due to bootloader and partition table being different.

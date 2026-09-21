@@ -17,6 +17,17 @@ This document outlines different methods for updating the firmware on your HomeK
 *   `*.firmware.ota.bin`: The main application firmware file.
 *   `littlefs.bin`: Contains the web interface files (LittleFS filesystem).
 
+
+> [!WARNING]
+> `enc.firmware.ota.bin` and `enc.firmware.factory.bin` release artifacts have Flash Encryption enabled and **disables** UART and USB/JTAG download
+>
+> Flashing this variant will render tools like `esptool` useless and any future updates will only be done through the project's OTA implementation
+> 
+> **You have been warned.** Also DO NOT attempt to update from a unencrypted version, bootloader and partition table are different and will fail.
+>
+> Additionally, the flash encryption is provided as is and DOES NOT provide any guarantee of a bulletproof solution against attacks, but attempts
+> to diminish the attack surface.
+
 ## 1. Over-The-Air (OTA) Updates
 
 The primary method for Over-The-Air (OTA) updates is through the WebUI. This allows you to update your device wirelessly.
