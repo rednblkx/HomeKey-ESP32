@@ -429,7 +429,7 @@
 								<div class="flex items-center justify-between py-2 px-3 bg-base-100 rounded-lg">
 									<div>
 										<p class="text-sm font-medium">Auth Precompute Cache</p>
-										<p class="text-xs text-base-content/60">Enable faster HomeKey authentication (higher CPU/RAM usage)</p>
+										<p class="text-xs text-base-content/60">Faster HomeKey authentication on chips w/o acceleration</p>
 									</div>
 									<input
 										type="checkbox"
