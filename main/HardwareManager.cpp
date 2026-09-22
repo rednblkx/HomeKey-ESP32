@@ -6,6 +6,8 @@
 #include "esp_timer.h"
 #include "eventStructs.hpp"
 #include "hal/gpio_types.h"
+#include "soc/gpio_struct.h"
+#include "hal/gpio_ll.h"
 #include "soc/gpio_num.h"
 #include "SharedLed.hpp"
 
@@ -29,10 +31,8 @@ const std::array<const char*, 6> pixelTypeMap = { "RGB", "RBG", "BRG", "BGR", "G
  */
 HardwareManager::HardwareManager(const espConfig::actions_config_t& miscConfig)
     : m_miscConfig(miscConfig),
-      m_feedbackTaskHandle(nullptr),
-      m_feedbackQueue(nullptr),
-      m_lockControlTaskHandle(nullptr),
-      m_lockControlQueue(nullptr)
+      m_hwEventTaskHandle(nullptr),
+      m_hwEventQueue(nullptr)
 {
   pinAllocations.emplace(PinFunctions::ACTION,
       GPIOAllocator::instance().acquire(gpio_num_t(miscConfig.gpioActionPin), GPIO_MODE_OUTPUT, GPIOAllocator::PinRole::GpioOut, GPIOAllocator::PinConsumer::Hardware, "ACTION_PIN"));
@@ -141,12 +141,20 @@ HardwareManager::HardwareManager(const espConfig::actions_config_t& miscConfig)
       }
 
       if (meta->func == PinFunctions::ALT_ACTION_INIT) {
+        new_lease.value().set_pulldown(false);
         new_lease.value().set_pullup(true);
+        if (m_initiatorQueue == nullptr) {
+          m_initiatorQueue = xQueueCreate(1, sizeof(uint8_t));
+        }
+        if (m_initiatorTaskHandle == nullptr) {
+          xTaskCreateUniversal(initiator_task_entry, "initiator_task", 3580, this, 3, &m_initiatorTaskHandle, 1);
+        }
         if(!isr_service_installed){
           esp_err_t err = gpio_install_isr_service(0);
           if(err == ESP_OK || err == ESP_ERR_INVALID_STATE) isr_service_installed = true;
         }
         gpio_set_intr_type(gpio_num_t(s.newValue), GPIO_INTR_NEGEDGE);
+        gpio_ll_clear_intr_status(&GPIO, 1U << s.newValue);
         gpio_isr_handler_add(gpio_num_t(s.newValue), initiator_isr_handler, (void*)this);
       }
 
@@ -190,9 +198,9 @@ void HardwareManager::begin() {
       case TAG_TAP: {
         EventTagTap s = alpaca::deserialize<EventTagTap>(nfc_event.data, ec);
         if(!ec){
-          if (m_feedbackQueue != nullptr) {
-              FeedbackType feedback = FeedbackType::TAG_EVENT;
-              xQueueSend(m_feedbackQueue, &feedback, 0);
+          if (m_hwEventQueue != nullptr) {
+              HwEvent event{HwEventType::FEEDBACK_TAG_EVENT, 0};
+              xQueueSend(m_hwEventQueue, &event, 0);
           }
         } else {
           ESP_LOGE(TAG, "Failed to deserialize Tag event: %s", ec.message().c_str());
@@ -216,6 +224,9 @@ void HardwareManager::begin() {
     if(live(pinAllocations.at(TAG_EVENT))){
       pinAllocations.at(TAG_EVENT).value().set_level(!m_miscConfig.tagEventHL);
     }
+    if(live(pinAllocations.at(ALT_ACTION_LED))){
+      pinAllocations.at(ALT_ACTION_LED).value().set_level(0);
+    }
     if(live(pinAllocations.at(ALT_ACTION_INIT))){
       gpio_num_t init_pin = pinAllocations.at(ALT_ACTION_INIT).value().get_pin();
       pinAllocations.at(ALT_ACTION_INIT).value().set_pullup(true);
@@ -225,6 +236,7 @@ void HardwareManager::begin() {
         isr_service_installed = true;
       }
       gpio_set_intr_type(init_pin, GPIO_INTR_NEGEDGE);
+      gpio_ll_clear_intr_status(&GPIO, 1U << init_pin);
       gpio_isr_handler_add(init_pin, initiator_isr_handler, (void*) this);
     }
 
@@ -333,11 +345,8 @@ void HardwareManager::begin() {
     create_timer(altAction_timer_args, m_altActionTimer, "altActionTimer");
     create_timer(altActionInit_timer_args, m_altActionInitTimer, "altActionInitTimer");
 
-    m_feedbackQueue = xQueueCreate(5, sizeof(FeedbackType));
-    xTaskCreateUniversal(feedbackTaskEntry, "feedback_task", 3580, this, 3, &m_feedbackTaskHandle, 1);
-
-    m_lockControlQueue = xQueueCreate(5, sizeof(int));
-    xTaskCreateUniversal(lockControlTaskEntry, "lock_control_task", 3580, this, 3, &m_lockControlTaskHandle, 1);
+    m_hwEventQueue = xQueueCreate(10, sizeof(HwEvent));
+    xTaskCreateUniversal(hwEventTaskEntry, "hw_event_task", 3580, this, 3, &m_hwEventTaskHandle, 1);
     ESP_LOGI(TAG, "Hardware initialization complete.");
 }
 
@@ -348,8 +357,9 @@ void HardwareManager::begin() {
  */
 
 void HardwareManager::setLockOutput(int state) {
-    if (m_lockControlQueue != nullptr) {
-        xQueueSend(m_lockControlQueue, &state, pdMS_TO_TICKS(100));
+    if (m_hwEventQueue != nullptr) {
+        HwEvent event{HwEventType::LOCK_STATE, state};
+        xQueueSend(m_hwEventQueue, &event, pdMS_TO_TICKS(100));
     }
 }
 
@@ -359,9 +369,9 @@ void HardwareManager::setLockOutput(int state) {
  * If the internal feedback queue is not initialized, the call has no effect.
  */
 void HardwareManager::showSuccessFeedback() {
-    if (m_feedbackQueue != nullptr) {
-        FeedbackType feedback = FeedbackType::SUCCESS;
-        xQueueSend(m_feedbackQueue, &feedback, 0);
+    if (m_hwEventQueue != nullptr) {
+        HwEvent event{HwEventType::FEEDBACK_SUCCESS, 0};
+        xQueueSend(m_hwEventQueue, &event, 0);
     }
 }
 
@@ -372,9 +382,9 @@ void HardwareManager::showSuccessFeedback() {
  * feedback task will run the configured failure sequence (GPIOs/NeoPixel).
  */
 void HardwareManager::showFailureFeedback() {
-    if (m_feedbackQueue != nullptr) {
-        FeedbackType feedback = FeedbackType::FAILURE;
-        xQueueSend(m_feedbackQueue, &feedback, 0);
+    if (m_hwEventQueue != nullptr) {
+        HwEvent event{HwEventType::FEEDBACK_FAILURE, 0};
+        xQueueSend(m_hwEventQueue, &event, 0);
     }
 }
 
@@ -446,8 +456,10 @@ void HardwareManager::initiator_task_entry(void* arg) {
  * @param arg Pointer to the HardwareManager instance whose initiator queue will be signaled.
  */
 void IRAM_ATTR HardwareManager::initiator_isr_handler(void* arg) {
+    QueueHandle_t queue = static_cast<HardwareManager*>(arg)->m_initiatorQueue;
+    if (queue == nullptr) return;
     uint8_t dummy = 0;
-    xQueueSendFromISR(static_cast<HardwareManager*>(arg)->m_initiatorQueue, &dummy, NULL);
+    xQueueSendFromISR(queue, &dummy, NULL);
 }
 
 /**
@@ -479,52 +491,38 @@ void HardwareManager::initiator_task() {
 }
 
 /**
- * @brief Task entry wrapper that forwards to the HardwareManager instance's lockControlTask.
+ * @brief Applies a lock state to the configured action GPIO and publishes the resulting lock state.
  *
- * @param instance Pointer to a HardwareManager instance (must not be null).
+ * If a GPIO action pin is configured the function sets that pin to the configured lock or unlock level and publishes an EventLockState whose `currentState` equals the received state, `targetState` is `UNKNOWN`, and `source` is `INTERNAL` to the lock update topic. If no action pin is configured (pin value 255), the command is ignored.
  */
-void HardwareManager::lockControlTaskEntry(void* instance) {
-    static_cast<HardwareManager*>(instance)->lockControlTask();
-}
-
-/**
- * @brief Processes lock commands from the internal lock-control queue, drives the configured GPIO, and publishes the resulting lock state.
- *
- * Waits for a lock state value from the internal queue; if a GPIO action pin is configured the function sets that pin to the configured lock or unlock level and publishes an EventLockState whose `currentState` equals the received state, `targetState` is `UNKNOWN`, and `source` is `INTERNAL` to the lock update topic. If no action pin is configured (pin value 255), the command is ignored.
- */
-void HardwareManager::lockControlTask() {
-    int receivedState;
-    while (true) {
-        if (xQueueReceive(m_lockControlQueue, &receivedState, portMAX_DELAY)) {
-          if (m_miscConfig.gpioActionPin == 255) {
-              ESP_LOGI(TAG, "Received lock command but no action pin is configured.");
-              continue;
-          }
-          
-          ESP_LOGI(TAG, "Setting lock output for state: %d", receivedState);
-          auto &action = pinAllocations.at(ACTION);
-          if(live(action)){
-            gpio_hold_dis(action->get_pin());
-          } else {
-            ESP_LOGW(TAG, "GPIOLease not held for action pin; skipping lock output");
-            continue;
-          }
-          if (receivedState == LockManager::LOCKED) {
-              action->set_level(m_miscConfig.gpioActionLockState);
-          } else if (receivedState == LockManager::UNLOCKED) {
-              action->set_level(m_miscConfig.gpioActionUnlockState);
-          }
-          gpio_hold_en(action->get_pin());
-          EventLockState s{
-            .currentState = static_cast<uint8_t>(receivedState),
-            .targetState = LockManager::UNKNOWN,
-            .source = LockManager::INTERNAL
-          };
-          std::vector<uint8_t> d;
-          alpaca::serialize(s, d);
-          AppEventLoop::publish(LOCK_EVENT, LOCK_UPDATE_STATE, d.data(), d.size());
-        }
+void HardwareManager::applyLockState(int receivedState) {
+    if (m_miscConfig.gpioActionPin == 255) {
+        ESP_LOGI(TAG, "Received lock command but no action pin is configured.");
+        return;
     }
+
+    ESP_LOGI(TAG, "Setting lock output for state: %d", receivedState);
+    auto &action = pinAllocations.at(ACTION);
+    if(live(action)){
+      gpio_hold_dis(action->get_pin());
+    } else {
+      ESP_LOGW(TAG, "GPIOLease not held for action pin; skipping lock output");
+      return;
+    }
+    if (receivedState == LockManager::LOCKED) {
+        action->set_level(m_miscConfig.gpioActionLockState);
+    } else if (receivedState == LockManager::UNLOCKED) {
+        action->set_level(m_miscConfig.gpioActionUnlockState);
+    }
+    gpio_hold_en(action->get_pin());
+    EventLockState s{
+      .currentState = static_cast<uint8_t>(receivedState),
+      .targetState = LockManager::UNKNOWN,
+      .source = LockManager::INTERNAL
+    };
+    std::vector<uint8_t> d;
+    alpaca::serialize(s, d);
+    AppEventLoop::publish(LOCK_EVENT, LOCK_UPDATE_STATE, d.data(), d.size());
 }
 
 /**
@@ -547,101 +545,124 @@ void HardwareManager::triggerAltAction() {
 }
 
 /**
- * @brief Starts the feedback task for the provided HardwareManager instance.
+ * @brief Starts the hardware event task for the provided HardwareManager instance.
  *
  * This is a FreeRTOS task entry function that casts the opaque `instance` pointer
- * to `HardwareManager*` and invokes its feedback task routine.
+ * to `HardwareManager*` and invokes its hardware event task routine.
  *
  * @param instance Pointer to a HardwareManager object (must be a valid `HardwareManager*`).
  */
-void HardwareManager::feedbackTaskEntry(void* instance) {
-    static_cast<HardwareManager*>(instance)->feedbackTask();
+void HardwareManager::hwEventTaskEntry(void* instance) {
+    static_cast<HardwareManager*>(instance)->hwEventTask();
 }
 
 /**
- * @brief Processes queued feedback events and actuates configured hardware indicators.
+ * @brief Processes queued hardware events (feedback sequences and lock state changes).
  *
- * This task runs indefinitely, blocking on the internal feedback queue. For each
- * FeedbackType received it executes the corresponding sequence:
- * - FeedbackType::SUCCESS: stops conflicting timers, sets the NeoPixel to the
- *   configured success color and starts the pixel success timer, and drives
- *   the configured NFC success GPIO for the configured duration.
- * - FeedbackType::FAILURE: stops conflicting timers, sets the NeoPixel to the
- *   configured failure color and starts the pixel failure timer, and drives
- *   the configured NFC failure GPIO for the configured duration.
+ * This task runs indefinitely, blocking on the internal hardware event queue. For each
+ * HwEvent received it executes the corresponding action:
+ * - FEEDBACK_SUCCESS/FEEDBACK_FAILURE/FEEDBACK_TAG_EVENT: runs the feedback sequence
+ *   (NeoPixel color, GPIO pulse, timer handling).
+ * - LOCK_STATE: applies the requested lock state to the action GPIO.
  *
  * GPIO pins configured with the sentinel value 255 are ignored. Timers and
  * NeoPixel behavior use durations and colors from the instance's misc configuration.
  */
-void HardwareManager::feedbackTask() {
-    FeedbackType feedback;
+void HardwareManager::hwEventTask() {
+    HwEvent event;
     while (true) {
-        if (xQueueReceive(m_feedbackQueue, &feedback, portMAX_DELAY)) {
-            switch (feedback) {
-                case FeedbackType::SUCCESS:
-                    ESP_LOGD(TAG, "Executing SUCCESS feedback sequence.");
-                    if(m_gpioSuccessTimer && esp_timer_is_active(m_gpioSuccessTimer)) esp_timer_stop(m_gpioSuccessTimer);
-                    if(m_pixelSuccessTimer && esp_timer_is_active(m_pixelSuccessTimer)) esp_timer_stop(m_pixelSuccessTimer);
-                    if (m_pixel != nullptr) {
-                        auto color = m_miscConfig.neopixelSuccessColor;
-                        m_pixel->set(m_pixel->RGB(color[espConfig::actions_config_t::colorMap::R], color[espConfig::actions_config_t::colorMap::G], color[espConfig::actions_config_t::colorMap::B]));
-
-                        if (m_pixelSuccessTimer) esp_timer_start_once(m_pixelSuccessTimer, m_miscConfig.neopixelSuccessTime * 1000);
-                    }
-                    if (live(pinAllocations.at(SUCCESS))) {
-                        auto& success_lease = pinAllocations.at(SUCCESS).value();
-                        // Shared LED (e.g. HomeSpan status pin): the arbiter
-                        // drives the flash and restores the blink afterwards.
-                        if (!SharedLed::preempt_pin(static_cast<int>(success_lease.get_pin()),
-                                                    m_miscConfig.nfcSuccessHL,
-                                                    m_miscConfig.nfcSuccessTime)) {
-                            success_lease.set_level(m_miscConfig.nfcSuccessHL);
-                            if (m_gpioSuccessTimer) esp_timer_start_once(m_gpioSuccessTimer, m_miscConfig.nfcSuccessTime * 1000);
-                        }
-                    }
+        if (xQueueReceive(m_hwEventQueue, &event, portMAX_DELAY)) {
+            switch (event.type) {
+                case HwEventType::FEEDBACK_SUCCESS:
+                    runFeedbackSequence(HwEventType::FEEDBACK_SUCCESS);
                     break;
-
-                case FeedbackType::FAILURE:
-                    ESP_LOGD(TAG, "Executing FAILURE feedback sequence.");
-                    if(m_gpioFailTimer && esp_timer_is_active(m_gpioFailTimer)) esp_timer_stop(m_gpioFailTimer);
-                    if(m_pixelFailTimer && esp_timer_is_active(m_pixelFailTimer)) esp_timer_stop(m_pixelFailTimer);
-                    if (m_pixel != nullptr) {
-                        auto color = m_miscConfig.neopixelFailureColor;
-                        m_pixel->set(m_pixel->RGB(color[espConfig::actions_config_t::colorMap::R], color[espConfig::actions_config_t::colorMap::G], color[espConfig::actions_config_t::colorMap::B]));
-
-                        if (m_pixelFailTimer) esp_timer_start_once(m_pixelFailTimer, m_miscConfig.neopixelFailTime * 1000);
-                    }
-                    if (live(pinAllocations.at(FAIL))) {
-                        auto& fail_lease = pinAllocations.at(FAIL).value();
-                        if (!SharedLed::preempt_pin(static_cast<int>(fail_lease.get_pin()),
-                                                    m_miscConfig.nfcFailHL,
-                                                    m_miscConfig.nfcFailTime)) {
-                            fail_lease.set_level(m_miscConfig.nfcFailHL);
-                            if (m_gpioFailTimer) esp_timer_start_once(m_gpioFailTimer, m_miscConfig.nfcFailTime * 1000);
-                        }
-                    }
+                case HwEventType::FEEDBACK_FAILURE:
+                    runFeedbackSequence(HwEventType::FEEDBACK_FAILURE);
                     break;
-                case FeedbackType::TAG_EVENT:
-                    ESP_LOGD(TAG, "Executing TAG_EVENT feedback sequence.");
-                    if(m_tagEventTimer && esp_timer_is_active(m_tagEventTimer)) esp_timer_stop(m_tagEventTimer);
-                    if(m_pixelTagEventTimer && esp_timer_is_active(m_pixelTagEventTimer)) esp_timer_stop(m_pixelTagEventTimer);
-                    if (m_pixel != nullptr) {
-                        auto color = m_miscConfig.neopixelTagEventColor;
-                        m_pixel->set(m_pixel->RGB(color[espConfig::actions_config_t::colorMap::R], color[espConfig::actions_config_t::colorMap::G], color[espConfig::actions_config_t::colorMap::B]));
+                case HwEventType::FEEDBACK_TAG_EVENT:
+                    runFeedbackSequence(HwEventType::FEEDBACK_TAG_EVENT);
+                    break;
+                case HwEventType::LOCK_STATE:
+                    applyLockState(event.state);
+                    break;
+            }
+        }
+    }
+}
 
-                        if (m_pixelTagEventTimer) esp_timer_start_once(m_pixelTagEventTimer, m_miscConfig.neopixelTagEventTime * 1000);
-                    }
-                    if (live(pinAllocations.at(TAG_EVENT))) {
-                        auto& tag_lease = pinAllocations.at(TAG_EVENT).value();
-                        if (!SharedLed::preempt_pin(static_cast<int>(tag_lease.get_pin()),
-                                                    m_miscConfig.tagEventHL,
-                                                    m_miscConfig.tagEventTimeout)) {
-                            tag_lease.set_level(m_miscConfig.tagEventHL);
+/**
+ * @brief Executes a feedback sequence for the given event type.
+ *
+ * Stops conflicting timers, sets the NeoPixel to the configured color and starts the
+ * corresponding pixel timer, and drives the configured feedback GPIO for the configured
+ * duration (via SharedLed arbitration when the pin is shared with the status LED).
+ */
+void HardwareManager::runFeedbackSequence(HwEventType feedback) {
+    switch (feedback) {
+        case HwEventType::FEEDBACK_SUCCESS:
+            ESP_LOGD(TAG, "Executing SUCCESS feedback sequence.");
+            if(m_gpioSuccessTimer && esp_timer_is_active(m_gpioSuccessTimer)) esp_timer_stop(m_gpioSuccessTimer);
+            if(m_pixelSuccessTimer && esp_timer_is_active(m_pixelSuccessTimer)) esp_timer_stop(m_pixelSuccessTimer);
+            if (m_pixel != nullptr) {
+                auto color = m_miscConfig.neopixelSuccessColor;
+                m_pixel->set(m_pixel->RGB(color[espConfig::actions_config_t::colorMap::R], color[espConfig::actions_config_t::colorMap::G], color[espConfig::actions_config_t::colorMap::B]));
+
+                if (m_pixelSuccessTimer) esp_timer_start_once(m_pixelSuccessTimer, m_miscConfig.neopixelSuccessTime * 1000);
+            }
+            if (live(pinAllocations.at(SUCCESS))) {
+                auto& success_lease = pinAllocations.at(SUCCESS).value();
+                // Shared LED (e.g. HomeSpan status pin): the arbiter
+                // drives the flash and restores the blink afterwards.
+                if (!SharedLed::preempt_pin(static_cast<int>(success_lease.get_pin()),
+                                            m_miscConfig.nfcSuccessHL,
+                                            m_miscConfig.nfcSuccessTime)) {
+                    success_lease.set_level(m_miscConfig.nfcSuccessHL);
+                    if (m_gpioSuccessTimer) esp_timer_start_once(m_gpioSuccessTimer, m_miscConfig.nfcSuccessTime * 1000);
+                }
+            }
+            break;
+
+        case HwEventType::FEEDBACK_FAILURE:
+            ESP_LOGD(TAG, "Executing FAILURE feedback sequence.");
+            if(m_gpioFailTimer && esp_timer_is_active(m_gpioFailTimer)) esp_timer_stop(m_gpioFailTimer);
+            if(m_pixelFailTimer && esp_timer_is_active(m_pixelFailTimer)) esp_timer_stop(m_pixelFailTimer);
+            if (m_pixel != nullptr) {
+                auto color = m_miscConfig.neopixelFailureColor;
+                m_pixel->set(m_pixel->RGB(color[espConfig::actions_config_t::colorMap::R], color[espConfig::actions_config_t::colorMap::G], color[espConfig::actions_config_t::colorMap::B]));
+
+                if (m_pixelFailTimer) esp_timer_start_once(m_pixelFailTimer, m_miscConfig.neopixelFailTime * 1000);
+            }
+            if (live(pinAllocations.at(FAIL))) {
+                auto& fail_lease = pinAllocations.at(FAIL).value();
+                if (!SharedLed::preempt_pin(static_cast<int>(fail_lease.get_pin()),
+                                            m_miscConfig.nfcFailHL,
+                                            m_miscConfig.nfcFailTime)) {
+                    fail_lease.set_level(m_miscConfig.nfcFailHL);
+                    if (m_gpioFailTimer) esp_timer_start_once(m_gpioFailTimer, m_miscConfig.nfcFailTime * 1000);
+                }
+            }
+            break;
+        case HwEventType::FEEDBACK_TAG_EVENT:
+            ESP_LOGD(TAG, "Executing TAG_EVENT feedback sequence.");
+            if(m_tagEventTimer && esp_timer_is_active(m_tagEventTimer)) esp_timer_stop(m_tagEventTimer);
+            if(m_pixelTagEventTimer && esp_timer_is_active(m_pixelTagEventTimer)) esp_timer_stop(m_pixelTagEventTimer);
+            if (m_pixel != nullptr) {
+                auto color = m_miscConfig.neopixelTagEventColor;
+                m_pixel->set(m_pixel->RGB(color[espConfig::actions_config_t::colorMap::R], color[espConfig::actions_config_t::colorMap::G], color[espConfig::actions_config_t::colorMap::B]));
+
+                if (m_pixelTagEventTimer) esp_timer_start_once(m_pixelTagEventTimer, m_miscConfig.neopixelTagEventTime * 1000);
+            }
+            if (live(pinAllocations.at(TAG_EVENT))) {
+                auto& tag_lease = pinAllocations.at(TAG_EVENT).value();
+                if (!SharedLed::preempt_pin(static_cast<int>(tag_lease.get_pin()),
+                                            m_miscConfig.tagEventHL,
+                                            m_miscConfig.tagEventTimeout)) {
+                    tag_lease.set_level(m_miscConfig.tagEventHL);
                             if (m_tagEventTimer) esp_timer_start_once(m_tagEventTimer, m_miscConfig.tagEventTimeout * 1000);
                         }
                     }
                     break;
-            }
-        }
+        case HwEventType::LOCK_STATE:
+            break;
     }
 }
