@@ -418,7 +418,7 @@
 								<div class="flex items-center justify-between py-2 px-3 bg-base-100 rounded-lg">
 									<div>
 										<p class="text-sm font-medium">SmartLock Battery Reporting</p>
-										<p class="text-xs text-base-content/60">Enable battery level reporting to HomeKit</p>
+										<p class="text-xs text-base-content/60">Enable battery level reporting from the physical lock (via MQTT) to HomeKit</p>
 									</div>
 									<input
 										type="checkbox"
