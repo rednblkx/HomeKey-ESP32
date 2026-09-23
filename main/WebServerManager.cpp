@@ -1822,9 +1822,9 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
 
 BaseType_t task;
 #ifndef CONFIG_FREERTOS_UNICORE
-    task = xTaskCreatePinnedToCore(captivePortalSaveTask, "wifi_save_task", 8192, params, 5, nullptr, tskNO_AFFINITY);
+    task = xTaskCreatePinnedToCore(captivePortalSaveTask, "wifi_save_task", 4096, params, 5, nullptr, tskNO_AFFINITY);
 #else
-    task = xTaskCreate(captivePortalSaveTask, "wifi_save_task", 8192, params, 5, nullptr);
+    task = xTaskCreate(captivePortalSaveTask, "wifi_save_task", 4096, params, 5, nullptr);
 #endif
     if (task != pdPASS) {
       ESP_LOGE(TAG, "Failed to create WiFi save task");
@@ -1856,9 +1856,9 @@ BaseType_t task;
 
     BaseType_t task;
 #ifndef CONFIG_FREERTOS_UNICORE
-    task = xTaskCreatePinnedToCore(captivePortalEthSaveTask, "eth_save_task", 8192, params, 5, nullptr, tskNO_AFFINITY);
+    task = xTaskCreatePinnedToCore(captivePortalEthSaveTask, "eth_save_task", 4096, params, 5, nullptr, tskNO_AFFINITY);
 #else
-    task = xTaskCreate(captivePortalEthSaveTask, "eth_save_task", 8192, params, 5, nullptr);
+    task = xTaskCreate(captivePortalEthSaveTask, "eth_save_task", 4096, params, 5, nullptr);
 #endif
     if (task != pdPASS) {
       ESP_LOGE(TAG, "Failed to create Ethernet save task");
@@ -2415,9 +2415,9 @@ esp_err_t WebServerManager::handleOTAUpload(httpd_req_t *req) {
 
 BaseType_t task;
 #ifndef CONFIG_FREERTOS_UNICORE
-    task = xTaskCreatePinnedToCore(otaTask, "ota_task", 8192, params, 5, NULL, 1);
+    task = xTaskCreatePinnedToCore(otaTask, "ota_task", 4096, params, 5, NULL, 1);
 #else
-    task = xTaskCreate(otaTask, "ota_task", 8192, params, 5, NULL);
+    task = xTaskCreate(otaTask, "ota_task", 4096, params, 5, NULL);
 #endif
   if (task != pdPASS) {
     ESP_LOGE(TAG, "Failed to create OTA task");

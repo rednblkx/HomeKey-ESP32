@@ -64,13 +64,19 @@ public:
 
 private:
     /**
-     * @enum FeedbackType
-     * @brief Defines the types of feedback that can be requested.
+     * @enum HwEventType
+     * @brief Defines the kinds of events processed by the hardware event task.
      */
-    enum class FeedbackType {
-        SUCCESS,
-        FAILURE,
-        TAG_EVENT
+    enum class HwEventType : uint8_t {
+        FEEDBACK_SUCCESS,
+        FEEDBACK_FAILURE,
+        FEEDBACK_TAG_EVENT,
+        LOCK_STATE
+    };
+
+    struct HwEvent {
+        HwEventType type;
+        int state; ///< Desired lock state, valid when type == LOCK_STATE.
     };
 
     enum class TimerSources : uint8_t {
@@ -90,11 +96,10 @@ private:
     };
 
     // --- FreeRTOS Task Management ---
-    static void feedbackTaskEntry(void* instance);
-    void feedbackTask();
-
-    static void lockControlTaskEntry(void* instance);
-    void lockControlTask();
+    static void hwEventTaskEntry(void* instance);
+    void hwEventTask();
+    void runFeedbackSequence(HwEventType type);
+    void applyLockState(int state);
 
     static void initiator_task_entry(void* arg);
     void initiator_task();
@@ -116,14 +121,11 @@ private:
     esp_timer_handle_t m_altActionTimer;
     esp_timer_handle_t m_altActionInitTimer;
 
-    TaskHandle_t m_feedbackTaskHandle;
-    QueueHandle_t m_feedbackQueue;
+    TaskHandle_t m_hwEventTaskHandle;
+    QueueHandle_t m_hwEventQueue;
 
-    TaskHandle_t m_lockControlTaskHandle;
-    QueueHandle_t m_lockControlQueue;
-
-    TaskHandle_t m_initiatorTaskHandle;
-    QueueHandle_t m_initiatorQueue;
+    TaskHandle_t m_initiatorTaskHandle = nullptr;
+    QueueHandle_t m_initiatorQueue = nullptr;
 
     bool m_altActionArmed = false;
 

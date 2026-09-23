@@ -18,25 +18,41 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh run download --name "esp32-firmware" --repo ${{ github.repository }} && \
+          gh run download --name "esp32-enc-firmware" --repo ${{ github.repository }} && \
           gh run download --name "esp32s3-firmware" --repo ${{ github.repository }} && \
+          gh run download --name "esp32s3-enc-firmware" --repo ${{ github.repository }} && \
           gh run download --name "esp32c3-firmware" --repo ${{ github.repository }} && \
+          gh run download --name "esp32c3-enc-firmware" --repo ${{ github.repository }} && \
           gh run download --name "esp32c6-firmware" --repo ${{ github.repository }} && \
+          gh run download --name "esp32c6-enc-firmware" --repo ${{ github.repository }} && \
           gh run download --name "esp32-firmware-factory" --repo ${{ github.repository }} && \
+          gh run download --name "esp32-enc-firmware-factory" --repo ${{ github.repository }} && \
           gh run download --name "esp32s3-firmware-factory" --repo ${{ github.repository }} && \
+          gh run download --name "esp32s3-enc-firmware-factory" --repo ${{ github.repository }} && \
           gh run download --name "esp32c3-firmware-factory" --repo ${{ github.repository }} && \
+          gh run download --name "esp32c3-enc-firmware-factory" --repo ${{ github.repository }} && \
           gh run download --name "esp32c6-firmware-factory" --repo ${{ github.repository }} && \
+          gh run download --name "esp32c6-enc-firmware-factory" --repo ${{ github.repository }} && \
           gh run download --name "littlefs-binary" --repo ${{ github.repository }}
 
       - name: Upload to Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload ${{ github.event.release.tag_name }} ./esp32.firmware.bin && \
-          gh release upload ${{ github.event.release.tag_name }} ./esp32s3.firmware.bin && \
-          gh release upload ${{ github.event.release.tag_name }} ./esp32c3.firmware.bin && \
-          gh release upload ${{ github.event.release.tag_name }} ./esp32c6.firmware.bin && \
+          gh release upload ${{ github.event.release.tag_name }} ./esp32.firmware.ota.bin && \
+          gh release upload ${{ github.event.release.tag_name }} ./esp32.enc.firmware.ota.bin && \
+          gh release upload ${{ github.event.release.tag_name }} ./esp32s3.firmware.ota.bin && \
+          gh release upload ${{ github.event.release.tag_name }} ./esp32s3.enc.firmware.ota.bin && \
+          gh release upload ${{ github.event.release.tag_name }} ./esp32c3.firmware.ota.bin && \
+          gh release upload ${{ github.event.release.tag_name }} ./esp32c3.enc.firmware.ota.bin && \
+          gh release upload ${{ github.event.release.tag_name }} ./esp32c6.firmware.ota.bin && \
+          gh release upload ${{ github.event.release.tag_name }} ./esp32c6.enc.firmware.ota.bin && \
           gh release upload ${{ github.event.release.tag_name }} ./esp32.firmware.factory.bin && \
+          gh release upload ${{ github.event.release.tag_name }} ./esp32.enc.firmware.factory.bin && \
           gh release upload ${{ github.event.release.tag_name }} ./esp32s3.firmware.factory.bin && \
+          gh release upload ${{ github.event.release.tag_name }} ./esp32s3.enc.firmware.factory.bin && \
           gh release upload ${{ github.event.release.tag_name }} ./esp32c3.firmware.factory.bin && \
+          gh release upload ${{ github.event.release.tag_name }} ./esp32c3.enc.firmware.factory.bin && \
           gh release upload ${{ github.event.release.tag_name }} ./esp32c6.firmware.factory.bin && \
+          gh release upload ${{ github.event.release.tag_name }} ./esp32c6.enc.firmware.factory.bin && \
           gh release upload ${{ github.event.release.tag_name }} ./littlefs.bin

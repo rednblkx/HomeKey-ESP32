@@ -484,7 +484,7 @@ void HomeKitService::begin() {
   if (xTaskCreate([](void* arg) {
                     static_cast<HomeKitService*>(arg)->hapTaskLoop();
                   },
-                  "hap_task", 12288, this, 5, &m_hapTask) != pdPASS) {
+                  "hap_task", 8192, this, 5, &m_hapTask) != pdPASS) {
     ESP_LOGE(TAG, "Failed to create HAP task");
     return;
   }

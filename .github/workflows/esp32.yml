@@ -177,6 +177,7 @@ jobs:
             $HOME/.ccache
             managed_components
             build
+            build-flash-encryption
           key: ${{ runner.os }}-${{ matrix.target }}-build-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-${{ matrix.target }}-build-
