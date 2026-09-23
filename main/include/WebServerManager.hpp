@@ -32,6 +32,7 @@ struct WsFrame {
   size_t len;
   const uint8_t *payload;
   std::shared_ptr<std::vector<uint8_t>> sharedData;
+  uint32_t generation{0};
   static constexpr size_t INLINE_SIZE = 128;
   uint8_t inlinePayload[INLINE_SIZE];
 };
@@ -89,8 +90,8 @@ private:
 
   struct WsClient {
     int fd;
-    std::mutex mutex;
-    WsClient(int file_descriptor) : fd(file_descriptor) {}
+    uint32_t generation;
+    WsClient(int file_descriptor, uint32_t gen) : fd(file_descriptor), generation(gen) {}
   };
 
   enum class OTAUploadType { FIRMWARE, LITTLEFS };
@@ -206,6 +207,7 @@ private:
   TaskHandle_t m_wsTaskHandle;
   std::vector<std::unique_ptr<WsClient>> m_wsClients;
   std::mutex m_wsClientsMutex;
+  std::atomic<uint32_t> m_wsClientGeneration{0};
   esp_timer_handle_t m_statusTimer;
   std::deque<std::vector<uint8_t>> m_wsBroadcastBuffer;
   std::mutex m_wsBroadcastMutex;

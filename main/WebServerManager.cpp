@@ -2030,7 +2030,8 @@ void WebServerManager::addWebSocketClient(int fd) {
       m_wsClients.begin(), m_wsClients.end(),
       [fd](const std::unique_ptr<WsClient> &c) { return c->fd == fd; });
   if (it == m_wsClients.end()) {
-    m_wsClients.emplace_back(std::make_unique<WsClient>(fd));
+    m_wsClients.emplace_back(std::make_unique<WsClient>(
+        fd, m_wsClientGeneration.load(std::memory_order_relaxed)));
   }
 }
 
@@ -2048,6 +2049,7 @@ void WebServerManager::removeWebSocketClient(int fd) {
       remaining = m_wsClients.size();
       stopTimer = m_wsClients.empty();
       removed = true;
+      m_wsClientGeneration.fetch_add(1, std::memory_order_relaxed);
     }
   }
   if (removed) {
@@ -2099,6 +2101,21 @@ void WebServerManager::broadcastWs(const uint8_t *payload, size_t len,
 void WebServerManager::queue_ws_frame(int fd, const uint8_t *payload,
                                       size_t len, httpd_ws_type_t type,
                                       const std::shared_ptr<std::vector<uint8_t>>& shared) {
+  uint32_t generation = 0;
+  bool known = false;
+  {
+    std::scoped_lock lock(m_wsClientsMutex);
+    auto it = std::find_if(
+        m_wsClients.begin(), m_wsClients.end(),
+        [fd](const std::unique_ptr<WsClient> &c) { return c->fd == fd; });
+    if (it != m_wsClients.end()) {
+      generation = (*it)->generation;
+      known = true;
+    }
+  }
+  if (!known)
+    return; // client already gone; nothing to deliver to
+
   WsFrame *frame = new WsFrame;
   if (!frame)
     return;
@@ -2106,6 +2123,7 @@ void WebServerManager::queue_ws_frame(int fd, const uint8_t *payload,
   frame->fd = fd;
   frame->type = type;
   frame->len = len;
+  frame->generation = generation;
   if (len <= WsFrame::INLINE_SIZE) {
     memcpy(frame->inlinePayload, payload, len);
     frame->payload = frame->inlinePayload;
@@ -2149,7 +2167,6 @@ void WebServerManager::ws_send_task(void *arg) {
     do {
       WsFramePtr frame(raw_frame);
 
-      int target_fd = -1;
       {
         std::scoped_lock<std::mutex> lock(instance->m_wsClientsMutex);
         auto it = std::find_if(
@@ -2157,29 +2174,31 @@ void WebServerManager::ws_send_task(void *arg) {
             [fd = frame->fd](const std::unique_ptr<WsClient> &c) {
               return c->fd == fd;
             });
-        if (it != instance->m_wsClients.end())
-          target_fd = frame->fd;
+        if (it == instance->m_wsClients.end() ||
+            (*it)->generation != frame->generation)
+          continue;
       }
 
-      if (target_fd != -1) {
-        httpd_ws_frame_t ws_pkt = {};
-        ws_pkt.final = true;
-        ws_pkt.fragmented = false;
-        ws_pkt.type = frame->type;
-        ws_pkt.len = frame->len;
-        ws_pkt.payload = const_cast<uint8_t*>(frame->payload);
+      httpd_ws_frame_t ws_pkt = {};
+      ws_pkt.final = true;
+      ws_pkt.fragmented = false;
+      ws_pkt.type = frame->type;
+      ws_pkt.len = frame->len;
+      ws_pkt.payload = const_cast<uint8_t*>(frame->payload);
 
-        esp_err_t send_ret = httpd_ws_send_frame_async(instance->m_server, target_fd, &ws_pkt);
-        if (send_ret != ESP_OK) {
-          const char *err = esp_err_to_name(send_ret);
-          bool is_err =
-              (err && (strstr(err, "masked") || strstr(err, "MASKED"))) ||
-              send_ret == ESP_FAIL;
-          if (is_err || send_ret == ESP_ERR_INVALID_STATE ||
-              send_ret == ESP_ERR_INVALID_ARG) {
-            instance->removeWebSocketClient(frame->fd);
-          }
-        }
+      esp_err_t send_ret =
+          httpd_ws_send_data(instance->m_server, frame->fd, &ws_pkt);
+      bool remove = false;
+      if (send_ret != ESP_OK) {
+        const char *err = esp_err_to_name(send_ret);
+        bool is_err =
+            (err && (strstr(err, "masked") || strstr(err, "MASKED"))) ||
+            send_ret == ESP_FAIL;
+        remove = is_err || send_ret == ESP_ERR_INVALID_STATE ||
+                 send_ret == ESP_ERR_INVALID_ARG;
+      }
+      if (remove) {
+        instance->removeWebSocketClient(frame->fd);
       }
     } while (xQueueReceive(instance->m_wsQueue, &raw_frame, 0) == pdPASS &&
              raw_frame != nullptr && raw_frame->fd != -1);
