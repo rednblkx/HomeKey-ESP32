@@ -286,11 +286,11 @@ void WebServerManager::begin() {
     const auto& httpsCerts = m_configManager.getHttpsCertsConfig();
     if (!httpsCerts.serverCert.empty() && !httpsCerts.privateKey.empty()) {
       ssl_config.servercert = reinterpret_cast<const uint8_t *>(httpsCerts.serverCert.c_str());
-      ssl_config.servercert_len = httpsCerts.serverCert.length() + 1;
+      ssl_config.servercert_len = httpsCerts.serverCert.length();
       ssl_config.prvtkey_pem = reinterpret_cast<const uint8_t *>(httpsCerts.privateKey.c_str());
-      ssl_config.prvtkey_len = httpsCerts.privateKey.length() + 1;
+      ssl_config.prvtkey_len = httpsCerts.privateKey.length();
       if (!httpsCerts.caCert.empty()) {
-        ssl_config.cacert_len = httpsCerts.caCert.length() + 1;
+        ssl_config.cacert_len = httpsCerts.caCert.length();
         ssl_config.cacert_pem = reinterpret_cast<const uint8_t *>(httpsCerts.caCert.c_str());
       }
       ESP_LOGI(TAG, "Loaded user HTTPS certificates (%d bytes cert, %d bytes key)",

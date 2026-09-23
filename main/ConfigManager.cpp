@@ -1546,10 +1546,7 @@ bool ConfigManager::saveCertificate(espConfig::CertType certType, const std::str
         return false;
     }
 
-    const std::string& stored = (certType == espConfig::CertType::MQTT_CA ||
-                                 certType == espConfig::CertType::MQTT_CLIENT ||
-                                 certType == espConfig::CertType::MQTT_PRIVATE_KEY)
-        ? pemToDer(certContent) : certContent;
+    const std::string& stored = pemToDer(certContent);
     if (stored.empty()) {
         ESP_LOGE(TAG, "PEM to DER conversion produced no data");
         return false;
@@ -1575,17 +1572,17 @@ bool ConfigManager::saveCertificate(espConfig::CertType certType, const std::str
             typeStr = "Private key";
             break;
         case espConfig::CertType::HTTPS_SERVER_CERT:
-            m_httpsCertsConfig.serverCert = certContent;
+            m_httpsCertsConfig.serverCert = stored;
             typeStr = "HTTPS server certificate";
             isHttps = true;
             break;
         case espConfig::CertType::HTTPS_PRIVATE_KEY:
-            m_httpsCertsConfig.privateKey = certContent;
+            m_httpsCertsConfig.privateKey = stored;
             typeStr = "HTTPS private key";
             isHttps = true;
             break;
         case espConfig::CertType::HTTPS_CA_CERT:
-            m_httpsCertsConfig.caCert = certContent;
+            m_httpsCertsConfig.caCert = stored;
             typeStr = "HTTPS CA certificate";
             isHttps = true;
             break;
