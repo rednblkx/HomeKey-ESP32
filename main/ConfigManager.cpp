@@ -482,6 +482,8 @@ void ConfigManager::loadConfigFromNvs(const char *key) {
     return;
   }
 
+  ESP_LOGD(TAG, "Read %zu bytes for key '%s'", buffer.size(), key);
+
   msgpack_unpacked unpacked;
   msgpack_unpacked_init(&unpacked);
   
@@ -536,6 +538,7 @@ bool ConfigManager::saveConfigToNvs(const char *key) {
     buf = serialize<espConfig::https_certs_t>();
   }
 
+  ESP_LOGD(TAG, "Config '%s' serialized, size %zu", key, buf.size());
   esp_err_t set_err = nvs_set_blob(m_nvsHandle, key, buf.data(), buf.size());
 
   if (set_err != ESP_OK) {
@@ -887,7 +890,7 @@ std::vector<uint8_t> ConfigManager::serialize() {
 
   std::vector<uint8_t> serialized_data;
   if (state.overflowed) {
-    ESP_LOGE(TAG, "Config serialize overflow (> %zu bytes); NVS save aborted.", kSerializeBufSize);
+    ESP_LOGE(TAG, "Config serialize overflow (%zu > %zu bytes); NVS save aborted.", state.sbuf.size, kSerializeBufSize);
   } else if (state.sbuf.size > 0) {
     serialized_data.assign(reinterpret_cast<uint8_t*>(state.sbuf.data), reinterpret_cast<uint8_t*>(state.sbuf.data) + state.sbuf.size);
   } else {
