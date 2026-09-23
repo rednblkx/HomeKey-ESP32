@@ -1513,16 +1513,19 @@ void ConfigManager::migrateMqttSslPemToDer() {
   if (!needsMigration) {
     return;
   }
-  std::string ca = pemToDer(m_mqttSslConfig.caCert);
-  std::string client = pemToDer(m_mqttSslConfig.clientCert);
-  std::string key = pemToDer(m_mqttSslConfig.clientKey);
-  if (ca.empty() || client.empty() || key.empty()) {
+  auto convert = [&isPem, this](std::string& field) {
+    if (isPem(field)) {
+      field = pemToDer(field);
+    }
+  };
+  convert(m_mqttSslConfig.caCert);
+  convert(m_mqttSslConfig.clientCert);
+  convert(m_mqttSslConfig.clientKey);
+  if (isPem(m_mqttSslConfig.caCert) || isPem(m_mqttSslConfig.clientCert) ||
+      isPem(m_mqttSslConfig.clientKey)) {
     ESP_LOGE(TAG, "MQTT SSL PEM->DER migration failed, keeping PEM blob");
     return;
   }
-  m_mqttSslConfig.caCert = std::move(ca);
-  m_mqttSslConfig.clientCert = std::move(client);
-  m_mqttSslConfig.clientKey = std::move(key);
   if (saveConfigToNvs("MQTTSSLDATA")) {
     ESP_LOGI(TAG, "Migrated MQTT SSL certificates from PEM to DER");
   }
