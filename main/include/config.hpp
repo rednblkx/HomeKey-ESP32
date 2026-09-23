@@ -150,7 +150,8 @@ namespace espConfig
     std::string clientKey = MQTT_CLIENT_KEY;
   };
 
-  /* HTTPS certs stay in PEM because esp_https_server consumes PEM directly. */
+  /* HTTPS certs are also stored in DER (binary) form, like the MQTT SSL
+     material. esp_https_server receives the DER bytes at startup. */
   struct https_certs_t {
     std::string serverCert = "";
     std::string privateKey = "";

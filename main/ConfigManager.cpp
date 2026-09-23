@@ -500,12 +500,13 @@ void ConfigManager::loadConfigFromNvs(const char *key) {
       deserialize(obj, "mqtt");
     } else if(!strcmp(key, "MQTTSSLDATA")){
       deserialize(obj, "ssl");
-      migrateMqttSslPemToDer();
+      migratePemToDer();
     } else if(!strcmp(key, "MISCDATA")){
       deserialize(obj, "misc");
       deserialize(obj, "actions");
     } else if(!strcmp(key, "HTTPSDATA")){
       deserialize(obj, "https");
+      migratePemToDer();
     } else {ESP_LOGE(TAG, "Key '%s' not valid", key);return;}
   } else {
     ESP_LOGE(TAG, "Failed to parse msgpack for key '%s'. Using defaults.", key);
@@ -1504,30 +1505,57 @@ void ConfigManager::ensureMqttSslLoaded() {
   }
 }
 
-void ConfigManager::migrateMqttSslPemToDer() {
-  auto isPem = [](const std::string& s) {
-    return !s.empty() && s.compare(0, 11, "-----BEGIN ") == 0;
+void ConfigManager::migratePemToDer() {
+  auto isPemEncoded = [](const std::string& s) {
+    return s.size() >= 11 && s.compare(0, 11, "-----BEGIN ") == 0;
   };
-  bool needsMigration = isPem(m_mqttSslConfig.caCert) || isPem(m_mqttSslConfig.clientCert) ||
-                        isPem(m_mqttSslConfig.clientKey);
-  if (!needsMigration) {
-    return;
-  }
-  auto convert = [&isPem, this](std::string& field) {
-    if (isPem(field)) {
-      field = pemToDer(field);
+  struct CertFieldRef {
+    std::string* field;
+    const char* name;
+  };
+  const CertFieldRef mqttFields[] = {
+      {&m_mqttSslConfig.caCert, "mqtt CA certificate"},
+      {&m_mqttSslConfig.clientCert, "mqtt client certificate"},
+      {&m_mqttSslConfig.clientKey, "mqtt client key"},
+  };
+  const CertFieldRef httpsFields[] = {
+      {&m_httpsCertsConfig.caCert, "https CA certificate"},
+      {&m_httpsCertsConfig.serverCert, "https server certificate"},
+      {&m_httpsCertsConfig.privateKey, "https private key"},
+  };
+  auto anyPem = [&isPemEncoded](const CertFieldRef* fields, size_t n) {
+    for (size_t i = 0; i < n; ++i) {
+      if (isPemEncoded(*fields[i].field)) return true;
     }
+    return false;
   };
-  convert(m_mqttSslConfig.caCert);
-  convert(m_mqttSslConfig.clientCert);
-  convert(m_mqttSslConfig.clientKey);
-  if (isPem(m_mqttSslConfig.caCert) || isPem(m_mqttSslConfig.clientCert) ||
-      isPem(m_mqttSslConfig.clientKey)) {
-    ESP_LOGE(TAG, "MQTT SSL PEM->DER migration failed, keeping PEM blob");
+  if (!anyPem(mqttFields, 3) && !anyPem(httpsFields, 3)) {
     return;
   }
-  if (saveConfigToNvs("MQTTSSLDATA")) {
+
+  auto convertAll = [&isPemEncoded](const CertFieldRef* fields, size_t n) {
+    bool changed = false;
+    for (size_t i = 0; i < n; ++i) {
+      std::string& field = *fields[i].field;
+      if (!isPemEncoded(field)) continue;
+      field = pemToDer(field);
+      if (isPemEncoded(field)) {
+        ESP_LOGE(TAG, "PEM->DER migration failed for %s, keeping PEM blob",
+                 fields[i].name);
+      } else {
+        changed = true;
+      }
+    }
+    return changed;
+  };
+  const bool mqttChanged = convertAll(mqttFields, 3);
+  const bool httpsChanged = convertAll(httpsFields, 3);
+
+  if (mqttChanged && saveConfigToNvs("MQTTSSLDATA")) {
     ESP_LOGI(TAG, "Migrated MQTT SSL certificates from PEM to DER");
+  }
+  if (httpsChanged && saveConfigToNvs("HTTPSDATA")) {
+    ESP_LOGI(TAG, "Migrated HTTPS certificates from PEM to DER");
   }
 }
 

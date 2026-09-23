@@ -112,7 +112,7 @@ public:
     static std::string pemToDer(const std::string& pem);
     static size_t mbedtlsParseLen(const std::string& content);
     void ensureMqttSslLoaded();
-    void migrateMqttSslPemToDer();
+    void migratePemToDer();
     void loadCertificateInto(espConfig::CertType certType, std::string& out);
     bool validateCertificateWithMbedTLS(const std::string& certContent, espConfig::CertType certType);
     bool validateCertificateContent(const std::string& certContent, espConfig::CertType certType);
