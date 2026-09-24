@@ -750,6 +750,7 @@ static int fixed_sbuffer_write(void* data, const char* buf, size_t len) {
   msgpack_sbuffer* sbuf = &state->sbuf;
   if (!buf) return 0;
   if (sbuf->size + len > sbuf->alloc) {
+    ESP_LOGE("ConfigManager", "sbuffer write failed (%zu > %zu)", sbuf->size + len, sbuf->alloc);
     state->overflowed = true; // caller aborts; never reallocates
     return -1;
   }
@@ -770,7 +771,7 @@ template <typename ConfigType>
  * @return std::vector<uint8_t> Byte vector containing the MessagePack-encoded configuration.
  */
 std::vector<uint8_t> ConfigManager::serialize() {
-  static constexpr size_t kSerializeBufSize = 2048;
+  static constexpr size_t kSerializeBufSize = 4096;
   uint8_t serialize_buf[kSerializeBufSize];
 
   FixedSbuffer state;
@@ -891,7 +892,7 @@ std::vector<uint8_t> ConfigManager::serialize() {
 
   std::vector<uint8_t> serialized_data;
   if (state.overflowed) {
-    ESP_LOGE(TAG, "Config serialize overflow (%zu > %zu bytes); NVS save aborted.", state.sbuf.size, kSerializeBufSize);
+    ESP_LOGE(TAG, "Config serialize overflow (%zu bytes); NVS save aborted.", kSerializeBufSize);
   } else if (state.sbuf.size > 0) {
     serialized_data.assign(reinterpret_cast<uint8_t*>(state.sbuf.data), reinterpret_cast<uint8_t*>(state.sbuf.data) + state.sbuf.size);
   } else {
