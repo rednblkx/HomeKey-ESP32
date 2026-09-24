@@ -2,6 +2,8 @@
 #include "config.hpp"
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
+#include <memory>
 #include <nvs.h>
 #include <variant>
 #include <vector>
@@ -104,8 +106,17 @@ public:
 
     void deserialize(msgpack_object obj, std::string key);
 
+    // Owning view of a msgpack_sbuffer's heap buffer, released via
+    // msgpack_sbuffer_release(); the block comes from realloc() and must be freed.
+    struct SerializedBuffer {
+        std::unique_ptr<uint8_t, decltype(&free)> data{nullptr, &free};
+        size_t size = 0;
+        uint8_t* begin() const { return data.get(); }
+        uint8_t* end() const { return data.get() + size; }
+    };
+
     template <typename ConfigType>
-    std::vector<uint8_t> serialize();
+    SerializedBuffer serialize();
 
     void loadConfigFromNvs(const char* key);
     bool saveConfigToNvs(const char* key);

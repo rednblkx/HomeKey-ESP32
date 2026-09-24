@@ -5,7 +5,6 @@
 #include <cstddef>
 #include <cstring>
 #include <cstdint>
-#include <ranges>
 #include <string>
 #include <vector>
 #include <limits>
@@ -13,11 +12,12 @@
 #include "esp_log.h"
 #include "esp_log_level.h"
 #include "fmt/ranges.h"
-#include "mbedtls/sha256.h"
 #include "mbedtls/x509.h"
+#define MSGPACK_SBUFFER_INIT_SIZE 2048
 #include "msgpack.h"
 #include <LittleFS.h>
 #include "fmt/format.h"
+#include "msgpack/sbuffer.h"
 #include "nvs.h"
 #include <mbedtls/entropy.h>
 #include <mbedtls/ctr_drbg.h>
@@ -528,19 +528,16 @@ bool ConfigManager::saveConfigToNvs(const char *key) {
     return false;
   }
 
-  std::vector<uint8_t> buf;
-  if (!strcmp(key, "MISCDATA")){
-    buf = serialize<espConfig::misc_config_t>();
-  } else if (!strcmp(key, "MQTTSSLDATA")){
-    buf = serialize<espConfig::mqtt_ssl_t>();
-  } else if (!strcmp(key, "MQTTDATA")){
-    buf = serialize<espConfig::mqttConfig_t>();
-  } else if (!strcmp(key, "HTTPSDATA")){
-    buf = serialize<espConfig::https_certs_t>();
-  }
+  const SerializedBuffer buf = [&] {
+    if (!strcmp(key, "MISCDATA")) return serialize<espConfig::misc_config_t>();
+    if (!strcmp(key, "MQTTSSLDATA")) return serialize<espConfig::mqtt_ssl_t>();
+    if (!strcmp(key, "MQTTDATA")) return serialize<espConfig::mqttConfig_t>();
+    if (!strcmp(key, "HTTPSDATA")) return serialize<espConfig::https_certs_t>();
+    return SerializedBuffer{};
+  }();
 
-  ESP_LOGD(TAG, "Config '%s' serialized, size %zu", key, buf.size());
-  esp_err_t set_err = nvs_set_blob(m_nvsHandle, key, buf.data(), buf.size());
+  ESP_LOGD(TAG, "Config '%s' serialized, size %zu", key, buf.size);
+  esp_err_t set_err = nvs_set_blob(m_nvsHandle, key, buf.data.get(), buf.size);
 
   if (set_err != ESP_OK) {
     ESP_LOGE(TAG, "Failed to set blob in NVS for key '%s': %04#x", key, set_err);
@@ -737,28 +734,6 @@ void ConfigManager::deserialize(msgpack_object obj, std::string type) {
   }
 }
 
-// Write callback for the fixed serialize buffer: mirrors msgpack_sbuffer_write
-// but never reallocates. On overflow it reports failure so the caller can
-// abort the save instead of persisting a truncated blob.
-struct FixedSbuffer {
-  msgpack_sbuffer sbuf;
-  bool overflowed = false;
-};
-
-static int fixed_sbuffer_write(void* data, const char* buf, size_t len) {
-  auto* state = static_cast<FixedSbuffer*>(data);
-  msgpack_sbuffer* sbuf = &state->sbuf;
-  if (!buf) return 0;
-  if (sbuf->size + len > sbuf->alloc) {
-    ESP_LOGE("ConfigManager", "sbuffer write failed (%zu > %zu)", sbuf->size + len, sbuf->alloc);
-    state->overflowed = true; // caller aborts; never reallocates
-    return -1;
-  }
-  memcpy(sbuf->data + sbuf->size, buf, len);
-  sbuf->size += len;
-  return 0;
-}
-
 template <typename ConfigType>
 /**
  * @brief Serializes the selected configuration type into a MessagePack binary blob.
@@ -768,18 +743,13 @@ template <typename ConfigType>
  * as arrays of key/value pairs; enum-keyed color maps are encoded as [enum, value] pairs and string-keyed maps as
  * [string, value] pairs.
  *
- * @return std::vector<uint8_t> Byte vector containing the MessagePack-encoded configuration.
+ * @return ConfigManager::SerializedBuffer handle to the MessagePack-encoded configuration.
  */
-std::vector<uint8_t> ConfigManager::serialize() {
-  static constexpr size_t kSerializeBufSize = 4096;
-  uint8_t serialize_buf[kSerializeBufSize];
-
-  FixedSbuffer state;
-  state.sbuf.size = 0;
-  state.sbuf.alloc = kSerializeBufSize;
-  state.sbuf.data = reinterpret_cast<char*>(serialize_buf);
+ConfigManager::SerializedBuffer ConfigManager::serialize() {
+  msgpack_sbuffer sbuf;
   msgpack_packer pk;
-  msgpack_packer_init(&pk, &state, fixed_sbuffer_write);
+  msgpack_sbuffer_init(&sbuf);
+  msgpack_packer_init(&pk, &sbuf, msgpack_sbuffer_write);
   FieldRange primary{}, secondary{};
   if constexpr (std::is_same_v<espConfig::misc_config_t, ConfigType>){
     primary = sectionRange("misc");
@@ -890,15 +860,10 @@ std::vector<uint8_t> ConfigManager::serialize() {
     }
   }
 
-  std::vector<uint8_t> serialized_data;
-  if (state.overflowed) {
-    ESP_LOGE(TAG, "Config serialize overflow (%zu bytes); NVS save aborted.", kSerializeBufSize);
-  } else if (state.sbuf.size > 0) {
-    serialized_data.assign(reinterpret_cast<uint8_t*>(state.sbuf.data), reinterpret_cast<uint8_t*>(state.sbuf.data) + state.sbuf.size);
-  } else {
-    ESP_LOGE(TAG, "Config serialization produced an empty blob; NVS save aborted.");
-  }
-  return serialized_data;
+  SerializedBuffer out;
+  out.size = sbuf.size;
+  out.data.reset(reinterpret_cast<uint8_t*>(msgpack_sbuffer_release(&sbuf)));
+  return out;
 }
 
 template <typename ConfigType>
