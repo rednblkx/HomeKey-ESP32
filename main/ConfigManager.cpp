@@ -8,7 +8,6 @@
 #include <cstdint>
 #include <ranges>
 #include <algorithm>
-#include <cstring>
 #include <string>
 #include <vector>
 #include <limits>
@@ -17,8 +16,10 @@
 #include "esp_log_level.h"
 #include "fmt/ranges.h"
 #include "mbedtls/x509.h"
+#define MSGPACK_SBUFFER_INIT_SIZE 2048
 #include "msgpack.h"
 #include "fmt/format.h"
+#include "msgpack/sbuffer.h"
 #include "nvs.h"
 #include "MbedtlsHelpers.hpp"
 #include <psa/crypto.h>
@@ -480,6 +481,8 @@ void ConfigManager::loadConfigFromNvs(const char *key) {
     return;
   }
 
+  ESP_LOGD(TAG, "Read %zu bytes for key '%s'", buffer.size(), key);
+
   msgpack_unpacked unpacked;
   msgpack_unpacked_init(&unpacked);
   
@@ -496,12 +499,13 @@ void ConfigManager::loadConfigFromNvs(const char *key) {
       deserialize(obj, "mqtt");
     } else if(!strcmp(key, "MQTTSSLDATA")){
       deserialize(obj, "ssl");
-      migrateMqttSslPemToDer();
+      migratePemToDer();
     } else if(!strcmp(key, "MISCDATA")){
       deserialize(obj, "misc");
       deserialize(obj, "actions");
     } else if(!strcmp(key, "HTTPSDATA")){
       deserialize(obj, "https");
+      migratePemToDer();
     } else {ESP_LOGE(TAG, "Key '%s' not valid", key);return;}
   } else {
     ESP_LOGE(TAG, "Failed to parse msgpack for key '%s'. Using defaults.", key);
@@ -523,18 +527,16 @@ bool ConfigManager::saveConfigToNvs(const char *key) {
     return false;
   }
 
-  std::vector<uint8_t> buf;
-  if (!strcmp(key, "MISCDATA")){
-    buf = serialize<espConfig::misc_config_t>();
-  } else if (!strcmp(key, "MQTTSSLDATA")){
-    buf = serialize<espConfig::mqtt_ssl_t>();
-  } else if (!strcmp(key, "MQTTDATA")){
-    buf = serialize<espConfig::mqttConfig_t>();
-  } else if (!strcmp(key, "HTTPSDATA")){
-    buf = serialize<espConfig::https_certs_t>();
-  }
+  const SerializedBuffer buf = [&] {
+    if (!strcmp(key, "MISCDATA")) return serialize<espConfig::misc_config_t>();
+    if (!strcmp(key, "MQTTSSLDATA")) return serialize<espConfig::mqtt_ssl_t>();
+    if (!strcmp(key, "MQTTDATA")) return serialize<espConfig::mqttConfig_t>();
+    if (!strcmp(key, "HTTPSDATA")) return serialize<espConfig::https_certs_t>();
+    return SerializedBuffer{};
+  }();
 
-  esp_err_t set_err = nvs_set_blob(m_nvsHandle, key, buf.data(), buf.size());
+  ESP_LOGD(TAG, "Config '%s' serialized, size %zu", key, buf.size);
+  esp_err_t set_err = nvs_set_blob(m_nvsHandle, key, buf.data.get(), buf.size);
 
   if (set_err != ESP_OK) {
     ESP_LOGE(TAG, "Failed to set blob in NVS for key '%s': %04#x", key, set_err);
@@ -731,27 +733,6 @@ void ConfigManager::deserialize(msgpack_object obj, std::string type) {
   }
 }
 
-// Write callback for the fixed serialize buffer: mirrors msgpack_sbuffer_write
-// but never reallocates. On overflow it reports failure so the caller can
-// abort the save instead of persisting a truncated blob.
-struct FixedSbuffer {
-  msgpack_sbuffer sbuf;
-  bool overflowed = false;
-};
-
-static int fixed_sbuffer_write(void* data, const char* buf, size_t len) {
-  auto* state = static_cast<FixedSbuffer*>(data);
-  msgpack_sbuffer* sbuf = &state->sbuf;
-  if (!buf) return 0;
-  if (sbuf->size + len > sbuf->alloc) {
-    state->overflowed = true; // caller aborts; never reallocates
-    return -1;
-  }
-  memcpy(sbuf->data + sbuf->size, buf, len);
-  sbuf->size += len;
-  return 0;
-}
-
 template <typename ConfigType>
 /**
  * @brief Serializes the selected configuration type into a MessagePack binary blob.
@@ -761,18 +742,13 @@ template <typename ConfigType>
  * as arrays of key/value pairs; enum-keyed color maps are encoded as [enum, value] pairs and string-keyed maps as
  * [string, value] pairs.
  *
- * @return std::vector<uint8_t> Byte vector containing the MessagePack-encoded configuration.
+ * @return ConfigManager::SerializedBuffer handle to the MessagePack-encoded configuration.
  */
-std::vector<uint8_t> ConfigManager::serialize() {
-  static constexpr size_t kSerializeBufSize = 2048;
-  uint8_t serialize_buf[kSerializeBufSize];
-
-  FixedSbuffer state;
-  state.sbuf.size = 0;
-  state.sbuf.alloc = kSerializeBufSize;
-  state.sbuf.data = reinterpret_cast<char*>(serialize_buf);
+ConfigManager::SerializedBuffer ConfigManager::serialize() {
+  msgpack_sbuffer sbuf;
   msgpack_packer pk;
-  msgpack_packer_init(&pk, &state, fixed_sbuffer_write);
+  msgpack_sbuffer_init(&sbuf);
+  msgpack_packer_init(&pk, &sbuf, msgpack_sbuffer_write);
   FieldRange primary{}, secondary{};
   if constexpr (std::is_same_v<espConfig::misc_config_t, ConfigType>){
     primary = sectionRange("misc");
@@ -883,15 +859,10 @@ std::vector<uint8_t> ConfigManager::serialize() {
     }
   }
 
-  std::vector<uint8_t> serialized_data;
-  if (state.overflowed) {
-    ESP_LOGE(TAG, "Config serialize overflow (> %zu bytes); NVS save aborted.", kSerializeBufSize);
-  } else if (state.sbuf.size > 0) {
-    serialized_data.assign(reinterpret_cast<uint8_t*>(state.sbuf.data), reinterpret_cast<uint8_t*>(state.sbuf.data) + state.sbuf.size);
-  } else {
-    ESP_LOGE(TAG, "Config serialization produced an empty blob; NVS save aborted.");
-  }
-  return serialized_data;
+  SerializedBuffer out;
+  out.size = sbuf.size;
+  out.data.reset(reinterpret_cast<uint8_t*>(msgpack_sbuffer_release(&sbuf)));
+  return out;
 }
 
 template <typename ConfigType>
@@ -1499,27 +1470,57 @@ void ConfigManager::ensureMqttSslLoaded() {
   }
 }
 
-void ConfigManager::migrateMqttSslPemToDer() {
-  auto isPem = [](const std::string& s) {
-    return !s.empty() && s.compare(0, 11, "-----BEGIN ") == 0;
+void ConfigManager::migratePemToDer() {
+  auto isPemEncoded = [](const std::string& s) {
+    return s.size() >= 11 && s.compare(0, 11, "-----BEGIN ") == 0;
   };
-  bool needsMigration = isPem(m_mqttSslConfig.caCert) || isPem(m_mqttSslConfig.clientCert) ||
-                        isPem(m_mqttSslConfig.clientKey);
-  if (!needsMigration) {
+  struct CertFieldRef {
+    std::string* field;
+    const char* name;
+  };
+  const CertFieldRef mqttFields[] = {
+      {&m_mqttSslConfig.caCert, "mqtt CA certificate"},
+      {&m_mqttSslConfig.clientCert, "mqtt client certificate"},
+      {&m_mqttSslConfig.clientKey, "mqtt client key"},
+  };
+  const CertFieldRef httpsFields[] = {
+      {&m_httpsCertsConfig.caCert, "https CA certificate"},
+      {&m_httpsCertsConfig.serverCert, "https server certificate"},
+      {&m_httpsCertsConfig.privateKey, "https private key"},
+  };
+  auto anyPem = [&isPemEncoded](const CertFieldRef* fields, size_t n) {
+    for (size_t i = 0; i < n; ++i) {
+      if (isPemEncoded(*fields[i].field)) return true;
+    }
+    return false;
+  };
+  if (!anyPem(mqttFields, 3) && !anyPem(httpsFields, 3)) {
     return;
   }
-  std::string ca = pemToDer(m_mqttSslConfig.caCert);
-  std::string client = pemToDer(m_mqttSslConfig.clientCert);
-  std::string key = pemToDer(m_mqttSslConfig.clientKey);
-  if (ca.empty() || client.empty() || key.empty()) {
-    ESP_LOGE(TAG, "MQTT SSL PEM->DER migration failed, keeping PEM blob");
-    return;
-  }
-  m_mqttSslConfig.caCert = std::move(ca);
-  m_mqttSslConfig.clientCert = std::move(client);
-  m_mqttSslConfig.clientKey = std::move(key);
-  if (saveConfigToNvs("MQTTSSLDATA")) {
+
+  auto convertAll = [&isPemEncoded](const CertFieldRef* fields, size_t n) {
+    bool changed = false;
+    for (size_t i = 0; i < n; ++i) {
+      std::string& field = *fields[i].field;
+      if (!isPemEncoded(field)) continue;
+      field = pemToDer(field);
+      if (isPemEncoded(field)) {
+        ESP_LOGE(TAG, "PEM->DER migration failed for %s, keeping PEM blob",
+                 fields[i].name);
+      } else {
+        changed = true;
+      }
+    }
+    return changed;
+  };
+  const bool mqttChanged = convertAll(mqttFields, 3);
+  const bool httpsChanged = convertAll(httpsFields, 3);
+
+  if (mqttChanged && saveConfigToNvs("MQTTSSLDATA")) {
     ESP_LOGI(TAG, "Migrated MQTT SSL certificates from PEM to DER");
+  }
+  if (httpsChanged && saveConfigToNvs("HTTPSDATA")) {
+    ESP_LOGI(TAG, "Migrated HTTPS certificates from PEM to DER");
   }
 }
 
@@ -1541,10 +1542,7 @@ bool ConfigManager::saveCertificate(espConfig::CertType certType, const std::str
         return false;
     }
 
-    const std::string& stored = (certType == espConfig::CertType::MQTT_CA ||
-                                 certType == espConfig::CertType::MQTT_CLIENT ||
-                                 certType == espConfig::CertType::MQTT_PRIVATE_KEY)
-        ? pemToDer(certContent) : certContent;
+    const std::string& stored = pemToDer(certContent);
     if (stored.empty()) {
         ESP_LOGE(TAG, "PEM to DER conversion produced no data");
         return false;
@@ -1570,17 +1568,17 @@ bool ConfigManager::saveCertificate(espConfig::CertType certType, const std::str
             typeStr = "Private key";
             break;
         case espConfig::CertType::HTTPS_SERVER_CERT:
-            m_httpsCertsConfig.serverCert = certContent;
+            m_httpsCertsConfig.serverCert = stored;
             typeStr = "HTTPS server certificate";
             isHttps = true;
             break;
         case espConfig::CertType::HTTPS_PRIVATE_KEY:
-            m_httpsCertsConfig.privateKey = certContent;
+            m_httpsCertsConfig.privateKey = stored;
             typeStr = "HTTPS private key";
             isHttps = true;
             break;
         case espConfig::CertType::HTTPS_CA_CERT:
-            m_httpsCertsConfig.caCert = certContent;
+            m_httpsCertsConfig.caCert = stored;
             typeStr = "HTTPS CA certificate";
             isHttps = true;
             break;

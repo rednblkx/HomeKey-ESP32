@@ -10,6 +10,7 @@
 #include "hal/gpio_ll.h"
 #include "soc/gpio_num.h"
 #include "SharedLed.hpp"
+#include "freertos/idf_additions.h"
 
 const char* HardwareManager::TAG = "HardwareManager";
 
@@ -147,7 +148,7 @@ HardwareManager::HardwareManager(const espConfig::actions_config_t& miscConfig)
           m_initiatorQueue = xQueueCreate(1, sizeof(uint8_t));
         }
         if (m_initiatorTaskHandle == nullptr) {
-          xTaskCreateUniversal(initiator_task_entry, "initiator_task", 3580, this, 3, &m_initiatorTaskHandle, 1);
+          xTaskCreatePinnedToCore(initiator_task_entry, "initiator_task", 3580, this, 3, &m_initiatorTaskHandle, 1);
         }
         if(!isr_service_installed){
           esp_err_t err = gpio_install_isr_service(0);
@@ -346,7 +347,7 @@ void HardwareManager::begin() {
     create_timer(altActionInit_timer_args, m_altActionInitTimer, "altActionInitTimer");
 
     m_hwEventQueue = xQueueCreate(10, sizeof(HwEvent));
-    xTaskCreateUniversal(hwEventTaskEntry, "hw_event_task", 3580, this, 3, &m_hwEventTaskHandle, 1);
+    xTaskCreatePinnedToCore(hwEventTaskEntry, "hw_event_task", 3580, this, 3, &m_hwEventTaskHandle, 1);
     ESP_LOGI(TAG, "Hardware initialization complete.");
 }
 
@@ -605,7 +606,7 @@ void HardwareManager::runFeedbackSequence(HwEventType feedback) {
             if(m_pixelSuccessTimer && esp_timer_is_active(m_pixelSuccessTimer)) esp_timer_stop(m_pixelSuccessTimer);
             if (m_pixel != nullptr) {
                 auto color = m_miscConfig.neopixelSuccessColor;
-                m_pixel->set(m_pixel->RGB(color[espConfig::actions_config_t::colorMap::R], color[espConfig::actions_config_t::colorMap::G], color[espConfig::actions_config_t::colorMap::B]));
+                m_pixel->set(m_pixel->rgb(color[espConfig::actions_config_t::colorMap::R], color[espConfig::actions_config_t::colorMap::G], color[espConfig::actions_config_t::colorMap::B]));
 
                 if (m_pixelSuccessTimer) esp_timer_start_once(m_pixelSuccessTimer, m_miscConfig.neopixelSuccessTime * 1000);
             }
@@ -628,7 +629,7 @@ void HardwareManager::runFeedbackSequence(HwEventType feedback) {
             if(m_pixelFailTimer && esp_timer_is_active(m_pixelFailTimer)) esp_timer_stop(m_pixelFailTimer);
             if (m_pixel != nullptr) {
                 auto color = m_miscConfig.neopixelFailureColor;
-                m_pixel->set(m_pixel->RGB(color[espConfig::actions_config_t::colorMap::R], color[espConfig::actions_config_t::colorMap::G], color[espConfig::actions_config_t::colorMap::B]));
+                m_pixel->set(m_pixel->rgb(color[espConfig::actions_config_t::colorMap::R], color[espConfig::actions_config_t::colorMap::G], color[espConfig::actions_config_t::colorMap::B]));
 
                 if (m_pixelFailTimer) esp_timer_start_once(m_pixelFailTimer, m_miscConfig.neopixelFailTime * 1000);
             }
@@ -648,7 +649,7 @@ void HardwareManager::runFeedbackSequence(HwEventType feedback) {
             if(m_pixelTagEventTimer && esp_timer_is_active(m_pixelTagEventTimer)) esp_timer_stop(m_pixelTagEventTimer);
             if (m_pixel != nullptr) {
                 auto color = m_miscConfig.neopixelTagEventColor;
-                m_pixel->set(m_pixel->RGB(color[espConfig::actions_config_t::colorMap::R], color[espConfig::actions_config_t::colorMap::G], color[espConfig::actions_config_t::colorMap::B]));
+                m_pixel->set(m_pixel->rgb(color[espConfig::actions_config_t::colorMap::R], color[espConfig::actions_config_t::colorMap::G], color[espConfig::actions_config_t::colorMap::B]));
 
                 if (m_pixelTagEventTimer) esp_timer_start_once(m_pixelTagEventTimer, m_miscConfig.neopixelTagEventTime * 1000);
             }
