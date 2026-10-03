@@ -14,6 +14,14 @@
 
 const char* HardwareManager::TAG = "HardwareManager";
 
+// Dual-core variants pin these tasks to core 1 (keeping core 0 for WiFi/BT);
+// unicore chips (esp32c6) use the scheduler's only core.
+#if CONFIG_FREERTOS_UNICORE
+static constexpr BaseType_t kTaskCore = tskNO_AFFINITY;
+#else
+static constexpr BaseType_t kTaskCore = 1;
+#endif
+
 const std::array<const char*, 6> pixelTypeMap = { "RGB", "RBG", "BRG", "BGR", "GBR", "GRB" };
 
 
@@ -148,7 +156,7 @@ HardwareManager::HardwareManager(const espConfig::actions_config_t& miscConfig)
           m_initiatorQueue = xQueueCreate(1, sizeof(uint8_t));
         }
         if (m_initiatorTaskHandle == nullptr) {
-          xTaskCreate(initiator_task_entry, "initiator_task", 3580, this, 3, &m_initiatorTaskHandle);
+          xTaskCreatePinnedToCore(initiator_task_entry, "initiator_task", 3580, this, 3, &m_initiatorTaskHandle, kTaskCore);
         }
         if(!isr_service_installed){
           esp_err_t err = gpio_install_isr_service(0);
@@ -232,7 +240,7 @@ void HardwareManager::begin() {
       gpio_num_t init_pin = pinAllocations.at(ALT_ACTION_INIT).value().get_pin();
       pinAllocations.at(ALT_ACTION_INIT).value().set_pullup(true);
       m_initiatorQueue = xQueueCreate(1, sizeof(uint8_t));
-      xTaskCreate(initiator_task_entry, "initiator_task", 3580, this, 3, &m_initiatorTaskHandle);
+      xTaskCreatePinnedToCore(initiator_task_entry, "initiator_task", 3580, this, 3, &m_initiatorTaskHandle, kTaskCore);
       if(esp_err_t err = gpio_install_isr_service(0); err == ESP_OK || err == ESP_ERR_INVALID_STATE){
         isr_service_installed = true;
       }
@@ -347,7 +355,7 @@ void HardwareManager::begin() {
     create_timer(altActionInit_timer_args, m_altActionInitTimer, "altActionInitTimer");
 
     m_hwEventQueue = xQueueCreate(10, sizeof(HwEvent));
-    xTaskCreate(hwEventTaskEntry, "hw_event_task", 3580, this, 3, &m_hwEventTaskHandle);
+    xTaskCreatePinnedToCore(hwEventTaskEntry, "hw_event_task", 3580, this, 3, &m_hwEventTaskHandle, kTaskCore);
     ESP_LOGI(TAG, "Hardware initialization complete.");
 }
 
