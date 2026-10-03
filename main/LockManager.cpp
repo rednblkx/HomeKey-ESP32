@@ -49,6 +49,7 @@ LockManager::LockManager(const espConfig::misc_config_t& miscConfig, const espCo
       EventLockState s = alpaca::deserialize<EventLockState>(payload, ec);
       if(ec) { ESP_LOGE(TAG, "Failed to deserialize update state event: %s", ec.message().c_str()); return; }
       ESP_LOGD(TAG, "Received update state event: %d -> %d", s.currentState, s.targetState);
+      s.prevState = m_currentState;
       m_currentState = s.currentState;
       s.targetState = m_targetState;
       s.source = LockManager::INTERNAL;
@@ -209,10 +210,12 @@ void LockManager::setTargetState(uint8_t state, Source source) {
 
     m_targetState = state;
 
+    const uint8_t prevState = m_currentState;
     EventLockState s{
       .currentState = m_currentState,
       .targetState = m_targetState,
-      .source = LockManager::INTERNAL
+      .source = LockManager::INTERNAL,
+      .prevState = prevState
     };
     std::array<uint8_t, sizeof(EventLockState)> d{};
     size_t d_len = alpaca::serialize(s, d);
@@ -251,6 +254,7 @@ void LockManager::overrideState(uint8_t c_state, uint8_t t_state, Source source)
 
     ESP_LOGI(TAG, "External source %d reported new c_state: %d t_state: %d. Overriding internal state.", static_cast<int>(source), c_state, t_state);
 
+    const uint8_t prevState = m_currentState;
     m_currentState = c_state != lockStates::MAX ? c_state : m_currentState;
     m_targetState = t_state != lockStates::MAX ? t_state : m_targetState;
 
@@ -258,7 +262,8 @@ void LockManager::overrideState(uint8_t c_state, uint8_t t_state, Source source)
     EventLockState s{
       .currentState = static_cast<uint8_t>(m_currentState),
       .targetState = static_cast<uint8_t>(m_targetState),
-      .source = LockManager::INTERNAL
+      .source = LockManager::INTERNAL,
+      .prevState = prevState
     };
     std::array<uint8_t, sizeof(EventLockState)> d{};
     size_t d_len = alpaca::serialize(s, d);

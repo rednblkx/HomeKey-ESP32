@@ -63,6 +63,12 @@ public:
      */
     void end();
 
+    /**
+      * @brief Publishes an arbitrary topic/payload pair.
+      * Used by the automation engine's mqtt_publish action.
+      */
+    void publish(const std::string& topic, const std::string& payload, int qos = 0, bool retain = false);
+
 private:
     /**
       * @brief Publishes the current state of the lock.
@@ -95,7 +101,6 @@ private:
     void onData(const std::string& topic, const std::string& data);
 
     // --- Publishing Logic ---
-    void publish(const std::string& topic, const std::string& payload, int qos = 0, bool retain = false);
     void publishHassDiscovery();
     void publishMqttStatus(bool connected, MqttErrorCode errorCode, const std::string& errorMessage = "");
 

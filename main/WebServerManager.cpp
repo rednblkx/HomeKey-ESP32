@@ -12,6 +12,7 @@
 #include "fmt/ranges.h"
 #include "WebServerManager.hpp"
 #include "ConfigManager.hpp"
+#include "automation/AutomationRegistry.hpp"
 #include "HomeSpan.h"
 #include "MqttManager.hpp"
 #include "NfcManager.hpp"
@@ -494,6 +495,7 @@ void WebServerManager::setupRoutes() {
       {"/config/clear", HTTP_POST, handleClearConfig, this},
       {"/config/save", HTTP_POST, handleSaveConfig, this},
       {"/eth_get_config", HTTP_GET, handleGetEthConfig, this},
+      {"/automation/schema", HTTP_GET, handleAutomationSchema, this},
       {"/nfc_get_presets", HTTP_GET, handleGetNfcPresets, this},
 
       // Action endpoints
@@ -771,6 +773,9 @@ esp_err_t WebServerManager::handleGetConfig(httpd_req_t *req) {
   } else if (type == "actions"){
     std::string s = instance->m_configManager.serializeToJson<espConfig::actions_config_t>();
     dataGuard.reset(cJSON_Parse(s.c_str()));
+  } else if (type == "automation"){
+    std::string s = instance->m_configManager.serializeToJson<espConfig::automation_config_t>();
+    dataGuard.reset(cJSON_Parse(s.c_str()));
   } else if (type == "hkinfo") {
     const auto readerData = instance->m_readerDataManager.snapshot();
     JsonGuard hkInfo(cJSON_CreateObject());
@@ -804,6 +809,67 @@ esp_err_t WebServerManager::handleGetConfig(httpd_req_t *req) {
       .toStringUnformatted();
   
   httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+  return ESP_OK;
+}
+
+static void addParamDescArray(JsonBuilder& obj, const char* key,
+                              const automation::ParamDesc* params, size_t count) {
+  obj.withArray(key, [&](JsonBuilder& arr) {
+    for (size_t i = 0; i < count; ++i) {
+      JsonBuilder p = JsonBuilder::object();
+      p.addString("name", params[i].name);
+      switch (params[i].kind) {
+        case automation::ParamDesc::Kind::String: p.addString("kind", "string"); break;
+        case automation::ParamDesc::Kind::Number: p.addString("kind", "number"); break;
+        case automation::ParamDesc::Kind::Bool:   p.addString("kind", "bool"); break;
+        case automation::ParamDesc::Kind::Select: p.addString("kind", "select"); break;
+      }
+      if (params[i].showIfParam) {
+        p.addString("showIfParam", params[i].showIfParam);
+        p.addString("showIfValue", params[i].showIfValue);
+      }
+      if (params[i].options) {
+        p.withArray("options", [&](JsonBuilder& opts) {
+          for (const char* const* o = params[i].options; *o; ++o) {
+            opts.addItemToArray(JsonGuard(cJSON_CreateString(*o)));
+          }
+        });
+      }
+      arr.addItemToArray(std::move(p).release());
+    }
+  });
+}
+
+template <typename Units>
+static JsonBuilder unitsToArray(const Units& units) {
+  JsonBuilder arr = JsonBuilder::array();
+  for (const auto& u : units) {
+    JsonBuilder unit = JsonBuilder::object();
+    unit.addString("type", u.type);
+    unit.addString("label", u.label);
+    addParamDescArray(unit, "params", u.params, u.paramCount);
+    arr.addItemToArray(std::move(unit).release());
+  }
+  return arr;
+}
+
+esp_err_t WebServerManager::handleAutomationSchema(httpd_req_t *req) {
+  WebServerManager *instance = getInstance(req);
+  if(!instance->basicAuth(req)){
+    return sendAuthFailure(req);
+  }
+
+  JsonBuilder data = JsonBuilder::object();
+  data.addItem("triggers", unitsToArray(automation::kTriggers).release());
+  data.addItem("conditions", unitsToArray(automation::kConditions).release());
+  data.addItem("actions", unitsToArray(automation::kActions).release());
+
+  httpd_resp_set_type(req, "application/json");
+  JsonBuilder response = JsonBuilder::object();
+  response.addBool("success", true);
+  response.addItem("data", std::move(data).release());
+  std::string resp = response.toStringUnformatted();
+  httpd_resp_send(req, resp.c_str(), HTTPD_RESP_USE_STRLEN);
   return ESP_OK;
 }
 
@@ -944,7 +1010,7 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     return sendJsonError(req, "Missing 'type' parameter");
   }
 
-  const size_t max_content_size = 2048;
+  const size_t max_content_size = std::string_view(type_param) == "automation" ? 8192 : 2048;
   if (req->content_len >= max_content_size) {
     return sendJsonError(req, "Request body too large", "413 Payload Too Large");
   }
@@ -973,6 +1039,9 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     configSchema.reset(cJSON_Parse(s.c_str()));
   } else if (type == "actions") {
     std::string s = instance->m_configManager.serializeToJson<espConfig::actions_config_t>();
+    configSchema.reset(cJSON_Parse(s.c_str()));
+  } else if (type == "automation") {
+    std::string s = instance->m_configManager.serializeToJson<espConfig::automation_config_t>();
     configSchema.reset(cJSON_Parse(s.c_str()));
   } else {
     return sendJsonError(req, "Invalid 'type' parameter");
@@ -1059,6 +1128,15 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
     result = instance->m_configManager.updateFromJson<espConfig::actions_config_t>(data_str);
     if (!result.empty()) {
       success = instance->m_configManager.saveConfig<espConfig::actions_config_t>();
+    }
+  } else if (type == "automation") {
+    result = instance->m_configManager.updateFromJson<espConfig::automation_config_t>(data_str);
+    if (!result.empty()) {
+      success = instance->m_configManager.saveConfig<espConfig::automation_config_t>();
+      EventValueChanged s{.name = "rules"};
+      std::vector<uint8_t> d;
+      alpaca::serialize(s, d);
+      AppEventLoop::publish(HW_EVENT, HW_CONFIG_CHANGED, d.data(), d.size());
     }
   }
 
@@ -1320,6 +1398,7 @@ esp_err_t WebServerManager::handleClearConfig(httpd_req_t *req) {
   if (type == "mqtt")        success = instance->m_configManager.deleteConfig<espConfig::mqttConfig_t>();
   else if (type == "misc")   success = instance->m_configManager.deleteConfig<espConfig::misc_config_t>();
   else if (type == "actions")success = instance->m_configManager.deleteConfig<espConfig::actions_config_t>();
+  else if (type == "automation") success = instance->m_configManager.deleteConfig<espConfig::automation_config_t>();
 
   if (success) {
     httpd_resp_send(req, "Cleared! Rebooting...", HTTPD_RESP_USE_STRLEN);

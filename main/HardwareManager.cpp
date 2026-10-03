@@ -126,6 +126,7 @@ HardwareManager::HardwareManager(const espConfig::actions_config_t& miscConfig)
       }
 
       alloc_entry = std::unexpected<GPIOAllocator::GPIOAllocatorError>(GPIOAllocator::INVALID_GPIO_NUM);
+      gpio_hold_dis(gpio_num_t(s.oldValue));
       gpio_pulldown_en(gpio_num_t(s.oldValue));
     }
 

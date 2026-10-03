@@ -12,6 +12,7 @@
 #include "ReaderDataManager.hpp"
 #include "HardwareManager.hpp"
 #include "MqttManager.hpp"
+#include "automation/AutomationEngine.hpp"
 #include "WebServerManager.hpp"
 #include <functional>
 #include <sodium/crypto_sign.h>
@@ -28,6 +29,7 @@ NvsCredentialStore readerDataManager;
 ConfigManager configManager;
 std::unique_ptr<HardwareManager> hardwareManager;
 std::unique_ptr<MqttManager> mqttManager;
+std::unique_ptr<automation::AutomationEngine> automationEngine;
 WebServerManager webServerManager(configManager, readerDataManager);
 std::unique_ptr<HomeKitLock> homekitLock;
 std::unique_ptr<NfcManager> nfcManager;
@@ -176,6 +178,9 @@ void setup() {
   hardwareManager = std::make_unique<HardwareManager>(configManager.getConfig<espConfig::actions_config_t>());
   lockManager = std::make_unique<LockManager>(configManager.getConfig<espConfig::misc_config_t>(), configManager.getConfig<espConfig::actions_config_t>());
   mqttManager = std::make_unique<MqttManager>(configManager);
+  automationEngine = std::make_unique<automation::AutomationEngine>(
+      configManager, mqttManager.get(), lockManager.get());
+  automationEngine->begin();
   homekitLock = std::make_unique<HomeKitLock>(lambda, *lockManager, configManager, readerDataManager);
   espConfig::misc_config_t miscConfig = configManager.getConfig<espConfig::misc_config_t>();
   static const char* TAG = "Main";

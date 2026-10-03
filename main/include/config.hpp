@@ -259,4 +259,11 @@ namespace espConfig
     uint8_t hkAltActionInitLedPin = GPIO_HK_ALT_ACTION_INIT_LED_PIN;
     uint16_t hkAltActionInitTimeout = GPIO_HK_ALT_ACTION_INIT_TIMEOUT;
   };
+
+  /* Automation rules: stored as the exact JSON blob authored in the web UI.
+     Kept as a string so the schema stays on the frontend; the firmware parses
+     it into automation::Rule structs at runtime. */
+  struct automation_config_t {
+    std::string rulesJson = "[]";
+  };
 } // namespace espConfig
