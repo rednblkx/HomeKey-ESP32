@@ -148,7 +148,7 @@ HardwareManager::HardwareManager(const espConfig::actions_config_t& miscConfig)
           m_initiatorQueue = xQueueCreate(1, sizeof(uint8_t));
         }
         if (m_initiatorTaskHandle == nullptr) {
-          xTaskCreatePinnedToCore(initiator_task_entry, "initiator_task", 3580, this, 3, &m_initiatorTaskHandle, 1);
+          xTaskCreate(initiator_task_entry, "initiator_task", 3580, this, 3, &m_initiatorTaskHandle);
         }
         if(!isr_service_installed){
           esp_err_t err = gpio_install_isr_service(0);
@@ -232,7 +232,7 @@ void HardwareManager::begin() {
       gpio_num_t init_pin = pinAllocations.at(ALT_ACTION_INIT).value().get_pin();
       pinAllocations.at(ALT_ACTION_INIT).value().set_pullup(true);
       m_initiatorQueue = xQueueCreate(1, sizeof(uint8_t));
-      xTaskCreatePinnedToCore(initiator_task_entry, "initiator_task", 3580, this, 3, &m_initiatorTaskHandle, tskNO_AFFINITY);
+      xTaskCreate(initiator_task_entry, "initiator_task", 3580, this, 3, &m_initiatorTaskHandle);
       if(esp_err_t err = gpio_install_isr_service(0); err == ESP_OK || err == ESP_ERR_INVALID_STATE){
         isr_service_installed = true;
       }
@@ -347,7 +347,7 @@ void HardwareManager::begin() {
     create_timer(altActionInit_timer_args, m_altActionInitTimer, "altActionInitTimer");
 
     m_hwEventQueue = xQueueCreate(10, sizeof(HwEvent));
-    xTaskCreatePinnedToCore(hwEventTaskEntry, "hw_event_task", 3580, this, 3, &m_hwEventTaskHandle, 1);
+    xTaskCreate(hwEventTaskEntry, "hw_event_task", 3580, this, 3, &m_hwEventTaskHandle);
     ESP_LOGI(TAG, "Hardware initialization complete.");
 }
 
