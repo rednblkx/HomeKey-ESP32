@@ -188,7 +188,7 @@ jobs:
       - name: ESP-IDF Build (${{ matrix.target }})
         uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: v5.5.5
+          esp_idf_version: v6.1
           target: ${{ matrix.target }}
           path: '.'
           extra_docker_args: >-
@@ -200,7 +200,7 @@ jobs:
       - name: ESP-IDF Build (${{ matrix.target }}) - Flash Encryption
         uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: v5.5.5
+          esp_idf_version: v6.1
           target: ${{ matrix.target }}
           path: '.'
           extra_docker_args: >-
