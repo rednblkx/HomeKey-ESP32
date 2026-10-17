@@ -1,7 +1,29 @@
 dependencies:
   idf:
-    version: '>=5.5.5'
-  espressif/arduino-esp32: ==3.3.11
+    version: '>=6.0'
   joltwallet/littlefs: ^1.20.1
   espp/serialization: ^1.0.22
+  espressif/mqtt: "*"
+  espressif/cjson: "*"
   espressif/keyboard_button: ^1.0.0
+  # SPI Ethernet MAC+PHY drivers (IDF 6 moved them out of tree)
+  espressif/w5500: "^2.0.0"
+  espressif/dm9051: "^1.1.1"
+  espressif/ksz8851snl: "^1.2.0"
+  # EMAC external PHY drivers: only meaningful on targets with EMAC
+  espressif/lan87xx:
+    version: "^1.1.0"
+    rules:
+      - if: "target in [esp32, esp32p4, esp32s31]"
+  espressif/rtl8201:
+    version: "^1.1.0"
+    rules:
+      - if: "target in [esp32, esp32p4, esp32s31]"
+  espressif/dp83848:
+    version: "^1.1.0"
+    rules:
+      - if: "target in [esp32, esp32p4, esp32s31]"
+  espressif/ksz80xx:
+    version: "^1.1.0"
+    rules:
+      - if: "target in [esp32, esp32p4, esp32s31]"

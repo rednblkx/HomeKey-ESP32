@@ -34,7 +34,8 @@ public:
     /**
      * @brief Initializes the keypad GPIOs from config and registers the key callback.
      * @param config Keypad-related misc configuration (layout, pins, active level, debounce, doorbell key).
-     * @return true on success, false if the keyboard_button instance could not be created.
+     * @return true on success or if already initialized; false on GPIO acquisition
+     * or keyboard creation failure. Callback registration and timer creation errors abort.
      */
     bool begin(const espConfig::misc_config_t& config);
 

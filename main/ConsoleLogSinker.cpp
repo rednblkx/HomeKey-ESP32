@@ -1,9 +1,12 @@
 #include "ConsoleLogSinker.h"
 #include "fmt/color.h"
+#include <cstdio>
 #include <ctime>
 
 namespace loggable {
 
+/// Write a colored log line to stdout with timestamp in milliseconds, level, and tag.
+/// Console write errors and short writes are ignored without retry.
 void ConsoleLogSinker::consume(const LogMessage& message) {
     fmt::detail::color_type c = fmt::color::white;
     const char *level = "NONE";
@@ -32,7 +35,11 @@ void ConsoleLogSinker::consume(const LogMessage& message) {
             break;
     }
 
-    fmt::print(fmt::fg(c), "[{}][{}][{}] {}\n", std::chrono::duration_cast<std::chrono::milliseconds>(message.get_timestamp().time_since_epoch()).count(), level, message.get_tag(), message.get_message());
+    fmt::memory_buffer buf;
+    fmt::format_to(fmt::appender(buf), fmt::fg(c), "[{}][{}][{}] {}\n", std::chrono::duration_cast<std::chrono::milliseconds>(message.get_timestamp().time_since_epoch()).count(), level, message.get_tag(), message.get_message());
+    // The console (USB-Serial/JTAG) can fail or short-write when no host is
+    // reading; fmt::print would abort() on that, so write directly instead.
+    std::fwrite(buf.data(), 1, buf.size(), stdout);
 }
 
 } // namespace loggable

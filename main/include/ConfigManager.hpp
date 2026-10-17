@@ -9,7 +9,6 @@
 #include <vector>
 #include <string>
 #include <map>
-#include <LittleFS.h>
 #include "msgpack/object.h"
 
 struct CertificateStatus {

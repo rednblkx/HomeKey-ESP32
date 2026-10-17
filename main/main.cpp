@@ -1,23 +1,20 @@
 #include <cstdint>
 #include <memory>
 #include "ConsoleLogSinker.h"
-#include "HomeSpan.h"
 #include "config.hpp"
 #include <esp_event.h>
 #include "dns_server.h"
-#include "HomeKitLock.hpp"
+#include "HomeKitService.hpp"
 #include "LockManager.hpp"
 #include "NfcManager.hpp"
 #include "ConfigManager.hpp"
+#include "NetworkManager.hpp"
 #include "ReaderDataManager.hpp"
 #include "HardwareManager.hpp"
 #include "MqttManager.hpp"
 #include "automation/AutomationEngine.hpp"
 #include "WebServerManager.hpp"
 #include <functional>
-#include <sodium/crypto_sign.h>
-#include <sodium/crypto_box.h>
-#include "HAP.h"
 #include "loggable.hpp"
 #include "loggable_espidf.hpp"
 #include "WebSocketLogSinker.h"
@@ -29,14 +26,13 @@ NvsCredentialStore readerDataManager;
 ConfigManager configManager;
 std::unique_ptr<HardwareManager> hardwareManager;
 std::unique_ptr<MqttManager> mqttManager;
+std::unique_ptr<NetworkManager> networkManager;
 std::unique_ptr<automation::AutomationEngine> automationEngine;
 WebServerManager webServerManager(configManager, readerDataManager);
-std::unique_ptr<HomeKitLock> homekitLock;
+std::unique_ptr<HomeKitService> homekitService;
 std::unique_ptr<NfcManager> nfcManager;
 
 static dns_server_handle_t dns_server = NULL;
-
-bool pollHS = false;
 
 static void dhcp_set_captiveportal_url(void) {
     esp_netif_ip_info_t ip_info;
@@ -65,27 +61,28 @@ static void start_captive_portal(void)
     ESP_LOGI("Main", "DNS server started for captive portal");
 }
 
+/// Stop the captive DNS server if running and clear its handle.
+static void stop_captive_portal(void)
+{
+    if (dns_server) {
+        stop_dns_server(dns_server);
+        dns_server = NULL;
+        ESP_LOGI("Main", "Captive portal DNS server stopped");
+    }
+}
+
 std::function<void(int)> lambda = [](int status) {
   if (status == 1) {
-    char identifier[18];
-    sprintf(identifier, "%.2s%.2s%.2s%.2s%.2s%.2s", HAPClient::accessory.ID, HAPClient::accessory.ID + 3, HAPClient::accessory.ID + 6, HAPClient::accessory.ID + 9, HAPClient::accessory.ID + 12, HAPClient::accessory.ID + 15);
-    mqttManager->begin(std::string(identifier));
-    webServerManager.begin(); 
+    stop_captive_portal();
+    webServerManager.end(); // free the portal's server/port before rebinding
+    std::string identifier = homekitService->accessoryIdentifier();
+    mqttManager->begin(identifier);
+    webServerManager.begin();
   } else if (status == 0){
-    pollHS = false;
     mqttManager->end();
     webServerManager.end();
-    WiFi.mode(WIFI_AP_STA);
-    uint8_t mac[6];
-    esp_read_mac(mac, ESP_MAC_BT);
-    const std::string macStr = fmt::format("HK_{:02X}{:02X}{:02X}{:02X}", mac[2], mac[3], mac[4], mac[5]);
-    auto misc = configManager.getConfig<espConfig::misc_config_t>();
-    WiFi.softAP(macStr.c_str(), misc.accessPointPassword.c_str(), 11, false, 2, false, WIFI_AUTH_WPA2_WPA3_PSK, WIFI_CIPHER_TYPE_AES_CMAC128); 
     start_captive_portal();
     webServerManager.begin();
-    while(true){
-      vTaskDelay(pdMS_TO_TICKS(100));
-    }
   }
 };
 using namespace loggable;
@@ -113,13 +110,25 @@ bool initLogging(){
   return true;
 }
 
+void setup();
+void loop();
+
+/// Run setup once, then remain in the RTOS-yielding application loop.
+extern "C" void app_main() {
+  setup();
+  while (true) {
+    loop();
+  }
+}
+
 /**
- * @brief Initialize runtime, configure logging/serial, and instantiate core subsystem managers.
+ * @brief Initialize runtime, configure logging, and instantiate core subsystem managers.
  *
- * Initializes the global runtime infrastructure (Sinker), sets logging levels and Serial,
+ * Initializes the global runtime infrastructure (Sinker), initializes NVS and logging,
  * constructs and assigns global manager instances (ReaderDataManager, ConfigManager, WebServerManager,
- * HardwareManager, LockManager, MqttManager, HomeKitLock, NfcManager), reads NFC-related configuration,
- * and starts managers that require explicit startup.
+ * HardwareManager, LockManager, MqttManager, NetworkManager, HomeKitService, NfcManager), reads NFC-related configuration,
+ * and starts managers that require explicit startup. Returns early if NVS or logging
+ * initialization fails.
  *
  * @note This function allocates and assigns globals used across the application and invokes their
  *       initialization routines (calls to `begin()` where applicable). It also logs the resolved NFC
@@ -128,9 +137,6 @@ bool initLogging(){
 void setup() {
   #ifdef CONFIG_IDF_TARGET_ESP32
   gpio_set_pull_mode(GPIO_NUM_3, GPIO_PULLUP_ONLY); // U0RXD idle-HIGH in case UART-bridge not present
-  #endif
-  #ifdef CONFIG_INIT_ARDU_SERIAL_LOGGING
-  Serial.begin(115200);
   #endif
   if(esp_err_t err = nvs_flash_init(); err != ESP_OK){
     ESP_LOGE("Main", "Failed to initialize NVS. Aborting. err=%d", err);
@@ -178,10 +184,11 @@ void setup() {
   hardwareManager = std::make_unique<HardwareManager>(configManager.getConfig<espConfig::actions_config_t>());
   lockManager = std::make_unique<LockManager>(configManager.getConfig<espConfig::misc_config_t>(), configManager.getConfig<espConfig::actions_config_t>());
   mqttManager = std::make_unique<MqttManager>(configManager);
+  networkManager = std::make_unique<NetworkManager>(configManager);
+  homekitService = std::make_unique<HomeKitService>(*lockManager, configManager, readerDataManager);
   automationEngine = std::make_unique<automation::AutomationEngine>(
       configManager, mqttManager.get(), lockManager.get());
   automationEngine->begin();
-  homekitLock = std::make_unique<HomeKitLock>(lambda, *lockManager, configManager, readerDataManager);
   espConfig::misc_config_t miscConfig = configManager.getConfig<espConfig::misc_config_t>();
   static const char* TAG = "Main";
   if(miscConfig.nfcPinsPreset != PIN_UNSET){
@@ -220,20 +227,18 @@ void setup() {
 
   webServerManager.setNfcManager(nfcManager.get());
   webServerManager.setMqttManager(mqttManager.get());
+  webServerManager.setNetworkManager(networkManager.get());
+  webServerManager.setHomeKitService(homekitService.get());
   hardwareManager->begin();
-  homekitLock->begin();
+  networkManager->setConnectionCallback(lambda);
+  networkManager->begin();
+  homekitService->begin();
   lockManager->begin();
-  pollHS = true;
 }
-/**
- * @brief Run the main application loop: service HomeSpan events and yield to the RTOS.
-*
- * Polls HomeSpan to process HomeKit and internal events, then delays 50 ms to allow other
- * FreeRTOS tasks to run.
- */
 
+/**
+ * @brief Idle loop. Yields to the RTOS; the HAP server runs on its own task.
+ */
 void loop() {
-  if(pollHS)
-    homeSpan.poll();
   vTaskDelay(pdMS_TO_TICKS(50));
 }

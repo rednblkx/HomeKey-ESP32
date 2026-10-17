@@ -2,7 +2,12 @@
 #include <vector>
 #include <string>
 #include <cstdint>
-#include <mbedtls/sha256.h>
+#include <mbedtls/build_info.h>
+#if MBEDTLS_VERSION_MAJOR >= 4
+#include "mbedtls/private/sha256.h"
+#else
+#include "mbedtls/sha256.h"
+#endif
 
 namespace Utils {
 

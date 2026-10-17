@@ -8,14 +8,14 @@
 #include "esp_system.h"
 #include "app_event_loop.hpp"
 #include "app_events.hpp"
-#include "EthernetDriver.hpp"
 #include "fmt/ranges.h"
 #include "WebServerManager.hpp"
 #include "ConfigManager.hpp"
+#include "HomeKitService.hpp"
 #include "automation/AutomationRegistry.hpp"
-#include "HomeSpan.h"
 #include "MqttManager.hpp"
 #include "NfcManager.hpp"
+#include "NetworkManager.hpp"
 #include "ReaderDataManager.hpp"
 #include "cJSON.h"
 #include "config.hpp"
@@ -32,7 +32,7 @@
 #include "loggable.hpp"
 #include "portmacro.h"
 #include "sodium/randombytes.h"
-#include <LittleFS.h>
+#include "WebFs.hpp"
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -257,18 +257,41 @@ void WebServerManager::begin() {
   randombytes_buf(sessionIdBytes.data(), sessionIdBytes.size());
   m_sessionId = fmt::format("{:02x}", fmt::join(sessionIdBytes, ""));
 
-  if (!LittleFS.begin()) {
+  if (!webfs::mount()) {
     ESP_LOGW(TAG, "Failed to mount LittleFS");
-  } else{
-    ESP_LOGI(TAG, "LittleFS mounted: %d/%d bytes", LittleFS.usedBytes(),
-            LittleFS.totalBytes());
   }
   wifi_mode_t currentMode;
   esp_err_t wifiErr = esp_wifi_get_mode(&currentMode);
   bool isApMode = (wifiErr == ESP_OK && (currentMode == WIFI_MODE_AP || currentMode == WIFI_MODE_APSTA));
   bool isHttpsActive = !isApMode && shouldEnableHttps();
 
-  httpd_ssl_config_t ssl_config = HTTPD_SSL_CONFIG_DEFAULT();
+  // HTTPD_SSL_CONFIG_DEFAULT() omits client_cert_authmode_optional (only set
+  // when CONFIG_ESP_TLS_SERVER_MIN_AUTH_MODE_OPTIONAL) and use_secure_element;
+  // zero-init first so -Werror=missing-field-initializers is satisfied.
+  httpd_ssl_config_t ssl_config{};
+  ssl_config.httpd = HTTPD_DEFAULT_CONFIG();
+  ssl_config.servercert = NULL;
+  ssl_config.servercert_len = 0;
+  ssl_config.cacert_pem = NULL;
+  ssl_config.cacert_len = 0;
+  ssl_config.prvtkey_pem = NULL;
+  ssl_config.prvtkey_len = 0;
+  ssl_config.use_ecdsa_peripheral = false;
+  ssl_config.ecdsa_key_efuse_blk = 0;
+  ssl_config.ecdsa_key_efuse_blk_high = 0;
+  ssl_config.ecdsa_curve = ESP_TLS_ECDSA_CURVE_SECP256R1;
+  ssl_config.transport_mode = HTTPD_SSL_TRANSPORT_SECURE;
+  ssl_config.port_secure = 443;
+  ssl_config.port_insecure = 80;
+  ssl_config.session_tickets = false;
+  ssl_config.user_cb = NULL;
+  ssl_config.ssl_userdata = NULL;
+  ssl_config.cert_select_cb = NULL;
+  ssl_config.alpn_protos = NULL;
+  ssl_config.tls_handshake_timeout_ms = 0;
+  ssl_config.tls_version = ESP_TLS_VER_ANY;
+  ssl_config.ciphersuites_list = NULL;
+  ssl_config.use_secure_element = false;
   ssl_config.httpd.max_uri_handlers = 22;
   ssl_config.httpd.max_open_sockets = 4;
   ssl_config.httpd.stack_size = 8192;
@@ -340,8 +363,10 @@ BaseType_t task;
     setupRoutes();
   }
 
-  esp_timer_create_args_t timerArgs = {
-      .callback = &statusTimerCallback, .arg = this, .name = "statusTimer"};
+  esp_timer_create_args_t timerArgs{};
+  timerArgs.callback = &statusTimerCallback;
+  timerArgs.arg = this;
+  timerArgs.name = "statusTimer";
   if (esp_timer_create(&timerArgs, &m_statusTimer) != ESP_OK) {
     ESP_LOGE(TAG, "Failed to create status timer");
   }
@@ -361,6 +386,11 @@ void WebServerManager::end() {
   ESP_LOGI(TAG, "Ending WebServerManager...");
 
   if(!m_isInitialized) return;
+  // Clear the flag FIRST: log messages dispatched concurrently (WebSocketLog-
+  // Sinker runs on the loggable task) must stop touching the server state
+  // before it is torn down — a broadcast that races this teardown would
+  // otherwise xQueueSend into a deleted queue and assert.
+  m_isInitialized = false;
 
   if (m_server) {
     httpd_ssl_stop(m_server);
@@ -474,6 +504,7 @@ esp_err_t WebServerManager::ws_post_handshake_cb(httpd_req_t *req) {
   return ESP_OK;
 }
 
+/// Register normal UI, API, and WebSocket routes, continuing after registration failures.
 void WebServerManager::setupRoutes() {
   ESP_LOGI(TAG, "Setting up routes...");
 
@@ -519,10 +550,11 @@ void WebServerManager::setupRoutes() {
       {"/*", HTTP_GET, handleRootOrHash, this}};
 
   for (auto &r : routes) {
-    httpd_uri_t uri = {.uri = r.uri,
-                       .method = r.method,
-                       .handler = r.handler,
-                       .user_ctx = r.ctx};
+    httpd_uri_t uri{};
+    uri.uri = r.uri;
+    uri.method = r.method;
+    uri.handler = r.handler;
+    uri.user_ctx = r.ctx;
 #ifdef CONFIG_HTTPD_WS_SUPPORT
     uri.is_websocket = r.is_ws;
     if (r.is_ws) {
@@ -541,6 +573,7 @@ void WebServerManager::setupRoutes() {
 // Captive Portal Route Setup
 // ============================================================================
 
+/// Register provisioning API, static assets, and captive-portal redirects; continue after registration failures.
 void WebServerManager::setupCaptivePortalRoutes() {
   ESP_LOGI(TAG, "Setting up captive portal routes...");
 
@@ -570,13 +603,11 @@ void WebServerManager::setupCaptivePortalRoutes() {
       {"/*", HTTP_GET, handleCaptivePortal, this}};
 
   for (auto &r : routes) {
-    httpd_uri_t uri = {.uri = r.uri,
-                       .method = r.method,
-                       .handler = r.handler,
-                       .user_ctx = r.ctx,
-                       .is_websocket = false,
-                       .handle_ws_control_frames = false,
-                       .supported_subprotocol = nullptr};
+    httpd_uri_t uri{};
+    uri.uri = r.uri;
+    uri.method = r.method;
+    uri.handler = r.handler;
+    uri.user_ctx = r.ctx;
     esp_err_t err = httpd_register_uri_handler(m_server, &uri);
     if (err != ESP_OK) {
       ESP_LOGE(TAG, "Failed to register captive portal URI %s: %s", r.uri, esp_err_to_name(err));
@@ -606,6 +637,9 @@ esp_err_t WebServerManager::sendAuthFailure(httpd_req_t *req) {
 // Static File Handler
 // ============================================================================
 
+/// Authenticate and stream a file, preferring gzip for JS/CSS when the client accepts it.
+/// Return ESP_FAIL for a missing/unopenable file, propagate chunk-send errors,
+/// or return the final chunk result. Authentication rejection sends 401 and returns ESP_OK.
 esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
   if(!instance->basicAuth(req)){
@@ -631,7 +665,7 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
       if (httpd_req_get_hdr_value_str(req, "Accept-Encoding", hdr, sizeof(hdr)) == ESP_OK) {
         if (strstr(hdr, "gzip") != nullptr) {
           std::string compressed = filepath + ".gz";
-          if (LittleFS.exists(compressed.c_str())) {
+          if (webfs::exists(compressed.c_str())) {
             use_compressed = true;
             filepath = compressed;
           }
@@ -640,11 +674,11 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
     }
   }
 
-  if (!LittleFS.exists(filepath.c_str())) {
+  if (!webfs::exists(filepath.c_str())) {
     httpd_resp_send_404(req);
     return ESP_FAIL;
   }
-  File file = LittleFS.open(filepath.c_str(), "r");
+  FILE *file = webfs::open_read(filepath.c_str());
   if (!file) {
     httpd_resp_send_404(req);
     return ESP_FAIL;
@@ -678,13 +712,13 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
 
   size_t bytes_read;
   esp_err_t err = ESP_OK;
-  while ((bytes_read = file.read((uint8_t*)buffer, sizeof(buffer))) > 0) {
+  while ((bytes_read = webfs::read(file, (uint8_t*)buffer, sizeof(buffer))) > 0) {
       err = httpd_resp_send_chunk(req, buffer, bytes_read);
       vTaskDelay(pdMS_TO_TICKS(5));
       if (err != ESP_OK) break;
   }
 
-  file.close();
+  fclose(file);
   if (err != ESP_OK) {
       httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "TLS send error");
       return err;
@@ -693,13 +727,15 @@ esp_err_t WebServerManager::handleStaticFiles(httpd_req_t *req) {
 }
 
 /**
- * @brief Serve the single-page application entry (app.html) for root/hash requests.
+ * @brief Serve the compressed single-page application entry for root/hash requests.
  *
  * Authenticates the request, issues a sessionId cookie when different from the server's session,
- * sets appropriate response headers, and streams /app.html from LittleFS in chunks.
+ * sets appropriate response headers, and streams /index.html.gz from LittleFS in chunks.
  *
  * @param req The HTTP request to handle.
- * @return esp_err_t ESP_OK on successful send; ESP_FAIL if authentication fails, the file is missing, or a send error occurs.
+ * @return ESP_FAIL if the file cannot be opened or a data chunk send fails;
+ * ESP_OK otherwise, including after sending 401 on authentication rejection.
+ * File read errors and the final chunk-send result are not checked.
  */
 esp_err_t WebServerManager::handleRootOrHash(httpd_req_t *req) {
   WebServerManager* instance = getInstance(req);
@@ -715,7 +751,7 @@ esp_err_t WebServerManager::handleRootOrHash(httpd_req_t *req) {
     httpd_resp_set_hdr(req, "Set-Cookie", sessionCookie.c_str());
   }
 
-  File file = LittleFS.open("/index.html.gz", "r");
+  FILE *file = webfs::open_read("/index.html.gz");
   if (!file) {
     httpd_resp_send_404(req);
     return ESP_FAIL;
@@ -727,15 +763,15 @@ esp_err_t WebServerManager::handleRootOrHash(httpd_req_t *req) {
 
   char buffer[1024];
   size_t bytes_read;
-  while ((bytes_read = file.read((uint8_t *)buffer, sizeof(buffer))) > 0) {
+  while ((bytes_read = webfs::read(file, (uint8_t *)buffer, sizeof(buffer))) > 0) {
     if (httpd_resp_send_chunk(req, buffer, bytes_read) != ESP_OK) {
-      file.close();
+      fclose(file);
       httpd_resp_send_chunk(req, NULL, 0);
       return ESP_FAIL;
     }
     vTaskDelay(pdMS_TO_TICKS(10));
   }
-  file.close();
+  fclose(file);
   httpd_resp_send_chunk(req, NULL, 0);
   return ESP_OK;
 }
@@ -1165,6 +1201,10 @@ esp_err_t WebServerManager::handleSaveConfig(httpd_req_t *req) {
   return ESP_OK;
 }
 
+/// Check incoming config keys/types, setup-code rules, GPIO assignments, and TLS heap limits.
+/// currentData is the existing config; obj is the proposed partial update. Numeric
+/// booleans are normalized in obj. Return false after sending a JSON error on the
+/// first rejection, or true if all supplied fields pass.
 bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData, cJSON *obj) {
   bool overrideStrapping = false;
   cJSON *ovrStrItem = cJSON_GetObjectItem(obj, "overrideStrappingRestriction");
@@ -1237,7 +1277,8 @@ bool WebServerManager::validateRequest(httpd_req_t *req, cJSON *currentData, cJS
         sendJsonError(req, "\"" + code + "\" is too simple to use as a Setup Code.");
         return false;
       }
-      if (homeSpan.controllerListBegin() != homeSpan.controllerListEnd() &&
+      WebServerManager *wsm = getInstance(req);
+      if (wsm && wsm->m_homeKit && wsm->m_homeKit->isPaired() &&
           code.compare(cJSON_GetStringValue(existingValue)) != 0) {
         sendJsonError(req, "Setup Code can only be set if no devices are paired");
         return false;
@@ -1426,6 +1467,9 @@ esp_err_t WebServerManager::handleReboot(httpd_req_t *req) {
   return ESP_OK;
 }
 
+/// Authenticate, acknowledge, and queue a HomeKit reset if the service is available.
+/// Return ESP_OK for handled requests, including after a 401 response.
+/// The response does not confirm that the queued reset completed.
 esp_err_t WebServerManager::handleHKReset(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
   if(!instance->basicAuth(req)){
@@ -1441,11 +1485,12 @@ esp_err_t WebServerManager::handleHKReset(httpd_req_t *req) {
       .addString("message", "Erasing HomeKit pairings, device will reboot")
       .toStringUnformatted();
   httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-  instance->m_readerDataManager.deleteAllReaderData();
-  homeSpan.processSerialCommand("H");
+  if (instance && instance->m_homeKit) instance->m_homeKit->factoryReset();
   return ESP_OK;
 }
 
+/// Authenticate, acknowledge, then attempt Wi-Fi credential erasure and reboot if a manager exists.
+/// Return ESP_OK when control returns, including after authentication rejection.
 esp_err_t WebServerManager::handleWifiReset(httpd_req_t *req) {
   WebServerManager* instance = getInstance(req);
   if(!instance->basicAuth(req)){
@@ -1457,10 +1502,13 @@ esp_err_t WebServerManager::handleWifiReset(httpd_req_t *req) {
       .addString("message", "Erasing WiFi credentials, device will reboot")
       .toStringUnformatted();
   httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-  homeSpan.processSerialCommand("X");
+  if (instance && instance->m_networkManager) instance->m_networkManager->eraseCredentialsAndReboot();
   return ESP_OK;
 }
 
+/// Authenticate and acknowledge before scheduling AP mode after a one-second delay.
+/// Return ESP_OK even if task creation fails or authentication is rejected; the
+/// mode change runs outside the HTTP handler because it can stop the web server.
 esp_err_t WebServerManager::handleStartConfigAP(httpd_req_t *req) {
   WebServerManager* instance = getInstance(req);
   if(!instance->basicAuth(req)){
@@ -1472,9 +1520,33 @@ esp_err_t WebServerManager::handleStartConfigAP(httpd_req_t *req) {
       .addString("message", "Starting AP mode...")
       .toStringUnformatted();
   httpd_resp_send(req, response.c_str(), HTTPD_RESP_USE_STRLEN);
-  vTaskDelay(pdMS_TO_TICKS(1000));
-  auto run = [](void* p){ homeSpan.processSerialCommand("A"); vTaskDelete(nullptr); };
-  xTaskCreate(run, "hs_cmd", 4096, NULL, 5, nullptr);
+
+  // startApMode() fires the connection callback, which calls
+  // webServerManager.end() → httpd_stop(). That must not run on this
+  // handler's task: httpd_stop waits for in-flight handlers, and this
+  // handler IS one — a direct call deadlocks. Defer to a throwaway task,
+  // as the old HomeSpan "A" serial-command path did.
+  struct ApTaskParams {
+    NetworkManager *net;
+  };
+  auto *apParams = new ApTaskParams{instance ? instance->m_networkManager : nullptr};
+  auto run = [](void *p) {
+    auto *ap = static_cast<ApTaskParams *>(p);
+    vTaskDelay(pdMS_TO_TICKS(1000)); // let the HTTP response drain
+    if (ap->net) ap->net->startApMode();
+    delete ap;
+    vTaskDelete(nullptr);
+  };
+  BaseType_t task;
+#ifndef CONFIG_FREERTOS_UNICORE
+  task = xTaskCreatePinnedToCore(run, "ap_start_task", 4096, apParams, 3, nullptr, tskNO_AFFINITY);
+#else
+  task = xTaskCreate(run, "ap_start_task", 4096, apParams, 3, nullptr);
+#endif
+  if (task != pdPASS) {
+    delete apParams;
+    ESP_LOGE(TAG, "Failed to create AP start task");
+  }
   return ESP_OK;
 }
 
@@ -1541,37 +1613,6 @@ esp_err_t WebServerManager::handleGetCaptivePortalConfig(httpd_req_t *req) {
   return ESP_OK;
 }
 
-static bool connectWiFi(const char* ssid, const char* password, int timeoutMs = 30000) {
-  ESP_LOGI("WiFiTest", "Testing connection to SSID: %s", ssid);
-
-  WiFi.begin(ssid, password);
-  WiFi.setAutoReconnect(true);
-  
-  int elapsed = 0;
-  const int checkInterval = 1000;
-  bool connected = false;
-  
-  while (elapsed < timeoutMs) {
-    vTaskDelay(pdMS_TO_TICKS(checkInterval));
-    elapsed += checkInterval;
-    
-    if (WiFi.isConnected()) {
-      ESP_LOGI("WiFiTest", "Connected to %s, RSSI: %d", ssid, WiFi.RSSI());
-      connected = true;
-      break;
-    } else {
-      ESP_LOGW("WiFiTest", "Not yet connected!");
-    }
-  }
-  
-  if (!connected) {
-    ESP_LOGE("WiFiTest", "Connection timeout after %d ms", timeoutMs);
-    WiFi.disconnect();
-  }
-  
-  return connected;
-}
-
 struct WifiSaveParams {
     httpd_req_t* req;
     WebServerManager* instance;
@@ -1593,23 +1634,26 @@ struct EthSaveParams {
 static constexpr int ETH_IP_WAIT_MS = 3000;
 
 /**
- * @brief Persist the captive-portal submission, start the ethernet driver, and
- *        report whether it came up.
+ * @brief Persist the captive-portal submission, start the Ethernet driver via
+ *        NetworkManager, and report whether it came up.
  *
  * Runs off the HTTPD task (the request is completed asynchronously). The
- * ETH_GOT_IP subscription is registered before the driver starts so the event
- * cannot be missed. Outcomes:
+ * ETH_GOT_IP subscription is registered before requesting driver startup.
+ * An already-started driver may have emitted the event earlier. Outcomes:
  * - driver failed to start -> 400, error message; the portal lets the user fix
  *   the ethernet settings and resubmit.
  * - driver started + IP within ETH_IP_WAIT_MS -> success with the real IP.
  * - driver started, no IP -> success with 0.0.0.0 and an explanatory message;
- *   the device reports 0.0.0.0 until the link/DHCP comes up after reboot.
+ *   this task does not itself reboot the device.
+ * Configuration is saved before testing; save results are not checked. The task
+ * owns/deletes EthSaveParams, completes its async request, and deletes itself.
  */
 void WebServerManager::captivePortalEthSaveTask(void *pvParameters) {
   EthSaveParams *params = static_cast<EthSaveParams *>(pvParameters);
+  NetworkManager *net = params->instance->m_networkManager;
 
-  if (params->hasSetupCode) {
-    homeSpan.setPairingCode(params->setupCode.c_str(), false);
+  if (params->hasSetupCode && params->instance->m_homeKit) {
+    params->instance->m_homeKit->setSetupCode(params->setupCode);
   }
 
   params->instance->m_configManager.updateFromJson<espConfig::misc_config_t>(
@@ -1624,7 +1668,7 @@ void WebServerManager::captivePortalEthSaveTask(void *pvParameters) {
 
   const auto miscConfig =
       params->instance->m_configManager.getConfig<espConfig::misc_config_t>();
-  const bool driverStarted = EthernetDriver::start(miscConfig);
+  const bool driverStarted = net && net->startEthernet(miscConfig);
 
   bool gotIp = false;
   std::string ipAddr = "0.0.0.0";
@@ -1634,7 +1678,7 @@ void WebServerManager::captivePortalEthSaveTask(void *pvParameters) {
                                    pdMS_TO_TICKS(ETH_IP_WAIT_MS)) & BIT0) != 0;
     }
     if (gotIp) {
-      ipAddr = ETH.localIP().toString().c_str();
+      ipAddr = net->ip();
     }
   }
 
@@ -1671,24 +1715,32 @@ void WebServerManager::captivePortalEthSaveTask(void *pvParameters) {
   vTaskDelete(NULL);
 }
 
+/// Test submitted Wi-Fi credentials for up to 15 seconds and save configuration on success.
+/// Complete the async response, then wait 10 seconds before committing the connected
+/// transition. Connection failure sends 400 without saving. Owns/deletes WifiSaveParams
+/// and deletes this task; NVS credential persistence errors abort.
 void WebServerManager::captivePortalSaveTask(void *pvParameters) {
   WifiSaveParams *params = static_cast<WifiSaveParams *>(pvParameters);
+  NetworkManager *net = params->instance->m_networkManager;
 
-  bool connected =
-      connectWiFi(params->ssid.c_str(), params->password.c_str(), 15000);
+  // Sequence mirrors the old HomeSpan-era flow, which was known-good:
+  // connect first (the AP is in APSTA for the portal's whole lifetime, so
+  // this is a plain STA connect with no mode transition), then save, then
+  // respond over the still-associated client.
+  bool connected = net && net->testConnect(params->ssid, params->password, 15000);
 
   if (connected) {
-    homeSpan.setWifiCredentials(params->ssid.c_str(), params->password.c_str());
-
-    if (params->hasSetupCode) {
-      homeSpan.setPairingCode(params->setupCode.c_str(), false);
+    if (net) {
+      net->saveCredentials(params->ssid, params->password);
     }
-
+    if (params->hasSetupCode && params->instance->m_homeKit) {
+      params->instance->m_homeKit->setSetupCode(params->setupCode);
+    }
     params->instance->m_configManager.updateFromJson<espConfig::misc_config_t>(
         params->cleaned_body_str);
     params->instance->m_configManager.saveConfig<espConfig::misc_config_t>();
 
-    std::string ipAddr = WiFi.localIP().toString().c_str();
+    std::string ipAddr = net ? net->ip() : "";
 
     httpd_resp_set_type(params->req, "application/json");
     JsonBuilder res = JsonBuilder::object();
@@ -1697,13 +1749,19 @@ void WebServerManager::captivePortalSaveTask(void *pvParameters) {
     res.withObject("data", [&](JsonBuilder &data) {
       data.addString("ip_addr", ipAddr.c_str());
     });
-
     std::string response = res.toStringUnformatted();
-    httpd_resp_send(params->req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+    esp_err_t send_err = httpd_resp_send(params->req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+    ESP_LOGI(TAG, "Portal save response sent: %s (err=%s)", ipAddr.c_str(),
+             esp_err_to_name(send_err));
 
     httpd_req_async_handler_complete(params->req);
 
-    delete params;
+    // The old flow did nothing after the response — the device stayed in
+    // APSTA with the portal up until the next boot. We keep that grace
+    // window (the client needs time to receive and process the response),
+    // then do the live transition the old flow deferred to a reboot.
+    vTaskDelay(pdMS_TO_TICKS(10000));
+    if (net) net->commitConnection();
   } else {
     httpd_resp_set_status(params->req, "400 Bad Request");
     httpd_resp_set_type(params->req, "application/json");
@@ -1713,15 +1771,20 @@ void WebServerManager::captivePortalSaveTask(void *pvParameters) {
             .addString("error", "Failed to connect to WiFi network. Please "
                                 "check your credentials and try again.")
             .toStringUnformatted();
-    httpd_resp_send(params->req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+    esp_err_t send_err = httpd_resp_send(params->req, response.c_str(), HTTPD_RESP_USE_STRLEN);
+    ESP_LOGI(TAG, "Portal save failure response sent (err=%s)", esp_err_to_name(send_err));
 
     httpd_req_async_handler_complete(params->req);
-
-    delete params;
   }
+
+  delete params;
   vTaskDelete(NULL);
 }
 
+/// Validate a provisioning submission smaller than 2048 bytes and start an async save.
+/// A nonempty Wi-Fi SSID selects Wi-Fi testing; otherwise Ethernet must be enabled.
+/// Return ESP_FAIL for invalid input or missing config/instance; task-launch errors
+/// return sendJsonError's result. ESP_OK does not confirm connection or persistence.
 esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
   if (!instance) {
@@ -1867,9 +1930,9 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
 
 BaseType_t task;
 #ifndef CONFIG_FREERTOS_UNICORE
-    task = xTaskCreatePinnedToCore(captivePortalSaveTask, "wifi_save_task", 8192, params, 5, nullptr, 1);
+    task = xTaskCreatePinnedToCore(captivePortalSaveTask, "wifi_save_task", 4096, params, 5, nullptr, tskNO_AFFINITY);
 #else
-    task = xTaskCreate(captivePortalSaveTask, "wifi_save_task", 8192, params, 5, nullptr);
+    task = xTaskCreate(captivePortalSaveTask, "wifi_save_task", 4096, params, 5, nullptr);
 #endif
     if (task != pdPASS) {
       ESP_LOGE(TAG, "Failed to create WiFi save task");
@@ -1881,7 +1944,11 @@ BaseType_t task;
     return ESP_OK;
   }
 
-  if (ethernetEnabled) {
+  if (hasSetupCode && instance && instance->m_homeKit) {
+    instance->m_homeKit->setSetupCode(setupCode);
+  }
+
+  if (ethernetEnabled && !wifiProvided) {
     httpd_req_t* reqCopy = nullptr;
     if (httpd_req_async_handler_begin(req, &reqCopy) != ESP_OK) {
       return sendJsonError(req, "Failed to start save operation");
@@ -1897,9 +1964,9 @@ BaseType_t task;
 
     BaseType_t task;
 #ifndef CONFIG_FREERTOS_UNICORE
-    task = xTaskCreatePinnedToCore(captivePortalEthSaveTask, "eth_save_task", 8192, params, 5, nullptr, 1);
+    task = xTaskCreatePinnedToCore(captivePortalEthSaveTask, "eth_save_task", 4096, params, 5, nullptr, tskNO_AFFINITY);
 #else
-    task = xTaskCreate(captivePortalEthSaveTask, "eth_save_task", 8192, params, 5, nullptr);
+    task = xTaskCreate(captivePortalEthSaveTask, "eth_save_task", 4096, params, 5, nullptr);
 #endif
     if (task != pdPASS) {
       ESP_LOGE(TAG, "Failed to create Ethernet save task");
@@ -2177,9 +2244,14 @@ void WebServerManager::broadcastWs(const uint8_t *payload, size_t len,
   }
 }
 
+/// Enqueue a frame for a known client without waiting for queue space.
+/// Copy payload unless a large frame supplies shared storage, which must contain len
+/// bytes for the same payload. Ignore stopped/unknown clients; count and drop frames
+/// when the queue is full.
 void WebServerManager::queue_ws_frame(int fd, const uint8_t *payload,
                                       size_t len, httpd_ws_type_t type,
                                       const std::shared_ptr<std::vector<uint8_t>>& shared) {
+  if (!m_isInitialized || !m_wsQueue) return; // tearing down / torn down
   uint32_t generation = 0;
   bool known = false;
   {
@@ -2349,12 +2421,14 @@ esp_err_t WebServerManager::handleWebSocketMessage(httpd_req_t *req, const std::
 // Device Info/Status Methods
 // ============================================================================
 
+/// Return metrics JSON with uptime in milliseconds, heap bytes, Wi-Fi RSSI in dBm
+/// (0 when unavailable), connection status, and WebSocket drop count.
 std::string WebServerManager::getDeviceMetrics() {
   JsonBuilder status = JsonBuilder::object();
   status.addString("type", "metrics");
   status.addNumber("uptime", std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::duration<int64_t, std::micro>(esp_timer_get_time())).count());
   status.addNumber("free_heap", esp_get_free_heap_size());
-  status.addNumber("wifi_rssi", WiFi.RSSI());
+  status.addNumber("wifi_rssi", m_networkManager ? m_networkManager->rssi() : 0);
   status.addBool("nfc_connected", m_nfcManager ? m_nfcManager->isConnected() : false);
   status.addNumber("nfc_reader_type", m_configManager.getConfig<espConfig::misc_config_t>().nfcReaderType);
   status.addBool("mqtt_connected", m_mqttManager ? m_mqttManager->isConnected() : false);
@@ -2366,13 +2440,15 @@ std::string WebServerManager::getDeviceMetrics() {
   return status.toStringUnformatted();
 }
 
+/// Return system-info JSON including configured identity, firmware/chip information,
+/// recorded network SSID, log level, and WebSocket backlog limit.
 std::string WebServerManager::getDeviceInfo() {
   JsonBuilder info = JsonBuilder::object();
   info.addString("type", "sysinfo");
   info.addString("deviceName", m_configManager.getConfig<espConfig::misc_config_t>().deviceName.c_str());
   info.addString("version", esp_app_get_description()->version);
   info.addBool("eth_enabled", m_configManager.getConfig<espConfig::misc_config_t>().ethernetEnabled);
-  info.addString("wifi_ssid", WiFi.SSID().c_str());
+  info.addString("wifi_ssid", m_networkManager ? m_networkManager->ssid().c_str() : "");
   info.addNumber("log_level", esp_log_level_get("*"));
   esp_chip_info_t chipInfo;
   esp_chip_info(&chipInfo);
@@ -2398,6 +2474,10 @@ void WebServerManager::statusTimerCallback(void *arg) {
 // OTA Implementation
 // ============================================================================
 
+/// Authenticate and dispatch one firmware or LittleFS upload to an async task.
+/// The URI suffix selects LittleFS; skipReboot=true suppresses reboot after success.
+/// Return ESP_FAIL if task creation fails; other HTTP rejections return ESP_OK.
+/// ESP_OK indicates handler completion, not successful installation.
 esp_err_t WebServerManager::handleOTAUpload(httpd_req_t *req) {
   WebServerManager *instance = getInstance(req);
   if (!instance->basicAuth(req)) {
@@ -2474,9 +2554,9 @@ esp_err_t WebServerManager::handleOTAUpload(httpd_req_t *req) {
 
 BaseType_t task;
 #ifndef CONFIG_FREERTOS_UNICORE
-    task = xTaskCreatePinnedToCore(otaTask, "ota_task", 8192, params, 5, NULL, 1);
+    task = xTaskCreatePinnedToCore(otaTask, "ota_task", 4096, params, 5, NULL, 1);
 #else
-    task = xTaskCreate(otaTask, "ota_task", 8192, params, 5, NULL);
+    task = xTaskCreate(otaTask, "ota_task", 4096, params, 5, NULL);
 #endif
   if (task != pdPASS) {
     ESP_LOGE(TAG, "Failed to create OTA task");
@@ -2493,6 +2573,11 @@ BaseType_t task;
   return ESP_OK;
 }
 
+/// Receive an upload, write the selected partition, and broadcast progress.
+/// LittleFS uploads unmount and erase the web partition, remounting on success;
+/// failures after unmount may leave it unmounted. Firmware success selects the next
+/// boot partition. Complete the async response with success or HTTP 500, reboot on
+/// success unless skipReboot, and release owned OTAParams/state before deleting the task.
 void WebServerManager::otaTask(void *pvParameters) {
   OTAParams *params = static_cast<OTAParams *>(pvParameters);
   WebServerManager *instance = params->instance;
@@ -2537,7 +2622,7 @@ void WebServerManager::otaTask(void *pvParameters) {
       params->state->error = "Image too large";
       goto error;
     }
-    LittleFS.end();
+    webfs::unmount();
     if (esp_partition_erase_range(params->state->littlefsPartition, 0, params->state->littlefsPartition->size) != ESP_OK) {
       params->state->error = "Erase failed";
       goto error;
@@ -2590,7 +2675,7 @@ void WebServerManager::otaTask(void *pvParameters) {
         goto error;
     }
   } else if (params->uploadType == OTAUploadType::LITTLEFS) {
-    if(!LittleFS.begin()) {
+    if(!webfs::mount()) {
       ESP_LOGE(TAG, "Failed to remount LittleFS after OTA");
       params->state->error = "LittleFS remount failed after OTA";
       goto error;

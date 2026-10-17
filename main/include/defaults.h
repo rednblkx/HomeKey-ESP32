@@ -1,4 +1,4 @@
-#include <pins_arduino.h>
+#include "pins_arduino_compat.h"
 
 // NFC Module Pins
 #define SS_PIN SS // Slave Select Pin for SPI communication
@@ -63,7 +63,7 @@
 #define NFC_READER_TYPE 0 // 0 = PN532, 1 = PN7160
 #define NFC_IRQ_PIN 255 // PN7160 IRQ pin (255 = unset)
 #define NFC_VEN_PIN 255 // PN7160 VEN pin (255 = unset)
-#define HS_STATUS_LED 255 // HomeSpan Status LED GPIO pin
+#define HS_STATUS_LED 255 // HomeKit status LED GPIO pin
 #define HS_PIN 255 // GPIO Pin for a Configuration Mode button (more info on https://github.com/HomeSpan/HomeSpan/blob/master/docs/UserGuide.md#device-configuration-mode)
 #define BTR_PROX_BAT_ENABLED false // Enable or disable battery monitoring
 #define BTR_PROX_BAT_LOW_THRESHOLD 10 // Battery low status threshold percentage

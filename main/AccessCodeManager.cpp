@@ -32,9 +32,6 @@ namespace AcTlv {
     constexpr uint8_t STATUS_INVALID_CHAR = 0x07;
     constexpr uint8_t STATUS_INVALID_REQUEST = 0x08;
     constexpr uint8_t STATUS_DOES_NOT_EXIST = 0x09;
-
-    // Bulk responses separate consecutive fragments with 2 zero bytes
-    constexpr uint8_t PADDING[2] = {0x00, 0x00};
 }
 
 AccessCodeManager::AccessCodeManager(uint8_t min_length, uint8_t max_length, uint8_t max_codes)
@@ -161,92 +158,75 @@ bool AccessCodeManager::validateCode(const std::string& code) const {
     return false;
 }
 
-std::vector<uint8_t> AccessCodeManager::handle_write(TLV8& request_tlv) {
-    TLV8_itc op_it = request_tlv.find(AcTlv::TAG_OPERATION);
-    if (op_it == request_tlv.end()) {
+std::vector<uint8_t> AccessCodeManager::handle_write(const std::vector<uint8_t>& request) {
+    std::vector<hap::core::TLV> request_tlv = hap::core::TLV8::parse(request);
+    auto op = hap::core::TLV8::find_uint8(request_tlv, AcTlv::TAG_OPERATION);
+    if (!op) {
         ESP_LOGE(TAG, "Access Code write is missing operation tag.");
         return {};
     }
 
-    uint8_t operation = op_it->getVal<uint8_t>();
+    uint8_t operation = *op;
     ESP_LOGI(TAG, "Handling Access Code operation: %d", operation);
 
-    TLV8 response_tlv;
-    response_tlv.add(AcTlv::TAG_OPERATION, operation); // Response must include the operation
+    // Response fragments: [operation TLV], then one encoded control-response
+    // fragment per entry, separated by 2 zero bytes (required by bulk
+    // List/Read operations so parsers don't defragment them together).
+    std::vector<hap::core::TLV> response;
+    response.emplace_back(AcTlv::TAG_OPERATION, operation);
+    auto append_fragment = [&response](const std::vector<hap::core::TLV>& fragment) {
+        if (std::any_of(response.begin(), response.end(),
+                        [](const hap::core::TLV& t) { return t.type == AcTlv::TAG_CONTROL_RESPONSE; })) {
+            response.emplace_back(0x00, std::vector<uint8_t>{0x00, 0x00});
+        }
+        response.emplace_back(AcTlv::TAG_CONTROL_RESPONSE, hap::core::TLV8::encode(fragment));
+    };
 
     switch (operation) {
         case AcTlv::OP_LIST:
-            return list_codes(response_tlv);
+            for (const auto& code_entry : access_codes) {
+                append_fragment(build_code_response_fragment(code_entry));
+            }
+            break;
         case AcTlv::OP_READ:
-            return read_codes(request_tlv, response_tlv);
+            read_codes(request_tlv, append_fragment);
+            break;
         case AcTlv::OP_ADD:
-            return add_code(request_tlv, response_tlv);
+            add_code(request_tlv, append_fragment);
+            break;
         case AcTlv::OP_UPDATE:
-            return update_code(request_tlv, response_tlv);
+            update_code(request_tlv, append_fragment);
+            break;
         case AcTlv::OP_REMOVE:
-            return remove_code(request_tlv, response_tlv);
+            remove_code(request_tlv, append_fragment);
+            break;
         default:
             ESP_LOGW(TAG, "Unhandled Access Code operation: %d", operation);
             return {};
     }
-}
-
-/**
- * @brief Packs the response TLV, inserting 2 zero bytes between consecutive
- *        control-response fragments (required by bulk List/Read operations).
- */
-static std::vector<uint8_t> pack_response(TLV8& response) {
-    TLV8 padded;
-    size_t fragments = 0;
-    for (auto it = response.begin(); it != response.end(); ++it) {
-        if (it->getTag() == AcTlv::TAG_CONTROL_RESPONSE) {
-            if (fragments > 0) {
-                padded.add(0x00, sizeof(AcTlv::PADDING), AcTlv::PADDING);
-            }
-            fragments++;
-        }
-        TLV8 sub;
-        sub.unpack(it->get(), it->getLen());
-        padded.add(it->getTag(), sub);
-    }
-    padded.pack_init();
-    std::vector<uint8_t> out(padded.pack_size());
-    padded.pack(out.data());
-    return out;
+    return hap::core::TLV8::encode(response);
 }
 
 // --- Operation Handlers ---
 
-std::vector<uint8_t> AccessCodeManager::list_codes(TLV8& response) {
-    for (const auto& code_entry : access_codes) {
-        TLV8 fragment = build_code_response_fragment(code_entry);
-        response.add(AcTlv::TAG_CONTROL_RESPONSE, fragment);
-    }
-    return pack_response(response);
-}
-
-std::vector<uint8_t> AccessCodeManager::read_codes(TLV8& request, TLV8& response) {
-    for (auto it = request.begin(); it != request.end(); ++it) {
-        if (it->getTag() == AcTlv::TAG_CONTROL_REQUEST) {
-            TLV8 req_fragment;
-            req_fragment.unpack(it->get(), it->getLen());
-            uint16_t id = 0;
-            if (extract_id(req_fragment, id)) {
-                AccessCode* code = find_code_by_id(id);
-                if (code) {
-                    TLV8 res_fragment = build_code_response_fragment(*code);
-                    response.add(AcTlv::TAG_CONTROL_RESPONSE, res_fragment);
-                } else {
-                    AccessCode err_code{};
-                    err_code.id = id;
-                    err_code.status = AcTlv::STATUS_DOES_NOT_EXIST;
-                    TLV8 res_fragment = build_code_response_fragment(err_code);
-                    response.add(AcTlv::TAG_CONTROL_RESPONSE, res_fragment);
-                }
+void AccessCodeManager::read_codes(const std::vector<hap::core::TLV>& request,
+                                   const FragmentSink& append_fragment) {
+    for (const auto& item : request) {
+        if (item.type != AcTlv::TAG_CONTROL_REQUEST) continue;
+        auto req_fragment = hap::core::TLV8::parse(item.value);
+        uint16_t id = 0;
+        if (extract_id(req_fragment, id)) {
+            AccessCode* code = find_code_by_id(id);
+            if (code) {
+                append_fragment(build_code_response_fragment(*code));
+            } else {
+                AccessCode err_code{};
+                err_code.id = id;
+                err_code.status = AcTlv::STATUS_DOES_NOT_EXIST;
+                append_fragment(build_code_response_fragment(err_code));
             }
         }
     }
-    return pack_response(response);
 }
 
 uint8_t AccessCodeManager::validate_constraints(const std::string& code) {
@@ -261,17 +241,16 @@ uint8_t AccessCodeManager::validate_constraints(const std::string& code) {
     return AcTlv::STATUS_SUCCESS;
 }
 
-std::vector<uint8_t> AccessCodeManager::add_code(TLV8& request, TLV8& response) {
-    TLV8_itc req_it = request.find(AcTlv::TAG_CONTROL_REQUEST);
-    if (req_it == request.end()) return {};
+void AccessCodeManager::add_code(const std::vector<hap::core::TLV>& request,
+                                 const FragmentSink& append_fragment) {
+    auto req_it = hap::core::TLV8::find(request, AcTlv::TAG_CONTROL_REQUEST);
+    if (!req_it) return;
 
-    TLV8 data_tlv;
-    data_tlv.unpack(req_it->get(), req_it->getLen());
+    auto data_tlv = hap::core::TLV8::parse(*req_it);
+    auto code_val = hap::core::TLV8::find(data_tlv, AcTlv::TAG_ACCESS_CODE);
+    if (!code_val) return;
 
-    TLV8_itc code_it = data_tlv.find(AcTlv::TAG_ACCESS_CODE);
-    if (code_it == data_tlv.end()) return {};
-
-    std::string new_code_str(reinterpret_cast<const char*>(code_it->get()), code_it->getLen());
+    std::string new_code_str(code_val->begin(), code_val->end());
 
     uint8_t validation_status = validate_constraints(new_code_str);
     uint8_t status = validation_status;
@@ -298,20 +277,18 @@ std::vector<uint8_t> AccessCodeManager::add_code(TLV8& request, TLV8& response) 
         ESP_LOGW(TAG, "Add rejected with status %d", status);
     }
 
-    TLV8 fragment = build_code_response_fragment(result);
-    response.add(AcTlv::TAG_CONTROL_RESPONSE, fragment);
-    return pack_response(response);
+    append_fragment(build_code_response_fragment(result));
 }
 
-std::vector<uint8_t> AccessCodeManager::remove_code(TLV8& request, TLV8& response) {
-    TLV8_itc req_it = request.find(AcTlv::TAG_CONTROL_REQUEST);
-    if (req_it == request.end()) return {};
+void AccessCodeManager::remove_code(const std::vector<hap::core::TLV>& request,
+                                    const FragmentSink& append_fragment) {
+    auto req_it = hap::core::TLV8::find(request, AcTlv::TAG_CONTROL_REQUEST);
+    if (!req_it) return;
 
-    TLV8 req_fragment;
-    req_fragment.unpack(req_it->get(), req_it->getLen());
+    auto req_fragment = hap::core::TLV8::parse(*req_it);
 
     uint16_t id_to_remove = 0;
-    if (!extract_id(req_fragment, id_to_remove)) return {};
+    if (!extract_id(req_fragment, id_to_remove)) return;
 
     auto it = std::find_if(access_codes.begin(), access_codes.end(),
         [id_to_remove](const AccessCode& ac){ return ac.id == id_to_remove; });
@@ -330,60 +307,55 @@ std::vector<uint8_t> AccessCodeManager::remove_code(TLV8& request, TLV8& respons
         ESP_LOGW(TAG, "Attempted to remove non-existent access code with ID: %d", id_to_remove);
     }
 
-    TLV8 fragment = build_code_response_fragment(response_code);
-    response.add(AcTlv::TAG_CONTROL_RESPONSE, fragment);
-    return pack_response(response);
+    append_fragment(build_code_response_fragment(response_code));
 }
 
-std::vector<uint8_t> AccessCodeManager::update_code(TLV8& request, TLV8& response) {
-    TLV8_itc req_it = request.find(AcTlv::TAG_CONTROL_REQUEST);
-    if (req_it == request.end()) return {};
+void AccessCodeManager::update_code(const std::vector<hap::core::TLV>& request,
+                                    const FragmentSink& append_fragment) {
+    auto req_it = hap::core::TLV8::find(request, AcTlv::TAG_CONTROL_REQUEST);
+    if (!req_it) return;
 
-    TLV8 req_fragment;
-    req_fragment.unpack(req_it->get(), req_it->getLen());
+    auto req_fragment = hap::core::TLV8::parse(*req_it);
 
     uint16_t id_to_update = 0;
-    TLV8_itc code_it = req_fragment.find(AcTlv::TAG_ACCESS_CODE);
-    if (!extract_id(req_fragment, id_to_update) || code_it == req_fragment.end()) {
+    auto code_val = hap::core::TLV8::find(req_fragment, AcTlv::TAG_ACCESS_CODE);
+    if (!extract_id(req_fragment, id_to_update) || !code_val) {
         // Invalid request, missing identifier or new code
-        return {};
+        return;
     }
 
     AccessCode* code_to_update = find_code_by_id(id_to_update);
 
     if (code_to_update) {
-        code_to_update->code.assign(reinterpret_cast<const char*>(code_it->get()), code_it->getLen());
+        code_to_update->code.assign(code_val->begin(), code_val->end());
         code_to_update->status = AcTlv::STATUS_SUCCESS;
         save_codes();
-        TLV8 fragment = build_code_response_fragment(*code_to_update);
-        response.add(AcTlv::TAG_CONTROL_RESPONSE, fragment);
+        append_fragment(build_code_response_fragment(*code_to_update));
         ESP_LOGI(TAG, "Updated access code for ID: %d", id_to_update);
     } else {
         AccessCode error_response;
         error_response.id = id_to_update;
         error_response.status = AcTlv::STATUS_DOES_NOT_EXIST;
-        TLV8 fragment = build_code_response_fragment(error_response);
-        response.add(AcTlv::TAG_CONTROL_RESPONSE, fragment);
+        append_fragment(build_code_response_fragment(error_response));
         ESP_LOGW(TAG, "Attempted to update non-existent access code with ID: %d", id_to_update);
     }
-
-    return pack_response(response);
 }
 
 
 // --- Helper Function Implementations ---
 
-TLV8 AccessCodeManager::build_code_response_fragment(const AccessCode& code) {
-    TLV8 fragment_tlv;
+std::vector<hap::core::TLV> AccessCodeManager::build_code_response_fragment(const AccessCode& code) {
+    std::vector<hap::core::TLV> fragment;
     // Identifier is multi-byte little-endian so IDs above 255 survive round-trips
-    fragment_tlv.add(AcTlv::TAG_IDENTIFIER, sizeof(code.id), reinterpret_cast<const uint8_t*>(&code.id));
+    const uint8_t* id_bytes = reinterpret_cast<const uint8_t*>(&code.id);
+    fragment.emplace_back(AcTlv::TAG_IDENTIFIER, std::vector<uint8_t>(id_bytes, id_bytes + sizeof(code.id)));
     // Only add code string if status is success, otherwise it might not be available
     if (code.status == AcTlv::STATUS_SUCCESS && !code.code.empty()) {
-        fragment_tlv.add(AcTlv::TAG_ACCESS_CODE, code.code.size(), reinterpret_cast<const uint8_t*>(code.code.data()));
+        fragment.emplace_back(AcTlv::TAG_ACCESS_CODE, code.code);
     }
-    fragment_tlv.add(AcTlv::TAG_FLAGS, code.flags);
-    fragment_tlv.add(AcTlv::TAG_STATUS_CODE, code.status);
-    return fragment_tlv;
+    fragment.emplace_back(AcTlv::TAG_FLAGS, code.flags);
+    fragment.emplace_back(AcTlv::TAG_STATUS_CODE, code.status);
+    return fragment;
 }
 
 AccessCode* AccessCodeManager::find_code_by_id(uint16_t id) {
@@ -396,9 +368,13 @@ AccessCode* AccessCodeManager::find_code_by_id(uint16_t id) {
     return nullptr;
 }
 
-bool AccessCodeManager::extract_id(TLV8& fragment, uint16_t& id) {
-    TLV8_itc id_it = fragment.find(AcTlv::TAG_IDENTIFIER);
-    if (id_it == fragment.end()) return false;
-    id = id_it->getVal<uint16_t>();
+bool AccessCodeManager::extract_id(const std::vector<hap::core::TLV>& fragment, uint16_t& id) {
+    auto id_val = hap::core::TLV8::find(fragment, AcTlv::TAG_IDENTIFIER);
+    if (!id_val || id_val->empty()) return false;
+    // Accept 1- or 2-byte little-endian encodings
+    id = static_cast<uint16_t>((*id_val)[0]);
+    if (id_val->size() > 1) {
+        id |= static_cast<uint16_t>((*id_val)[1]) << 8;
+    }
     return true;
 }

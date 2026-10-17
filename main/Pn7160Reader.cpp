@@ -1,7 +1,7 @@
 #include "Pn7160Reader.hpp"
 #include "esp_err.h"
 #include "esp_log.h"
-#include "esp32-hal.h"
+#include <esp_timer.h>
 #include "esp_log_buffer.h"
 #include "esp_log_level.h"
 #include "freertos/FreeRTOS.h"

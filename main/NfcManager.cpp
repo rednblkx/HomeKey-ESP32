@@ -6,7 +6,7 @@
 #include "ddk/session/Session.h"
 #include "ddk/store/CredentialStore.h"
 #include "ddk/transport/NfcChannel.h"
-#include "esp32-hal.h"
+#include <esp_timer.h>
 #include "esp_log_buffer.h"
 #include "esp_log_level.h"
 #include "eventStructs.hpp"
@@ -65,7 +65,7 @@ std::unique_ptr<ddk::Session> NfcManager::buildAuthSession() {
  * DEBUG_AUTH_FLOW updates the debug authentication flow when received.
  *
  * @param readerDataManager Reference to the ReaderDataManager used to read and persist reader data.
- * @param nfcGpioPins Four GPIO pin numbers used for SPI communication (SS/CS, SCK, MISO, MOSI).
+ * @param nfcGpioPins SPI pins (SS/CS, SCK, MISO, MOSI), or SDA/SCL in the first two slots for ST25R3916.
  * @param nfcReaderType 0 = PN532 (SPI), 1 = PN7160, 2 = ST25R3916 (I2C).
  * @param nfcIrqPin IRQ pin for PN7160 (255 = unset).
  * @param nfcVenPin VEN pin for PN7160 (255 = unset).
@@ -91,23 +91,23 @@ NfcManager::NfcManager(NvsCredentialStore& readerDataManager,
 {
   std::copy(ECP_HEAD, ECP_HEAD + 8, m_ecpData.begin());
   if (nfcReaderType == ST25R3916) {
-    pinAllocations.emplace(PinFunctions::SDA, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[0]), GPIO_MODE_DISABLE, GPIOAllocator::PinRole::I2cSda, GPIOAllocator::PinConsumer::Nfc, "I2C_SDA"));
-    pinAllocations.emplace(PinFunctions::SCL, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[1]), GPIO_MODE_DISABLE, GPIOAllocator::PinRole::I2cScl, GPIOAllocator::PinConsumer::Nfc, "I2C_SCL"));
+    pinAllocations[PinFunctions::SDA] = GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[0]), GPIO_MODE_DISABLE, GPIOAllocator::PinRole::I2cSda, GPIOAllocator::PinConsumer::Nfc, "I2C_SDA");
+    pinAllocations[PinFunctions::SCL] = GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[1]), GPIO_MODE_DISABLE, GPIOAllocator::PinRole::I2cScl, GPIOAllocator::PinConsumer::Nfc, "I2C_SCL");
   } else {
-    pinAllocations.emplace(PinFunctions::SS, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[0]), GPIO_MODE_DISABLE, GPIOAllocator::PinRole::SpiCs, GPIOAllocator::PinConsumer::Nfc, "SPI2_SS"));
-    pinAllocations.emplace(PinFunctions::SCK, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[1]), GPIO_MODE_DISABLE, GPIOAllocator::PinRole::SpiSck, GPIOAllocator::PinConsumer::Nfc, "SPI2_SCK"));
-    pinAllocations.emplace(PinFunctions::MISO, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[2]), GPIO_MODE_DISABLE, GPIOAllocator::PinRole::SpiMiso, GPIOAllocator::PinConsumer::Nfc, "SPI2_MISO"));
-    pinAllocations.emplace(PinFunctions::MOSI, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[3]), GPIO_MODE_DISABLE, GPIOAllocator::PinRole::SpiMosi, GPIOAllocator::PinConsumer::Nfc, "SPI2_MOSI"));
+    pinAllocations[PinFunctions::SS] = GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[0]), GPIO_MODE_DISABLE, GPIOAllocator::PinRole::SpiCs, GPIOAllocator::PinConsumer::Nfc, "SPI2_SS");
+    pinAllocations[PinFunctions::SCK] = GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[1]), GPIO_MODE_DISABLE, GPIOAllocator::PinRole::SpiSck, GPIOAllocator::PinConsumer::Nfc, "SPI2_SCK");
+    pinAllocations[PinFunctions::MISO] = GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[2]), GPIO_MODE_DISABLE, GPIOAllocator::PinRole::SpiMiso, GPIOAllocator::PinConsumer::Nfc, "SPI2_MISO");
+    pinAllocations[PinFunctions::MOSI] = GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[3]), GPIO_MODE_DISABLE, GPIOAllocator::PinRole::SpiMosi, GPIOAllocator::PinConsumer::Nfc, "SPI2_MOSI");
   }
   if (nfcReaderType == PN7160){
     if(nfcIrqPin != 255)
-      pinAllocations.emplace(PinFunctions::IRQ, GPIOAllocator::instance().acquire(gpio_num_t(nfcIrqPin), GPIO_MODE_DISABLE, GPIOAllocator::PinRole::NfcIrq, GPIOAllocator::PinConsumer::Nfc, "NFC_IRQ"));
+      pinAllocations[PinFunctions::IRQ] = GPIOAllocator::instance().acquire(gpio_num_t(nfcIrqPin), GPIO_MODE_DISABLE, GPIOAllocator::PinRole::NfcIrq, GPIOAllocator::PinConsumer::Nfc, "NFC_IRQ");
     if(nfcVenPin != 255)
-      pinAllocations.emplace(PinFunctions::VEN, GPIOAllocator::instance().acquire(gpio_num_t(nfcVenPin), GPIO_MODE_DISABLE, GPIOAllocator::PinRole::NfcVen, GPIOAllocator::PinConsumer::Nfc, "NFC_VEN"));
+      pinAllocations[PinFunctions::VEN] = GPIOAllocator::instance().acquire(gpio_num_t(nfcVenPin), GPIO_MODE_DISABLE, GPIOAllocator::PinRole::NfcVen, GPIOAllocator::PinConsumer::Nfc, "NFC_VEN");
   }
-  for(auto &p : pinAllocations){
-    if(!p.second.has_value()){
-      ESP_LOGW(TAG, "Could not acquire GPIO Pin for '%s' with error '%s'", pin_function_str(p.first), GPIOAllocator::error_str(p.second.error()));
+  for(size_t i = 0; i < pinAllocations.size(); ++i){
+    if(!pinAllocations[i].has_value()){
+      ESP_LOGW(TAG, "Could not acquire GPIO Pin for '%s' with error '%s'", pin_function_str(static_cast<PinFunctions>(i)), GPIOAllocator::error_str(pinAllocations[i].error()));
     }
   }
   m_hk_event = AppEventLoop::subscribe(HK_EVENT, HK_INTERNAL_EVENT, [&](const uint8_t* data, size_t size){
@@ -155,7 +155,7 @@ NfcManager::~NfcManager() = default;
 /**
  * @brief Initialize the selected NFC reader and start the NFC polling task.
  *
- * Instantiates the correct reader implementation (PN532 or PN7160) and launches
+ * Instantiates the selected reader (PN532, PN7160, or ST25R3916) and launches
  * the background task that drives NFC polling.
  *
  * @return `true` if the NFC polling task was started, `false` otherwise.
@@ -196,8 +196,8 @@ bool NfcManager::begin() {
     ESP_LOGI(TAG, "Auth precompute %s.", m_hkAuthPrecomputeEnabled ? "enabled" : "disabled");
     ESP_LOGI(TAG, "NFC fast polling: %s", m_nfcFastPollingEnabled ? "enabled" : "disabled");
     ESP_LOGI(TAG, "Starting NFC polling task...");
-		BaseType_t ok = xTaskCreateUniversal(
-				pollingTaskEntry, "nfc_poll_task", 8192, this, 4, &m_pollingTaskHandle, 1);
+		BaseType_t ok = xTaskCreatePinnedToCore(
+				pollingTaskEntry, "nfc_poll_task", 8192, this, 4, &m_pollingTaskHandle, tskNO_AFFINITY);
 		if (ok != pdPASS || !m_pollingTaskHandle) {
 			ESP_LOGE(TAG, "Failed to create NFC polling task.");
 			return false;

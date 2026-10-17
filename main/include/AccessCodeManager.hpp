@@ -1,9 +1,10 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
-#include "TLV8.h"
+#include "hap/core/TLV8.hpp"
 
 /**
  * @brief Represents a stored access code.
@@ -46,10 +47,13 @@ public:
 
     /**
      * @brief Processes a control-point write from the HomeKit controller.
-     * @param request TLV8 containing the request payload.
-     * @return A vector<uint8_t> containing the full TLV8 response.
+     * LIST/READ return stored entries; ADD/UPDATE/REMOVE mutate memory and attempt
+     * persistence. Persistence failure is not reflected in response status.
+     * @param request Raw TLV8 bytes of the request payload.
+     * @return Encoded TLV8 response, or empty for a missing/unsupported operation.
+     * Missing handler fields may produce an operation-only response.
      */
-    std::vector<uint8_t> handle_write(TLV8& request);
+    std::vector<uint8_t> handle_write(const std::vector<uint8_t>& request);
 
     /**
      * @brief Validates if a given code string exists.
@@ -78,12 +82,23 @@ private:
     const char* nvs_namespace = "acc_codes";
     const char* nvs_key = "access_codes";
 
+    // Callback that appends one encoded control-response fragment to the
+    // response, inserting the bulk-operation separator when needed.
+    using FragmentSink = std::function<void(const std::vector<hap::core::TLV>&)>;
+
     // --- Operation handlers ---
-    std::vector<uint8_t> list_codes(TLV8& response);
-    std::vector<uint8_t> read_codes(TLV8& request, TLV8& response);
-    std::vector<uint8_t> add_code(TLV8& request, TLV8& response);
-    std::vector<uint8_t> remove_code(TLV8& request, TLV8& response);
-    std::vector<uint8_t> update_code(TLV8& request, TLV8& response);
+    /// Append a response for each control request with a nonempty identifier;
+    /// report DOES_NOT_EXIST for unknown IDs and skip requests without an identifier.
+    void read_codes(const std::vector<hap::core::TLV>& request, const FragmentSink& append_fragment);
+    /// Validate and add the first requested code, then attempt persistence.
+    /// Append its result status; missing request/code fields produce no fragment.
+    void add_code(const std::vector<hap::core::TLV>& request, const FragmentSink& append_fragment);
+    /// Remove the first requested ID and attempt persistence, or append DOES_NOT_EXIST.
+    /// Missing request/identifier fields produce no fragment.
+    void remove_code(const std::vector<hap::core::TLV>& request, const FragmentSink& append_fragment);
+    /// Replace the first requested ID's code without applying ADD constraints and attempt persistence.
+    /// Append the result or DOES_NOT_EXIST; missing request/identifier/code fields produce no fragment.
+    void update_code(const std::vector<hap::core::TLV>& request, const FragmentSink& append_fragment);
 
     /**
      * @brief Validates a code against the supported configuration constraints.
@@ -95,9 +110,9 @@ private:
     /**
      * @brief Builds a single "Access Code Control Response" TLV fragment.
      * @param code The access code to serialize.
-     * @return A TLV8 object representing the fragment.
+     * @return A TLV list representing the fragment.
      */
-    TLV8 build_code_response_fragment(const AccessCode& code);
+    std::vector<hap::core::TLV> build_code_response_fragment(const AccessCode& code);
 
     /**
      * @brief Finds an access code by its 1-based identifier.
@@ -113,10 +128,10 @@ private:
     bool save_codes();
 
     /**
-     * @brief Extracts an identifier from a request fragment, accepting 1- or 2-byte encodings.
-     * @param fragment TLV8 fragment containing the identifier tag.
-     * @param id Output identifier.
-     * @return true if the identifier tag was present.
+     * @brief Reads up to two little-endian identifier bytes; ignores additional bytes.
+     * @param fragment TLV list containing the identifier tag.
+     * @param id Output identifier, unchanged on failure.
+     * @return true if the identifier tag was present and nonempty.
      */
-    static bool extract_id(TLV8& fragment, uint16_t& id);
+    static bool extract_id(const std::vector<hap::core::TLV>& fragment, uint16_t& id);
 };

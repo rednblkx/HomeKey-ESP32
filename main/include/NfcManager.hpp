@@ -6,7 +6,6 @@
 #include <atomic>
 #include <cstdint>
 #include <expected>
-#include <map>
 #include <memory>
 #include "app_event_loop.hpp"
 #include "NfcReader.hpp"
@@ -113,7 +112,7 @@ private:
       return "Unknown";
     }
 
-    std::map<PinFunctions, std::expected<GPIOAllocator::GPIOLease, GPIOAllocator::GPIOAllocatorError>> pinAllocations;
+    std::array<std::expected<GPIOAllocator::GPIOLease, GPIOAllocator::GPIOAllocatorError>, 8> pinAllocations;
 
 public:
     /**

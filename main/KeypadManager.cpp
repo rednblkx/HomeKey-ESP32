@@ -104,6 +104,7 @@ bool KeypadManager::begin(const espConfig::misc_config_t& config) {
 
     keyboard_btn_cb_config_t cb_cfg = {
         .event = KBD_EVENT_PRESSED,
+        .event_data = {},
         .callback = KeypadManager::keyboard_cb_wrapper,
         .user_data = this,
     };
@@ -113,7 +114,9 @@ bool KeypadManager::begin(const espConfig::misc_config_t& config) {
         const esp_timer_create_args_t timer_args = {
             .callback = &entry_timeout_callback,
             .arg = this,
-            .name = "keypad-timeout"
+            .dispatch_method = ESP_TIMER_TASK,
+            .name = "keypad-timeout",
+            .skip_unhandled_events = true
         };
         ESP_ERROR_CHECK(esp_timer_create(&timer_args, &entry_timer));
     }
