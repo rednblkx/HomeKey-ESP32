@@ -29,40 +29,57 @@ struct misc_config_t;
  */
 class NetworkManager {
 public:
+  /// Retain configuration for later startup; configManager must outlive this manager.
   NetworkManager(ConfigManager &configManager);
 
-  /** Initialize netif/eventloop/wifi, start STA if credentials exist, else AP mode. */
+  /**
+   * Initialize networking, preferring Ethernet when enabled. Wait up to 10 seconds
+   * for Ethernet IP acquisition, then try saved Wi-Fi credentials asynchronously
+   * or enter AP mode if none exist. Checked ESP-IDF initialization errors abort.
+   */
   void begin();
 
   /**
-   * Bring up Ethernet per the given config. Idempotent: a later call with
-   * the same config is a no-op that reports success, so the captive-portal
-   * flow can start the driver to verify the module and the normal boot path
-   * will not re-initialize it. Lifecycle changes are mirrored onto
-   * ETH_APP_EVENT (ETH_STARTED / ETH_GOT_IP / ...) for other components.
+   * Initialize Ethernet from the retained ConfigManager; config is unused.
+   * Once initialized, later calls return true without applying config changes.
+   * Return false for rejected configuration or driver setup failures; true does
+   * not guarantee a link or IP address. Event-handler registration errors abort.
+   * Lifecycle changes are mirrored onto ETH_APP_EVENT.
    */
   bool startEthernet(const espConfig::misc_config_t &config);
 
-  /** Save credentials to NVS (does not connect; caller decides next step). */
+  /**
+   * Save credentials to NVS without connecting, truncating stored SSID/password
+   * to 32/64 bytes. NVS open, write, or commit errors abort.
+   */
   void saveCredentials(const std::string &ssid, const std::string &password);
-  /** Erase stored credentials and reboot (old HomeSpan "X" behavior). */
+  /** Attempt to erase stored credentials and reboot even if NVS operations fail. */
   void eraseCredentialsAndReboot();
 
-  /** Blocking connect attempt used by the web UI test-then-save flow. */
+  /**
+   * Test credentials using initialized Wi-Fi in a mode that supports STA.
+   * Wait up to timeoutMs milliseconds for a GOT_IP event. Success leaves STA
+   * connected and defers the connected transition until commitConnection();
+   * timeout disconnects and returns false. Credentials are not saved and the
+   * previous connection is not restored. A configuration error aborts.
+   */
   bool testConnect(const std::string &ssid, const std::string &password,
                    int timeoutMs = 15000);
 
-  /** Switch to AP-only configuration mode (old HomeSpan "A" / autoStartAP). */
+  /**
+   * Start the configuration AP in APSTA mode, disable automatic STA retries,
+   * and call the connection callback with 0. Checked Wi-Fi errors abort.
+   */
   void startApMode();
 
   /**
    * Keep the (already-established) test STA connection and switch the whole
    * system to the connected state. Called by the web save task after the
-   * HTTP response has been delivered; fires the connection callback (1).
+   * HTTP response has been delivered; fires callback (1) only for the first uplink.
    */
   void commitConnection();
 
-  /** Stop serving the softAP/captive portal once a real uplink exists. */
+  /** Disable the softAP if active; this does not stop the captive DNS server. */
   void tearDownAp();
 
   /** Single-shot connected transition: fires the callback on the first
@@ -74,29 +91,42 @@ public:
   void onEthDown();
   void onEthUp();
 
-  /** Status queries for the web UI (old WiFi.RSSI()/SSID()/isConnected()). */
+  /** Return whether an uplink has ever been committed; disconnects do not clear it. */
   bool isConnected() const;
+  /// Return the saved SSID, or "ETH" if Ethernet is up and no SSID is recorded.
   std::string ssid() const;
+  /// Return the associated Wi-Fi AP signal strength in dBm, or 0 if unavailable.
   int rssi() const;
+  /// Return a nonzero STA IPv4 address, then Ethernet IPv4, or empty if neither exists.
   std::string ip() const;
 
-  /** AP-mode SSID derived from the BT MAC ("HK_XXXX"). */
+  /** AP-mode SSID: "HK_" plus eight uppercase hex digits from the BT MAC. */
   static std::string apSsid();
 
   /** conn_cb contract: 1 = connected, 0 = AP config mode. */
   void setConnectionCallback(std::function<void(int)> cb) { m_conn_cb = cb; }
 
 private:
+  /// Initialize STA networking and Wi-Fi event handlers; checked driver errors abort.
   void initWifi();
+  /// Connect using saved credentials; do nothing if loading fails. Checked Wi-Fi errors abort.
   void startSta();
+  /// Configure the AP in APSTA mode; dualMode is unused. Checked Wi-Fi errors abort.
   void startAp(bool dualMode);
+  /// Signal connection-test success, or announce an uplink when no test is active.
   void handleStaGotIp(esp_event_base_t base, int32_t id, void *data);
+  /// Retry STA up to eight times, then enter AP mode, unless STA retries are disabled or Ethernet is up.
   void handleStaDisconnected(esp_event_base_t base, int32_t id, void *data);
 
+  /// Handle Ethernet lifecycle events, publish app events, and apply uplink preference.
   static void ethEventCb(void *arg, esp_event_base_t base, int32_t id, void *data);
+  /// Acquire pins and configure Ethernet from saved settings; return false on setup failure.
+  /// Checked event-handler registration errors abort; success does not wait for IP acquisition.
   bool initializeEth();
+  /// Set the Ethernet hostname from the BT MAC when an Ethernet netif exists.
   void onEthStarted();
 
+  /// Dispatch STA IP and disconnect events to the manager supplied in arg.
   static void eventHandler(void *arg, esp_event_base_t base, int32_t id, void *data);
 
   ConfigManager &m_configManager;

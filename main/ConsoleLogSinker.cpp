@@ -5,6 +5,8 @@
 
 namespace loggable {
 
+/// Write a colored log line to stdout with timestamp in milliseconds, level, and tag.
+/// Console write errors and short writes are ignored without retry.
 void ConsoleLogSinker::consume(const LogMessage& message) {
     fmt::detail::color_type c = fmt::color::white;
     const char *level = "NONE";

@@ -64,7 +64,9 @@ public:
   void set_restore_hook(std::function<void()> hook) { m_restore_hook = std::move(hook); }
 
   // --- Status LED driver interface (was HomeSpan's Blinkable) ---
+  /// Drive the active LED level unless the lease is invalid or feedback preempts it; ignored writes are not replayed.
   void on() { write_status(m_active_high); }
+  /// Drive the inactive LED level unless the lease is invalid or feedback preempts it; ignored writes are not replayed.
   void off() { write_status(!m_active_high); }
   int getPin() const { return static_cast<int>(pin()); }
 
@@ -107,6 +109,7 @@ private:
 
   bool off_level() const { return !m_active_high; }
 
+  /// Write a raw GPIO level only when the lease is valid and no feedback preemption is active.
   void write_status(bool level) {
     std::lock_guard lock(s_mutex);
     if (!m_lease.valid() || m_preempted) return; // swallowed while preempted

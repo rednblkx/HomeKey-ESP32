@@ -23,7 +23,12 @@ struct MigrationStats {
   int controllers = 0;         // number of paired controllers migrated
 };
 
-/// Run the migration. Call once from setup() before constructing the HAP server.
+/// Migrate HomeSpan pairing state and attempt to copy its Wi-Fi credentials.
+/// Call before constructing the HAP server. Return skipped if HAP or ACCESSORY
+/// cannot be read, failed on parse/readback mismatch, or migrated after verified
+/// pairing writes. Old namespaces are erased only after verification; erase
+/// failures do not change migrated to failed. Writes may remain after failure.
+/// Storage initialization errors abort.
 MigrationStats run();
 
 /// Test-only hooks: parse the raw HomeSpan blobs without touching NVS.
@@ -39,7 +44,14 @@ struct ControllerData {
   bool admin;
 };
 
+/// Decode the first 113 bytes of a readable HomeSpan accessory blob.
+/// Return false for a short blob or a public key that disagrees with the secret
+/// key's seed. out is filled before the key check, so failure may modify it;
+/// trailing bytes are ignored.
 bool parse_accessory(const uint8_t *blob, size_t len, AccessoryData &out);
+/// Append allocated records from a readable HomeSpan controller blob to out.
+/// Return false without modifying out if len is not a multiple of 70 bytes.
+/// An empty blob succeeds; unallocated records are skipped and out is not cleared.
 bool parse_controllers(const uint8_t *blob, size_t len,
                        std::vector<ControllerData> &out);
 

@@ -20,6 +20,8 @@ public:
   // Channel-order index, matching HomeSpan's PixelType tables.
   static constexpr uint8_t RGB = 0, RBG = 1, BRG = 2, BGR = 3, GBR = 4, GRB = 5;
 
+  /// Initialize one LED on pin using the channel-order index; indices >= 6 use GRB.
+  /// RMT setup failure leaves an inactive object whose set() calls do nothing.
   NeoPixel(int pin, uint8_t typeIndex) {
     // Each entry maps wire position -> source channel (0=r, 1=g, 2=b),
     // derived from HomeSpan's pixelType_t start-bit tables (Color union is
@@ -85,8 +87,10 @@ public:
   NeoPixel(const NeoPixel&) = delete;
   NeoPixel& operator=(const NeoPixel&) = delete;
 
+  /// Return whether RMT initialization succeeded.
   explicit operator bool() const { return m_chan != nullptr; }
 
+  /// Pack 8-bit RGB intensities in this LED's wire order for set().
   uint32_t rgb(uint8_t r, uint8_t g, uint8_t b) const {
     uint8_t wire[3] = {r, g, b};
     return (static_cast<uint32_t>(wire[m_map[0]]) << 16) |
@@ -94,6 +98,8 @@ public:
            static_cast<uint32_t>(wire[m_map[2]]);
   }
 
+  /// Transmit the low 24 bits in wire order and wait for completion without a timeout.
+  /// An inactive object or rejected transmission produces no update and reports no error.
   void set(uint32_t wireRgb) {
     if (!m_chan) return;
     uint8_t bytes[3] = {
@@ -108,6 +114,7 @@ public:
     }
   }
 
+  /// Send a zero-intensity pixel using the same blocking behavior as set().
   void off() { set(0); }
 
 private:

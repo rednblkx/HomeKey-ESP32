@@ -48,13 +48,8 @@ static SharedLed* s_statusLed = nullptr;
 
 } // namespace
 
-/**
- * @brief PAL bundle for the YAHAP server.
- *
- * Instances are held by unique_ptr and wired into AccessoryServer::Config as
- * raw pointers; declaration order guarantees they outlive the server.
- */
-/// Format an 8-digit setup code as HAP expects: "XXX-XX-XXX".
+/// Format the eight digits extracted from input as "XXX-XX-XXX".
+/// Return the original input when it does not contain exactly eight digits.
 static std::string hapSetupCode(const std::string& digits) {
   std::string clean;
   for (char c : digits) {

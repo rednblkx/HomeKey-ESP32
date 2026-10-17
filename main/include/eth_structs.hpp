@@ -78,6 +78,8 @@ inline const std::map<int, eth_chip_desc_t> supportedChips = {
     {ETH_PHY_KSZ8851, eth_chip_desc_t{"KSZ8851", false, ETH_PHY_KSZ8851}},
 #endif
 };
+/// Build named Ethernet presets for this target.
+/// @throws std::out_of_range if a required chip is absent from supportedChips.
 inline std::vector<eth_board_presets_t> makeBoardPresets() {
   std::vector<eth_board_presets_t> presets;
   {

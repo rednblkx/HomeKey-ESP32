@@ -61,6 +61,7 @@ static void start_captive_portal(void)
     ESP_LOGI("Main", "DNS server started for captive portal");
 }
 
+/// Stop the captive DNS server if running and clear its handle.
 static void stop_captive_portal(void)
 {
     if (dns_server) {
@@ -112,6 +113,7 @@ bool initLogging(){
 void setup();
 void loop();
 
+/// Run setup once, then remain in the RTOS-yielding application loop.
 extern "C" void app_main() {
   setup();
   while (true) {
@@ -120,12 +122,13 @@ extern "C" void app_main() {
 }
 
 /**
- * @brief Initialize runtime, configure logging/serial, and instantiate core subsystem managers.
+ * @brief Initialize runtime, configure logging, and instantiate core subsystem managers.
  *
- * Initializes the global runtime infrastructure (Sinker), sets logging levels and Serial,
+ * Initializes the global runtime infrastructure (Sinker), initializes NVS and logging,
  * constructs and assigns global manager instances (ReaderDataManager, ConfigManager, WebServerManager,
- * HardwareManager, LockManager, MqttManager, HomeKitService, NfcManager), reads NFC-related configuration,
- * and starts managers that require explicit startup.
+ * HardwareManager, LockManager, MqttManager, NetworkManager, HomeKitService, NfcManager), reads NFC-related configuration,
+ * and starts managers that require explicit startup. Returns early if NVS or logging
+ * initialization fails.
  *
  * @note This function allocates and assigns globals used across the application and invokes their
  *       initialization routines (calls to `begin()` where applicable). It also logs the resolved NFC

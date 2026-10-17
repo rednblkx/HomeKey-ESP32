@@ -47,6 +47,7 @@ struct WifiCreds {
   char pwd[65];
 };
 
+/// Load a fixed-size credential record into out; return false on NVS errors or a size mismatch.
 bool loadCreds(WifiCreds &out) {
   nvs_handle_t h;
   if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &h) != ESP_OK) return false;
@@ -56,6 +57,7 @@ bool loadCreds(WifiCreds &out) {
   return err == ESP_OK && len == sizeof(out);
 }
 
+/// Persist credentials; abort on NVS open, write, or commit failure.
 void storeCreds(const WifiCreds &creds) {
   nvs_handle_t h;
   ESP_ERROR_CHECK(nvs_open(NVS_NAMESPACE, NVS_READWRITE, &h));

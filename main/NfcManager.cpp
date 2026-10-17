@@ -65,7 +65,7 @@ std::unique_ptr<ddk::Session> NfcManager::buildAuthSession() {
  * DEBUG_AUTH_FLOW updates the debug authentication flow when received.
  *
  * @param readerDataManager Reference to the ReaderDataManager used to read and persist reader data.
- * @param nfcGpioPins Four GPIO pin numbers used for SPI communication (SS/CS, SCK, MISO, MOSI).
+ * @param nfcGpioPins SPI pins (SS/CS, SCK, MISO, MOSI), or SDA/SCL in the first two slots for ST25R3916.
  * @param nfcReaderType 0 = PN532 (SPI), 1 = PN7160, 2 = ST25R3916 (I2C).
  * @param nfcIrqPin IRQ pin for PN7160 (255 = unset).
  * @param nfcVenPin VEN pin for PN7160 (255 = unset).
@@ -155,7 +155,7 @@ NfcManager::~NfcManager() = default;
 /**
  * @brief Initialize the selected NFC reader and start the NFC polling task.
  *
- * Instantiates the correct reader implementation (PN532 or PN7160) and launches
+ * Instantiates the selected reader (PN532, PN7160, or ST25R3916) and launches
  * the background task that drives NFC polling.
  *
  * @return `true` if the NFC polling task was started, `false` otherwise.

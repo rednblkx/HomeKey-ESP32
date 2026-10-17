@@ -1738,6 +1738,9 @@ bool ConfigManager::validateCertificateContent(const std::string& certContent, e
     return false;
 }
 
+/// Check certificate parsing and required version, names, dates, and public key.
+/// Return false on parsing or missing-field failures. This does not verify trust
+/// or current validity; a CA certificate lacking CA:true is still accepted.
 bool ConfigManager::validateCertificateWithMbedTLS(const std::string& certContent, espConfig::CertType certType) {
     ScopedX509Crt cert;
 
@@ -1800,6 +1803,8 @@ bool ConfigManager::validateCertificateWithMbedTLS(const std::string& certConten
     return isValid;
 }
 
+/// Return whether an unencrypted private key parses as supported RSA or EC.
+/// Parsing/unsupported-type errors return false; RSA keys below 2048 bits are accepted.
 bool ConfigManager::validatePrivateKeyContent(const std::string& keyContent) {
     ScopedPk pk;
 
@@ -1829,6 +1834,9 @@ bool ConfigManager::validatePrivateKeyContent(const std::string& keyContent) {
     return true;
 }
 
+/// Return whether nonempty key/certificate inputs parse and their keys match.
+/// Parsing, pair-check, type, RSA-size, or EC-family mismatch returns false.
+/// context labels diagnostics; this does not validate certificate trust or expiry.
 bool ConfigManager::validateKeyCertPair(const std::string& privateKey, const std::string& certificate, const char* context) {
     if (privateKey.empty() || certificate.empty()) {
         ESP_LOGE("ConfigManager", "%s private key or certificate is empty", context);
@@ -1884,6 +1892,10 @@ bool ConfigManager::validateKeyCertPair(const std::string& privateKey, const std
     return true;
 }
 
+/// Return metadata for stored MQTT/HTTPS certificates and supported private keys.
+/// Omit missing, unparseable, or unsupported entries and certificates whose names
+/// or serial cannot be formatted. Fingerprint failure produces an all-zero SHA-1
+/// fingerprint. Client/server entries include a key-pair match result.
 std::vector<CertificateStatus> ConfigManager::getCertificatesStatus(){
   std::vector<CertificateStatus> certificates;
   ensureMqttSslLoaded();

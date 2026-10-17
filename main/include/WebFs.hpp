@@ -14,18 +14,23 @@
  */
 namespace webfs {
 
-/// Mount the web UI partition. Safe to call again (returns true if mounted).
+/// Mount at /www, formatting the partition if mounting fails.
+/// Return false on registration failure; return true if already mounted.
 bool mount();
 /// Unmount (used around OTA writes to the partition).
 void unmount();
-/// Partition usage in bytes.
+/// Fill total and used with partition sizes in bytes.
+/// Return false when unmounted or usage cannot be queried.
 bool usage(size_t &total, size_t &used);
 
-/// true if the file exists under the mount point.
+/// Return whether path names a regular file under /www.
+/// path must start with a slash; null paths and an unmounted partition return false.
 bool exists(const char *path);
-/// Open a file for reading; returns nullptr on failure. fclose() to release.
+/// Open path (starting with a slash) under /www for binary reading.
+/// Return nullptr if unmounted, path is null, or opening fails; fclose() to release.
 FILE *open_read(const char *path);
-/// Read up to `len` bytes; returns bytes read (0 at EOF).
+/// Read up to len bytes into buf and advance the stream.
+/// Return bytes read; zero can mean EOF, a read error, len == 0, or a null stream.
 size_t read(FILE *f, uint8_t *buf, size_t len);
 
 } // namespace webfs

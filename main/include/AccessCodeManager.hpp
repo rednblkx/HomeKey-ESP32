@@ -47,8 +47,11 @@ public:
 
     /**
      * @brief Processes a control-point write from the HomeKit controller.
+     * LIST/READ return stored entries; ADD/UPDATE/REMOVE mutate memory and attempt
+     * persistence. Persistence failure is not reflected in response status.
      * @param request Raw TLV8 bytes of the request payload.
-     * @return A vector<uint8_t> containing the full TLV8 response.
+     * @return Encoded TLV8 response, or empty for a missing/unsupported operation.
+     * Missing handler fields may produce an operation-only response.
      */
     std::vector<uint8_t> handle_write(const std::vector<uint8_t>& request);
 
@@ -84,9 +87,17 @@ private:
     using FragmentSink = std::function<void(const std::vector<hap::core::TLV>&)>;
 
     // --- Operation handlers ---
+    /// Append a response for each control request with a nonempty identifier;
+    /// report DOES_NOT_EXIST for unknown IDs and skip requests without an identifier.
     void read_codes(const std::vector<hap::core::TLV>& request, const FragmentSink& append_fragment);
+    /// Validate and add the first requested code, then attempt persistence.
+    /// Append its result status; missing request/code fields produce no fragment.
     void add_code(const std::vector<hap::core::TLV>& request, const FragmentSink& append_fragment);
+    /// Remove the first requested ID and attempt persistence, or append DOES_NOT_EXIST.
+    /// Missing request/identifier fields produce no fragment.
     void remove_code(const std::vector<hap::core::TLV>& request, const FragmentSink& append_fragment);
+    /// Replace the first requested ID's code without applying ADD constraints and attempt persistence.
+    /// Append the result or DOES_NOT_EXIST; missing request/identifier/code fields produce no fragment.
     void update_code(const std::vector<hap::core::TLV>& request, const FragmentSink& append_fragment);
 
     /**
@@ -117,10 +128,10 @@ private:
     bool save_codes();
 
     /**
-     * @brief Extracts an identifier from a request fragment, accepting 1- or 2-byte encodings.
+     * @brief Reads up to two little-endian identifier bytes; ignores additional bytes.
      * @param fragment TLV list containing the identifier tag.
-     * @param id Output identifier.
-     * @return true if the identifier tag was present.
+     * @param id Output identifier, unchanged on failure.
+     * @return true if the identifier tag was present and nonempty.
      */
     static bool extract_id(const std::vector<hap::core::TLV>& fragment, uint16_t& id);
 };

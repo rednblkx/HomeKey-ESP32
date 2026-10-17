@@ -70,6 +70,7 @@ inline mbedtls_pk_type_t pk_get_type(const mbedtls_pk_context* ctx) {
     return mbedtls_pk_get_type(ctx);
 }
 
+/// Return whether an initialized context describes an ECC key pair.
 inline bool pk_is_ec(const mbedtls_pk_context* ctx) {
     psa_key_type_t t = ctx->MBEDTLS_PRIVATE(psa_type);
     return PSA_KEY_TYPE_IS_ECC(t) && PSA_KEY_TYPE_IS_KEY_PAIR(t);
@@ -79,6 +80,7 @@ inline bool pk_is_rsa(const mbedtls_pk_context* ctx) {
     return PSA_KEY_TYPE_IS_RSA(ctx->MBEDTLS_PRIVATE(psa_type));
 }
 
+/// Return the stored PSA curve family; ctx must describe an EC key.
 inline psa_ecc_family_t pk_ec_family(const mbedtls_pk_context* ctx) {
     return ctx->MBEDTLS_PRIVATE(ec_family);
 }
@@ -87,7 +89,7 @@ inline size_t pk_key_bits(const mbedtls_pk_context* ctx) {
     return mbedtls_pk_get_bitlen(ctx);
 }
 
-// Human-readable key type for UI/telemetry.
+/// Return "RSA", "EC" for an ECC key pair, or "None" for other key types.
 inline const char* pk_type_name(const mbedtls_pk_context* ctx) {
     if (pk_is_rsa(ctx)) return "RSA";
     if (pk_is_ec(ctx)) return "EC";
@@ -99,6 +101,7 @@ inline const char* pk_type_name(const mbedtls_pk_context* ctx) {
 inline mbedtls_pk_type_t pk_get_type(const mbedtls_pk_context* ctx) {
     return mbedtls_pk_get_type(ctx);
 }
+/// Return whether an initialized context has an EC, EC-DH, or ECDSA key type.
 inline bool pk_is_ec(const mbedtls_pk_context* ctx) {
     mbedtls_pk_type_t t = mbedtls_pk_get_type(ctx);
     return t == MBEDTLS_PK_ECKEY || t == MBEDTLS_PK_ECKEY_DH || t == MBEDTLS_PK_ECDSA;
@@ -109,6 +112,7 @@ inline bool pk_is_rsa(const mbedtls_pk_context* ctx) {
 inline size_t pk_key_bits(const mbedtls_pk_context* ctx) {
     return mbedtls_pk_get_bitlen(ctx);
 }
+/// Return "RSA", "None" for an empty key, or "EC" for every other key type.
 inline const char* pk_type_name(const mbedtls_pk_context* ctx) {
     mbedtls_pk_type_t t = mbedtls_pk_get_type(ctx);
     return t == MBEDTLS_PK_RSA ? "RSA" : (t == MBEDTLS_PK_NONE ? "None" : "EC");

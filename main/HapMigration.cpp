@@ -80,11 +80,13 @@ bool parse_controllers(const uint8_t *blob, size_t len,
 // ---------------------------------------------------------------------------
 namespace {
 
+/// Return the shared storage adapter used for migration writes and readback.
 Esp32Storage &storage() {
   static Esp32Storage s;
   return s;
 }
 
+/// Write a pairing value and return whether readback exists and matches it.
 bool write_and_verify(const char *key, const std::vector<uint8_t> &value) {
   storage().set(key, value);
   auto readback = storage().get(key);
@@ -95,6 +97,8 @@ bool write_and_verify(const char *key, const std::vector<uint8_t> &value) {
   return true;
 }
 
+/// Erase and commit an old NVS namespace; a missing namespace counts as success.
+/// Return false if opening or committing fails; the erase result is not checked.
 bool erase_namespace(const char *ns) {
   nvs_handle_t h;
   esp_err_t err = nvs_open(ns, NVS_READWRITE, &h);
