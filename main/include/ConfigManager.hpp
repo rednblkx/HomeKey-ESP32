@@ -84,7 +84,7 @@ public:
       uint16_t offset;
       FieldType type;
     };
-    static constexpr size_t kFieldCount = 97;
+    static constexpr size_t kFieldCount = 98;
     static const ConfigField kConfigFields[kFieldCount];
 
     // Guards that table section names and sectionBase() agree; aborts at
@@ -134,6 +134,7 @@ public:
     espConfig::https_certs_t m_httpsCertsConfig;
     espConfig::misc_config_t m_miscConfig;
     espConfig::actions_config_t m_actionsConfig;
+    espConfig::automation_config_t m_automationConfig;
     nvs_handle m_nvsHandle = 0;
     bool m_isInitialized;
     static const char* TAG;

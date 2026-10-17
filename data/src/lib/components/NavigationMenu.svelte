@@ -128,6 +128,18 @@
 			</a>
 		</li>
 		<li class="my-1" role="menuitem">
+			<a href={p('/automations')} class="text-lg flex items-center" {@attach isActiveLink({ className: 'bg-neutral' })}>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="h-6 w-6 mr-1" aria-hidden="true">
+          <circle cx="8" cy="3.25" r="2" />
+          <circle cx="3.25" cy="12.5" r="2" />
+          <circle cx="12.75" cy="12.5" r="2" />
+          <path d="M7.4 5.1 4 10.4M8.6 5.1 12 10.4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none" />
+          <circle cx="8" cy="3.25" r="0.6" fill="none" />
+        </svg>
+				Automations
+			</a>
+		</li>
+		<li class="my-1" role="menuitem">
 			<a href={p('/misc')} class="text-lg flex items-center" {@attach isActiveLink({ className: 'bg-neutral' })}>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"

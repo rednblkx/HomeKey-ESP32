@@ -2,7 +2,7 @@ idf_component_register(SRCS "main.cpp" "app_events.cpp" "app_event_loop.cpp" "Co
                     "HardwareManager.cpp" "HomeKitService.cpp" "HapMigration.cpp" "NetworkManager.cpp" "LockManager.cpp"
                     "MqttManager.cpp" "NfcManager.cpp" "Pn532Reader.cpp" "Pn7160Reader.cpp" "St25r3916Reader.cpp" "WebServerManager.cpp" "WebSocketLogSinker.cpp"
                     "ConsoleLogSinker.cpp" "GPIOAllocator.cpp" "WebFs.cpp" "KeypadManager.cpp" "AccessCodeManager.cpp"
-                    "NvsSecEarlyInit.cpp"
+                    "NvsSecEarlyInit.cpp" "AutomationEngine.cpp"
                     INCLUDE_DIRS "include"
                     PRIV_REQUIRES yahap yahap_pal pn532_hal pn7160 DigitalDoorKey esp_https_server mqtt libsodium
                     msgpack-c cjson loggable loggable_espidf esp_wifi dns_server esp_timer esp_netif esp_eth esp_event nvs_flash

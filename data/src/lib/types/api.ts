@@ -277,6 +277,64 @@ export interface ActionsConfig {
 }
 
 /**
+ * Automation engine unit descriptor, served by GET /automation/schema.
+ * A "unit" is one trigger / condition / action kind the firmware supports.
+ */
+export interface AutomationParamDesc {
+  name: string;
+  kind: 'string' | 'number' | 'bool' | 'select';
+  options?: string[];
+  /** Only relevant when params[showIfParam] === showIfValue; hidden otherwise. */
+  showIfParam?: string;
+  showIfValue?: string;
+}
+
+export interface AutomationUnitDesc {
+  type: string;
+  label: string;
+  params: AutomationParamDesc[];
+}
+
+export interface AutomationSchema {
+  triggers: AutomationUnitDesc[];
+  conditions: AutomationUnitDesc[];
+  actions: AutomationUnitDesc[];
+}
+
+/** One user-authored automation rule. */
+export interface AutomationTrigger {
+  type: string;
+  filter?: Record<string, string | number | boolean>;
+}
+
+export interface AutomationCondition {
+  type: string;
+  params?: Record<string, string | number | boolean>;
+}
+
+export interface AutomationAction {
+  type: string;
+  params?: Record<string, string | number | boolean>;
+}
+
+export interface AutomationRule {
+  id: string;
+  name: string;
+  enabled: boolean;
+  trigger: AutomationTrigger;
+  conditions: AutomationCondition[];
+  actions: AutomationAction[];
+}
+
+/**
+ * Automation config section: the firmware stores exactly this JSON blob.
+ * @type {AutomationConfig}
+ */
+export interface AutomationConfig {
+  rules: AutomationRule[];
+}
+
+/**
  * Ethernet configuration structure for network connectivity
  * @type {EthConfig}
  */

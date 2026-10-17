@@ -165,6 +165,8 @@ const ConfigManager::ConfigField ConfigManager::kConfigFields[ConfigManager::kFi
   F("actions", actions_config_t, hkAltActionInitPin, U8),
   F("actions", actions_config_t, hkAltActionInitLedPin, U8),
   F("actions", actions_config_t, hkAltActionInitTimeout, U16),
+  // --- automation (1) ---
+  F("automation", automation_config_t, rulesJson, Str),
 };
 
 void* ConfigManager::sectionBase(const char* section) {
@@ -173,6 +175,7 @@ void* ConfigManager::sectionBase(const char* section) {
   if (!strcmp(section, "https")) return &m_httpsCertsConfig;
   if (!strcmp(section, "misc")) return &m_miscConfig;
   if (!strcmp(section, "actions")) return &m_actionsConfig;
+  if (!strcmp(section, "automation")) return &m_automationConfig;
   return nullptr;
 }
 
@@ -200,7 +203,7 @@ void ConfigManager::verifyFieldTable() {
   static bool checked = false;
   if (checked) return;
   checked = true;
-  const char* known[] = {"mqtt", "ssl", "https", "misc", "actions"};
+  const char* known[] = {"mqtt", "ssl", "https", "misc", "actions", "automation"};
   for (size_t i = 0; i < kFieldCount; ++i) {
     if (sectionBase(kConfigFields[i].section) == nullptr) {
       ESP_LOGE(TAG, "FATAL: field '%s' references unknown section '%s'",
@@ -287,6 +290,7 @@ bool ConfigManager::begin() {
   }
   loadConfigFromNvs("MISCDATA");
   loadConfigFromNvs("HTTPSDATA");
+  loadConfigFromNvs("AUTOMATIONDATA");
 
   ESP_LOGI(TAG, "Initialization complete.");
   return true;
@@ -316,6 +320,8 @@ const ConfigType& ConfigManager::getConfig() const {
     return m_miscConfig;
   } else if constexpr (std::is_same_v<NonConstConfigType, espConfig::actions_config_t>) {
     return m_actionsConfig;
+  } else if constexpr (std::is_same_v<NonConstConfigType, espConfig::automation_config_t>) {
+    return m_automationConfig;
   }else {
     static_assert(std::is_void_v<ConfigType> && false, "Unsupported ConfigType for getConfig");
   }
@@ -326,6 +332,8 @@ template const espConfig::misc_config_t& ConfigManager::getConfig<espConfig::mis
 template const espConfig::misc_config_t& ConfigManager::getConfig<espConfig::misc_config_t const>() const;
 template const espConfig::actions_config_t& ConfigManager::getConfig<espConfig::actions_config_t>() const;
 template const espConfig::actions_config_t& ConfigManager::getConfig<espConfig::actions_config_t const>() const;
+template const espConfig::automation_config_t& ConfigManager::getConfig<espConfig::automation_config_t>() const;
+template const espConfig::automation_config_t& ConfigManager::getConfig<espConfig::automation_config_t const>() const;
 
 template <typename ConfigType>
 /**
@@ -378,6 +386,9 @@ bool ConfigManager::deleteConfig() {
   } else if constexpr(std::is_same_v<ConfigType, espConfig::actions_config_t>){
     m_actionsConfig = {};
     return saveConfig<espConfig::actions_config_t>();
+  } else if constexpr(std::is_same_v<ConfigType, espConfig::automation_config_t>){
+    m_automationConfig = {};
+    return saveConfig<espConfig::automation_config_t>();
   } else if constexpr(std::is_same_v<ConfigType, espConfig::https_certs_t>){
     m_httpsCertsConfig = {};
     esp_err_t err = nvs_erase_key(m_nvsHandle, "HTTPSDATA");
@@ -395,6 +406,7 @@ bool ConfigManager::deleteConfig() {
 template bool ConfigManager::deleteConfig<espConfig::mqttConfig_t>();
 template bool ConfigManager::deleteConfig<espConfig::misc_config_t>();
 template bool ConfigManager::deleteConfig<espConfig::actions_config_t>();
+template bool ConfigManager::deleteConfig<espConfig::automation_config_t>();
 
 template <typename ConfigType>
 /**
@@ -414,6 +426,8 @@ bool ConfigManager::saveConfig() {
     key = "MISCDATA";
   } else if constexpr(std::is_same_v<ConfigType, espConfig::https_certs_t>){
     key = "HTTPSDATA";
+  } else if constexpr(std::is_same_v<ConfigType, espConfig::automation_config_t>){
+    key = "AUTOMATIONDATA";
   } else {
     static_assert(std::is_void_v<ConfigType> && false, "Unsupported ConfigType for saveConfig");
   }
@@ -428,6 +442,7 @@ bool ConfigManager::saveConfig() {
 template bool ConfigManager::saveConfig<espConfig::mqttConfig_t>();
 template bool ConfigManager::saveConfig<espConfig::misc_config_t>();
 template bool ConfigManager::saveConfig<espConfig::actions_config_t>();
+template bool ConfigManager::saveConfig<espConfig::automation_config_t>();
 
 /**
  * @brief Loads and applies a configuration blob from NVS into the in-memory config.
@@ -503,6 +518,8 @@ void ConfigManager::loadConfigFromNvs(const char *key) {
     } else if(!strcmp(key, "MISCDATA")){
       deserialize(obj, "misc");
       deserialize(obj, "actions");
+    } else if(!strcmp(key, "AUTOMATIONDATA")){
+      deserialize(obj, "automation");
     } else if(!strcmp(key, "HTTPSDATA")){
       deserialize(obj, "https");
       migratePemToDer();
@@ -532,6 +549,7 @@ bool ConfigManager::saveConfigToNvs(const char *key) {
     if (!strcmp(key, "MQTTSSLDATA")) return serialize<espConfig::mqtt_ssl_t>();
     if (!strcmp(key, "MQTTDATA")) return serialize<espConfig::mqttConfig_t>();
     if (!strcmp(key, "HTTPSDATA")) return serialize<espConfig::https_certs_t>();
+    if (!strcmp(key, "AUTOMATIONDATA")) return serialize<espConfig::automation_config_t>();
     return SerializedBuffer{};
   }();
 
@@ -756,6 +774,8 @@ ConfigManager::SerializedBuffer ConfigManager::serialize() {
   } else if constexpr (std::is_same_v<espConfig::actions_config_t, ConfigType>){
     primary = sectionRange("actions");
     secondary = sectionRange("misc");
+  } else if constexpr (std::is_same_v<espConfig::automation_config_t, ConfigType>){
+    primary = sectionRange("automation");
   } else if constexpr (std::is_same_v<espConfig::mqtt_ssl_t, ConfigType>){
     primary = sectionRange("ssl");
   } else if constexpr (std::is_same_v<espConfig::mqttConfig_t, ConfigType>){
@@ -892,6 +912,8 @@ std::string ConfigManager::updateFromJson(const std::string& json_string) {
     section = "misc";
   } else if constexpr (std::is_same_v<ConfigType, espConfig::actions_config_t>) {
     section = "actions";
+  } else if constexpr (std::is_same_v<ConfigType, espConfig::automation_config_t>) {
+    section = "automation";
   } else if constexpr (std::is_same_v<ConfigType, espConfig::mqttConfig_t>) {
     section = "mqtt";
   } else {
@@ -1048,6 +1070,7 @@ std::string ConfigManager::updateFromJson(const std::string& json_string) {
 }
 template std::string ConfigManager::updateFromJson<espConfig::misc_config_t>(const std::string& json_string);
 template std::string ConfigManager::updateFromJson<espConfig::actions_config_t>(const std::string& json_string);
+template std::string ConfigManager::updateFromJson<espConfig::automation_config_t>(const std::string& json_string);
 template std::string ConfigManager::updateFromJson<espConfig::mqttConfig_t>(const std::string& json_string);
 
 template <typename ConfigType>
@@ -1084,6 +1107,8 @@ std::string ConfigManager::serializeToJson() {
     section = "misc";
   } else if constexpr (std::is_same_v<espConfig::actions_config_t, ConfigType>){
     section = "actions";
+  } else if constexpr (std::is_same_v<espConfig::automation_config_t, ConfigType>){
+    section = "automation";
   } else if constexpr (std::is_same_v<espConfig::mqttConfig_t, ConfigType>){
     section = "mqtt";
   }
@@ -1191,6 +1216,7 @@ std::string ConfigManager::serializeToJson() {
 
 template std::string ConfigManager::serializeToJson<espConfig::misc_config_t>();
 template std::string ConfigManager::serializeToJson<espConfig::actions_config_t>();
+template std::string ConfigManager::serializeToJson<espConfig::automation_config_t>();
 template std::string ConfigManager::serializeToJson<espConfig::mqttConfig_t>();
 
 template <typename ConfigType>
@@ -1231,6 +1257,8 @@ bool ConfigManager::deserializeFromJson(const std::string& json_string) {
       section = "misc";
     } else if constexpr (std::is_same_v<ConfigType, espConfig::actions_config_t>){
       section = "actions";
+    } else if constexpr (std::is_same_v<ConfigType, espConfig::automation_config_t>){
+      section = "automation";
     } else if constexpr (std::is_same_v<ConfigType, espConfig::mqttConfig_t>){
       section = "mqtt";
     } else {
@@ -1414,6 +1442,7 @@ bool ConfigManager::deserializeFromJson(const std::string& json_string) {
 }
 template bool ConfigManager::deserializeFromJson<espConfig::misc_config_t>(const std::string& json_string);
 template bool ConfigManager::deserializeFromJson<espConfig::actions_config_t>(const std::string& json_string);
+template bool ConfigManager::deserializeFromJson<espConfig::automation_config_t>(const std::string& json_string);
 template bool ConfigManager::deserializeFromJson<espConfig::mqttConfig_t>(const std::string& json_string);
 
 // Certificate storage implementation

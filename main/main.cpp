@@ -12,6 +12,7 @@
 #include "ReaderDataManager.hpp"
 #include "HardwareManager.hpp"
 #include "MqttManager.hpp"
+#include "automation/AutomationEngine.hpp"
 #include "WebServerManager.hpp"
 #include <functional>
 #include "loggable.hpp"
@@ -26,6 +27,7 @@ ConfigManager configManager;
 std::unique_ptr<HardwareManager> hardwareManager;
 std::unique_ptr<MqttManager> mqttManager;
 std::unique_ptr<NetworkManager> networkManager;
+std::unique_ptr<automation::AutomationEngine> automationEngine;
 WebServerManager webServerManager(configManager, readerDataManager);
 std::unique_ptr<HomeKitService> homekitService;
 std::unique_ptr<NfcManager> nfcManager;
@@ -181,6 +183,9 @@ void setup() {
   mqttManager = std::make_unique<MqttManager>(configManager);
   networkManager = std::make_unique<NetworkManager>(configManager);
   homekitService = std::make_unique<HomeKitService>(*lockManager, configManager, readerDataManager);
+  automationEngine = std::make_unique<automation::AutomationEngine>(
+      configManager, mqttManager.get(), lockManager.get());
+  automationEngine->begin();
   espConfig::misc_config_t miscConfig = configManager.getConfig<espConfig::misc_config_t>();
   static const char* TAG = "Main";
   if(miscConfig.nfcPinsPreset != PIN_UNSET){

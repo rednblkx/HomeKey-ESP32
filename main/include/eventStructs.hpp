@@ -31,6 +31,7 @@ struct EventLockState {
   uint8_t currentState = 255;
   uint8_t targetState = 255;
   uint8_t source = 0;
+  uint8_t prevState = 255;
 };
 
 struct EventBinaryStatus {
