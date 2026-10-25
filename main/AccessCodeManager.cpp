@@ -32,9 +32,6 @@ namespace AcTlv {
     constexpr uint8_t STATUS_INVALID_CHAR = 0x07;
     constexpr uint8_t STATUS_INVALID_REQUEST = 0x08;
     constexpr uint8_t STATUS_DOES_NOT_EXIST = 0x09;
-
-    // Bulk responses separate consecutive fragments with 2 zero bytes
-    constexpr uint8_t PADDING[2] = {0x00, 0x00};
 }
 
 AccessCodeManager::AccessCodeManager(uint8_t min_length, uint8_t max_length, uint8_t max_codes)
@@ -192,27 +189,36 @@ std::vector<uint8_t> AccessCodeManager::handle_write(TLV8& request_tlv) {
 }
 
 /**
- * @brief Packs the response TLV, inserting 2 zero bytes between consecutive
- *        control-response fragments (required by bulk List/Read operations).
+ * @brief Pack a TLV8 value without reinterpreting scalar fields as nested TLV.
+ *
+ * HomeSpan's unpacker treats the value bytes as a TLV stream. Feeding it a
+ * one-byte operation (for example 0x03) produces a different encoding than the
+ * scalar that was stored, so Apple Home cannot match the response to the request.
  */
-static std::vector<uint8_t> pack_response(TLV8& response) {
-    TLV8 padded;
-    size_t fragments = 0;
-    for (auto it = response.begin(); it != response.end(); ++it) {
-        if (it->getTag() == AcTlv::TAG_CONTROL_RESPONSE) {
-            if (fragments > 0) {
-                padded.add(0x00, sizeof(AcTlv::PADDING), AcTlv::PADDING);
-            }
-            fragments++;
-        }
-        TLV8 sub;
-        sub.unpack(it->get(), it->getLen());
-        padded.add(it->getTag(), sub);
+static std::vector<uint8_t> pack_tlv(TLV8& tlv) {
+    std::vector<uint8_t> out(tlv.pack_size());
+    if (!out.empty()) {
+        tlv.pack(out.data());
     }
-    padded.pack_init();
-    std::vector<uint8_t> out(padded.pack_size());
-    padded.pack(out.data());
     return out;
+}
+
+/**
+ * @brief Append one Access Code Control Response.
+ *
+ * HomeSpan's TLV8::add concatenates a new item into the previous one when the
+ * tags match. A list of codes would otherwise become a single response whose
+ * duplicate identifier/code/status tags hide every entry after the first.
+ * Apple Home then never learns the identifier to remove, and a deleted PIN
+ * stays valid. A zero-length type 0 packs as the two 0x00 bytes the bulk
+ * List/Read/Remove framing uses, and it also keeps the following response
+ * from being merged.
+ */
+static void append_control_response(TLV8& response, TLV8& fragment) {
+    if (response.find(AcTlv::TAG_CONTROL_RESPONSE) != response.end()) {
+        response.add(0x00);
+    }
+    response.add(AcTlv::TAG_CONTROL_RESPONSE, fragment);
 }
 
 // --- Operation Handlers ---
@@ -220,9 +226,9 @@ static std::vector<uint8_t> pack_response(TLV8& response) {
 std::vector<uint8_t> AccessCodeManager::list_codes(TLV8& response) {
     for (const auto& code_entry : access_codes) {
         TLV8 fragment = build_code_response_fragment(code_entry);
-        response.add(AcTlv::TAG_CONTROL_RESPONSE, fragment);
+        append_control_response(response, fragment);
     }
-    return pack_response(response);
+    return pack_tlv(response);
 }
 
 std::vector<uint8_t> AccessCodeManager::read_codes(TLV8& request, TLV8& response) {
@@ -235,18 +241,18 @@ std::vector<uint8_t> AccessCodeManager::read_codes(TLV8& request, TLV8& response
                 AccessCode* code = find_code_by_id(id);
                 if (code) {
                     TLV8 res_fragment = build_code_response_fragment(*code);
-                    response.add(AcTlv::TAG_CONTROL_RESPONSE, res_fragment);
+                    append_control_response(response, res_fragment);
                 } else {
                     AccessCode err_code{};
                     err_code.id = id;
                     err_code.status = AcTlv::STATUS_DOES_NOT_EXIST;
                     TLV8 res_fragment = build_code_response_fragment(err_code);
-                    response.add(AcTlv::TAG_CONTROL_RESPONSE, res_fragment);
+                    append_control_response(response, res_fragment);
                 }
             }
         }
     }
-    return pack_response(response);
+    return pack_tlv(response);
 }
 
 uint8_t AccessCodeManager::validate_constraints(const std::string& code) {
@@ -299,40 +305,49 @@ std::vector<uint8_t> AccessCodeManager::add_code(TLV8& request, TLV8& response) 
     }
 
     TLV8 fragment = build_code_response_fragment(result);
-    response.add(AcTlv::TAG_CONTROL_RESPONSE, fragment);
-    return pack_response(response);
+    append_control_response(response, fragment);
+    return pack_tlv(response);
 }
 
 std::vector<uint8_t> AccessCodeManager::remove_code(TLV8& request, TLV8& response) {
-    TLV8_itc req_it = request.find(AcTlv::TAG_CONTROL_REQUEST);
-    if (req_it == request.end()) return {};
+    bool changed = false;
+    bool saw_request = false;
 
-    TLV8 req_fragment;
-    req_fragment.unpack(req_it->get(), req_it->getLen());
+    for (auto it = request.begin(); it != request.end(); ++it) {
+        if (it->getTag() != AcTlv::TAG_CONTROL_REQUEST) continue;
+        saw_request = true;
 
-    uint16_t id_to_remove = 0;
-    if (!extract_id(req_fragment, id_to_remove)) return {};
+        TLV8 req_fragment;
+        req_fragment.unpack(it->get(), it->getLen());
 
-    auto it = std::find_if(access_codes.begin(), access_codes.end(),
-        [id_to_remove](const AccessCode& ac){ return ac.id == id_to_remove; });
+        uint16_t id_to_remove = 0;
+        AccessCode response_code{};
+        if (!extract_id(req_fragment, id_to_remove)) {
+            response_code.status = AcTlv::STATUS_INVALID_REQUEST;
+        } else {
+            auto code_it = std::find_if(access_codes.begin(), access_codes.end(),
+                [id_to_remove](const AccessCode& ac){ return ac.id == id_to_remove; });
+            response_code.id = id_to_remove;
+            if (code_it != access_codes.end()) {
+                response_code = *code_it;
+                response_code.status = AcTlv::STATUS_SUCCESS;
+                access_codes.erase(code_it);
+                changed = true;
+                ESP_LOGI(TAG, "Removed access code with ID: %d", id_to_remove);
+            } else {
+                response_code.status = AcTlv::STATUS_DOES_NOT_EXIST;
+                ESP_LOGW(TAG, "Attempted to remove non-existent access code with ID: %d", id_to_remove);
+            }
+        }
 
-    AccessCode response_code;
-    response_code.id = id_to_remove;
-
-    if (it != access_codes.end()) {
-        response_code = *it; // Copy data before erasing
-        response_code.status = AcTlv::STATUS_SUCCESS;
-        access_codes.erase(it);
-        save_codes();
-        ESP_LOGI(TAG, "Removed access code with ID: %d", id_to_remove);
-    } else {
-        response_code.status = AcTlv::STATUS_DOES_NOT_EXIST;
-        ESP_LOGW(TAG, "Attempted to remove non-existent access code with ID: %d", id_to_remove);
+        TLV8 fragment = build_code_response_fragment(response_code);
+        append_control_response(response, fragment);
     }
 
-    TLV8 fragment = build_code_response_fragment(response_code);
-    response.add(AcTlv::TAG_CONTROL_RESPONSE, fragment);
-    return pack_response(response);
+    if (!saw_request) return pack_tlv(response);
+
+    if (changed) save_codes();
+    return pack_tlv(response);
 }
 
 std::vector<uint8_t> AccessCodeManager::update_code(TLV8& request, TLV8& response) {
@@ -356,18 +371,18 @@ std::vector<uint8_t> AccessCodeManager::update_code(TLV8& request, TLV8& respons
         code_to_update->status = AcTlv::STATUS_SUCCESS;
         save_codes();
         TLV8 fragment = build_code_response_fragment(*code_to_update);
-        response.add(AcTlv::TAG_CONTROL_RESPONSE, fragment);
+        append_control_response(response, fragment);
         ESP_LOGI(TAG, "Updated access code for ID: %d", id_to_update);
     } else {
         AccessCode error_response;
         error_response.id = id_to_update;
         error_response.status = AcTlv::STATUS_DOES_NOT_EXIST;
         TLV8 fragment = build_code_response_fragment(error_response);
-        response.add(AcTlv::TAG_CONTROL_RESPONSE, fragment);
+        append_control_response(response, fragment);
         ESP_LOGW(TAG, "Attempted to update non-existent access code with ID: %d", id_to_update);
     }
 
-    return pack_response(response);
+    return pack_tlv(response);
 }
 
 
@@ -375,10 +390,9 @@ std::vector<uint8_t> AccessCodeManager::update_code(TLV8& request, TLV8& respons
 
 TLV8 AccessCodeManager::build_code_response_fragment(const AccessCode& code) {
     TLV8 fragment_tlv;
-    // Identifier is multi-byte little-endian so IDs above 255 survive round-trips
-    fragment_tlv.add(AcTlv::TAG_IDENTIFIER, sizeof(code.id), reinterpret_cast<const uint8_t*>(&code.id));
-    // Only add code string if status is success, otherwise it might not be available
-    if (code.status == AcTlv::STATUS_SUCCESS && !code.code.empty()) {
+    // One byte for the IDs this lock actually uses; two or more bytes once an ID exceeds 255.
+    fragment_tlv.add(AcTlv::TAG_IDENTIFIER, static_cast<uint64_t>(code.id));
+    if (!code.code.empty()) {
         fragment_tlv.add(AcTlv::TAG_ACCESS_CODE, code.code.size(), reinterpret_cast<const uint8_t*>(code.code.data()));
     }
     fragment_tlv.add(AcTlv::TAG_FLAGS, code.flags);
