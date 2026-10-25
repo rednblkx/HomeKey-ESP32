@@ -376,6 +376,7 @@ std::vector<uint8_t> AccessCodeManager::update_code(TLV8& request, TLV8& respons
     } else {
         AccessCode error_response;
         error_response.id = id_to_update;
+        error_response.code.assign(reinterpret_cast<const char*>(code_it->get()), code_it->getLen());
         error_response.status = AcTlv::STATUS_DOES_NOT_EXIST;
         TLV8 fragment = build_code_response_fragment(error_response);
         append_control_response(response, fragment);
