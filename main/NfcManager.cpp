@@ -414,6 +414,7 @@ void NfcManager::handleHomeKeyAuth(const std::vector<uint8_t>& select_response) 
     ) {
         if (authResult.state != ddk::FlowState::Failed) {
             ESP_LOGI(TAG, "HomeKey authentication successful!");
+			ESP_LOGI(TAG, "PASSKEY: Home Key authenticated");
             EventHKTap s{.status = true, .issuerId = authResult.issuer->id, .endpointId = authResult.endpoint->id, .readerId = readerId };
             std::vector<uint8_t> d;
             alpaca::serialize(s, d);
