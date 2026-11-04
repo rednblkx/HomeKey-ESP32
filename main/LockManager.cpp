@@ -4,6 +4,7 @@
 #include "LockManager.hpp"
 #include "HardwareManager.hpp"
 #include "eventStructs.hpp"
+#include "PasskeyGate.h"
 
 const char* LockManager::TAG = "LockManager";
 
