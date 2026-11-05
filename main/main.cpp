@@ -20,6 +20,7 @@
 #include "WebSocketLogSinker.h"
 #include "lwip/inet.h"
 #include "nvs_flash.h"
+#include "esp_ota_ops.h"
 
 std::unique_ptr<LockManager> lockManager;
 NvsCredentialStore readerDataManager;
@@ -234,6 +235,20 @@ void setup() {
   networkManager->begin();
   homekitService->begin();
   lockManager->begin();
+
+  // With CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE an OTA image boots in
+  // PENDING_VERIFY state. Arduino's initArduino() used to confirm it; without
+  // Arduino nothing did, so the next reboot rolled back and esp_ota_begin()
+  // refused further updates. Startup completed, so confirm the image now.
+  esp_ota_img_states_t otaState;
+  if (esp_ota_get_state_partition(esp_ota_get_running_partition(), &otaState) == ESP_OK &&
+      otaState == ESP_OTA_IMG_PENDING_VERIFY) {
+    if (esp_ota_mark_app_valid_cancel_rollback() == ESP_OK) {
+      ESP_LOGI("Main", "OTA image confirmed valid; rollback cancelled");
+    } else {
+      ESP_LOGE("Main", "Failed to confirm OTA image; next reboot will roll back");
+    }
+  }
 }
 
 /**
