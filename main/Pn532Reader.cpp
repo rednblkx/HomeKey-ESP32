@@ -1,11 +1,13 @@
 #include "Pn532Reader.hpp"
+#include "Pn532I2cTransport.hpp"
 #include "esp_log.h"
 #include "pn532_cxx/transaction.hpp"
 #include <array>
 
-Pn532Reader::Pn532Reader(const std::array<uint8_t, 4>& gpioPins, const std::array<uint8_t, 18>& ecpData)
+Pn532Reader::Pn532Reader(const std::array<uint8_t, 4>& gpioPins, const std::array<uint8_t, 18>& ecpData, Bus bus)
     : m_ecpData(ecpData),
-      m_gpioPins(gpioPins) {}
+      m_gpioPins(gpioPins),
+      m_bus(bus) {}
 
 Pn532Reader::~Pn532Reader() {
     stop();
@@ -13,13 +15,20 @@ Pn532Reader::~Pn532Reader() {
 
 bool Pn532Reader::init() {
     if (!m_transport) {
-        m_transport = new pn532::SpiTransport(
-            GPIO_NUM_NC,
-            static_cast<gpio_num_t>(m_gpioPins[2]),  // MISO
-            static_cast<gpio_num_t>(m_gpioPins[3]),  // MOSI
-            static_cast<gpio_num_t>(m_gpioPins[1]),  // SCK
-            static_cast<gpio_num_t>(m_gpioPins[0])   // SS
-        );
+        if (m_bus == Bus::I2c) {
+            m_transport = new Pn532I2cTransport(
+                static_cast<gpio_num_t>(m_gpioPins[0]),  // SDA
+                static_cast<gpio_num_t>(m_gpioPins[1])   // SCL
+            );
+        } else {
+            m_transport = new pn532::SpiTransport(
+                GPIO_NUM_NC,
+                static_cast<gpio_num_t>(m_gpioPins[2]),  // MISO
+                static_cast<gpio_num_t>(m_gpioPins[3]),  // MOSI
+                static_cast<gpio_num_t>(m_gpioPins[1]),  // SCK
+                static_cast<gpio_num_t>(m_gpioPins[0])   // SS
+            );
+        }
     }
     if (!m_frontend) {
         m_frontend = new pn532::Frontend(*m_transport);

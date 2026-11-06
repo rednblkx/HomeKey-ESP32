@@ -37,8 +37,8 @@ NfcManager(NvsCredentialStore& readerDataManager,
 
 **Parameters:**
 *   `readerDataManager`: A reference to the `NvsCredentialStore`, which provides the necessary reader data (like the Reader GID) for HomeKey operations.
-*   `nfcGpioPins`: An array of four GPIO pin numbers. For SPI readers (PN532, PN7161) these are SS/SCK/MISO/MOSI; for the I2C reader (ST25R3916) only entries 0 and 1 are used, as SDA and SCL.
-*   `nfcReaderType`: The reader backend to instantiate: `0` = PN532 (SPI), `1` = PN7160/PN7161 (SPI), `2` = ST25R3916 (I2C).
+*   `nfcGpioPins`: An array of four GPIO pin numbers. For SPI readers (PN532, PN7161) these are SS/SCK/MISO/MOSI; for the I2C readers (ST25R3916, PN532 over I2C) only entries 0 and 1 are used, as SDA and SCL.
+*   `nfcReaderType`: The reader backend to instantiate: `0` = PN532 (SPI), `1` = PN7160/PN7161 (SPI), `2` = ST25R3916 (I2C), `3` = PN532 (I2C).
 *   `nfcIrqPin`: The IRQ pin for the PN7161 (255 = unset; required for reader type 1).
 *   `nfcVenPin`: The VEN (enable/reset) pin for the PN7161 (255 = unset; required for reader type 1).
 *   `hkAuthPrecomputeEnabled`: Whether to enable authentication precomputation for faster response times.

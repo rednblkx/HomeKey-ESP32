@@ -69,8 +69,8 @@ Generally, any board should be fine. However, some may have non-genuine modules 
 HomeKey-ESP32 supports **PN532**, **PN7161**, and ST25R3916 NFC controllers.
 
 *   **PN532:**
-    *   **Interface:** SPI protocol.
-    *   **Recommendation:** Ensure you have a PN532 module that supports SPI communication (for red Elechouse boards/clones, DIP switches must be set to `0` and `1`).
+    *   **Interface:** SPI or I2C protocol. SPI is recommended, I2C is slower and adds latency to each tap.
+    *   **Recommendation:** Ensure you have a PN532 module that supports the interface you want to use (for red Elechouse boards/clones, DIP switches must be set to `0` and `1` for SPI, or `1` and `0` for I2C).
     *   Avoid long jumper wires between the module and ESP32 to maintain signal integrity.
 
 *   **PN7161:**

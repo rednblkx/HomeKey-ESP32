@@ -60,9 +60,11 @@
 #define HK_AUTH_PRECOMPUTE_ENABLED true // Enable HomeKey auth precompute cache
 #endif
 #define NFC_FAST_POLLING_ENABLED false // Poll the PN532 more aggressively for faster tag detection
-#define NFC_READER_TYPE 0 // 0 = PN532, 1 = PN7160
+#define NFC_READER_TYPE 0 // 0 = PN532 (SPI), 1 = PN7160, 2 = ST25R3916 (I2C), 3 = PN532 (I2C)
 #define NFC_IRQ_PIN 255 // PN7160 IRQ pin (255 = unset)
 #define NFC_VEN_PIN 255 // PN7160 VEN pin (255 = unset)
+#define PN532_I2C_SDA_PIN 35 // PN532 (I2C) default SDA pin (ESP32-S3 preset)
+#define PN532_I2C_SCL_PIN 36 // PN532 (I2C) default SCL pin (ESP32-S3 preset)
 #define HS_STATUS_LED 255 // HomeSpan Status LED GPIO pin
 #define HS_PIN 255 // GPIO Pin for a Configuration Mode button (more info on https://github.com/HomeSpan/HomeSpan/blob/master/docs/UserGuide.md#device-configuration-mode)
 #define BTR_PROX_BAT_ENABLED false // Enable or disable battery monitoring

@@ -22,7 +22,8 @@ namespace ddk { class Session; }
 enum ReaderType : uint8_t {
   PN532,
   PN7160,
-  ST25R3916
+  ST25R3916,
+  PN532_I2C
 };
 
 class NfcManager {
@@ -95,7 +96,7 @@ private:
       SS,
       IRQ,
       VEN,
-      // I2C readers (ST25R3916) use only two of the four nfcGpioPins entries.
+      // I2C readers (ST25R3916, PN532 over I2C) use only two of the four nfcGpioPins entries.
       SDA,
       SCL
     };

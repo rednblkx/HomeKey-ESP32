@@ -24,7 +24,7 @@ First things first, let's get the brains of your HomeKey-ESP32 onto your compute
 
 Before flashing, you need to connect your NFC module (PN532, PN7161 or ST25R3916) to your ESP32 development board.
 
-* **Using Jumper Wires:** If you're connecting the modules manually, refer to the [NFC Module Wiring](#21-nfc-module-wiring) section below. Ensure you connect the correct interface pins (SPI for PN532, SPI + IRQ/VEN for PN7161 or I2C for ST25R3916) and power (VCC/3V3, GND).
+* **Using Jumper Wires:** If you're connecting the modules manually, refer to the [NFC Module Wiring](#21-nfc-module-wiring) section below. Ensure you connect the correct interface pins (SPI or I2C for PN532, SPI + IRQ/VEN for PN7161 or I2C for ST25R3916) and power (VCC/3V3, GND).
 * **Using an Integrated PCB Board:** If you have an [Integrated PCB Board](../prerequisites#22-option-b---integrated-pcb-boards), connections are pre-wired. Simply select the corresponding hardware preset in the WebUI or Captive Portal.
 
 ### 2.1. NFC Module Wiring
@@ -81,7 +81,28 @@ Default pinout table for ESP32 with ST25R3916 over I2C:
 | GPIO18    | SCL               |
 
 
-#### 2.1.4. Integrated PCB Board Presets
+#### 2.1.4. PN532 Module Wiring (I2C Mode)
+
+> [!CAUTION]
+> The PN532 must be configured for I2C mode.
+> On standard red boards, ensure the DIP switch is set to `1` and `0`, the opposite of SPI mode.
+
+Default pinout table for ESP32-S3 with PN532 over I2C, using the `Default` preset of the `PN532 (I2C)` reader type:
+
+| ESP32-S3 Pin | PN532 Pin |
+| :----------- | :-------- |
+| VCC/3V3      | VCC       |
+| GND          | GND       |
+| GPIO35       | SDA       |
+| GPIO36       | SCL       |
+
+> [!WARNING]
+> GPIO35 and GPIO36 are not available on ESP32-S3 modules with octal flash or PSRAM (such as `R8` variants), where they connect to the memory bus. The preset is also ESP32-S3 only: on the ESP32 these pins are input-only, and they don't exist on the ESP32-C3 and ESP32-C6. In all of these cases, use the `Custom` preset with other pins.
+
+> [!NOTE]
+> The bus runs at 400 kHz. The ESP32's internal pull-ups are weak for that speed, so use a module with on-board pull-ups or fit external ones (around 4.7 kΩ to 3V3).
+
+#### 2.1.5. Integrated PCB Board Presets
 
 When using an Integrated PCB or predefined layout, select the hardware preset in the Captive Portal or WebUI:
 

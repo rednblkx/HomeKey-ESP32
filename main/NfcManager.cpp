@@ -65,8 +65,8 @@ std::unique_ptr<ddk::Session> NfcManager::buildAuthSession() {
  * DEBUG_AUTH_FLOW updates the debug authentication flow when received.
  *
  * @param readerDataManager Reference to the ReaderDataManager used to read and persist reader data.
- * @param nfcGpioPins Four GPIO pin numbers used for SPI communication (SS/CS, SCK, MISO, MOSI).
- * @param nfcReaderType 0 = PN532 (SPI), 1 = PN7160, 2 = ST25R3916 (I2C).
+ * @param nfcGpioPins Four GPIO pin numbers: SPI readers use SS/CS, SCK, MISO, MOSI; I2C readers use SDA, SCL.
+ * @param nfcReaderType 0 = PN532 (SPI), 1 = PN7160, 2 = ST25R3916 (I2C), 3 = PN532 (I2C).
  * @param nfcIrqPin IRQ pin for PN7160 (255 = unset).
  * @param nfcVenPin VEN pin for PN7160 (255 = unset).
  * @param hkAuthPrecomputeEnabled If true, enables HomeKit authentication precompute behavior.
@@ -90,7 +90,7 @@ NfcManager::NfcManager(NvsCredentialStore& readerDataManager,
       m_retryTaskHandle(nullptr)
 {
   std::copy(ECP_HEAD, ECP_HEAD + 8, m_ecpData.begin());
-  if (nfcReaderType == ST25R3916) {
+  if (nfcReaderType == ST25R3916 || nfcReaderType == PN532_I2C) {
     pinAllocations.emplace(PinFunctions::SDA, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[0]), GPIO_MODE_DISABLE, GPIOAllocator::PinRole::I2cSda, GPIOAllocator::PinConsumer::Nfc, "I2C_SDA"));
     pinAllocations.emplace(PinFunctions::SCL, GPIOAllocator::instance().acquire(gpio_num_t(nfcGpioPins[1]), GPIO_MODE_DISABLE, GPIOAllocator::PinRole::I2cScl, GPIOAllocator::PinConsumer::Nfc, "I2C_SCL"));
   } else {
@@ -189,6 +189,13 @@ bool NfcManager::begin() {
         }
         m_reader = std::make_unique<St25r3916Reader>(nfcGpioPins, m_ecpData);
         ESP_LOGI(TAG, "Using ST25R3916 reader (I2C)");
+    } else if (m_nfcReaderType == PN532_I2C) {
+        if (nfcGpioPins[0] == 255 || nfcGpioPins[1] == 255) {
+            ESP_LOGE(TAG, "PN532 (I2C) selected but SDA/SCL pins are unset");
+            return false;
+        }
+        m_reader = std::make_unique<Pn532Reader>(nfcGpioPins, m_ecpData, Pn532Reader::Bus::I2c);
+        ESP_LOGI(TAG, "Using PN532 reader (I2C)");
     } else {
     	ESP_LOGE(TAG, "Unsupported NFC reader type: %u", m_nfcReaderType);
     	return false;

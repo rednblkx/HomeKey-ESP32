@@ -68,17 +68,20 @@ struct nfcGpioPins_t {
 #endif
 };
 
-inline const std::array<nfcGpioPins_t,5> nfcGpioPinsPresets = {
-    {
+inline const auto nfcGpioPinsPresets = std::to_array<nfcGpioPins_t>({
       // PN532
     {"Default", 0, {SS_PIN, SCK_PIN, MISO_PIN, MOSI_PIN}},
     {"@lollokara's board", 0, {6, 5, 4, 7}},
     {"CASmo-NFC", 0, {5, 18, 19, 23}},
     {"CASmo-NFC-MB-ETH", 0, {5, 14, 12, 13}},
       // PN7161
-    {"Default", 1, {SS_PIN, SCK_PIN, MISO_PIN, MOSI_PIN}}
-    }
-};
+    {"Default", 1, {SS_PIN, SCK_PIN, MISO_PIN, MOSI_PIN}},
+      // PN532 (I2C). GPIO35/36 are input-only or absent on the other targets,
+      // and belong to the octal flash/PSRAM bus on octal ESP32-S3 modules.
+#if defined(CONFIG_IDF_TARGET_ESP32S3) && !defined(CONFIG_ESPTOOLPY_OCT_FLASH) && !defined(CONFIG_SPIRAM_MODE_OCT)
+    {"Default", 3, {PN532_I2C_SDA_PIN, PN532_I2C_SCL_PIN, PIN_UNSET, PIN_UNSET}},
+#endif
+});
 
 namespace espConfig
 {

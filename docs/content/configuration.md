@@ -139,10 +139,11 @@ Configure GPIO pin allocations for the NFC reader, Ethernet, and HomeSpan status
     > Using strapping pins can disrupt normal ESP32 boot behavior if not handled carefully with external pull-up/pull-down resistors.
 
 #### 5.2.2. NFC Reader Configuration
-*   **Reader Type:** Select your NFC reader hardware (**PN532** over SPI, **PN7161** over SPI, or **ST25R3916** over I2C).
+*   **Reader Type:** Select your NFC reader hardware (**PN532** over SPI or I2C, **PN7161** over SPI, or **ST25R3916** over I2C).
 *   **Preset:** Select predefined hardware board presets (@lollokara, CASmo-NFC, CASmo-NFC-MB-ETH, PN7161 presets, or `Custom`).
 *   **Pin Assignments:**
     *   **PN532 (SPI):** Assign `SS Pin`, `SCK Pin`, `MISO Pin`, and `MOSI Pin`.
+    *   **PN532 (I2C):** Assign I2C bus pins (SDA, SCL). The `Default` preset (ESP32-S3 only) uses SDA `35` and SCL `36`.
     *   **PN7161 (SPI):** Assign SPI bus pins (SCK, MOSI, MISO, SS) alongside dedicated `IRQ Pin` and `VEN Pin` (Hardware Enable/Reset).
     *   **ST25R3916 (I2C)**: Assign I2C bus pins (SDA, SCL)
 *   **Fast NFC Polling:** Enables reduced delay between poll cycles for quicker tag detection.

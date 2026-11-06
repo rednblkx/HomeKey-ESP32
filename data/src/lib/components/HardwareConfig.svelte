@@ -45,11 +45,11 @@
 
 	const isCaptivePortal = $derived(route.pathname.startsWith('/captive-portal'));
 
-	// Reader type 2 (ST25R3916) is I2C: it uses only the first two pin slots,
-	// as SDA and SCL. Showing them as SS/SCK/MISO/MOSI is not just cosmetic --
+	// Reader types 2 (ST25R3916) and 3 (PN532) are I2C: they use only the first
+	// two pin slots, as SDA and SCL. Showing them as SS/SCK/MISO/MOSI is not just cosmetic --
 	// it invites setting MISO/MOSI to real GPIOs that the firmware will never
 	// claim, and makes a correct I2C config look wrong.
-	const isI2cReader = $derived(nfcReaderType === 2);
+	const isI2cReader = $derived(nfcReaderType === 2 || nfcReaderType === 3);
 	const pinLabels = $derived(
 		isI2cReader
 			? ['SDA Pin', 'SCL Pin', '', '']
@@ -120,7 +120,8 @@
 				class="select select-sm select-bordered w-full"
 				disabled={loading}
 			>
-				<option value={0}>PN532</option>
+				<option value={0}>PN532 (SPI)</option>
+				<option value={3}>PN532 (I2C)</option>
 				<option value={1}>PN7161</option>
 				<option value={2}>ST25R3916 (I2C)</option>
 			</select>
@@ -199,8 +200,13 @@
 		</div>
 		{#if isI2cReader}
 			<p class="text-xs opacity-60 mb-2">
-				I2C reader: only SDA and SCL are used. On an M5Stack AtomS3 Lite Grove
-				port that is SDA&nbsp;=&nbsp;2, SCL&nbsp;=&nbsp;1.
+				{#if nfcReaderType === 3}
+					I2C reader: only SDA and SCL are used. Set the PN532 module to I2C mode
+					and fit external pull-ups if the module has none.
+				{:else}
+					I2C reader: only SDA and SCL are used. On an M5Stack AtomS3 Lite Grove
+					port that is SDA&nbsp;=&nbsp;2, SCL&nbsp;=&nbsp;1.
+				{/if}
 			</p>
 		{/if}
 		{#if nfcReaderType === 1}

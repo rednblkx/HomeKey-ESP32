@@ -83,7 +83,7 @@ inline std::optional<std::string> check_pin_reassignment(uint8_t incoming_pin,
     if (key == "nfcGpioPins") {
       consumer = GPIOAllocator::PinConsumer::Nfc;
       ignore_consumer = GPIOAllocator::PinConsumer::Nfc;
-      if (nfcReaderType == 2) { // ST25R3916: I2C bus
+      if (nfcReaderType == 2 || nfcReaderType == 3) { // ST25R3916 / PN532 (I2C): I2C bus
         switch (array_index) {
           case 0: role = GPIOAllocator::PinRole::I2cSda; break;
           case 1: role = GPIOAllocator::PinRole::I2cScl; break;
@@ -1822,7 +1822,7 @@ esp_err_t WebServerManager::handleSaveCaptivePortalConfig(httpd_req_t *req) {
   }
 
   cJSON *nfcReaderTypeItem = cJSON_GetObjectItem(obj.get(), "nfcReaderType");
-  if (nfcReaderTypeItem && cJSON_IsNumber(nfcReaderTypeItem) && (nfcReaderTypeItem->valueint < 0 || nfcReaderTypeItem->valueint > 2)) {
+  if (nfcReaderTypeItem && cJSON_IsNumber(nfcReaderTypeItem) && (nfcReaderTypeItem->valueint < 0 || nfcReaderTypeItem->valueint > 3)) {
     httpd_resp_set_status(req, "400 Bad Request");
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, "{\"success\":false,\"error\":\"Invalid nfcReaderType\"}");

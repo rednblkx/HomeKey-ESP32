@@ -1,6 +1,6 @@
 idf_component_register(SRCS "main.cpp" "app_events.cpp" "app_event_loop.cpp" "ConfigManager.cpp" "ReaderDataManager.cpp"
                     "HardwareManager.cpp" "HomeKitLock.cpp" "LockManager.cpp"
-                    "MqttManager.cpp" "HKServices.cpp" "NfcManager.cpp" "Pn532Reader.cpp" "Pn7160Reader.cpp" "St25r3916Reader.cpp" "WebServerManager.cpp" "WebSocketLogSinker.cpp"
+                    "MqttManager.cpp" "HKServices.cpp" "NfcManager.cpp" "Pn532Reader.cpp" "Pn532I2cTransport.cpp" "Pn7160Reader.cpp" "St25r3916Reader.cpp" "WebServerManager.cpp" "WebSocketLogSinker.cpp"
                     "ConsoleLogSinker.cpp" "GPIOAllocator.cpp" "EthernetDriver.cpp" "KeypadManager.cpp" "AccessCodeManager.cpp"
                     "NvsSecEarlyInit.cpp" "AutomationEngine.cpp"
                     INCLUDE_DIRS "include"

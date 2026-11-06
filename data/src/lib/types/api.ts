@@ -93,7 +93,7 @@ export interface CaptivePortalConfig {
   nfcPinsPreset: number;
   /** NFC GPIO pin configuration [SS, SCK, MISO, MOSI] */
   nfcGpioPins: [number, number, number, number];
-  /** NFC reader type (0 = PN532, 1 = PN7160, 2 = ST25R3916) */
+  /** NFC reader type (0 = PN532 SPI, 1 = PN7160, 2 = ST25R3916, 3 = PN532 I2C) */
   nfcReaderType: number;
   /** PN7160 IRQ pin */
   nfcIrqPin: number;
@@ -163,7 +163,7 @@ export interface MiscConfig {
   nfcPinsPreset: number;
   /** NFC GPIO pin configuration [pin1, pin2, pin3, pin4] */
   nfcGpioPins: [number, number, number, number];
-  /** NFC reader type (0 = PN532, 1 = PN7160, 2 = ST25R3916) */
+  /** NFC reader type (0 = PN532 SPI, 1 = PN7160, 2 = ST25R3916, 3 = PN532 I2C) */
   nfcReaderType: number;
   /** PN7160 IRQ pin */
   nfcIrqPin: number;

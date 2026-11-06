@@ -200,11 +200,12 @@ void setup() {
   const char *readerName = miscConfig.nfcReaderType == 0   ? "PN532 (SPI)"
                            : miscConfig.nfcReaderType == 1 ? "PN7160"
                            : miscConfig.nfcReaderType == 2 ? "ST25R3916 (I2C)"
+                           : miscConfig.nfcReaderType == 3 ? "PN532 (I2C)"
                                                            : "UNKNOWN";
   ESP_LOGI(TAG, "NFC reader type: %s (%u)", readerName, miscConfig.nfcReaderType);
   if (miscConfig.nfcReaderType == 1) {
     ESP_LOGI(TAG, "NFC IRQ pin: %d, VEN pin: %d", miscConfig.nfcIrqPin, miscConfig.nfcVenPin);
-  } else if (miscConfig.nfcReaderType == 2) {
+  } else if (miscConfig.nfcReaderType == 2 || miscConfig.nfcReaderType == 3) {
     ESP_LOGI(TAG, "NFC I2C pins: SDA=%d, SCL=%d", activeNfcPins[0], activeNfcPins[1]);
   }
   readerDataManager.begin();
