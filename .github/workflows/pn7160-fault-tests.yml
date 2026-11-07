@@ -1,0 +1,25 @@
+name: PN7160 connection-fault tests
+
+on:
+  push:
+    paths:
+      - 'main/Pn7160Reader.cpp'
+      - 'tests/pn7160_faults/**'
+      - '.github/workflows/pn7160-fault-tests.yml'
+  pull_request:
+    paths:
+      - 'main/Pn7160Reader.cpp'
+      - 'tests/pn7160_faults/**'
+      - '.github/workflows/pn7160-fault-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  connection-fault-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Exercise reader fault handling with sanitizers
+        run: python3 tests/pn7160_faults/run.py
