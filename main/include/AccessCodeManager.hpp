@@ -21,7 +21,9 @@ struct AccessCode {
  *
  * Implements the Access Code control-point TLV8 protocol (LIST/READ/ADD/
  * UPDATE/REMOVE operations), persists the code list to NVS, and validates
- * codes entered on the keypad.
+ * codes entered on the keypad. Bulk responses are separate TLV fragments
+ * divided by a zero-length type-0 separator; merging those fragments hides
+ * every code after the first from Apple Home, so revocation never arrives.
  */
 class AccessCodeManager {
 public:
