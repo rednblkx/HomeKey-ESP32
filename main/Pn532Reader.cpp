@@ -11,6 +11,16 @@ Pn532Reader::~Pn532Reader() {
     stop();
 }
 
+/**
+ * @brief Initialize the PN532 reader and configure RF settings.
+ *
+ * Allocates the SPI transport and frontend if not already created,
+ * establishes communication with the chip, verifies firmware version,
+ * and sets up RF configurations. Releases resources via stop()
+ * if any initialization step fails.
+ *
+ * @return true if initialization succeeded, false otherwise.
+ */
 bool Pn532Reader::init() {
     if (!m_transport) {
         m_transport = new pn532::SpiTransport(
@@ -26,7 +36,9 @@ bool Pn532Reader::init() {
     }
 
     if (auto status = m_frontend->begin(); status != pn532::Status::SUCCESS){
-        ESP_LOGE(TAG, "Error establishing PN532 connection. (err=%d)", status);
+        ESP_LOGE(TAG, "Error establishing PN532 connection. (err=%d)", static_cast<int>(status));
+        stop();
+        return false;
     }
     if (auto versiondata = m_frontend->GetFirmwareVersion()) {
       ESP_LOGI(TAG, "Found chip PN532, Firmware ver. %d.%d",
@@ -41,15 +53,19 @@ bool Pn532Reader::init() {
     }
 
     if (m_frontend->RFConfiguration(0x01, {0x03}) != pn532::Status::SUCCESS) {
+        stop();
         return false;
     }
     if (m_frontend->setPassiveActivationRetries(0) != pn532::Status::SUCCESS) {
+        stop();
         return false;
     }
     if (m_frontend->RFConfiguration(0x02, {0x00, 0x0B, 0x10}) != pn532::Status::SUCCESS) {
+        stop();
         return false;
     }
     if (m_frontend->RFConfiguration(0x04, {0xFF}) != pn532::Status::SUCCESS) {
+        stop();
         return false;
     }
 
