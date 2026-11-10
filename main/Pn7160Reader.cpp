@@ -177,7 +177,10 @@ bool Pn7160Reader::pollForTag(std::vector<uint8_t>& uid,
                               std::array<uint8_t, 2>& atqa,
                               uint8_t& sak,
                               uint32_t timeoutMs) {
-    if (!m_nci) return false;
+    if (!m_connected || !m_nci || !m_nci->is_initialized()) {
+        m_connected = false;
+        return false;
+    }
     NciEvent event;
     esp_err_t ret = m_nci->get_event(event, timeoutMs);
     if (ret == ESP_ERR_TIMEOUT) {
@@ -185,6 +188,7 @@ bool Pn7160Reader::pollForTag(std::vector<uint8_t>& uid,
     }
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "get_event failed: 0x%X", ret);
+        m_connected = false;
         return false;
     }
     switch (event.type) {
@@ -317,12 +321,18 @@ bool Pn7160Reader::pollForTag(std::vector<uint8_t>& uid,
 }
 
 bool Pn7160Reader::isTagStillPresent() {
-    if (!m_nci) return false;
+    if (!m_connected || !m_nci || !m_nci->is_initialized()) {
+        m_connected = false;
+        return false;
+    }
 
     if (m_currentProtocol == nci::PROT_ISODEP) {
         TickType_t now = xTaskGetTickCount();
         if ((now - m_lastPresenceCheck) * portTICK_PERIOD_MS >= kPresenceCheckIntervalMs) {
-            (void)m_nci->rf_iso_dep_presence_check();
+            if (m_nci->rf_iso_dep_presence_check() != ESP_OK) {
+                m_connected = false;
+                return false;
+            }
             m_lastPresenceCheck = now;
         }
         return m_nci->tag_in_field();
@@ -331,7 +341,7 @@ bool Pn7160Reader::isTagStillPresent() {
 }
 
 void Pn7160Reader::releaseTag() {
-    if (!m_nci) return;
+    if (!m_connected || !m_nci) return;
 
     esp_err_t ret = m_nci->rf_deactivate(nci::DEACTIVATION_TYPE_DISCOVERY);
     if (ret != nci::STATUS_OK) {
@@ -362,7 +372,7 @@ bool Pn7160Reader::exchangeApdu(const std::vector<uint8_t>& send,
 }
 
 bool Pn7160Reader::healthCheck() {
-    if (!m_nci) {
+    if (!m_connected || !m_nci) {
         m_connected = false;
         return false;
     }
