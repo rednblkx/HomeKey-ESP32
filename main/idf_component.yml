@@ -5,7 +5,3 @@ dependencies:
   joltwallet/littlefs: ^1.20.1
   espp/serialization: ^1.0.22
   espressif/keyboard_button: ^1.0.0
-  espressif/esp_tinyusb:
-  version: "^1.7.6"
-  rules:
-    - if: "target == esp32s3"
